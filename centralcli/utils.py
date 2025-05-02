@@ -11,7 +11,7 @@ import string
 import sys
 import urllib.parse
 # from pprint import pprint
-from typing import Any, Dict, List, Optional, Tuple, Union, Literal
+from typing import Any, Dict, List, Optional, Tuple, Union, Literal, Iterable
 import typer
 import logging
 
@@ -222,7 +222,7 @@ class Utils:
     def valid_file(self, filepath):
         return os.path.isfile(filepath) and os.stat(filepath).st_size > 0
 
-    def listify(self, var):
+    def listify(self, var) -> Iterable:
         if isinstance(var, tuple):
             return list(var)
         return var if isinstance(var, list) or var is None else [var]
@@ -853,12 +853,14 @@ class Utils:
     def parse_time_options(
         from_time: int | float | datetime = None,
         to_time: int | float | datetime = None,
+        in_milliseconds: bool = False,
     ) -> Tuple[int | None, int | None]:
         """parse time options (from_time, to_time) from user if any provided and return int timestamp for each.
 
         Args:
             from_time (int | float | datetime, optional): from time. Defaults to None.
             to_time (int | float | datetime, optional): to time. Defaults to None.
+            in_milliseconds (bool, optional): Convert response timestamps to milliseconds.  Default is Seconds.
 
         Returns:
             Tuple(int | None, int | None): returns Tuple with int timestamps for from_time
@@ -876,6 +878,8 @@ class Utils:
 
         # if to_time and to_time <= from_time:
         #     return Response(error=f"To timestamp ({to_time}) can not be less than from timestamp ({from_time})")
+        if in_milliseconds:
+            return from_time * 1000, (to_time or pendulum.now(tz="UTC").int_timestamp) * 1000
 
         return from_time, to_time
 
@@ -907,3 +911,9 @@ class Utils:
         diff = pendulum.now(tz=tz) - dt
         return getattr(diff, f'in_{unit}')() > time_frame
 
+    @staticmethod
+    def singular_plural_sfx(items: Iterable | int, singular: str = None, plural: str = None) -> str:
+        cnt = items if isinstance(items, int) else len(items)
+        singular = singular or ''
+        plural = plural or 's'
+        return plural if cnt > 1 else singular

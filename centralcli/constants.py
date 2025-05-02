@@ -11,6 +11,7 @@ from typing import Literal, Union
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
 generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
 flex_dual_models = ["615", "605H", "605R"]
+dynamic_antenna_models = ["679"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete  # TODO make separate one without sdwan and refactor, won't be valid in most places
@@ -22,6 +23,8 @@ DeviceStatus = Literal["up", "down"]
 SendConfigTypes = Literal["ap", "gw"]
 CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
+LogType = Literal["event", "audit"]
+InsightSeverityType = Literal["high", "med", "low"]
 
 
 class AllDevTypes(str, Enum):
@@ -105,6 +108,16 @@ class ShowInventoryArgs(str, Enum):
     gw = "gw"
     vgw = "vgw"
     switch = "switch"
+
+
+class SortInsightOptions(str, Enum):
+    insight_id = "insight-id"
+    severity = "severity"
+    category = "category"
+    insight = "insight"
+    impact = "impact"
+    config_insight = "config-insight"
+    # description = "description"  # have not seen a scenario where insight and description are not the same (have seen different case, but still same words).  Description filled is stripped from output if it matches insight field.
 
 
 class SortStackOptions(str, Enum):
@@ -308,6 +321,7 @@ class FirmwareDeviceType(str, Enum):
     switch = "switch"
     gw = "gw"
     mas = "mas"
+    ap = "ap"
 
 
 class BlinkArgs(str, Enum):
@@ -352,6 +366,13 @@ class LogLevel(str, Enum):
     LOG_INFO = "info"
     LOG_WARN = "warning"
     LOG_ERR = "error"
+
+
+class InsightSeverity(str, Enum):
+    hight = "high"
+    med = "med"
+    low = "low"
+
 
 class CacheArgs(str, Enum):
     all = "all"
@@ -632,7 +653,8 @@ APIMethodType = Literal[
     "event",
     "tshoot",
     "inventory",
-    "licensing"
+    "licensing",
+    "aiops",
 ]
 
 
@@ -717,6 +739,14 @@ class LibToAPI:
             "controller": "all_controller",
             "gw": "all_controller",
             "vgw": "vgw"
+        }
+        self.aiops_to_api = {
+            "ap": "ap",
+            "cx": "switch",
+            "sw": "switch",
+            "switch": "switch",
+            "gw": "gateway",
+            "vgw": "gateway"
         }
 
     def __call__(self, dev_type: str | Enum, method: APIMethodType = None, default: str = None) -> str:
@@ -1110,6 +1140,7 @@ class IdenMetaVars:
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
         self.guest = "[name|email|phone|id]"
+        self.ip_dhcp = "[IP_ADDRESS|'dhcp']"
 
 iden_meta = IdenMetaVars()
 

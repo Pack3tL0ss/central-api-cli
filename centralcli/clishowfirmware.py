@@ -23,7 +23,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes, FirmwareDeviceType  # noqa
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject, CacheDevice
 
 app = typer.Typer()
 
@@ -41,11 +41,13 @@ class ShowFirmwareKwags(str, Enum):
 device_help = f"""Show firmware details for device(s)
 
     Either provide one or more devices as arguments or [cyan]--dev-type[/]
-    [cyan]--dev-type[/] can be one of cx, sw, gw (not supported on APs)
+    [cyan]--dev-type[/] can be one of cx, sw, gw, ap
     [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
 
     [cyan]cx[/], [cyan]sw[/] and the generic [cyan]switch[/] are allowed for [cyan]--dev-type[/] for consistency with other commands.
     API endpoint treats them all the same and returns all switches.
+
+    :warning:  The APIs used by this command seem to no longer work for Gateways.
     """
 @app.command(help=device_help)
 def device(
@@ -63,7 +65,7 @@ def device(
     account: str = cli.options.account,
 ) -> None:
     if device:
-        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch"], conductor_only=True) for dev in device]
+        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
@@ -71,7 +73,10 @@ def device(
                 caption=True
             )
     elif dev_type:
-        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+        if dev_type != "ap":
+            batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+        else:
+            batch_reqs = [BatchRequest(cli.central.get_all_swarms_firmware_details,)]
     else:
         cli.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
 
@@ -244,14 +249,17 @@ def _list(
     """
     caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
 
-    dev: CentralObject = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
+    dev: CacheDevice = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
-    if dev and dev.type == "ap":
+    if dev is not None and dev.type == "ap":
         if swarm:
             swarm_id = dev.swack_id
         else:
-            dev_type = "ap"
+            dev_type = DevTypes.ap
+        dev = None
+    elif dev is not None and dev.type == "gw":  # Endpoint now returns "API does not support cluster gateway" so we just use the dev.type.
+        dev_type = DevTypes.gw
         dev = None
 
     kwargs = {
@@ -271,7 +279,7 @@ def _list(
 
     title = f"Available firmware versions for {list(kwargs.keys())[0].replace('_', ' ')}: {list(kwargs.values())[0]}"
     if "device_type" in kwargs:
-        title = f'{title.split(":")[0]} {dev_type}'
+        title = f'{title.split(":")[0]} {dev_type.value}'
     elif dev:
         title = f'{title.split("serial")[0]} device [cyan]{dev.name}[/]'
 

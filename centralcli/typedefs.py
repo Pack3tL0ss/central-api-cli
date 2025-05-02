@@ -26,3 +26,13 @@ SiteData = Union[
 PortalAuthType = Literal["user/pass", "anon", "self-reg"]
 PortalAuthTypes = List[PortalAuthType]
 CacheTableName = Literal["devices", "sites", "groups", "labels", "macs", "mpsk"]
+DynamicAntenna = Literal["narrow", "wide"]
+RadioType = Literal["2.4", "5", "6"]
+
+# StrEnum available python 3.11+
+try:
+    from enum import StrEnum
+except ImportError:
+    from enum import Enum
+    class StrEnum(Enum):
+        ...

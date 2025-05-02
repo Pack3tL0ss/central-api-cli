@@ -195,7 +195,7 @@ class Hook2Snow:
             snow_data["u_assignment_group"] = config.snow.assignment_group
             snow_data["u_short_description"] = "".join(data.alert_type[0:161])
             snow_data["u_description"] = data.description
-            snow_data["work_notes"] = "\n".join([f'{k}: {v}' for k, v in data.dict().items()])
+            snow_data["work_notes"] = "\n".join([f'{k}: {v}' for k, v in data.model_dump().items()])
             snow_data["u_raised_severity"] = data.severity
             snow_data["u_state"] = "New"
             out_data = models.SnowCreate(**snow_data)
@@ -210,7 +210,7 @@ class Hook2Snow:
         word = "create" if data.get("state").lower() == "open" else "update"
         payload = await self.format_payload(data)
         for _ in range(0, 2):
-            response = await self.post2snow(data=payload.dict())
+            response = await self.post2snow(data=payload.model_dump())
             if response is not None:
                 break  # None indicates Exception during POST attempt
             else:
@@ -226,7 +226,7 @@ class Hook2Snow:
             res_payload = await response.json()
             res_model = models.SnowResponse(**res_payload)
             self.created += [res_model.u_servicenow_number]
-            _ = await cache.update_hook_data_db(res_model.dict())  # TODO should we strip_none here?
+            _ = await cache.update_hook_data_db(res_model.model_dump())  # TODO should we strip_none here?
 
 
     async def verify_header_auth(self, data: dict, svc: str, sig: str, ts: str, del_id: str):

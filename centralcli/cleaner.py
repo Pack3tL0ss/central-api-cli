@@ -31,7 +31,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes
+from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes, InsightSeverityType
 from .objects import DateTime, ShowInterfaceFilters
 from .models import CloudAuthUploadResponse, Sites
 
@@ -240,6 +240,7 @@ _short_value = {
     "last_state_change":  lambda x: DateTime(x, "log"),
     "graceful_restart_timer": lambda x: DateTime(x, "durwords"),
     "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    "reserved": lambda v: '✅' if v is True else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
     "poe_detection_status": lambda i: constants.PoEDetectionStatus(i).name,
     "reserved_power_in_watts": lambda v: round(v, 2),
     "speed": lambda v: "1000BaseT FD" if v == "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode" else v,
@@ -456,7 +457,7 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, strip_keys: List[str] = None, strip_null: bool = False, emoji_bools: bool = False) -> List[Dict[str, Any]]:
+def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None, strip_keys: List[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True) -> List[Dict[str, Any]]:
     """Default simple formatter
 
     Args:
@@ -466,6 +467,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
         strip_keys (List[str], optional): List of keys to be stripped from output.
         strip_null (bool, optional): Set True to strip keys that have no value for any items.  Defaults to False.
         emoji_bools (bool, optional): Replace boolean values with emoji ✅ for True ❌ for False. Defaults to False.
+        show_false (bool, optional): When emoji_bools is True.  Set this to False to only show ✅ for True items, leave blank for False.
 
     Returns:
         List[Dict[str, Any]]: Formatted data
@@ -478,7 +480,7 @@ def simple_kv_formatter(data: List[Dict[str, Any]], key_order: List[str] = None,
         if not emoji_bools or not isinstance(value, bool):
             return value
 
-        return '\u2705' if value is True else '\u274c'  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
+        return '\u2705' if value is True else '\u274c' if show_false else ''  # /u2705 = white_check_mark (✅) \u274c :x: (❌)
 
     strip_keys = strip_keys or []
     if key_order:
@@ -1234,6 +1236,7 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "mac",
             "ip",
             "reservation",
+            "reserved",
             # "mask",
             "pool_name",
             "vlan_id",
@@ -1246,6 +1249,8 @@ def get_dhcp(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "client_type",
         ]
 
+    # API-FLAW Reservations for APs show nonsense values for lease_ fields, so we strip them.  Most reservations only show ip and mac for reservations.
+    data = [d if not d.get("reserved") else {k: v for k, v in d.items() if not k.startswith("lease")} for d in data]
     data = [{"client name": None, **dict(short_value(k, d.get(k)) for k in field_order)} for d in data]
     data = strip_no_value(data)
     return data
@@ -1324,14 +1329,14 @@ def get_all_webhooks(data: List[dict]) -> List[dict]:
         none = 0
         important = 1  # Up to 5 retries over 6 minutes
         critical = 2  # Up to 5 retries over 32 hours
-        notfound = 99  # indicates an error retrieving policy from payload
+        # none = 99  # indicates an error retrieving policy from payload
 
     del_keys = ["retry_policy", "secure_token", "urls"]
     # flatten dict
     data = [
         {**{k: v for k, v in d.items() if k not in del_keys},
          "urls": "\n".join(d.get("urls", [])),
-         "retry_policy": HookRetryPolicy(d.get("retry_policy", {}).get("policy", 99)).name,
+         "retry_policy": HookRetryPolicy(d.get("retry_policy", {}).get("policy", 0)).name,
          "token": d.get("secure_token", {}).get("token", ""), "token_created": d.get("secure_token", {}).get("ts", 0)
          }
          for d in data
@@ -2015,7 +2020,7 @@ def get_device_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, An
     _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
     _short_value["status"] = lambda v: "up to date" if v == "Firmware version upto date" else v
 
-    return simple_kv_formatter(data, key_order=key_order)
+    return simple_kv_formatter(data, key_order=key_order, strip_null=True)
 
 
 def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -2124,3 +2129,22 @@ def get_guests(data: List[Dict[str, Any]], output_format: TableFormat = "yaml") 
     strip_keys = ["auto_created"] if all([item.get("auto_created") is False for item in data]) else None
 
     return simple_kv_formatter(data, key_order=key_order, strip_keys=strip_keys, strip_null=output_format == "rich", emoji_bools=output_format == "rich")
+
+def show_ai_insights(data: List[Dict[str, str | bool | int]], severity: InsightSeverityType = None):
+    field_order = [
+        "insight_id",
+        "severity",
+        "category",
+        "insight",
+        "impact",
+        "is_config_recommendation_insight"
+    ]
+    all_keys = list(set([key for d in data for key in d.keys()]))
+    field_order = [*field_order, *[k for k in all_keys if k not in field_order]]
+    global _short_key
+    _short_key["is_config_recommendation_insight"] = "config insight"
+    data = [{f: inner.get(f) for f in field_order if f != "description" or inner[f].casefold() != inner.get("insight", "").casefold()} for inner in data]
+    if severity:
+        data = [{k: v for k, v in inner.items() if inner.get("severity") is None or inner["severity"] == severity} for inner in data]
+
+    return simple_kv_formatter(data, key_order=field_order, strip_null=True, emoji_bools=True, show_false=False)

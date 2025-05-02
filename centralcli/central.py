@@ -7,7 +7,7 @@ import base64
 import json
 import time
 from asyncio.proactor_events import _ProactorBasePipeTransport
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from pathlib import Path
 from typing import Dict, List, Literal
@@ -22,14 +22,11 @@ from copy import deepcopy
 
 from . import ArubaCentralBase, MyLogger, cleaner, config, constants, log, utils
 from .exceptions import CentralCliException
-from .response import CombinedResponse, Response, Session
+from .response import CombinedResponse, Response, Session, BatchRequest
 from .utils import Mac
+from .typedefs import RadioType, DynamicAntenna
 
 # buried import: requests is imported in add_template and cloudauth_upload as a workaround until figure out aiohttp form data
-
-
-
-
 color = utils.color
 
 
@@ -4092,7 +4089,7 @@ class CentralApi(Session):
 
     async def get_device_firmware_details_by_type(
         self,
-        device_type: Literal["mas", "cx", "sw", "gw"],
+        device_type: Literal["mas", "cx", "sw", "gw", "ap"],
         group: str = None,
         offset: int = 0,
         limit: int = 500,
@@ -4100,7 +4097,7 @@ class CentralApi(Session):
         """List Firmware Details by type for switches or gateways (Not valid for APs).
 
         Args:
-            device_type (str): Specify one of "mas|sw|cx|gw"
+            device_type (str): Specify one of "mas|sw|cx|gw|ap"
             group (str, optional): Group name
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. max 1000, Defaults to 500.
@@ -5354,7 +5351,7 @@ class CentralApi(Session):
 
     async def get_ap_config(
         self,
-        group_swarmid: str,
+        iden: str,
         version: str = None,
     ) -> Response:
         """Get AP Group Level configuration for UI group.
@@ -5362,14 +5359,14 @@ class CentralApi(Session):
         // Used by show config <AP MAC for AOS10 AP> //
 
         Args:
-            group_swarmid (str): Group name of the group or guid of the swarm.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            iden (str, optional): Group name swarm id or serial # (AOS10 AP).
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1.
             version (str, optional): Version of AP.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/ap_cli/{group_swarmid}"
+        url = f"/configuration/v1/ap_cli/{iden}"
 
         params = {
             'version': version
@@ -5382,7 +5379,7 @@ class CentralApi(Session):
         iden: str,
         clis: List[str],
     ) -> Response:
-        """Replace AP Group Level configuration for UI group.
+        """Replace AP Group or device Level configuration for UI group.
 
         Send AP configuration in CLI format as a list of strings where each item in the list is
         a line from the config.  Requires all lines of the config, not a partial update.
@@ -5402,6 +5399,94 @@ class CentralApi(Session):
         }
 
         return await self.post(url, json_data=json_data)
+
+    async def _add_altitude_to_config(self, data: List[str], altitude: int | float) -> List[str] | None:
+            """Adds GPS altitude (meters from ground) to existing AP or swarm config
+
+            Args:
+                data (str): str representing the current configuration.
+                altitude (int | float): The ap-altitude to add to the provided config.
+
+            Raises:
+                typer.Exit: If no commands remain after stripping empty lines.
+
+            Returns:
+                List[str] | None Original config with 2 additional lines to define ap-altitude for gps
+                    Returns None if desired ap-altitude is already in current configuration
+            """
+            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+
+            if not cli_cmds:
+                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+
+            # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
+            # sending value as int initially is OK, but float to int it doesn't like so just always send float
+            # this may have been because group level had ap-altitude as 2, dunno
+            if "gps" not in cli_cmds:
+                cli_cmds += ["gps", f"  ap-altitude {float(altitude)}"]
+            elif f"  ap-altitude {float(altitude)}" in cli_cmds:
+                return # No change ap-altitude already in existing
+            else:
+                cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
+                cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {float(altitude)}")
+
+            return cli_cmds
+
+    async def update_ap_altitude(
+        self,
+        iden: str | List[str] = None,
+        altitude: int | float = None,
+        as_dict: Dict[str, int | float] = None,
+    ) -> List[Response]:
+        """Set or Update gps ap-altitude at group or device level for APs (UI group).
+
+        Pulls existing config and adds or updates provided ap-altitude.
+        Performs 2 API calls per AP.
+
+        Multiple APs can be provided using as_dict.
+
+        Args:
+            iden (str, optional): Group name swarm id or serial # (AOS10 AP).
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1.
+            altitude (int | float, optional): The AP installation height represented as meters from the ground.
+                Note: Despite the CLI command being ap-altitude, it is not from sea level, it's from the ground.
+            as_dict: (Dict[str, int | float], optional): A dict providing ap serial numbers and altitudes.
+                i.e.: {"AP1serial": ap1_altitude, AP2serial: ap2_altitude ...}
+
+        Returns:
+            List[Response]: Returns a List of Response objects.
+        """
+        base_url = "/configuration/v1/ap_cli"
+        as_dict = as_dict or {}
+        if iden:
+            if not altitude:
+                raise ValueError("altitude is required when iden is provided")
+            as_dict = {**as_dict, **{iden, altitude}}
+        if not as_dict:
+            raise ValueError("Missing required parameter: iden and altitude and/or as_dict is required")
+
+        current_reqs = [self.BatchRequest(self.get, f"{base_url}/{iden}") for iden in as_dict]
+        current_resp = await self._batch_request(current_reqs)
+
+        passed: Dict[str, Response] = {}
+        failed: Dict[str, Response] = {}
+        for iden, resp in zip(as_dict.keys(), current_resp):
+            if resp.ok:
+                passed[iden] = resp
+            else:
+                failed[iden] = resp
+
+        if not passed:
+            return current_resp
+
+        updated_clis_list = [await self._add_altitude_to_config(resp.output, altitude=as_dict[iden]) for iden, resp in passed.items()]
+
+        skipped = [Response(error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        update_reqs = [BatchRequest(self.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+
+        update_resp = await self._batch_request(update_reqs)
+
+        return [*update_resp, *skipped, *list(failed.values())]
 
     async def get_per_ap_config(
         self,
@@ -5442,47 +5527,42 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
-    # TODO not used # TODO types for below
-    # FIXME effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
-    async def update_per_ap_settings(
-            self,
-            serial: str,
-            hostname: str = None,
-            ip: str = None,
-            mask: str = None,
-            gateway: str = None,
-            dns: str | List[str] = None,
-            domain: str = None,
-            swarm_mode: str = None,
-            radio_24_mode: str = None,
-            radio_5_mode: str = None,
-            radio_6_mode: str = None,
-            radio_24_disable: bool = None,
-            radio_5_disable: bool = None,
-            radio_6_disable: bool = None,
-            uplink_vlan: int = None,
-            zone: str = None,
-            dynamic_ant_mode: Literal["narrow", "wide"] = None,
-            flex_dual_exclude: Literal["2.4", "5", "6"] = None,
-    ) -> Response:
+    async def _build_update_per_ap_settings_reqs(
+        self,
+        serial: str,
+        current_clis: List[str],
+        *,
+        hostname: str = None,
+        ip: str = None,
+        mask: str = None,
+        gateway: str = None,
+        dns: str | List[str] = None,
+        domain: str = None,
+        swarm_mode: str = None,
+        radio_24_mode: str = None,
+        radio_5_mode: str = None,
+        radio_6_mode: str = None,
+        radio_24_disable: bool = None,
+        radio_5_disable: bool = None,
+        radio_6_disable: bool = None,
+        uplink_vlan: int = None,
+        zone: str = None,
+        dynamic_ant_mode: Literal["narrow", "wide"] = None,
+        flex_dual_exclude: Literal["2.4", "5", "6"] = None,
+    ) -> List[BatchRequest]:
         url = f"/configuration/v1/ap_settings_cli/{serial}"
-
-        now_res = await self.get(url)
-        if not now_res.ok:
-            return now_res
-
-        clis = now_res.output
 
         ip_address = None
         if ip:
             for param in [mask, gateway, dns]:
                 if not param:
-                    raise ValueError("mask, gateway, and dns are required when IP is updated")
+                    raise ValueError(f"Invalid configuration for {serial}: mask, gateway, and dns are required when IP is updated")
 
             dns = ','.join(utils.listify(dns))
 
             domain = domain or '""'
             ip_address = f'{ip} {mask} {gateway} {dns} {domain}'.rstrip()
+
         flex_dual = None
         if flex_dual_exclude:
             flex_dual_exclude = str(flex_dual_exclude)
@@ -5492,7 +5572,13 @@ class CentralApi(Session):
                 flex_dual = "2.4GHz-and-6GHz"
             elif flex_dual_exclude.startswith("2.4") or flex_dual_exclude.startswith("24"):
                 flex_dual = "5GHz-and-6GHz"
+            else:
+                raise ValueError(f"Invalid value {flex_dual_exclude} for flex_dual_exclude, valid values: '2.4', '5', '6'")
 
+        old_disable = {
+            "radio-0-disable": "dot11a-radio-disable",
+            "radio-1-disable": "dot11g-radio-disable",
+        }
         cli_items = {
             "hostname": hostname,
             "ip-address": ip_address,
@@ -5511,22 +5597,134 @@ class CentralApi(Session):
         if all([v is None for v in cli_items.values()]):
             return Response(error="No Values provided to update")
 
+        update_clis = deepcopy(current_clis)
         for idx, key in enumerate(cli_items, start=1):
             if cli_items[key] is not None:
-                clis = [item for item in clis if not item.lstrip().startswith(key)]
+                update_clis = [item for item in update_clis if not item.lstrip().startswith(key)]
                 if key.endswith("-disable"):
+                    old_model = True if "wifi2-mode" not in str(update_clis) else False
+                    old_var = old_disable.get(key)
+                    value = old_var if old_model else key
+                    stripped_clis = [item.strip() for item in update_clis]
                     if cli_items[key] is True:
-                        clis.insert(idx, f"  {key}")
+                        if value not in stripped_clis:
+                            update_clis.insert(idx, f"  {value}")
+                    elif old_var and old_var in stripped_clis:  # Ensure we remove old variable from new APs as we initially sent both.
+                        _ = update_clis.pop(stripped_clis.index(old_var))
+                elif key == "dynamic-ant" and cli_items[key] == "wide":
+                    continue  # dynamic-ant wide is the default putting it in the config causes dirty diff as central pushes it, but when it verifies that line is not there
                 else:
-                    clis.insert(idx, f"  {key} {cli_items[key]}")
+                    update_clis.insert(idx, f"  {key} {cli_items[key]}")
 
-        json_data = {
-            'clis': clis
+        if sorted(current_clis) == sorted(update_clis):
+            try:
+                iden = f"{current_clis[1].split()[1]}|{serial}"
+            except Exception:
+                iden = serial
+            return Response(error="NO CHANGES", output=f"{iden} skipped. The Provided per ap settings match the APs current AP settings.")
+
+        return BatchRequest(self.post, url, json_data={'clis': update_clis})
+
+
+
+
+    # TODO types for below
+    # effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
+    async def update_per_ap_settings(
+        self,
+        serial: str = None,
+        hostname: str = None,
+        ip: str = None,
+        mask: str = None,
+        gateway: str = None,
+        dns: str | List[str] = None,
+        domain: str = None,
+        swarm_mode: str = None,
+        radio_24_mode: str = None,
+        radio_5_mode: str = None,
+        radio_6_mode: str = None,
+        radio_24_disable: bool = None,
+        radio_5_disable: bool = None,
+        radio_6_disable: bool = None,
+        uplink_vlan: int = None,
+        zone: str = None,
+        dynamic_ant_mode: Literal["narrow", "wide"] = None,
+        flex_dual_exclude: Literal["2.4", "5", "6"] = None,
+        as_dict: Dict[str, Dict[str | int | List[str] | bool | DynamicAntenna | RadioType]] = None
+    ) -> List[Response]:
+        """Update per AP settings (AP ENV)
+
+        This method performs 2 API calls, the first to pull the existing config,
+        the second to update the config based on the updates provided.
+
+        model is needed if disabling 2.4 or 5Ghz radios to determine if AP uses
+        old format: dot11g-radio-disable or newer: radio-1-disable
+        Sending the wrong one has no impact, sending both results in Central
+        showing unsynchronized
+
+        as_list can be provided with params for multiple APs.
+        """
+        kwargs = {
+            "hostname": hostname,
+            "ip": ip,
+            "mask": mask,
+            "gateway": gateway,
+            "dns": dns,
+            "domain": domain,
+            "swarm_mode": swarm_mode,
+            "radio_24_mode": radio_24_mode,
+            "radio_5_mode": radio_5_mode,
+            "radio_6_mode": radio_6_mode,
+            "radio_24_disable": radio_24_disable,
+            "radio_5_disable": radio_5_disable,
+            "radio_6_disable": radio_6_disable,
+            "uplink_vlan": uplink_vlan,
+            "zone": zone,
+            "dynamic_ant_mode": dynamic_ant_mode,
+            "flex_dual_exclude": flex_dual_exclude
         }
+        as_dict = as_dict or {}
+        if any(kwargs.values()) and not serial:
+            raise ValueError("serial is required")
+        if serial:
+            as_dict["serial"] = kwargs
 
-        # utils.json_print(json_data)
-        # raise NotImplementedError("This helper function is currently under test, not implemented.")
-        return await self.post(url, json_data=json_data)
+        base_url = "/configuration/v1/ap_settings_cli"
+
+        try:
+            current_reqs = [
+                self.BatchRequest(self.get, f"{base_url}/{serial}")
+                for serial in as_dict
+            ]
+        except KeyError as e:
+            raise KeyError(f"Missing required argument 'serial'\n{e}")
+
+        current_resp = await self._batch_request(current_reqs)
+
+        passed: Dict[str, Response] = {}
+        failed: Dict[str, Response] = {}
+        for serial, resp in zip(as_dict.keys(), current_resp):
+            if resp.ok:
+                passed[serial] = resp
+            else:
+                failed[serial] = resp
+
+        if not passed:
+            log.error(f"Unable to send updates to AP{utils.singular_plural_sfx(current_reqs)}.  Request to fetch current settings failed{utils.singular_plural_sfx(current_reqs, singular='.', plural=' for All APs.')}", caption=True)
+            return current_resp
+
+        update_reqs = [
+            await self._build_update_per_ap_settings_reqs(serial, current_clis=resp.output, **{k: v for k, v in as_dict[serial].items() if k != "serial"})
+            for serial, resp in passed.items()
+        ]
+
+        skipped = [resp for resp in update_reqs if isinstance(resp, Response)]
+        update_reqs = [req for req in update_reqs if isinstance(req, BatchRequest)]
+
+        update_resp = await self._batch_request(update_reqs)
+
+        return [*update_resp, *skipped, *list(failed.values())]
+
 
     async def get_branch_health(
         self,
@@ -6554,6 +6752,78 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    async def get_aiops_insights(
+        self,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+        *,
+        site_id: int = None,
+        client_mac: str = None,
+        serial: str = None,
+        device_type: Literal["ap", "gw", "cx", "sw", "switch"] = None
+    ) -> Response:
+        """List AI Insights.
+
+        returns global insights unless site_id, serial (and dev_type), or client_mac is provided
+
+        Args:
+            from_time (int | float | datetime, optional): Start of Time Range to collect insights for.
+            to_time (int | float | datetime, optional): End of Time Range to collect insights for.
+                Defaults to now.
+            site_id (int, optional): Site ID. Return insights for as specific site. Defaults to None
+            client_mac (str, optional): Client Mac. Return insights for as specific client. Defaults to None
+            serial (str, optional): AP Serial. Return insights for as specific device (device_type is required). Defaults to None
+            device_type (Literal['ap', 'gw', 'cx', 'sw'], optional): required if serial number is provided.  Valid Values: ap|gw|cx|sw|switch.
+                Defaults to None
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800) # Now - 3 hours (UTC)
+        from_time, to_time = utils.parse_time_options(from_time, to_time, in_milliseconds=True)
+        if serial:
+            if not device_type:
+                raise ValueError("device_type must be provided if serial is provided")
+            device_type = constants.lib_to_api(device_type, "aiops")
+        if len([param for param in [site_id, client_mac, serial] if param is not None]) > 1:
+            raise ValueError("Too many filtering arguments provided.  Only one of site_id, client_mac, or serial is expected.")
+
+        base_url = "/aiops/v2/insights"
+        if site_id is not None:
+            url = f"{base_url}/site/{site_id}/list"
+        elif serial is not None:
+            url = f"{base_url}/{device_type}/{serial}/list"
+        elif client_mac is not None:
+            url = f"{base_url}/client/{client_mac}/list"
+        else:
+            url = f"{base_url}/global/list"
+
+        return await self.get(url, params={"from": from_time, "to": to_time})
+
+    async def get_aiops_insight_details(
+        self,
+        insight_id: int,
+        from_time: int | float | datetime = None,
+        to_time: int | float | datetime = None,
+    ) -> Response:
+        """Get AI Insight Details by insight id.
+
+        Args:
+            insight_id (int): Insight ID
+            from_time (int | float | datetime, optional): Start of Time Range to collect insights for.
+            to_time (int | float | datetime, optional): End of Time Range to collect insights for.
+                Defaults to now.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800) # Now - 3 hours (UTC)
+        from_time, to_time = utils.parse_time_options(from_time, to_time, in_milliseconds=True)
+        url = f"/aiops/v2/insights/global/id/{insight_id}/export"
+
+        return await self.get(url, params={"from": from_time, "to": to_time})
+
 
     async def get_user_accounts(
         self,

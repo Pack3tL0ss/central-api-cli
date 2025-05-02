@@ -50,7 +50,7 @@ def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
     return cencli
 
 
-@app.command()
+@app.command(hidden=True)
 def acp_logs(
     log_id: str = typer.Argument(
         None,
@@ -93,6 +93,8 @@ def acp_logs(
     account: str = cli.options.account,
 ) -> None:
     """Show ACP audit logs
+
+    Use [cyan]cencli show audit logs[/]  The payload on this one seems far less useful
 
     This command shows logs associated with Aruba Cloud Platform (ACP).
     i.e. [cyan]Device Onboarded[/]

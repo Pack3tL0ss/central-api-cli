@@ -1,27 +1,27 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Iterable
+from pathlib import Path
+from random import randint
+from typing import TYPE_CHECKING, Annotated, Any, Dict, Iterable, List, Literal, Optional
 
 import pendulum
-from pathlib import Path
-from pydantic import BaseModel, RootModel, Field, validator, field_serializer, field_validator, ConfigDict, AliasChoices
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, RootModel, field_serializer, field_validator, model_validator
+from rich.console import Console
+from typing_extensions import Self
 
-from centralcli import utils, log
-from centralcli.constants import DevTypes, SiteStates, state_abbrev_to_pretty
+from centralcli import log, utils
+from centralcli.constants import DevTypes, DynamicAntMode, RadioBandOptions, SiteStates, state_abbrev_to_pretty
 from centralcli.objects import DateTime
-from random import randint
-import json
 
 if TYPE_CHECKING:
     from collections.abc import KeysView
 
-class DeviceStatus(str, Enum):
-    Up = "Up"
-    Down = "Down"
 
-# TODO This is a dup of DevTypes (plural) from constants verify if can import w/out circular issues
+# This is the same as DevTypes (plural in constants) other than DevTypes includes sdwan.
+# Could probably use same model for everything in here.  One or the other.
 class DevType(str, Enum):
     ap = "ap"
     sw = "sw"
@@ -39,11 +39,6 @@ class InventoryDevice(BaseModel):
     services: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services"))
     subscription_key: Optional[str] = None
     subscription_expires: Optional[int] = None
-
-switch_types = {
-    "AOS-S": "sw",
-    "AOS-CX": "cx"
-}
 
 
 class Inventory(RootModel):
@@ -69,14 +64,10 @@ class Inventory(RootModel):
             if key in ["device_type", "type"]:
                 return self._inv_type(value, model=device.get("model"))
             if key == "subscription_expires" and value:
-                return value / 1000 # convert ts in ms to ts in seconds
+                return value / 1000  # convert ts in ms to ts in seconds
             return value
 
-        return [
-            {
-                k: format_value(k, v, device=dev) for k, v in dev.items()
-            } for dev in data
-        ]
+        return [{k: format_value(k, v, device=dev) for k, v in dev.items()} for dev in data]
 
     @staticmethod
     def _inv_type(dev_type: str | None, model: str | None) -> DevType | None:
@@ -101,7 +92,11 @@ class Inventory(RootModel):
         return {s.serial: s.model_dump() for s in self.root}
 
 
-# TODO have Cache return model for attribute completion support in IDE
+class DeviceStatus(str, Enum):
+    Up = "Up"
+    Down = "Down"
+
+
 class Device(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     name: str
@@ -131,10 +126,12 @@ class Device(BaseModel):
 
         return DevType(dev_type)
 
+
 class Devices(BaseModel):
     aps: Optional[List[Device]] = Field([])
     switches: Optional[List[Device]] = Field([])
     gateways: Optional[List[Device]] = Field([])
+
 
 class Site(BaseModel):
     name: str = Field()
@@ -146,7 +143,7 @@ class Site(BaseModel):
     country: Optional[str] = Field(None)
     lon: Optional[float] = Field(None, alias=AliasChoices("longitude", "lon"))
     lat: Optional[float] = Field(None, alias=AliasChoices("latitude", "lat"))
-    devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices")) # field in prev cache had space "associated devices"
+    devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices"))  # field in prev cache had space "associated devices"
 
 
 class Sites(RootModel):
@@ -167,23 +164,18 @@ class Sites(RootModel):
 
     def prep_for_cache(self, data: List[Dict[str, str | int | float]]):
         def cache_keys(key: str) -> str:
-            short_keys = {
-                "longitude": "lon",
-                "latitude": "lat",
-                "zipcode": "zip"
-            }
+            short_keys = {"longitude": "lon", "latitude": "lat", "zipcode": "zip"}
 
             return short_keys.get(key, key).removeprefix("site_")
 
         strip_keys = ["site_details", "associated devices", "associated_device_count"]
         return [
             {
-                **{
-                    cache_keys(k): v for k, v in s.items() if k not in strip_keys
-                },
+                **{cache_keys(k): v for k, v in s.items() if k not in strip_keys},
                 **s.get("site_details", {}),
-                "devices": s.get("associated_device_count", s.get("associated devices", s.get("devices", 0)))
-            } for s in data
+                "devices": s.get("associated_device_count", s.get("associated devices", s.get("devices", 0))),
+            }
+            for s in data
         ]
 
     @property
@@ -250,11 +242,13 @@ class ImportSites(RootModel):
                 **inner.get("site_address", {}),
                 **inner.get("geolocation", {}),
                 **{k: v for k, v in inner.items() if k not in ["site_address", "geolocation"]},
-                "country": auto_usa(inner)
-            } for inner in _data
+                "country": auto_usa(inner),
+            }
+            for inner in _data
         ]
         # _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
         return _data
+
 
 class GatewayRole(str, Enum):
     branch = "branch"
@@ -271,10 +265,18 @@ class Group(BaseModel):
     gw_role: Optional[GatewayRole] = Field(None, alias=AliasChoices("gw_role", "GwNetworkRole"))
     aos10: Optional[bool | Literal["NA"]] = None
     microbranch: Optional[bool | Literal["NA"]] = None
-    wlan_tg: Optional[bool] = Field(False,)
-    wired_tg: Optional[bool] = Field(False,)
-    monitor_only_sw: Optional[bool] = Field(False,)
-    monitor_only_cx: Optional[bool] = Field(False,)
+    wlan_tg: Optional[bool] = Field(
+        False,
+    )
+    wired_tg: Optional[bool] = Field(
+        False,
+    )
+    monitor_only_sw: Optional[bool] = Field(
+        False,
+    )
+    monitor_only_cx: Optional[bool] = Field(
+        False,
+    )
     cnx: Optional[bool] = False
     gw_config: Optional[Path] = Field(None, exclude=True)
     ap_config: Optional[Path] = Field(None, exclude=True)
@@ -320,9 +322,13 @@ class Groups(RootModel):
         clean = []
         for g in data:
             properties = {
-                "AllowedDevTypes": [allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"],
+                "AllowedDevTypes": [
+                    allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"
+                ],
                 "GwNetworkRole": gw_role_map[g["properties"].get("GwNetworkRole", "NA")],
-                "aos10": "NA" if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA" else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
+                "aos10": "NA"
+                if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA"
+                else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
                 "microbranch": "NA" if g["properties"].get("ApNetworkRole") is None else g["properties"]["ApNetworkRole"].lower() == "microbranch",
                 "monitor_only_sw": "AOS_S" in g["properties"].get("MonitorOnly", []),
                 "monitor_only_cx": "AOS_CX" in g["properties"].get("MonitorOnly", []),
@@ -331,15 +337,15 @@ class Groups(RootModel):
             # MonitorOnly is all we need MonitorOnlySwitch is a bool and is set True if AOS_S is in MonitorOnly, it's a legacy field.  The Create Group endpoint accepts the MonitorOnly List.
             extra = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k not in ["MonitorOnlySwitch", "AllowedSwitchTypes", *captured_keys]}
 
-            template_info = {
-                "wired_tg": g["template_details"].get("Wired", False),
-                "wlan_tg": g["template_details"].get("Wireless", False)
-            }
+            template_info = {"wired_tg": g["template_details"].get("Wired", False), "wlan_tg": g["template_details"].get("Wireless", False)}
 
             clean += [{"name": g["group"], **extra, **properties, **template_info}]
-            clean = [{k.replace("-", "_"): v for k, v in inner.items()} for inner in clean]  # We allow hyphen in most inputs/import keys to be consistent with the CLI Options, but we always use _ to store the data.
+            clean = [
+                {k.replace("-", "_"): v for k, v in inner.items()} for inner in clean
+            ]  # We allow hyphen in most inputs/import keys to be consistent with the CLI Options, but we always use _ to store the data.
 
         return clean
+
 
 class Template(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
@@ -349,6 +355,7 @@ class Template(BaseModel):
     model: str  # model as in sku here
     version: str
     template_hash: str
+
 
 class Templates(RootModel):
     root: List[Template]
@@ -369,23 +376,15 @@ class Templates(RootModel):
     def format_data(self, data: List[Dict[str, str]]):
         if not isinstance(data, Iterable) or not all([isinstance(d, dict) for d in data]):
             return data
-        lib_dev_types = {
-            "MobilityController": "gw",
-            "IAP": "ap",
-            "CX": "cx",
-            "ArubaSwitch": "sw"
-        }
-        return [
-            {
-                k: v if k != "device_type" else lib_dev_types.get(v, v)
-                for k, v in inner.items()
-            } for inner in data
-        ]
+        lib_dev_types = {"MobilityController": "gw", "IAP": "ap", "CX": "cx", "ArubaSwitch": "sw"}
+        return [{k: v if k != "device_type" else lib_dev_types.get(v, v) for k, v in inner.items()} for inner in data]
+
 
 class Label(BaseModel):
     id: int = Field(alias="label_id")
     name: str = Field(alias="label_name")
     devices: Optional[int] = Field(0, alias=AliasChoices("devices", "associated_device_count"))
+
 
 class Labels(RootModel):
     root: List[Label]
@@ -402,19 +401,15 @@ class Labels(RootModel):
     def __len__(self) -> int:
         return len(self.model_dump())
 
+
 class ClientType(str, Enum):
     wired = "wired"
     wireless = "wireless"
 
+
 # Client Cache  # TODO need to include attribute for TinyDB.Table doc_id
 class Client(BaseModel):
-    model_config = ConfigDict(
-        use_enum_values=True,
-        arbitrary_types_allowed=True,
-        json_encoders={
-            DateTime: lambda dt: dt.ts
-        }
-    )
+    model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, json_encoders={DateTime: lambda dt: dt.ts})
     mac: str = Field(default_factory=str, alias=AliasChoices("macaddr", "mac"))
     name: str = Field(default_factory=str, alias=AliasChoices("name", "username"))
     ip: str = Field(default_factory=str, alias=AliasChoices("ip_address", "ip"))
@@ -422,12 +417,13 @@ class Client(BaseModel):
     network_port: str = Field(None, alias=AliasChoices("network", "interface_port", "network_port"))
     connected_serial: str = Field(None, alias=AliasChoices("associated_device", "connected_serial"))
     connected_name: str = Field(None, alias=AliasChoices("associated_device_name", "connected_name"))
-    site: Optional[str] = Field(None,)
+    site: Optional[str] = Field(
+        None,
+    )
     group: str = Field(None, alias=AliasChoices("group_name", "group"))
     last_connected: datetime | None = Field(None, alias=AliasChoices("last_connection_time", "last_connection"))
 
-
-    @field_serializer('last_connected')
+    @field_serializer("last_connected")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         if dt is None:  # TODO all with potential for there not to be a value need this
@@ -439,11 +435,7 @@ class Client(BaseModel):
     def summary_text(self):
         parts = [self.name, self.mac, self.ip, self.connected_name]
         parts = utils.unique([p for p in parts if p is not None])
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
+        return "[reset]" + "|".join([f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)])
 
     def __contains__(self, item: str) -> bool:
         return item in self.model_dump()
@@ -459,9 +451,8 @@ class Client(BaseModel):
 
     @property
     def help_text(self):
-        return [
-            tuple([self.name, f'{self.ip}|{self.mac} type: {self.type} connected to: {self.connected_name} ~ {self.network_port}'])
-        ]
+        return [tuple([self.name, f"{self.ip}|{self.mac} type: {self.type} connected to: {self.connected_name} ~ {self.network_port}"])]
+
 
 class Clients(RootModel):
     root: List[Client]
@@ -472,10 +463,7 @@ class Clients(RootModel):
 
     @staticmethod
     def prep_for_cache(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
-        return [
-            {k: v if k not in ["client_type", "type"] else v.lower() for k, v in inner.items()}
-            for inner in data
-        ]
+        return [{k: v if k not in ["client_type", "type"] else v.lower() for k, v in inner.items()} for inner in data]
 
     def __iter__(self):
         return iter(self.root)
@@ -488,66 +476,8 @@ class Clients(RootModel):
 
     @property
     def by_mac(self) -> Dict[str, Any]:  # Nedd to use model_dump_json to use models JsonEncoder
-        return {
-            c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root
-        }
+        return {c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root}
 
-
-class Event(BaseModel):
-    id: int
-    device: str  # formatted str from cleaner i.e. "av-655.21af-ap|CNXXYYZZN Group: WadeLab"
-    details: dict  # Not reliable source for the fields that are possible here
-    connected_port: str  # The Wired interface or WLAN SSID
-    connected_serial: str
-    connected_name: str
-
-class Logs(BaseModel):
-    """Audit logs model
-
-    We only store id and long_id so user can gather more details using long_id
-    actual Audit log details pulled from Central on demand, but not cached.
-    """
-    id: int
-    long_id: str
-
-class WebHookState(str, Enum):
-    Open = "Open"
-    Close = "Close"
-
-# TODO 2 enums below are repeats of what is already defined in constants.  import or move all to here?
-class AllowedGroupDevs(str, Enum):
-    ap = "ap"
-    gw = "gw"
-    cx = "cx"
-    sw = "sw"
-
-
-# TODO clibranch already had a model built for this, this isn't used, but consider moving models out of clibatch to here
-# class GroupImport(BaseModel):
-#     group: str = Field(..., alias="name")
-#     allowed_types: List[AllowedGroupDevs] = ["ap", "gw", "cx"]
-#     wired_tg: bool = False
-#     wlan_tg: bool = False
-#     aos10: bool = False
-#     microbranch: bool = False
-#     gw_role: GatewayRole = False
-#     monitor_only_sw: bool = False
-#     monitor_only_cx: bool = False
-
-
-# This is what is in the cache for the hook-proxy
-class WebHookData(BaseModel):
-    id: str
-    snow_incident_num: Optional[str] = None
-    ok: bool
-    alert_type: str
-    device_id: str  # serial#
-    state: WebHookState
-    text: str
-    timestamp: int  # could use datetime here
-
-def pretty_dt(dt: datetime) -> str:
-    return pendulum.from_timestamp(dt.timestamp(), tz="local").to_day_datetime_string()
 
 class WidsItem(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -572,10 +502,11 @@ class WidsItem(BaseModel):
     signal: Optional[int] = Field(default_factory=int)
     ssid: Optional[str] = Field(default_factory=str)
 
-    @field_serializer('first_seen', 'last_seen')
+    @field_serializer("first_seen", "last_seen")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         return DateTime(dt.timestamp(), "mdyt")
+
 
 class Wids(RootModel):
     root: List[WidsItem]
@@ -592,12 +523,6 @@ class Wids(RootModel):
     def __len__(self) -> int:
         return len(self.model_dump())
 
-
-class WIDS_LIST(BaseModel):
-    rogue: Optional[List[WidsItem]] = Field(default_factory=list)
-    interfering: Optional[List[WidsItem]] = Field(default_factory=list)
-    neighbor: Optional[List[WidsItem]] = Field(default_factory=list)
-    suspectrogue: Optional[List[WidsItem]] = Field(default_factory=list)
 
 # SNOW Response
 class SysTargetSysId(BaseModel):
@@ -679,6 +604,7 @@ class Result(BaseModel):
 class SnowResponse(Result):
     result: Result
 
+
 # WebHook Models WebHookDetails no reliable source for all possible fields.
 class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     customer_id: Optional[str] = None
@@ -708,7 +634,7 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     _band: Optional[str] = None
     _radio_num: Optional[str] = None
     channel: Optional[str] = None
-    client_count: Optional[int] = None # converting from str
+    client_count: Optional[int] = None  # converting from str
     src_ip: Optional[str] = None
     dst_ip: Optional[str] = None
     alias_map_name: Optional[str] = None
@@ -740,8 +666,8 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     nbr_addr: Optional[str] = None
     nbr_as: Optional[str] = None
     nbr_id: Optional[str] = None
-    count: Optional[int] = None # convert from str
-    max: Optional[int] = None # convert from str
+    count: Optional[int] = None  # convert from str
+    max: Optional[int] = None  # convert from str
     default_gw_status: Optional[str] = None
     uplink_tag: Optional[str] = None
     link_tag: Optional[str] = None
@@ -760,7 +686,6 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     cluster_name: Optional[str] = Field(None, alias="cluster-name")
 
 
-
 class WebHook(BaseModel):
     id: Optional[str] = None
     nid: Optional[int] = None
@@ -776,37 +701,40 @@ class WebHook(BaseModel):
     webhook: Optional[str] = None
     text: Optional[str] = None
 
-_example_snow_payload = {
-        "u_affected_user": "blah",
-        "u_assignment_group":"TE-sn-servicenow",
-        "u_business_service": "",
-        "u_call_back": False,
-        "u_category": "",
-        "u_contact_type": "integration",
-        "u_description": "",
-        "u_configuration_item": "valid snow config item",
-        "u_external_source": "40 chars",
-        "u_external_ticket": "40 chars",
-        "u_raised_severity": 2,
-        "u_reported_by": "valid TE ID",
-        "u_servicenow_number": "Only on Update",
-        "u_service_offering": "snow valid service offering",
-        "u_short_description":"Test Ticket Mandatory Create 160 char",
-        "u_state": "resolved",
-        "u_subcategory": "must be valid sub cat of cat",
-        "u_work_notes": "4000 chars",
-        "u_attachment_name":"Integration_Sample.txt",
-        "u_attachment_type":"text/plain",
-        "u_attachment_encoded_code":"SW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA==",
-        "u_impact": 2,
-        "u_urgency": 2,
-        "u_watch_list":"TE308801,TE163762"
-    }
+
+# _example_snow_payload = {
+#         "u_affected_user": "blah",
+#         "u_assignment_group":"TE-sn-servicenow",
+#         "u_business_service": "",
+#         "u_call_back": False,
+#         "u_category": "",
+#         "u_contact_type": "integration",
+#         "u_description": "",
+#         "u_configuration_item": "valid snow config item",
+#         "u_external_source": "40 chars",
+#         "u_external_ticket": "40 chars",
+#         "u_raised_severity": 2,
+#         "u_reported_by": "valid TE ID",
+#         "u_servicenow_number": "Only on Update",
+#         "u_service_offering": "snow valid service offering",
+#         "u_short_description":"Test Ticket Mandatory Create 160 char",
+#         "u_state": "resolved",
+#         "u_subcategory": "must be valid sub cat of cat",
+#         "u_work_notes": "4000 chars",
+#         "u_attachment_name":"Integration_Sample.txt",
+#         "u_attachment_type":"text/plain",
+#         "u_attachment_encoded_code":"SW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA==",
+#         "u_impact": 2,
+#         "u_urgency": 2,
+#         "u_watch_list":"TE308801,TE163762"
+#     }
+
 
 class HighMedLow(str, Enum):
     High = 1
     Medium = 2
     Low = 3
+
 
 class SnowCreate(BaseModel):
     u_affected_user: Optional[str] = None
@@ -822,7 +750,7 @@ class SnowCreate(BaseModel):
     u_raised_severity: Optional[int] = None
     u_reported_by: Optional[str] = None
     u_service_offering: Optional[str] = None
-    u_short_description: str # = Field(..., le=160)
+    u_short_description: str  # = Field(..., le=160)
     u_state: Optional[str] = None
     u_subcategory: Optional[str] = None
     u_work_notes: Optional[str] = None
@@ -832,6 +760,7 @@ class SnowCreate(BaseModel):
     u_impact: Optional[HighMedLow] = None
     u_urgency: Optional[HighMedLow] = None
     u_watch_list: Optional[str] = None
+
 
 class SnowUpdate(BaseModel):
     u_affected_user: Optional[str] = None
@@ -858,74 +787,6 @@ class SnowUpdate(BaseModel):
     u_impact: Optional[HighMedLow] = None
     u_urgency: Optional[HighMedLow] = None
     u_watch_list: Optional[str] = None
-
-# TODO not currently used.  ROUTES ospf/overlay/etc
-class Summary(BaseModel):
-    admin_status: bool
-    oper_state: str
-    channel_state: str
-    site: str
-    up_count: int
-    down_count: int
-    last_state_change: datetime
-    num_interfaces: int
-    advertised_routes: int
-    learned_routes: int
-
-    _normalize_datetimes = validator("last_state_change", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-        }
-
-#learned
-class NexthopItem(BaseModel):
-    address: str
-    protocol: str
-    flags: str
-    is_best: bool
-    metric: int
-    interface: List[str]
-
-# advertised
-class NexthopListItem(BaseModel):
-    address: str
-    protocol: str
-    flags: str
-    metric: int
-    interface: str
-
-
-class RouteLearned(BaseModel):
-    prefix: str
-    length: int
-    protocol: str
-    flags: str
-    nexthop: str
-    metric: int
-    interface: str
-    nexthop_list: List[NexthopItem]
-
-
-class RouteAdvertised(BaseModel):
-    prefix: str
-    length: int
-    protocol: str
-    flags: str
-    nexthop: str
-    metric: int
-    interface: str
-    nexthop_list: List[NexthopListItem]
-
-
-class RoutesLearned(BaseModel):
-    summary: Summary
-    routes: List[RouteLearned]
-
-class RoutesAdvertised(BaseModel):
-    summary: Summary
-    routes: List[RouteAdvertised]
 
 
 # get_user_accounts
@@ -961,17 +822,19 @@ class UserAccounts(BaseModel):
     items: List[Item]
     total: int
 
+
 class CloudAuthUploadStats(BaseModel):
     completed: int
     failed: int
     total: int
+
 
 class CloudAuthUploadResponse(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         json_encoders={
             datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-        }
+        },
     )
     details: Dict[str, Any]
     status: str
@@ -981,40 +844,10 @@ class CloudAuthUploadResponse(BaseModel):
     durationNanos: int
     fileName: str
 
-    @field_serializer('lastUpdatedAt', 'submittedAt')
+    @field_serializer("lastUpdatedAt", "submittedAt")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         return DateTime(dt.timestamp())
-
-    # _normalize_datetimes = validator("lastUpdatedAt", "submittedAt", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
-
-    # class Config:
-    #     json_encoders = {
-    #         datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-    #     }
-
-
-# class MpskNetwork(BaseModel):
-#     id: str
-#     ssid: str
-#     accessURL: str
-#     passwordPolicy: str
-
-
-# class MpskNetworks(RootModel):
-#     root: List[MpskNetwork]
-
-#     def __init__(self, data: List[dict]) -> None:
-#         super().__init__([CacheMpskNetwork(**m) for m in data])
-
-#     def __iter__(self):
-#         return iter(self.root)
-
-#     def __getitem__(self, item):
-#         return self.root[item]
-
-#     def __len__(self) -> int:
-#         return len(self.root)
 
 
 class MpskNetwork(BaseModel):
@@ -1040,11 +873,13 @@ class MpskNetworks(RootModel):
         return len(self.root)
 
 
-# We don't use this, but if there is a need, this is what they should map to
+# Not Used currently, For reference this is what auth_type_num List[int] in portal payload maps to
+# auth_type field is ', ' seperated field showing text description of auth types: 'Username/Password, Self-Registration'
 class PortalAuthType(Enum):
     anon = 0
     user_pass = 1
     self_reg = 2
+
 
 class Portal(BaseModel):
     name: str
@@ -1075,6 +910,7 @@ class Portals(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
+
 class Guest(BaseModel):
     portal_id: str
     name: str
@@ -1083,9 +919,10 @@ class Guest(BaseModel):
     phone: Optional[str] = None
     company: Optional[str] = Field(None, alias=AliasChoices("company", "company_name"))
     enabled: bool = Field(None, alias=AliasChoices("is_enabled", "enabled"))
-    status:  Optional[str] = None
+    status: Optional[str] = None
     created: int = Field(alias=AliasChoices("created", "created_at"))
     expires: Optional[int] = Field(None, alias=AliasChoices("expires", "expire_at"))
+
 
 class Guests(RootModel):
     root: List[Guest]
@@ -1096,10 +933,7 @@ class Guests(RootModel):
 
     @staticmethod
     def _flatten_guest_data(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
-        return [
-            {**{k: v for k, v in inner.items() if k != ["user"]}, **inner.get("user", {})}
-            for inner in data
-        ]
+        return [{**{k: v for k, v in inner.items() if k != ["user"]}, **inner.get("user", {})} for inner in data]
 
     def __iter__(self):
         return iter(self.root)
@@ -1110,17 +944,185 @@ class Guests(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
-# class Guests(RootModel):
-#     root: Dict[str, GuestItems]
 
-#     def __init__(self, portal_id: str, data: List[dict]) -> None:
-#         super().__init__({portal_id: GuestItems(data)})
+def _str_to_list(value: str | int | float | List[Enum] | List[str] | List[int, float]) -> None | List[str]:
+    """Allows import file to be a space or quoted comma separated str vs. a list
 
-#     def __iter__(self):
-#         return iter(self.root)
+    useful for csv.  A comma seperated str (wrapped in quotes in the csv) is also valid.
+    i.e. '2.4 5 6' would return ["2.4", "5", "6"]
 
-#     def __getitem__(self, item):
-#         return self.root[item]
+    Args:
+        value (str | int | float | List[Enum] | List[str] | List[int, float]): The value of the field
 
-#     def __len__(self) -> int:
-#         return len(self.root)
+    Returns:
+        None | List[str]: None if the field is not in the import file or has no value otherwise
+            returns a list based on the value(s) provided.
+    """
+    if value is None:
+        return value
+
+    if isinstance(value, list):
+        if value and hasattr(value[0], "value"):
+            return [v.value for v in value]
+
+        return list(map(str, value))
+
+    if isinstance(value, (int, float)):  # possible with yaml/json import
+        return [str(value)]
+
+    if "," in value:
+        return [v.strip() for v in map(str, value.split(","))]
+
+    if " " in value:
+        return list(map(str, value.split()))
+
+    return utils.listify(value)
+
+
+class APUpdate(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    serial: str
+    hostname: Optional[str] = None
+    ip: Optional[str] = None
+    mask: Optional[str] = None
+    gateway: Optional[str] = None
+    dns: Annotated[List[str], BeforeValidator(_str_to_list)] = None
+    domain: Optional[str] = None
+    disable_radios: Annotated[List[RadioBandOptions], BeforeValidator(_str_to_list)] = None
+    enable_radios: Annotated[List[RadioBandOptions], BeforeValidator(_str_to_list)] = None
+    access_radios: Annotated[List[RadioBandOptions], BeforeValidator(_str_to_list)] = None
+    monitor_radios: Annotated[List[RadioBandOptions], BeforeValidator(_str_to_list)] = None
+    spectrum_radios: Annotated[List[RadioBandOptions], BeforeValidator(_str_to_list)] = None
+    flex_dual_exclude: Optional[RadioBandOptions] = None
+    dynamic_ant_mode: Optional[DynamicAntMode] = Field(None, alias=AliasChoices("antenna_width", "dynamic_ant_mode"))
+    uplink_vlan: Optional[int] = Field(None, alias=AliasChoices("uplink_vlan", "tagged_uplink_vlan"))
+    gps_altitude: Optional[float] = None
+
+    def __str__(self):
+        console = Console(force_terminal=False, emoji=False)
+        with console.capture() as cap:
+            console.print(self.__rich__())
+        return cap.get()
+
+    def __rich__(self):
+        iden = f"[bright_green]{self.serial}[/]"
+        items = "|".join(
+            [
+                f"{field}: {getattr(self, field) if not isinstance(getattr(self, field), list) else ','.join(getattr(self, field))}"
+                for field in self.model_fields_set
+                if field != "serial" and getattr(self, field) is not None
+            ]
+        )
+        reboot_msg = "\u267b  " if self.ip else ""  # \u267b :recycle: ♻
+        return f"{reboot_msg}{iden}|{items}"
+
+    @model_validator(mode="after")
+    def validate_radio_modes(self) -> Self:
+        radios = ["2.4", "5", "6"]
+        enable_radios = self.enable_radios or []
+        disable_radios = self.disable_radios or []
+        access_radios = self.access_radios or []
+        monitor_radios = self.monitor_radios or []
+        spectrum_radios = self.spectrum_radios or []
+        checks = [
+            {"values": [*disable_radios, *enable_radios], "msg": "radio set to be both enabled and disabled. Which makes no sense."},
+            {"values": [*access_radios, *monitor_radios, *spectrum_radios], "msg": "radio defined multiple modes (access, monitor, spectrum)."},
+        ]
+        for c in checks:
+            for r in radios:
+                if c["values"].count(r) > 1:
+                    ap_iden = self.serial if not self.hostname else f"{self.hostname} ({self.serial})"
+                    raise ValueError(f"Invalid import data for {ap_iden},  {r}Ghz {c['msg']}")
+
+        return self
+
+    @model_validator(mode="after")
+    def validate_ip_fields(self) -> Self:
+        ap_iden = self.serial if not self.hostname else f"{self.hostname} ({self.serial})"
+        if self.ip and self.ip.lower() == "dhcp":
+            if any([self.mask, self.gateway]):
+                raise ValueError(f"Invalid import data for {ap_iden}, mask and gateway are not expected if ip is being set to dhcp")
+
+            # reset static IP values to default (for DHCP)  This is the default so only necessary when changing an AP that previously had a static IP
+            self.ip = self.mask = self.gateway = "0.0.0.0"
+            # Unsure if static DNS/domain can be configured with dynamic IP
+            self.dns = self.dns or ["0.0.0.0"]
+            self.domain = self.domain or ""
+
+        elif any([self.ip, self.mask, self.gateway]) and not all([self.ip, self.mask, self.gateway, self.dns]):  # unsure if dns by itself is valid.
+            raise ValueError(f"Invalid import data for {ap_iden},  if any of ip, mask, gateway are provided all of ip, mask, gateway, and dns must be provided")
+
+        return self
+
+    @staticmethod
+    def _parse_disable_radio_values(enable_radios: None | list, disable_radios: None | list) -> tuple:
+        if not disable_radios and not enable_radios:
+            return None, None, None
+
+        radio_24_disable = None if not enable_radios or "2.4" not in enable_radios else False
+        radio_5_disable = None if not enable_radios or "5" not in enable_radios else False
+        radio_6_disable = None if not enable_radios or "6" not in enable_radios else False
+
+        if disable_radios:
+            if radio_24_disable is None and "2.4" in disable_radios:
+                radio_24_disable = True
+            if radio_5_disable is None and "5" in disable_radios:
+                radio_5_disable = True
+            if radio_6_disable is None and "6" in disable_radios:
+                radio_6_disable = True
+
+        return radio_24_disable, radio_5_disable, radio_6_disable
+
+    @staticmethod
+    def _parse_radio_mode_values(
+        access_radios: None | list,
+        monitor_radios: None | list,
+        spectrum_radios: None | list,
+    ) -> tuple:
+        radio_24_mode, radio_5_mode, radio_6_mode = None, None, None
+        modes = ["access", "monitor", "spectrum"]
+        for mode, radios in zip(modes, [access_radios, monitor_radios, spectrum_radios]):
+            if radios is None:
+                continue
+            if radio_24_mode is None:
+                radio_24_mode = None if "2.4" not in radios else mode
+            if radio_5_mode is None:
+                radio_5_mode = None if "5" not in radios else mode
+            if radio_6_mode is None:
+                radio_6_mode = None if "6" not in radios else mode
+
+        return radio_24_mode, radio_5_mode, radio_6_mode
+
+    @property
+    def api_params(self):
+        radios_24_diable, radio_5_disable, radio_6_disable = self._parse_disable_radio_values(self.enable_radios, self.disable_radios)
+        radio_24_mode, radio_5_mode, radio_6_mode = self._parse_radio_mode_values(self.access_radios, self.monitor_radios, self.spectrum_radios)
+        kwargs = {
+            **{k: v for k, v in self.model_dump().items() if k not in ["gps_altitude"] and not k.endswith("_radios")},
+            **{
+                "radio_24_disable": radios_24_diable,
+                "radio_5_disable": radio_5_disable,
+                "radio_6_disable": radio_6_disable,
+                "radio_24_mode": radio_24_mode,
+                "radio_5_mode": radio_5_mode,
+                "radio_6_mode": radio_6_mode,
+            },
+        }
+
+        return kwargs
+
+
+class APUpdates(RootModel):
+    root: List[APUpdate]
+
+    def __init__(self, data: List[dict]) -> None:
+        super().__init__([APUpdate(**ap) for ap in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)

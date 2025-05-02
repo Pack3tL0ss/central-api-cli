@@ -7,6 +7,8 @@ import pendulum
 import sys
 import json
 import os
+import re
+import ipaddress
 from datetime import datetime
 from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
@@ -46,8 +48,8 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, DeviceStatus,
-    DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, InsightSeverity,
+    SortInsightOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from .objects import DateTime, ShowInterfaceFilters
@@ -55,9 +57,11 @@ from .strings import cron_weekly
 from .cache import CacheDevice
 from .response import CombinedResponse
 from .models import Device
+from .caas import CaasAPI
+
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal
+    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
     from tinydb.table import Document
 
 
@@ -469,7 +473,7 @@ def devices(
             m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ],
-        help=f"Show details for a specific device [grey42]{escape('[default: show details for all devices]')}[/]",
+        help=f"Show details for a specific device {cli.help_block('show details for all devices')}",
         show_default=False,
     ),
     group: str = cli.options.group,
@@ -520,17 +524,17 @@ def devices(
 @app.command()
 def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [grey42 italic](config items not pushed) {escape('[requires --group]')}[/]"),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {cli.help_block('--group', help_type='requires')}[/]"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {cli.help_block('--site', help_type='requires')}", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
+    group: str = cli.options.group,
+    site: str = cli.options.site,
+    label: str = cli.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site [grey42 italic]{escape('[requires --site]')}[/]", show_default=False,),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortDevOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -554,7 +558,7 @@ def aps(
         if up and down:
                 ...  # They used both flags.  ignore
         elif up or down:
-                status = "down" if down else "up"
+                status = StatusOptions.Down if down else StatusOptions.Up
 
     if dirty:
         if not group:
@@ -770,7 +774,7 @@ def inventory(
     dev_type: ShowInventoryArgs = typer.Argument("all",),
     sub: bool = typer.Option(
         None,
-        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. [grey42]{escape('[default: show all]')}[/]",
+        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {cli.help_block('show all')}",
         show_default=False,
     ),
     verbose: int = cli.options.verbose,
@@ -1012,7 +1016,7 @@ def interfaces(
         "all",
         metavar=f"{iden_meta.dev.replace(']', '|all]')}",
         autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
-        help=f"Device to fetch interfaces from {cli.help_default('ALL (must provide one of --ap, --gw, or --switch)')}",
+        help=f"Device to fetch interfaces from {cli.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
     ),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
@@ -1296,6 +1300,77 @@ def vlans(
         cleaner=cleaner.get_vlans
     )
 
+def _get_reservation_pool_from_config(cfg_resp: Response, res_by_mac: Dict[str, dict]) -> Dict[str, dict]:
+    dhcp_pools = {}
+    pvids = {}
+    for idx, line in enumerate(cfg_resp.output):
+        if line.lstrip().startswith("ip dhcp pool"):
+            pool = line.removeprefix("ip dhcp pool").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("network")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("network ")
+                network = ipaddress.ip_network("/".join(network_line.split()))
+                dhcp_pools[network] = pool
+        elif line.startswith("interface vlan"):
+            pvid = line.removeprefix("interface vlan").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("ip address")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("ip address ")
+                network = ipaddress.ip_network("/".join(network_line.split()), strict=False)
+                pvids[network] = pvid
+
+    for mac, data in res_by_mac.items():
+        if data.get("ip"):
+            ip = ipaddress.ip_address(data["ip"])
+            matched = [net for net in dhcp_pools if ip in net]
+            if matched:
+                res_by_mac[mac]["pool_name"] = dhcp_pools[matched[0]]
+                res_by_mac[mac]["subnet"] = str(matched[0])
+            pvid_match = [net for net in pvids if ip in net]
+            if pvid_match:
+                res_by_mac[mac]["vlan_id"] = pvids[pvid_match[0]]
+    return res_by_mac
+
+
+def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Response:
+    reservations = [gw for gw in resp.output if gw.get("reserved", False) is True]
+    if not reservations:
+        return resp
+
+    caas = CaasAPI(central=cli.central)
+    cfg_resp = cli.central.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
+    if not cfg_resp.ok:
+        log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
+        return resp
+
+    cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
+    dhcp_res_lines = [line for line in cfg_resp.output if line.lstrip().startswith("ip dhcp reserved hardware-address")]
+    if not dhcp_res_lines:
+        return resp
+
+    res_by_mac = {r["mac"]: r for r in reservations}
+    for line in dhcp_res_lines:
+        match = re.match("ip dhcp reserved hardware-address (.*) ip-address (.*) hostname (.*)", line)
+        if match:
+            mac, ip, hostname = map(str.strip, match.groups())
+            if mac in res_by_mac and res_by_mac[mac].get("ip", "err") == ip:
+                res_by_mac[mac]["client_name"] = hostname
+
+    try:
+        res_by_mac = _get_reservation_pool_from_config(cfg_resp=cfg_resp, res_by_mac=res_by_mac)
+    except Exception as e:
+        msg = f"{e.__class__.__name__} while trying to extract reservation info from config in _get_reservation_pool_from_config."
+        log.exception(f"{msg}\n{e}")
+        log.error(f"{msg}", caption=True)
+
+
+    output_by_mac = {r["mac"]: r for r in resp.output}
+    combined = {**output_by_mac, **res_by_mac}
+    resp.output = list(combined.values())
+    return resp
+
 
 @app.command()
 def dhcp(
@@ -1313,6 +1388,7 @@ def dhcp(
     do_yaml: bool = cli.options.do_yaml,
     do_csv: bool = cli.options.do_csv,
     do_table: bool = cli.options.do_table,
+    verbosity: int = cli.options.verbose,
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
@@ -1322,14 +1398,18 @@ def dhcp(
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
+
+    -v (verbose) will extract hostnames for defined reservations from GW config
     """
     central = cli.central
     dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
     if what == "pools":
         resp = central.request(central.get_dhcp_pools, dev.serial)
-    else:
+    else:  # clients
         resp = central.request(central.get_dhcp_clients, dev.serial, reservation=not no_res)
+        if resp.ok and not no_res and verbosity:
+            resp = _get_reservation_info_from_config(resp, dev=dev)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -1710,7 +1790,7 @@ def variables(
     device: str = typer.Argument(
         None,
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
-        help=f"[grey42]{escape('[default: all]')}[/]",
+        help=cli.help_block('all'),
         autocompletion=lambda incomplete: [
             m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
@@ -1789,9 +1869,13 @@ def lldp(
     # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
     stack_ids, devs = [], []
     for dev in _devs:
-        if dev.swack_id and dev.swack_id not in stack_ids:
-            stack_ids.append(dev.swack_id)
+        if dev.swack_id:
+            if dev.swack_id not in stack_ids:
+                stack_ids.append(dev.swack_id)
+                devs.append(dev)
+        else:
             devs.append(dev)
+
 
     reqs = {dev: BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
     reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
@@ -1991,14 +2075,20 @@ def config_(
 
     _data_key = None
     if do_gw or (device and device.generic_type == "gw"):
-        if device and device.generic_type != "gw":
-            cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+        if device:
+            if device.generic_type != "gw":
+                cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+
         caasapi = caas.CaasAPI(central=cli.central)
         if not status:
             func = caasapi.show_config
+            args = [group.name,]
+            if device:
+                args += [device.mac]
             _data_key = "config"
         else:
             func = caasapi.get_config_status
+            args = [device.serial]
     elif do_ap or (device and device.generic_type == "ap"):
         func = cli.central.get_ap_config
         if device:
@@ -2006,22 +2096,15 @@ def config_(
                 args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
                     func = cli.central.get_per_ap_config
+                    args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
+                elif not device.is_aos10:
+                    cli.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             else:
                 cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
-        else:
-            args = [group.name]
     else:
         cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
-        cli.exit()
 
-    # Build arguments cli.central method associated with each device type supported.
-    if device:
-        if device.generic_type == "ap" or status:
-            args = [device.swack_id]
-            if not device.is_aos10:
-                cli.econsole.print(f"Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
-            args = [group.name, device.mac]
-    else:
+    if not device:
         args = [group.name]
 
     resp = cli.central.request(func, *args)
@@ -2126,8 +2209,8 @@ def wlans(
     site: str = cli.options.site,
     label: str = cli.options.label,
     swarm: str = cli.options.swarm_device,
-    verbose: int = typer.Option(0, "-v", count=True, help="get more details for SSIDs across all AP groups", show_default=False,),
-    sort_by: SortWlanOptions = typer.Option(None, "--sort", help=f"Field to sort by [grey42]{escape('[default: SSID]')}[/]", show_default=False),
+    verbose: int = cli.options.get("verbose", help="get more details for SSIDs across all AP groups"),
+    sort_by: SortWlanOptions = cli.options.get("sort_by", help=f"Field to sort by {cli.help_block('SSID')}",),
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -2196,7 +2279,8 @@ def wlans(
         else:
             resp = group_res
 
-        cli.display_results(resp, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        group_by = "group" if not sort_by else None
+        cli.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
         resp = central.request(central.get_wlans, **params)
         caption = None
@@ -2294,7 +2378,7 @@ def clients(
     client: str = typer.Argument(
         None,
         metavar=iden_meta.client,
-        help="Show details for a specific client. [grey42 italic]verbose assumed.[/]",
+        help="Show details for a specific client. [dim italic]verbose assumed.[/]",
         autocompletion=cli.cache.client_completion,
         show_default=False,
     ),
@@ -2304,9 +2388,9 @@ def clients(
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
-    ssid: str = typer.Option(None, help="Filter by SSID [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
-    band: RadioBandOptions = typer.Option(None, help="Filter by Band [grey42 italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help="Show denylisted clients [grey42 italic](--dev (AP only) must also be supplied)[/]",),
+    ssid: str = typer.Option(None, help="Filter by SSID [dim italic](Applies only to wireless clients)[/]", show_default=False,),
+    band: RadioBandOptions = typer.Option(None, help="Filter by Band [dim italic](Applies only to wireless clients)[/]", show_default=False,),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {cli.help_block('--dev (AP only)', help_type='requires')}",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
     device: str = cli.options.device,
     verbose: int = cli.options.verbose,
@@ -2567,7 +2651,7 @@ def roaming(
     cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
-def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
+def show_logs_cencli_callback(ctx: typer.Context, cencli: bool) -> bool:
     if ctx.resilient_parsing:  # tab completion, return without validating
         return cencli
 
@@ -2590,7 +2674,7 @@ def logs(
         autocompletion=cli.cache.event_log_completion,
         show_default=False,
     ),
-    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs", callback=show_logs_cencli_callback),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),  # callback=show_logs_cencli_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True),
     group: str = cli.options.group,
     site: str = cli.options.site,
@@ -2603,7 +2687,7 @@ def logs(
     device: str = cli.options.device,
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
-    client: str = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cli.cache.client_completion, show_default=False,),
+    client: str = cli.options.client,
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
     hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
     dev_type: EventDevTypeArgs = typer.Option(
@@ -2640,6 +2724,9 @@ def logs(
         log.print_file() if not tail else log.follow()
         cli.exit(code=0)
 
+    if tail:
+        cli.ws_follow_tail(title=title, log_type="event")  # program will exit here
+
     # TODO move to common func for use by show logs and show audit logs
     if event_id:
         event_details = cli.cache.get_event_log_identifier(event_id)
@@ -2648,41 +2735,41 @@ def logs(
             tablefmt="action",
         )
         cli.exit(code=0)
-    else:
-        if (_all or count) and [start, end, past].count(None) != 3:
-            cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
 
-        start, end = cli.verify_time_range(start, end=end, past=past)
-        level = level if level is None else level.name
-        dev_id = None
-        swarm_id = None
-        if device:
-            device = cli.cache.get_dev_identifier(device)
-            if swarm:
-                if device.type != "ap":
-                    log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
-                else:
-                    swarm_id = device.swack_id
+    if (_all or count) and [start, end, past].count(None) != 3:
+        cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+    start, end = cli.verify_time_range(start, end=end, past=past)
+    level = level if level is None else level.name
+    dev_id = None
+    swarm_id = None
+    if device:
+        device = cli.cache.get_dev_identifier(device)
+        if swarm:
+            if device.type != "ap":
+                log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
             else:
-                dev_id = device.serial
+                swarm_id = device.swack_id
+        else:
+            dev_id = device.serial
 
-        client_mac = None
-        if client:
-            if utils.Mac(client).ok:
-                client_mac = client
-            else:
-                _client = cli.cache.get_client_identifier(client)
-                client_mac = _client.mac
+    client_mac = None
+    if client:
+        if utils.Mac(client).ok:
+            client_mac = client
+        else:
+            _client = cli.cache.get_client_identifier(client)
+            client_mac = _client.mac
 
-        if _all:
-            start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves macking this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
-            title = f"All available {title}"
-            count = 10_000
-        elif count:
-            title = f"Last {count} {title}"
-        elif [start, end].count(None) == 2:
-            start = pendulum.now(tz="UTC").subtract(minutes=30)
-            title = f"{title} for last 30 minutes"
+    if _all:
+        start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves making this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
+        title = f"All available {title}"
+        count = 10_000
+    elif count:
+        title = f"Last {count} {title}"
+    elif [start, end].count(None) == 2:
+        start = pendulum.now(tz="UTC").subtract(minutes=30)
+        title = f"{title} for last 30 minutes"
 
     kwargs = {
         "group": group,
@@ -2733,7 +2820,7 @@ def alerts(
     label: str = cli.options.label,
     device: str = cli.options.device,
     severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
-    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category.", show_default=False,),
+    search: str = typer.Option(None, help="Filter by alerts with supplied text in name/description/category.", show_default=False,),
     ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
     alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
     start: datetime = cli.options.start,
@@ -2922,11 +3009,15 @@ def webhooks(
         sort_by = sort_by.name
     ...
     resp = cli.central.request(cli.central.get_all_webhooks)
+    caption = None
+    if resp.ok and resp.output:
+        caption = f"Counts: Webhooks: [cyan]{len(resp.output)}[/] | Destination URLs: [cyan]{sum([len(wh['urls']) for wh in resp.output])}[/]"
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title="WebHooks",
+        caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -3015,14 +3106,14 @@ def portals(
     portal: List[str] = typer.Argument(
         None,
         metavar="[name|id]",
-        help=f"show details for a specific portal profile [grey42]{escape('[default: show summary for all portals]')}[/]",
+        help=f"show details for a specific portal profile {cli.help_block('show summary for all portals')}",
         autocompletion=cli.cache.portal_completion,
         show_default=False,),
     logo: bool = typer.Option(
         False,
         "-L", "--logo",
         metavar="PATH",
-        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] [grey42]{escape(f'[default: {Path.cwd()}/<original_logo_filename>]')}[/]",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {cli.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
         show_default = False,
         writable=True,
     ),
@@ -3069,7 +3160,7 @@ def portals(
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(None, help=f"portal name [grey42]{escape('[default: Guests for all defined User/Pass portals]')}[/]", autocompletion=cli.cache.portal_completion, show_default=False,),
+    portal: str = typer.Argument(None, help=f"portal name {cli.help_block('Guests for all defined User/Pass portals')}", autocompletion=cli.cache.portal_completion, show_default=False,),
     refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
     sort_by: str = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -3238,6 +3329,75 @@ def radios(
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
     cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+
+@app.command()
+def insights(
+    insight_id: int = typer.Argument(
+        None,
+        help="Show details for a specific insight id.",
+        show_default=False,
+    ),
+    start: datetime = cli.options(timerange="3h").start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    site: str = cli.options.site,
+    device: str = cli.options.get("device", help="Show insights related to a specific device"),
+    client: str = cli.options.get("client", help="Show insights related to a specific client"),
+    severity: InsightSeverity = typer.Option(None, "-s", "--severity", help="Filter insights by severity", show_default=False,),
+    sort_by: SortInsightOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Show AI Insights or details for a specific insight
+
+    Shows Global Insights by default, or insights related to a site, device, or client based on provided options.
+    Result of above will include insight id, which can be provided to show details for the insight.
+    """
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not insight_id else "yaml")
+    if not any([past, start]):
+        start = pendulum.now(tz="UTC").subtract(hours=3)
+    start, end = cli.verify_time_range(start, end=end, past=past, max_days=None)  # this endpoint doesn't complain for longer ranges, but appears to only stores insights for a month
+    duration: pendulum.Interval = end - start
+    if duration.in_days() > 31:
+        log.info(f":information:  Specified time range ({duration.in_words()}), exceeds the retention period for AI Insights (1 month).  Showing all available insights.", caption=True)
+
+    if insight_id:
+        resp = cli.central.request(cli.central.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
+        title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
+        cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
+        cli.exit(0)
+
+    site_id, serial, dev_type, client_mac = None, None, None, None
+    if device:
+        device: CacheDevice = cli.cache.get_dev_identifier(device)
+        serial = device.serial
+        dev_type = device.generic_type
+        title = f"AI Insights related to device {device.summary_text}"
+    elif client:
+        client: CacheClient = cli.cache.get_client_identifier(client)
+        client_mac = client.mac
+        title = f"AI Insights related to Client {client.summary_text}"
+    elif site:
+        site: CacheSite = cli.cache.get_site_identifier(site)
+        site_id = site.id
+        title = f"AI Insights related to site {site.name}"
+    else:
+        title = "Global AI Insights"
+    title = f"{title} for past {duration.in_words()}"
+    caption="Use [cyan]show insight <id>[/] to see details for an insight."
+
+    resp = cli.central.request(cli.central.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
+
+    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
 
 
 @app.command()

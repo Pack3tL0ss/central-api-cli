@@ -68,6 +68,33 @@ class CsvLexer(RegexLexer):
             (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'tenth'),
         ],
         'tenth': [
+            (r'(,)([^,\n]*)',   Operator,                                       'eleventh'),
+        ],
+        'eleventh': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'twelfth'),
+        ],
+        'twelfth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Declaration),     'thirteenth'),
+        ],
+        'thirteenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'fourteenth'),
+        ],
+        'fourteenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'fifteenth'),
+        ],
+        'fifteenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'sixteenth'),
+        ],
+        'sixteenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Namespace),       'seventeenth'),
+        ],
+        'seventeenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'eighteenth'),
+        ],
+        'eighteenth': [
+            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'nineteenth'),
+        ],
+        'nineteenth': [
             (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Type),            'unsupported'),
         ],
         'unsupported': [
