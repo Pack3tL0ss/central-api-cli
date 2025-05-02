@@ -945,17 +945,17 @@ class Guests(RootModel):
         return len(self.root)
 
 
-def _str_to_list(value: str | list) -> None | List[str]:
+def _str_to_list(value: str | int | float | List[Enum] | List[str] | List[int, float]) -> None | List[str]:
     """Allows import file to be a space or quoted comma separated str vs. a list
 
     useful for csv.  A comma seperated str (wrapped in quotes in the csv) is also valid.
     i.e. '2.4 5 6' would return ["2.4", "5", "6"]
 
     Args:
-        value (str | list): The value of the field
+        value (str | int | float | List[Enum] | List[str] | List[int, float]): The value of the field
 
     Returns:
-        None | list: None if the field is not in the import file or has not value otherwise
+        None | List[str]: None if the field is not in the import file or has no value otherwise
             returns a list based on the value(s) provided.
     """
     if value is None:
@@ -966,6 +966,9 @@ def _str_to_list(value: str | list) -> None | List[str]:
             return [v.value for v in value]
 
         return list(map(str, value))
+
+    if isinstance(value, (int, float)):  # possible with yaml/json import
+        return [str(value)]
 
     if "," in value:
         return [v.strip() for v in map(str, value.split(","))]
@@ -1010,8 +1013,8 @@ class APUpdate(BaseModel):
                 if field != "serial" and getattr(self, field) is not None
             ]
         )
-        reboot_msg = "\u267b" if self.ip else ""  # \u267b :recycle: ♻
-        return f"{reboot_msg}  {iden}|{items}"
+        reboot_msg = "\u267b  " if self.ip else ""  # \u267b :recycle: ♻
+        return f"{reboot_msg}{iden}|{items}"
 
     @model_validator(mode="after")
     def validate_radio_modes(self) -> Self:
