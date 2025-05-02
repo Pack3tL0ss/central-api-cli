@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, 
 import typer
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
@@ -21,9 +22,9 @@ from yarl import URL
 from centralcli import CentralApi, Response, config, constants, log, models, render, utils
 from centralcli.response import CombinedResponse
 
-
 if TYPE_CHECKING:
     from tinydb.table import Table
+
     from .config import Config
     from .typedefs import PortalAuthTypes, SiteData
 
@@ -3597,9 +3598,9 @@ class Cache:
             log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
                 all_match_msg = f"{', '.join(m.get('name', m.get('serial')) for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
-                _dev_type_str = ", ".join(dev_type)
+                _dev_type_str = escape(str(utils.unlistify(dev_type)))
                 log.error(
-                    f"The Following devices matched {all_match_msg} excluded as device type != [{_dev_type_str}]",
+                    f"The Following devices matched {all_match_msg} excluded as device type != {_dev_type_str}",
                     show=True,
                 )
             if exit_on_fail:
