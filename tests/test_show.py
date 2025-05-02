@@ -495,8 +495,6 @@ def test_show_notifications():
     result = runner.invoke(app, [
             "show",
             "notifications",
-            "--severity",
-            "low"
         ]
     )
     assert result.exit_code == 0
