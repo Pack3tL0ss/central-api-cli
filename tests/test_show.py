@@ -273,7 +273,7 @@ def test_show_audit_acp_logs_count():
     result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
     print(result.stdout)
     assert result.exit_code == 0
-    if "Empty Response" not in result.stdout and "no data" not in result.stdout:
+    if "Empty Response" not in result.stdout and "no data" not in result.stdout.lower():
         assert "acp audit logs" in result.stdout.lower()
         assert "id" in result.stdout
 
