@@ -102,16 +102,27 @@ class MoveData:
 
         return confirm_msgs
 
+
+@dataclass
+class Skipped:
+    iden: str
+    reason: str
+
+    def __str__(self):
+        return f"{self.iden}: {self.reason}"
+
+
 @dataclass
 class APRequestInfo:
     reqs: List[BatchRequest] | None
     ap_data: APUpdates
-    skipped: List[str] = None
+    skipped: Dict[str, Skipped] = None
     requires_reboot: Dict[str, CacheDevice] = None
     env_update_aps: int = None
     gps_update_aps: int = None
 
 
+    # This seems to be incomplete, but is not used currently.
     @property
     def serials_by_move_type(self) -> Dict[str, List[str]]:
         out = {}
@@ -125,6 +136,13 @@ class APRequestInfo:
             out = utils.update_dict(out, key=key, value=serials)
 
         return out
+
+    @property
+    def skipped_summary(self) -> str:
+        return utils.summarize_list([str(s) for s in self.skipped.values()], max=12, color=None, italic=True)
+
+
+
 class CLICommon:
     def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
         self.account = account
@@ -1660,8 +1678,10 @@ class CLICommon:
         if inv_doc_ids:
             self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
+
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
-        altitude_by_serial, ap_env_by_serial, batch_reqs, skipped, requires_reboot = {}, {}, [], [], {}
+        altitude_by_serial, ap_env_by_serial, batch_reqs, requires_reboot = {}, {}, [], {}
+        skipped: Dict[str, Skipped] = {}
 
         try:
             data: List[APUpdate] = APUpdates(data)
@@ -1669,8 +1689,14 @@ class CLICommon:
             self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
 
         for ap in data:
-            cache_ap: CacheDevice = self.cache.get_dev_identifier(ap.serial, dev_type="ap")
+            cache_ap: CacheDevice = self.cache.get_dev_identifier(ap.serial)  # , dev_type="ap")
             ap_iden = utils.color([cache_ap.name, cache_ap.serial], color_str="cyan", sep="|")
+
+            # Allow import to contain other device types, we skip them.
+            if cache_ap.type != "ap":
+                # self.econsole.print(f"[dark_orange3]:warning:[/] Skipping {ap_iden}.  This command is valid for device type: [green]AP[/] not [red]{cache_ap.type}[/].")
+                skipped[cache_ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  Device is [red]{cache_ap.type}[/], Command is only valid for [green]APs[/].")
+                continue
 
             if ap.gps_altitude:
                 altitude_by_serial[cache_ap.swack_id] = ap.gps_altitude  # swack_id is serial for aos10, swarm_id for AOS8
@@ -1688,7 +1714,7 @@ class CLICommon:
             if {k: v for k, v in kwargs.items() if k != "serial" and v is not None}:
                 ap_env_by_serial[ap.serial] = kwargs
             elif not ap.gps_altitude:
-                skipped += [ap_iden]
+                skipped[ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  [red]No updates found[/] in import file that apply to [cyan]AP{cache_ap.model}[/].")
 
         if ap_env_by_serial:
             batch_reqs += [BatchRequest(self.central.update_per_ap_settings, as_dict=ap_env_by_serial)]
@@ -1697,7 +1723,7 @@ class CLICommon:
 
         return APRequestInfo(
             batch_reqs,
-            ap_data=data,
+            ap_data=[ap for ap in data if ap.serial not in skipped],
             skipped=skipped,
             requires_reboot=requires_reboot,
             # env_update_aps=(len(batch_reqs) - len(altitude_by_serial)),
@@ -1760,17 +1786,23 @@ class CLICommon:
             self.econsole.print(f"    Adding/Updating [cyan]gps-altitude[/] to {req_info.gps_update_aps} AP{utils.singular_plural_sfx(req_info.gps_update_aps)}")
 
         self.econsole.print("\n[bold magenta]Summary of Changes to be Applied[/]")
+        if len(req_info.ap_data) > 12:
+            self.econsole.print(f"    [dim italic]Summary showing 12 of the {len(req_info.ap_data)} devices being updated.")
         self.econsole.print(utils.summarize_list([ap.__rich__() for ap in req_info.ap_data], color=None, max=12, pad=4), emoji=False)
+
+        if req_info.skipped:
+            _cnt = len(req_info.skipped)
+            self.econsole.print(f"\nThe following {_cnt} APs were skipped as no updates applied to those models:")
+            if _cnt > 12:
+                self.econsole.print(f"    [dim italic]Summary showing 12 of the {_cnt} skipped devices.")
+            self.econsole.print(req_info.skipped_summary)
+
+        calls_word = utils.singular_plural_sfx(req_info.reqs, singular=" was", plural="s were")
+        caption = f"[yellow]:information:[/]  [italic cyan]{req_info.env_update_aps + req_info.gps_update_aps}[/] [italic dark_olive_green2]API call{calls_word} performed to get current configuration/settings. These calls are only shown if there was a failure.[/]"
 
         if reboot_msg:
             self.econsole.print(reboot_msg)
         self.econsole.print(f"\n[yellow]:information:[/]  [italic dark_olive_green2]This operation will result in {call_cnt} API calls[/]")
-
-        if req_info.skipped:
-            self.econsole.print(f"\nThe following {len(req_info.skipped)} APs were skipped as no updates applied to those models:\n{utils.summarize_list(req_info.skipped, max=10)}")
-
-        calls_word = utils.singular_plural_sfx(req_info.reqs, singular=" was", plural="s were")
-        caption = f"[yellow]:information:[/]  [italic cyan]{req_info.env_update_aps + req_info.gps_update_aps}[/] [italic dark_olive_green2]API call{calls_word} performed to get current configuration/settings. These calls are only shown if there was a failure.[/]"
 
         self.confirm(yes)  # exits here if they abort
         _batch_resp = self.central.batch_request(req_info.reqs)
