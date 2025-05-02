@@ -139,7 +139,7 @@ class CentralObject:
         if self.cache == "site":
             parts = [
                 "Site",
-                *[a for a in [self.city, self.state, self.zipcode] if a]
+                *[a for a in [self.city, self.state, self.zip] if a]
             ]
         elif self.cache == "template":
             parts = [
@@ -195,7 +195,7 @@ class CentralObject:
     @property
     def summary_text(self):
         if self.is_site:
-            parts = [a for a in [self.name, self.city, self.state, self.zipcode] if a]
+            parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
         elif self.is_dev:
             parts = [p for p in utils.unique([self.name, self.serial, self.mac, self.ip, self.site]) if p]
             if self.site:
@@ -3641,7 +3641,7 @@ class Cache:
             if not match or completion:
                 match += self.SiteDB.search(
                     (self.Q.id.test(lambda v: str(v) == query_str))
-                    | (self.Q.zipcode == query_str)
+                    | (self.Q.zip == query_str)
                     | (self.Q.address == query_str)
                     | (self.Q.city == query_str)
                     | (self.Q.state == query_str)
@@ -3675,7 +3675,7 @@ class Cache:
             # Last Chance try other fields case insensitive startswith provided value
             if not match or completion:
                 match += self.SiteDB.search(
-                    self.Q.zipcode.test(lambda v: v.startswith(query_str))
+                    self.Q.zip.test(lambda v: v.startswith(query_str))
                     | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.address.test(lambda v: v.lower().startswith(query_str.lower()))
