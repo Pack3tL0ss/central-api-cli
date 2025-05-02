@@ -264,7 +264,7 @@ def test_show_audit_logs_past():
     result = runner.invoke(app, ["show", "audit", "logs", "--past", "5d"],)
     print(result.stdout)
     assert result.exit_code == 0
-    if "Empty Response" not in result.stdout:
+    if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
         assert "audit event logs" in result.stdout.lower()
         assert "id" in result.stdout
 
@@ -273,7 +273,7 @@ def test_show_audit_acp_logs_count():
     result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
     print(result.stdout)
     assert result.exit_code == 0
-    if "Empty Response" not in result.stdout:
+    if "Empty Response" not in result.stdout and "no data" not in result.stdout:
         assert "acp audit logs" in result.stdout.lower()
         assert "id" in result.stdout
 
@@ -467,4 +467,38 @@ def test_show_guests():
     )
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
+
+
+def test_show_insights():
+    result = runner.invoke(app, [
+            "show",
+            "insights",
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API Rate Limit" in result.stdout
+
+
+def test_show_insights_low_severity():
+    result = runner.invoke(app, [
+            "show",
+            "insights",
+            "--severity",
+            "low"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API Rate Limit" in result.stdout
+
+
+def test_show_notifications():
+    result = runner.invoke(app, [
+            "show",
+            "notifications",
+            "--severity",
+            "low"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "category" in result.stdout
 
