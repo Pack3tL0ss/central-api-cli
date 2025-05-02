@@ -1,25 +1,27 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Literal, Iterable, Annotated
-from typing_extensions import Self
+from pathlib import Path
+from random import randint
+from typing import TYPE_CHECKING, Annotated, Any, Dict, Iterable, List, Literal, Optional
 
 import pendulum
-from pathlib import Path
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, RootModel, field_serializer, field_validator, model_validator
 from rich.console import Console
-from pydantic import BaseModel, RootModel, Field, field_serializer, field_validator, ConfigDict, AliasChoices, BeforeValidator, model_validator
+from typing_extensions import Self
 
-from centralcli import utils, log
-from centralcli.constants import DevTypes, SiteStates, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode
+from centralcli import log, utils
+from centralcli.constants import DevTypes, DynamicAntMode, RadioBandOptions, SiteStates, state_abbrev_to_pretty
 from centralcli.objects import DateTime
-from random import randint
-import json
 
 if TYPE_CHECKING:
     from collections.abc import KeysView
 
-# TODO This is a dup of DevTypes (plural) from constants verify if can import w/out circular issues
+
+# This is the same as DevTypes (plural in constants) other than DevTypes includes sdwan.
+# Could probably use same model for everything in here.  One or the other.
 class DevType(str, Enum):
     ap = "ap"
     sw = "sw"
@@ -39,7 +41,6 @@ class InventoryDevice(BaseModel):
     subscription_expires: Optional[int] = None
 
 
-# IS_USED
 class Inventory(RootModel):
     root: List[InventoryDevice]
 
@@ -63,14 +64,10 @@ class Inventory(RootModel):
             if key in ["device_type", "type"]:
                 return self._inv_type(value, model=device.get("model"))
             if key == "subscription_expires" and value:
-                return value / 1000 # convert ts in ms to ts in seconds
+                return value / 1000  # convert ts in ms to ts in seconds
             return value
 
-        return [
-            {
-                k: format_value(k, v, device=dev) for k, v in dev.items()
-            } for dev in data
-        ]
+        return [{k: format_value(k, v, device=dev) for k, v in dev.items()} for dev in data]
 
     @staticmethod
     def _inv_type(dev_type: str | None, model: str | None) -> DevType | None:
@@ -100,7 +97,6 @@ class DeviceStatus(str, Enum):
     Down = "Down"
 
 
-# TODO have Cache return model for attribute completion support in IDE
 class Device(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     name: str
@@ -130,7 +126,7 @@ class Device(BaseModel):
 
         return DevType(dev_type)
 
-# IS USED refresh_dev_db
+
 class Devices(BaseModel):
     aps: Optional[List[Device]] = Field([])
     switches: Optional[List[Device]] = Field([])
@@ -147,7 +143,7 @@ class Site(BaseModel):
     country: Optional[str] = Field(None)
     lon: Optional[float] = Field(None, alias=AliasChoices("longitude", "lon"))
     lat: Optional[float] = Field(None, alias=AliasChoices("latitude", "lat"))
-    devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices")) # field in prev cache had space "associated devices"
+    devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices"))  # field in prev cache had space "associated devices"
 
 
 class Sites(RootModel):
@@ -168,23 +164,18 @@ class Sites(RootModel):
 
     def prep_for_cache(self, data: List[Dict[str, str | int | float]]):
         def cache_keys(key: str) -> str:
-            short_keys = {
-                "longitude": "lon",
-                "latitude": "lat",
-                "zipcode": "zip"
-            }
+            short_keys = {"longitude": "lon", "latitude": "lat", "zipcode": "zip"}
 
             return short_keys.get(key, key).removeprefix("site_")
 
         strip_keys = ["site_details", "associated devices", "associated_device_count"]
         return [
             {
-                **{
-                    cache_keys(k): v for k, v in s.items() if k not in strip_keys
-                },
+                **{cache_keys(k): v for k, v in s.items() if k not in strip_keys},
                 **s.get("site_details", {}),
-                "devices": s.get("associated_device_count", s.get("associated devices", s.get("devices", 0)))
-            } for s in data
+                "devices": s.get("associated_device_count", s.get("associated devices", s.get("devices", 0))),
+            }
+            for s in data
         ]
 
     @property
@@ -251,8 +242,9 @@ class ImportSites(RootModel):
                 **inner.get("site_address", {}),
                 **inner.get("geolocation", {}),
                 **{k: v for k, v in inner.items() if k not in ["site_address", "geolocation"]},
-                "country": auto_usa(inner)
-            } for inner in _data
+                "country": auto_usa(inner),
+            }
+            for inner in _data
         ]
         # _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
         return _data
@@ -273,10 +265,18 @@ class Group(BaseModel):
     gw_role: Optional[GatewayRole] = Field(None, alias=AliasChoices("gw_role", "GwNetworkRole"))
     aos10: Optional[bool | Literal["NA"]] = None
     microbranch: Optional[bool | Literal["NA"]] = None
-    wlan_tg: Optional[bool] = Field(False,)
-    wired_tg: Optional[bool] = Field(False,)
-    monitor_only_sw: Optional[bool] = Field(False,)
-    monitor_only_cx: Optional[bool] = Field(False,)
+    wlan_tg: Optional[bool] = Field(
+        False,
+    )
+    wired_tg: Optional[bool] = Field(
+        False,
+    )
+    monitor_only_sw: Optional[bool] = Field(
+        False,
+    )
+    monitor_only_cx: Optional[bool] = Field(
+        False,
+    )
     cnx: Optional[bool] = False
     gw_config: Optional[Path] = Field(None, exclude=True)
     ap_config: Optional[Path] = Field(None, exclude=True)
@@ -322,9 +322,13 @@ class Groups(RootModel):
         clean = []
         for g in data:
             properties = {
-                "AllowedDevTypes": [allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"],
+                "AllowedDevTypes": [
+                    allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"
+                ],
                 "GwNetworkRole": gw_role_map[g["properties"].get("GwNetworkRole", "NA")],
-                "aos10": "NA" if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA" else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
+                "aos10": "NA"
+                if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA"
+                else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
                 "microbranch": "NA" if g["properties"].get("ApNetworkRole") is None else g["properties"]["ApNetworkRole"].lower() == "microbranch",
                 "monitor_only_sw": "AOS_S" in g["properties"].get("MonitorOnly", []),
                 "monitor_only_cx": "AOS_CX" in g["properties"].get("MonitorOnly", []),
@@ -333,15 +337,15 @@ class Groups(RootModel):
             # MonitorOnly is all we need MonitorOnlySwitch is a bool and is set True if AOS_S is in MonitorOnly, it's a legacy field.  The Create Group endpoint accepts the MonitorOnly List.
             extra = {k: g["properties"][k] for k in sorted(g["properties"].keys()) if k not in ["MonitorOnlySwitch", "AllowedSwitchTypes", *captured_keys]}
 
-            template_info = {
-                "wired_tg": g["template_details"].get("Wired", False),
-                "wlan_tg": g["template_details"].get("Wireless", False)
-            }
+            template_info = {"wired_tg": g["template_details"].get("Wired", False), "wlan_tg": g["template_details"].get("Wireless", False)}
 
             clean += [{"name": g["group"], **extra, **properties, **template_info}]
-            clean = [{k.replace("-", "_"): v for k, v in inner.items()} for inner in clean]  # We allow hyphen in most inputs/import keys to be consistent with the CLI Options, but we always use _ to store the data.
+            clean = [
+                {k.replace("-", "_"): v for k, v in inner.items()} for inner in clean
+            ]  # We allow hyphen in most inputs/import keys to be consistent with the CLI Options, but we always use _ to store the data.
 
         return clean
+
 
 class Template(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
@@ -372,18 +376,8 @@ class Templates(RootModel):
     def format_data(self, data: List[Dict[str, str]]):
         if not isinstance(data, Iterable) or not all([isinstance(d, dict) for d in data]):
             return data
-        lib_dev_types = {
-            "MobilityController": "gw",
-            "IAP": "ap",
-            "CX": "cx",
-            "ArubaSwitch": "sw"
-        }
-        return [
-            {
-                k: v if k != "device_type" else lib_dev_types.get(v, v)
-                for k, v in inner.items()
-            } for inner in data
-        ]
+        lib_dev_types = {"MobilityController": "gw", "IAP": "ap", "CX": "cx", "ArubaSwitch": "sw"}
+        return [{k: v if k != "device_type" else lib_dev_types.get(v, v) for k, v in inner.items()} for inner in data]
 
 
 class Label(BaseModel):
@@ -412,15 +406,10 @@ class ClientType(str, Enum):
     wired = "wired"
     wireless = "wireless"
 
+
 # Client Cache  # TODO need to include attribute for TinyDB.Table doc_id
 class Client(BaseModel):
-    model_config = ConfigDict(
-        use_enum_values=True,
-        arbitrary_types_allowed=True,
-        json_encoders={
-            DateTime: lambda dt: dt.ts
-        }
-    )
+    model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, json_encoders={DateTime: lambda dt: dt.ts})
     mac: str = Field(default_factory=str, alias=AliasChoices("macaddr", "mac"))
     name: str = Field(default_factory=str, alias=AliasChoices("name", "username"))
     ip: str = Field(default_factory=str, alias=AliasChoices("ip_address", "ip"))
@@ -428,12 +417,13 @@ class Client(BaseModel):
     network_port: str = Field(None, alias=AliasChoices("network", "interface_port", "network_port"))
     connected_serial: str = Field(None, alias=AliasChoices("associated_device", "connected_serial"))
     connected_name: str = Field(None, alias=AliasChoices("associated_device_name", "connected_name"))
-    site: Optional[str] = Field(None,)
+    site: Optional[str] = Field(
+        None,
+    )
     group: str = Field(None, alias=AliasChoices("group_name", "group"))
     last_connected: datetime | None = Field(None, alias=AliasChoices("last_connection_time", "last_connection"))
 
-
-    @field_serializer('last_connected')
+    @field_serializer("last_connected")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         if dt is None:  # TODO all with potential for there not to be a value need this
@@ -445,11 +435,7 @@ class Client(BaseModel):
     def summary_text(self):
         parts = [self.name, self.mac, self.ip, self.connected_name]
         parts = utils.unique([p for p in parts if p is not None])
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
+        return "[reset]" + "|".join([f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)])
 
     def __contains__(self, item: str) -> bool:
         return item in self.model_dump()
@@ -465,9 +451,8 @@ class Client(BaseModel):
 
     @property
     def help_text(self):
-        return [
-            tuple([self.name, f'{self.ip}|{self.mac} type: {self.type} connected to: {self.connected_name} ~ {self.network_port}'])
-        ]
+        return [tuple([self.name, f"{self.ip}|{self.mac} type: {self.type} connected to: {self.connected_name} ~ {self.network_port}"])]
+
 
 class Clients(RootModel):
     root: List[Client]
@@ -478,10 +463,7 @@ class Clients(RootModel):
 
     @staticmethod
     def prep_for_cache(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
-        return [
-            {k: v if k not in ["client_type", "type"] else v.lower() for k, v in inner.items()}
-            for inner in data
-        ]
+        return [{k: v if k not in ["client_type", "type"] else v.lower() for k, v in inner.items()} for inner in data]
 
     def __iter__(self):
         return iter(self.root)
@@ -494,9 +476,7 @@ class Clients(RootModel):
 
     @property
     def by_mac(self) -> Dict[str, Any]:  # Nedd to use model_dump_json to use models JsonEncoder
-        return {
-            c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root
-        }
+        return {c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root}
 
 
 class WidsItem(BaseModel):
@@ -522,10 +502,11 @@ class WidsItem(BaseModel):
     signal: Optional[int] = Field(default_factory=int)
     ssid: Optional[str] = Field(default_factory=str)
 
-    @field_serializer('first_seen', 'last_seen')
+    @field_serializer("first_seen", "last_seen")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         return DateTime(dt.timestamp(), "mdyt")
+
 
 class Wids(RootModel):
     root: List[WidsItem]
@@ -553,13 +534,16 @@ class SysImportSet(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
 
+
 class ImportSetRun(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
 
+
 class SysTransformMap(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
+
 
 class Result(BaseModel):
     u_comments_to_customer: Optional[str] = None
@@ -620,6 +604,7 @@ class Result(BaseModel):
 class SnowResponse(Result):
     result: Result
 
+
 # WebHook Models WebHookDetails no reliable source for all possible fields.
 class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     customer_id: Optional[str] = None
@@ -649,7 +634,7 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     _band: Optional[str] = None
     _radio_num: Optional[str] = None
     channel: Optional[str] = None
-    client_count: Optional[int] = None # converting from str
+    client_count: Optional[int] = None  # converting from str
     src_ip: Optional[str] = None
     dst_ip: Optional[str] = None
     alias_map_name: Optional[str] = None
@@ -681,8 +666,8 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     nbr_addr: Optional[str] = None
     nbr_as: Optional[str] = None
     nbr_id: Optional[str] = None
-    count: Optional[int] = None # convert from str
-    max: Optional[int] = None # convert from str
+    count: Optional[int] = None  # convert from str
+    max: Optional[int] = None  # convert from str
     default_gw_status: Optional[str] = None
     uplink_tag: Optional[str] = None
     link_tag: Optional[str] = None
@@ -716,6 +701,7 @@ class WebHook(BaseModel):
     webhook: Optional[str] = None
     text: Optional[str] = None
 
+
 # _example_snow_payload = {
 #         "u_affected_user": "blah",
 #         "u_assignment_group":"TE-sn-servicenow",
@@ -743,10 +729,12 @@ class WebHook(BaseModel):
 #         "u_watch_list":"TE308801,TE163762"
 #     }
 
+
 class HighMedLow(str, Enum):
     High = 1
     Medium = 2
     Low = 3
+
 
 class SnowCreate(BaseModel):
     u_affected_user: Optional[str] = None
@@ -762,7 +750,7 @@ class SnowCreate(BaseModel):
     u_raised_severity: Optional[int] = None
     u_reported_by: Optional[str] = None
     u_service_offering: Optional[str] = None
-    u_short_description: str # = Field(..., le=160)
+    u_short_description: str  # = Field(..., le=160)
     u_state: Optional[str] = None
     u_subcategory: Optional[str] = None
     u_work_notes: Optional[str] = None
@@ -772,6 +760,7 @@ class SnowCreate(BaseModel):
     u_impact: Optional[HighMedLow] = None
     u_urgency: Optional[HighMedLow] = None
     u_watch_list: Optional[str] = None
+
 
 class SnowUpdate(BaseModel):
     u_affected_user: Optional[str] = None
@@ -806,17 +795,21 @@ class Scope(BaseModel):
     labels: List
     sites: List
 
+
 class InfoItem(BaseModel):
     role: str
     scope: Scope
+
 
 class Application(BaseModel):
     info: List[InfoItem]
     name: str
 
+
 class Name(BaseModel):
     firstname: str
     lastname: str
+
 
 class Item(BaseModel):
     applications: List[Application]
@@ -824,21 +817,24 @@ class Item(BaseModel):
     system_user: bool
     username: str
 
+
 class UserAccounts(BaseModel):
     items: List[Item]
     total: int
+
 
 class CloudAuthUploadStats(BaseModel):
     completed: int
     failed: int
     total: int
 
+
 class CloudAuthUploadResponse(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         json_encoders={
             datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-        }
+        },
     )
     details: Dict[str, Any]
     status: str
@@ -848,7 +844,7 @@ class CloudAuthUploadResponse(BaseModel):
     durationNanos: int
     fileName: str
 
-    @field_serializer('lastUpdatedAt', 'submittedAt')
+    @field_serializer("lastUpdatedAt", "submittedAt")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
         return DateTime(dt.timestamp())
@@ -914,6 +910,7 @@ class Portals(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
+
 class Guest(BaseModel):
     portal_id: str
     name: str
@@ -922,9 +919,10 @@ class Guest(BaseModel):
     phone: Optional[str] = None
     company: Optional[str] = Field(None, alias=AliasChoices("company", "company_name"))
     enabled: bool = Field(None, alias=AliasChoices("is_enabled", "enabled"))
-    status:  Optional[str] = None
+    status: Optional[str] = None
     created: int = Field(alias=AliasChoices("created", "created_at"))
     expires: Optional[int] = Field(None, alias=AliasChoices("expires", "expire_at"))
+
 
 class Guests(RootModel):
     root: List[Guest]
@@ -935,10 +933,7 @@ class Guests(RootModel):
 
     @staticmethod
     def _flatten_guest_data(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
-        return [
-            {**{k: v for k, v in inner.items() if k != ["user"]}, **inner.get("user", {})}
-            for inner in data
-        ]
+        return [{**{k: v for k, v in inner.items() if k != ["user"]}, **inner.get("user", {})} for inner in data]
 
     def __iter__(self):
         return iter(self.root)
@@ -980,6 +975,7 @@ def _str_to_list(value: str | list) -> None | List[str]:
 
     return utils.listify(value)
 
+
 class APUpdate(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     serial: str
@@ -1007,8 +1003,14 @@ class APUpdate(BaseModel):
 
     def __rich__(self):
         iden = f"[bright_green]{self.serial}[/]"
-        items = "|".join([f"{field}: {getattr(self, field) if not isinstance(getattr(self, field), list) else ','.join(getattr(self, field))}" for field in self.model_fields_set if field != "serial" and getattr(self, field) is not None])
-        reboot_msg = '\u267b' if self.ip else ""  # \u267b :recycle: ♻
+        items = "|".join(
+            [
+                f"{field}: {getattr(self, field) if not isinstance(getattr(self, field), list) else ','.join(getattr(self, field))}"
+                for field in self.model_fields_set
+                if field != "serial" and getattr(self, field) is not None
+            ]
+        )
+        reboot_msg = "\u267b" if self.ip else ""  # \u267b :recycle: ♻
         return f"{reboot_msg}  {iden}|{items}"
 
     @model_validator(mode="after")
@@ -1020,14 +1022,8 @@ class APUpdate(BaseModel):
         monitor_radios = self.monitor_radios or []
         spectrum_radios = self.spectrum_radios or []
         checks = [
-            {
-            "values": [*disable_radios, *enable_radios],
-            "msg": "radio set to be both enabled and disabled. Which makes no sense."
-            },
-            {
-            "values": [*access_radios, *monitor_radios, *spectrum_radios],
-            "msg": "radio defined multiple modes (access, monitor, spectrum)."
-            }
+            {"values": [*disable_radios, *enable_radios], "msg": "radio set to be both enabled and disabled. Which makes no sense."},
+            {"values": [*access_radios, *monitor_radios, *spectrum_radios], "msg": "radio defined multiple modes (access, monitor, spectrum)."},
         ]
         for c in checks:
             for r in radios:
@@ -1075,7 +1071,11 @@ class APUpdate(BaseModel):
         return radio_24_disable, radio_5_disable, radio_6_disable
 
     @staticmethod
-    def _parse_radio_mode_values(access_radios: None | list, monitor_radios: None | list, spectrum_radios: None | list,) -> tuple:
+    def _parse_radio_mode_values(
+        access_radios: None | list,
+        monitor_radios: None | list,
+        spectrum_radios: None | list,
+    ) -> tuple:
         radio_24_mode, radio_5_mode, radio_6_mode = None, None, None
         modes = ["access", "monitor", "spectrum"]
         for mode, radios in zip(modes, [access_radios, monitor_radios, spectrum_radios]):
@@ -1103,10 +1103,11 @@ class APUpdate(BaseModel):
                 "radio_24_mode": radio_24_mode,
                 "radio_5_mode": radio_5_mode,
                 "radio_6_mode": radio_6_mode,
-            }
+            },
         }
 
         return kwargs
+
 
 class APUpdates(RootModel):
     root: List[APUpdate]
