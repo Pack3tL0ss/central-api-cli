@@ -8,7 +8,7 @@ from typing_extensions import Self
 import pendulum
 from pathlib import Path
 from rich.console import Console
-from pydantic import BaseModel, RootModel, Field, validator, field_serializer, field_validator, ConfigDict, AliasChoices, BeforeValidator, model_validator
+from pydantic import BaseModel, RootModel, Field, field_serializer, field_validator, ConfigDict, AliasChoices, BeforeValidator, model_validator
 
 from centralcli import utils, log
 from centralcli.constants import DevTypes, SiteStates, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode
@@ -18,10 +18,6 @@ import json
 
 if TYPE_CHECKING:
     from collections.abc import KeysView
-
-class DeviceStatus(str, Enum):
-    Up = "Up"
-    Down = "Down"
 
 # TODO This is a dup of DevTypes (plural) from constants verify if can import w/out circular issues
 class DevType(str, Enum):
@@ -42,12 +38,8 @@ class InventoryDevice(BaseModel):
     subscription_key: Optional[str] = None
     subscription_expires: Optional[int] = None
 
-switch_types = {
-    "AOS-S": "sw",
-    "AOS-CX": "cx"
-}
 
-
+# IS_USED
 class Inventory(RootModel):
     root: List[InventoryDevice]
 
@@ -103,6 +95,11 @@ class Inventory(RootModel):
         return {s.serial: s.model_dump() for s in self.root}
 
 
+class DeviceStatus(str, Enum):
+    Up = "Up"
+    Down = "Down"
+
+
 # TODO have Cache return model for attribute completion support in IDE
 class Device(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
@@ -133,10 +130,12 @@ class Device(BaseModel):
 
         return DevType(dev_type)
 
+# IS USED refresh_dev_db
 class Devices(BaseModel):
     aps: Optional[List[Device]] = Field([])
     switches: Optional[List[Device]] = Field([])
     gateways: Optional[List[Device]] = Field([])
+
 
 class Site(BaseModel):
     name: str = Field()
@@ -258,6 +257,7 @@ class ImportSites(RootModel):
         # _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
         return _data
 
+
 class GatewayRole(str, Enum):
     branch = "branch"
     vpnc = "vpnc"
@@ -352,6 +352,7 @@ class Template(BaseModel):
     version: str
     template_hash: str
 
+
 class Templates(RootModel):
     root: List[Template]
 
@@ -384,10 +385,12 @@ class Templates(RootModel):
             } for inner in data
         ]
 
+
 class Label(BaseModel):
     id: int = Field(alias="label_id")
     name: str = Field(alias="label_name")
     devices: Optional[int] = Field(0, alias=AliasChoices("devices", "associated_device_count"))
+
 
 class Labels(RootModel):
     root: List[Label]
@@ -403,6 +406,7 @@ class Labels(RootModel):
 
     def __len__(self) -> int:
         return len(self.model_dump())
+
 
 class ClientType(str, Enum):
     wired = "wired"
@@ -495,62 +499,6 @@ class Clients(RootModel):
         }
 
 
-class Event(BaseModel):
-    id: int
-    device: str  # formatted str from cleaner i.e. "av-655.21af-ap|CNXXYYZZN Group: WadeLab"
-    details: dict  # Not reliable source for the fields that are possible here
-    connected_port: str  # The Wired interface or WLAN SSID
-    connected_serial: str
-    connected_name: str
-
-class Logs(BaseModel):
-    """Audit logs model
-
-    We only store id and long_id so user can gather more details using long_id
-    actual Audit log details pulled from Central on demand, but not cached.
-    """
-    id: int
-    long_id: str
-
-class WebHookState(str, Enum):
-    Open = "Open"
-    Close = "Close"
-
-# TODO 2 enums below are repeats of what is already defined in constants.  import or move all to here?
-class AllowedGroupDevs(str, Enum):
-    ap = "ap"
-    gw = "gw"
-    cx = "cx"
-    sw = "sw"
-
-
-# TODO clibranch already had a model built for this, this isn't used, but consider moving models out of clibatch to here
-# class GroupImport(BaseModel):
-#     group: str = Field(..., alias="name")
-#     allowed_types: List[AllowedGroupDevs] = ["ap", "gw", "cx"]
-#     wired_tg: bool = False
-#     wlan_tg: bool = False
-#     aos10: bool = False
-#     microbranch: bool = False
-#     gw_role: GatewayRole = False
-#     monitor_only_sw: bool = False
-#     monitor_only_cx: bool = False
-
-
-# This is what is in the cache for the hook-proxy
-class WebHookData(BaseModel):
-    id: str
-    snow_incident_num: Optional[str] = None
-    ok: bool
-    alert_type: str
-    device_id: str  # serial#
-    state: WebHookState
-    text: str
-    timestamp: int  # could use datetime here
-
-def pretty_dt(dt: datetime) -> str:
-    return pendulum.from_timestamp(dt.timestamp(), tz="local").to_day_datetime_string()
-
 class WidsItem(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     acknowledged: Optional[bool] = Field(default=None)
@@ -595,12 +543,6 @@ class Wids(RootModel):
         return len(self.model_dump())
 
 
-class WIDS_LIST(BaseModel):
-    rogue: Optional[List[WidsItem]] = Field(default_factory=list)
-    interfering: Optional[List[WidsItem]] = Field(default_factory=list)
-    neighbor: Optional[List[WidsItem]] = Field(default_factory=list)
-    suspectrogue: Optional[List[WidsItem]] = Field(default_factory=list)
-
 # SNOW Response
 class SysTargetSysId(BaseModel):
     display_value: Optional[str] = None
@@ -611,16 +553,13 @@ class SysImportSet(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
 
-
 class ImportSetRun(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
 
-
 class SysTransformMap(BaseModel):
     display_value: Optional[str] = None
     link: Optional[str] = None
-
 
 class Result(BaseModel):
     u_comments_to_customer: Optional[str] = None
@@ -762,7 +701,6 @@ class WebHookDetails(BaseModel):  # extra="allow"):  Pydantic 2.x
     cluster_name: Optional[str] = Field(None, alias="cluster-name")
 
 
-
 class WebHook(BaseModel):
     id: Optional[str] = None
     nid: Optional[int] = None
@@ -778,32 +716,32 @@ class WebHook(BaseModel):
     webhook: Optional[str] = None
     text: Optional[str] = None
 
-_example_snow_payload = {
-        "u_affected_user": "blah",
-        "u_assignment_group":"TE-sn-servicenow",
-        "u_business_service": "",
-        "u_call_back": False,
-        "u_category": "",
-        "u_contact_type": "integration",
-        "u_description": "",
-        "u_configuration_item": "valid snow config item",
-        "u_external_source": "40 chars",
-        "u_external_ticket": "40 chars",
-        "u_raised_severity": 2,
-        "u_reported_by": "valid TE ID",
-        "u_servicenow_number": "Only on Update",
-        "u_service_offering": "snow valid service offering",
-        "u_short_description":"Test Ticket Mandatory Create 160 char",
-        "u_state": "resolved",
-        "u_subcategory": "must be valid sub cat of cat",
-        "u_work_notes": "4000 chars",
-        "u_attachment_name":"Integration_Sample.txt",
-        "u_attachment_type":"text/plain",
-        "u_attachment_encoded_code":"SW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA==",
-        "u_impact": 2,
-        "u_urgency": 2,
-        "u_watch_list":"TE308801,TE163762"
-    }
+# _example_snow_payload = {
+#         "u_affected_user": "blah",
+#         "u_assignment_group":"TE-sn-servicenow",
+#         "u_business_service": "",
+#         "u_call_back": False,
+#         "u_category": "",
+#         "u_contact_type": "integration",
+#         "u_description": "",
+#         "u_configuration_item": "valid snow config item",
+#         "u_external_source": "40 chars",
+#         "u_external_ticket": "40 chars",
+#         "u_raised_severity": 2,
+#         "u_reported_by": "valid TE ID",
+#         "u_servicenow_number": "Only on Update",
+#         "u_service_offering": "snow valid service offering",
+#         "u_short_description":"Test Ticket Mandatory Create 160 char",
+#         "u_state": "resolved",
+#         "u_subcategory": "must be valid sub cat of cat",
+#         "u_work_notes": "4000 chars",
+#         "u_attachment_name":"Integration_Sample.txt",
+#         "u_attachment_type":"text/plain",
+#         "u_attachment_encoded_code":"SW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA0KSW50ZWdyYXRpb25fU2FtcGxlLnR4dA==",
+#         "u_impact": 2,
+#         "u_urgency": 2,
+#         "u_watch_list":"TE308801,TE163762"
+#     }
 
 class HighMedLow(str, Enum):
     High = 1
@@ -861,75 +799,6 @@ class SnowUpdate(BaseModel):
     u_urgency: Optional[HighMedLow] = None
     u_watch_list: Optional[str] = None
 
-# TODO not currently used.  ROUTES ospf/overlay/etc
-class Summary(BaseModel):
-    admin_status: bool
-    oper_state: str
-    channel_state: str
-    site: str
-    up_count: int
-    down_count: int
-    last_state_change: datetime
-    num_interfaces: int
-    advertised_routes: int
-    learned_routes: int
-
-    # TODO deprecated validator below
-    _normalize_datetimes = validator("last_state_change", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-        }
-
-#learned
-class NexthopItem(BaseModel):
-    address: str
-    protocol: str
-    flags: str
-    is_best: bool
-    metric: int
-    interface: List[str]
-
-# advertised
-class NexthopListItem(BaseModel):
-    address: str
-    protocol: str
-    flags: str
-    metric: int
-    interface: str
-
-
-class RouteLearned(BaseModel):
-    prefix: str
-    length: int
-    protocol: str
-    flags: str
-    nexthop: str
-    metric: int
-    interface: str
-    nexthop_list: List[NexthopItem]
-
-
-class RouteAdvertised(BaseModel):
-    prefix: str
-    length: int
-    protocol: str
-    flags: str
-    nexthop: str
-    metric: int
-    interface: str
-    nexthop_list: List[NexthopListItem]
-
-
-class RoutesLearned(BaseModel):
-    summary: Summary
-    routes: List[RouteLearned]
-
-class RoutesAdvertised(BaseModel):
-    summary: Summary
-    routes: List[RouteAdvertised]
-
 
 # get_user_accounts
 class Scope(BaseModel):
@@ -937,28 +806,23 @@ class Scope(BaseModel):
     labels: List
     sites: List
 
-
 class InfoItem(BaseModel):
     role: str
     scope: Scope
-
 
 class Application(BaseModel):
     info: List[InfoItem]
     name: str
 
-
 class Name(BaseModel):
     firstname: str
     lastname: str
-
 
 class Item(BaseModel):
     applications: List[Application]
     name: Name
     system_user: bool
     username: str
-
 
 class UserAccounts(BaseModel):
     items: List[Item]
@@ -989,36 +853,6 @@ class CloudAuthUploadResponse(BaseModel):
     def pretty_dt(cls, dt: datetime) -> DateTime:
         return DateTime(dt.timestamp())
 
-    # _normalize_datetimes = validator("lastUpdatedAt", "submittedAt", allow_reuse=True)(lambda v: " ".join(pendulum.from_timestamp(v.timestamp(), tz="local").to_day_datetime_string().split()[1:]))
-
-    # class Config:
-    #     json_encoders = {
-    #         datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
-    #     }
-
-
-# class MpskNetwork(BaseModel):
-#     id: str
-#     ssid: str
-#     accessURL: str
-#     passwordPolicy: str
-
-
-# class MpskNetworks(RootModel):
-#     root: List[MpskNetwork]
-
-#     def __init__(self, data: List[dict]) -> None:
-#         super().__init__([CacheMpskNetwork(**m) for m in data])
-
-#     def __iter__(self):
-#         return iter(self.root)
-
-#     def __getitem__(self, item):
-#         return self.root[item]
-
-#     def __len__(self) -> int:
-#         return len(self.root)
-
 
 class MpskNetwork(BaseModel):
     id: str
@@ -1043,11 +877,13 @@ class MpskNetworks(RootModel):
         return len(self.root)
 
 
-# We don't use this, but if there is a need, this is what they should map to
+# Not Used currently, For reference this is what auth_type_num List[int] in portal payload maps to
+# auth_type field is ', ' seperated field showing text description of auth types: 'Username/Password, Self-Registration'
 class PortalAuthType(Enum):
     anon = 0
     user_pass = 1
     self_reg = 2
+
 
 class Portal(BaseModel):
     name: str
@@ -1285,21 +1121,4 @@ class APUpdates(RootModel):
         return self.root[item]
 
     def __len__(self) -> int:
-        return
-        len(self.root)
-
-
-# class Guests(RootModel):
-#     root: Dict[str, GuestItems]
-
-#     def __init__(self, portal_id: str, data: List[dict]) -> None:
-#         super().__init__({portal_id: GuestItems(data)})
-
-#     def __iter__(self):
-#         return iter(self.root)
-
-#     def __getitem__(self, item):
-#         return self.root[item]
-
-#     def __len__(self) -> int:
-#         return len(self.root)
+        return len(self.root)
