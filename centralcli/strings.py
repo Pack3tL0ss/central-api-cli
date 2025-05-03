@@ -447,7 +447,8 @@ Accepts the following keys (include as header row for csv import):
 
 clibatch_add_labels = f"""[italic cyan]cencli batch add labels IMPORT_FILE[/]:
 
-For all formats, labels should be under a 'labels' key/header.
+For {utils.color(['csv', 'json'], color_str='cyan')}, & [cyan]yaml[/] formats, labels should be under a 'labels' key/header.
+The 'labels' key/header is optional if import file is a simple text file.
 
 -------------- [cyan]yaml[/] --------------------
 labels:
@@ -489,38 +490,39 @@ example = Example(data=data, type="groups", action="add")
 
 # TODO verify aos10 default. make functional only tested with deploy yaml file need to make work for csv
     # [red]name[/],[cyan]types[/],[cyan]wired-tg[/],[cyan]wlan-tg[/],[cyan]gw-role[/],[cyan]aos10[/],[cyan]gw-config[/],[cyan]ap-config[/],[cyan]gw-vars[/],[cyan]ap-vars[/] [italic red](red=required)[/]
-_str = escape("[str]")
-_str_or_list = escape("[str | list]")
-_bool = escape("[bool]")
-_path = escape("[Path]")
 _default_false = escape("[default: False]")
+def type_str(_type: str):
+    return f"[dim]({_type})[/]"
+
 clibatch_add_groups = f"""{example.command_text}
 
 Accepts the following keys (include as header row for csv import):
     {utils.color(ADD_FIELDS['groups']["required"], color_str="red")}, {utils.color(list(ADD_FIELDS['groups']["optional"].keys()))} [italic red](red=required)[/]
 
-Where [cyan]name[/]{_str}: The name of the group. [red italic]required[/]
-      [cyan]types[/]{_str_or_list}: defines what type of devices are allowed in the group.
-            Valid values: ["ap", "gw", "cx", "sw" "sdwan"] [grey42]{escape('[default: ap, gw, cx, sw]')}[/]
-            :information:  For csv the field can be blank {escape('[use default: ap, gw, cx, sw]')}: or a space seperated list of device types.
-            :information: "sdwan" is for EdgeConnect SD-WAN portfolio (SilverPeak), when allowed it has to be the only type allowed.
-      [cyan]wired-tg[/]{_bool}: Set to true to make the group a template group for switches. [grey42]{_default_false}[/]
-      [cyan]wlan-tg[/]{_bool}: Set to true to make the group a template group for APs.  [grey42]{_default_false}[/]
-      [cyan]gw-role[/]{_str}: [cyan]branch[/], [cyan]vpnc[/], or [cyan]wlan[/] only valid if gw type is allowed. [grey42]{escape('[default: branch]')}[/]
-      [cyan]aos10[/]{_bool}: set to true to enable group as aos10 group.  [grey42]{escape('[default: AOS8 IAP]')}[/]
-      [cyan]microbranch[/]{_bool}: Set to true to configure APs in the group as micro-branch APs [grey42]{_default_false}[/]
-      [cyan]monitor-only-cx[/]{_bool}: Set to true to enable CX switches as monitor only [grey42]{_default_false}[/]
-      [cyan]monitor-only-sw[/]{_bool}: Set to true to enable AOS-SW switches as monitor only [grey42]{_default_false}[/]
-      [cyan]cnx[/]{_bool}: Make group compatible with New Central (cnx).
-            :warning:  All configurations will be pushed from New Central configuration model. [grey42]{_default_false}[/]
-      [cyan]gw-config[/]{_path}: Path to file containing gw group level config or jinja2 template.
-      [cyan]ap-config[/]{_path}: Path to file containing ap group level config or jinja2 template.
-      [cyan]gw-vars[/]{_path}: Path to variables used if gw-config is a j2 template.
-      [cyan]ap-vars[/]{_path}: Path to variables used if ap-config is a j2 template.
+[bold dark_olive_green2]Field Summary[/]:
+  [cyan]name[/] {type_str('str')}: The name of the group. [dim red]{escape('[required]')}[/]
+  [cyan]types[/] {type_str('str | list')}: defines what type of devices are allowed in the group.
+    Valid values: ["ap", "gw", "cx", "sw" "sdwan"] [dim]{escape('[default: ap, gw, cx, sw]')}[/]
+    :information:  For csv the field can be blank {escape('[use default: ap, gw, cx, sw]')}: or a space seperated list of device types.
+    :information:  "sdwan" is for EdgeConnect SD-WAN portfolio (SilverPeak), when allowed it has to be the only type allowed.
+  [cyan]wired-tg[/] {type_str('bool')}: Set to true to make the group a template group for switches. [dim]{_default_false}[/]
+  [cyan]wlan-tg[/] {type_str('bool')}: Set to true to make the group a template group for APs.  [dim]{_default_false}[/]
+  [cyan]gw-role[/] {type_str('str')}: [cyan]branch[/], [cyan]vpnc[/], or [cyan]wlan[/] only valid if gw type is allowed. [dim]{escape('[default: branch]')}[/]
+  [cyan]aos10[/] {type_str('bool')}: set to true to enable group as aos10 group.  [dim]{escape('[default: AOS8 IAP]')}[/]
+  [cyan]microbranch[/] {type_str('bool')}: Set to true to configure APs in the group as micro-branch APs [dim]{_default_false}[/]
+  [cyan]monitor-only-cx[/] {type_str('bool')}: Set to true to enable CX switches as monitor only [dim]{_default_false}[/]
+  [cyan]monitor-only-sw[/] {type_str('bool')}: Set to true to enable AOS-SW switches as monitor only [dim]{_default_false}[/]
+  [cyan]cnx[/] {type_str('bool')}: Make group compatible with New Central (cnx).
+    :warning:  All configurations will be pushed from New Central configuration model. [dim]{_default_false}[/]
+    :information:  [cyan]cencli[/] does not support New Central APIs yet.
+  [cyan]gw-config[/] {type_str('Path')}: Path to file containing gw group level config or jinja2 template.
+  [cyan]ap-config[/] {type_str('Path')}: Path to file containing ap group level config or jinja2 template.
+  [cyan]gw-vars[/] {type_str('Path')}: Path to variables used if gw-config is a j2 template.
+  [cyan]ap-vars[/] {type_str('Path')}: Path to variables used if ap-config is a j2 template.
 
-:warning:  USE [cyan]ap-config[/] / [cyan]gw-config[/] variables with caution. Best to be familiar with these and the caveats before using.
+[dark_orange3]:warning:[/]  USE [cyan]ap-config[/] / [cyan]gw-config[/] variables with caution. Best to be familiar with these and the caveats before using.
 If [cyan]gw-config[/] or [cyan]ap-config[/] is a j2 file and the associated [cyan]gw-vars[/] / [cyan]ap-vars[/] key is not provided
-the cli will look for a yaml/json/csv with the same name as the j2 file.
+the cli will look for a yaml/json/csv variable file with the same name as the j2 file.
 
 {example.ignore_text}
 
@@ -600,10 +602,8 @@ data="""Mac Address,Client Name
 
 clibatch_add_macs = f"""[italic cyan]cencli batch add macs IMPORT_FILE[/]:
 
-Requires the following keys (include as header row for csv import):
-    [cyan]Mac Address[/]
-Optional keys:
-    [cyan]Client Name[/]
+Accepts the following keys (include as header row for csv import):
+    {utils.color("Mac Address", color_str="red")}, [cyan]Client Name[/] [italic red](red=required)[/]
 
 {Example(data, type="macs", action="add")}
 """
