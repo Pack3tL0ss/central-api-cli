@@ -349,7 +349,7 @@ class CLICommon:
             minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major])
             patch = max([int(str(k).split(".")[2]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major and int(str(k).split(".")[1]) == minor])
             latest = f'{major}.{minor}.{patch}'
-            msg = "[bold bright_green]centralcli[/] "
+            msg = "[bold bright_green]HPE Aruba Central API CLI (cencli)[/]\n"
             msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
             msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'
             msg += "\n".join([f'  {k}: [cyan]{v}[/]' for k, v in resp.output["info"]["project_urls"].items()])
