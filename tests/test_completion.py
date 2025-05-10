@@ -53,7 +53,7 @@ def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_mpsk_completion_partial_name(ctx=ctx, incomplete: str = test_data["mpsk_ssid"].capitalize()[0:-3]):
-    result = [c for c in cache.mpsk_completion(ctx, incomplete)]
+    result = [c for c in cache.mpsk_network_completion(ctx, incomplete)]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
