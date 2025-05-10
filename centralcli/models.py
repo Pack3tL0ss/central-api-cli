@@ -873,6 +873,36 @@ class MpskNetworks(RootModel):
         return len(self.root)
 
 
+class MpskStatus(str, Enum):
+    enabled = "enabled"
+    disabled = "disabled"
+
+class Mpsk(BaseModel):
+    id: str
+    name: str
+    role: str
+    status: MpskStatus
+    ssid: Optional[str] = None  # We add the SSID / MPSK network associated when fetching all Named MPSKs across all SSIDs
+    # mpsk: str  #  We don't store the psk in the cache
+
+class Mpsks(RootModel):
+    root: List[Mpsk]
+
+    def __init__(self, data: List[dict]) -> None:
+        if isinstance(data, dict) and "items" in data:
+            data = data["items"]
+        super().__init__([Mpsk(**m) for m in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+
 # Not Used currently, For reference this is what auth_type_num List[int] in portal payload maps to
 # auth_type field is ', ' seperated field showing text description of auth types: 'Username/Password, Self-Registration'
 class PortalAuthType(Enum):

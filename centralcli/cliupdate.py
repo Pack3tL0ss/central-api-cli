@@ -27,7 +27,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode
+from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, IAPTimeZoneNames
 from . import render
 from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal
 from .caas import CaasAPI
@@ -334,6 +334,69 @@ def config_(
         else:
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
+
+
+@app.command(hidden=True)
+def swarm(
+    ap: str = typer.Argument(..., metavar=iden_meta.dev, help="Update the virtual controller/swarm associated with this AP", autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    name: str = typer.Option(None, help="The name to assign to the Virtual Controller", show_default=False,),
+    ip: str = typer.Option(None, help="Configure static IP to assign to the Virtual Controller", show_default=False,),
+    no_ip: bool = typer.Option(False, "--no-ip", help="Remove static IP currently assigned to Virtual Controller", show_default=False,),
+    timezone: IAPTimeZoneNames = typer.Option(None, "--tz", help='timezone name', show_default=False),
+    utc_offset: str = typer.Option(None, "-o", "--offset", help="Timezone offset in format h:mm where h = hours and mm = minutes.", show_default=False),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Update AOS8 IAP swarm settings
+
+    :warning:  It is recommended to do TimeZone updates via the UI currently, as API endpoint does not automatically add the appropriate daylight saving time rule
+    """
+    dev = cli.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
+    if dev.is_aos10:
+        cli.exit("Command is only valid for AOS8 APs")
+
+    offset_hr, offset_min, need_current_settings = None, None, False
+    if utc_offset:
+        try:
+            offset_hr, offset_min = map(int, utc_offset.split(":"))
+        except Exception as e:
+            cli.exit(f"[red dim]{e.__class__.__name__}[/]\nInvalid format for utc offset [cyan]{utc_offset}[/].  Should be in the form h:mm where h = hour, m = minutes i.e. 6:00 or -6:00.")
+
+    kwargs = {
+        "name": name,
+        "ip_address": ip,
+        "timezone": timezone if not timezone else timezone.value,
+        "utc_offset": utc_offset
+    }
+
+    if all([v is None for v in kwargs.values()]) and not no_ip:
+        cli.exit("Nothing to do, No update options provided.")
+
+    cli.econsole.print(f"Updat{'ing' if yes else 'e'} Virtual Controller/swarm associated with [cyan]{dev.name}[/] with the following:", emoji=False)  # TODO need short summary with name|serial|ip only in CacheDevice
+    _ = [cli.econsole.print(f"  {k}: {v}") for k, v in kwargs.items() if v is not None]
+    if no_ip:
+        cli.econsole.print("  ip: [dim italic][red]Remove[/red] static IP[/]")
+
+    if any([v is None for v in kwargs.values()]):
+        need_current_settings = True
+        cli.econsole.print("\n[italic dark_olive_green2]Will result in 2 API Calls.")
+    cli.confirm(yes)
+
+    if need_current_settings:
+        cur_resp = cli.central.request(cli.central.get_swarm_config, dev.swack_id)
+        if not cur_resp.ok:
+            log.error("Unable to perform update due to error fetching current settings for swarm", caption=True)
+            cli.display_results(cur_resp, tablefmt="action", exit_on_fail=True)
+        name = name or cur_resp.output["name"]
+        ip = ip or cur_resp.output["ip_address"] if not no_ip else ""
+        timezone = timezone or cur_resp.output["timezone_name"]
+        offset_hr = offset_hr or cur_resp.output["timezone_hr"]
+        offset_min = offset_min or cur_resp.output["timezone_min"]
+
+    resp = cli.central.request(cli.central.replace_swarm_config, swarm_id=dev.swack_id, name=name, ip_address=ip, timezone=timezone, tz_offset_hr=offset_hr, tz_offset_min=offset_min)
+    cli.display_results(resp, tablefmt="action")
 
 
 # FIXME entering more than one DNS results in the 2nd and beyond entry being evaluated as additional aps

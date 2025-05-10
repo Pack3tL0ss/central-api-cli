@@ -1898,6 +1898,7 @@ def cloudauth_upload_status(data: List[Dict[str, Any]] | Dict[str, Any]) -> Dict
 def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> List[Dict[str, Any]]:
     verbosity_keys = {
         0: [
+            'ssid',
             'name',
             'role',
             'status',
@@ -1905,7 +1906,7 @@ def cloudauth_get_namedmpsk(data: List[Dict[str, Any]], verbosity: int = 0,) -> 
     }
 
     if verbosity == 0:  # currently no verbosity beyond 0, we just don't filter the fields
-        data = [{k: d.get(k) for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())])} for d in data]
+        data = [{k: d.get(k) for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())]) if k in d} for d in data]
 
     return data
 
