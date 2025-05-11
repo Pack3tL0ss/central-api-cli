@@ -1051,7 +1051,7 @@ def add(
         resp = batch_add_cloudauth("mpsk", import_file, ssid=ssid, yes=yes)
         caption = [
             "\n [dim italic]Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import.",
-            f"Use [cyan]cencli show mpsk named {ssid} -v[/] to determine the randomly generated MPSKs[/dim italic]"  # TODO fix spacing for converting List when tablfmt=action in cli.display_results
+            f"Use [cyan]cencli show mpsk named {ssid.name} -v[/] to determine the randomly generated MPSKs[/dim italic]"  # TODO fix spacing for converting List when tablfmt=action in cli.display_results
         ]
 
     cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what.value}", caption=caption)
