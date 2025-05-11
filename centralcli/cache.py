@@ -660,7 +660,21 @@ class CacheMpskNetwork(CentralObject):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
-        return f'[bright_green]MPSK Network[/]:[cyan]{self.id}[/]|[green_yellow]{self.name})[/]'
+        return f'[bright_green]MPSK Network[/]: [cyan]{self.name}[/]|[green_yellow]{self.id}[/]'
+
+    @property
+    def rich_help_text(self) -> str:
+        return self.__rich__()
+
+    @property
+    def help_text(self) -> str:
+        return "|".join(
+            [
+                typer.style(self.name, fg="green"),
+                typer.style(self.id, fg="cyan"),
+            ]
+        )
+
 
 
 class CacheMpsk(CentralObject):
@@ -4317,7 +4331,8 @@ class Cache:
         """
         name_to_model = {
             "portal": CachePortal,
-            "label": CacheLabel
+            "label": CacheLabel,
+            "mpsk_network": CacheMpskNetwork,
         }
         cache_updated = False
         Model = name_to_model.get(cache_name, CentralObject)

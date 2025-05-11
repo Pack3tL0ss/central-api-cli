@@ -705,6 +705,7 @@ def mpsk(
     cli.confirm(yes)  # exits here if they don't confirm
     resp = cli.central.request(cli.central.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
     cli.display_results(resp, tablefmt="action")
+    # TODO cache update
 
 
 @app.callback()

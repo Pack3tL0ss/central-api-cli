@@ -8,11 +8,14 @@ from time import sleep
 from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
-from pydantic import BaseModel, ValidationError, ConfigDict
+from pydantic import BaseModel, ValidationError, ConfigDict, RootModel
 from rich import print
 from rich.console import Console
 from rich.progress import track
 from rich.markup import escape
+import tablib
+import json
+import tempfile
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -44,7 +47,7 @@ from centralcli.cache import CentralObject
 examples = ImportExamples()
 
 if TYPE_CHECKING:
-    from .cache import CacheSite
+    from .cache import CacheSite, CacheMpskNetwork
 
 iden = IdenMetaVars()
 tty = utils.tty
@@ -761,16 +764,56 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
         return resp
 
 
-def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
+def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: CacheMpskNetwork = None, data: bool = None, yes: bool = False) -> Response:
     if import_file is not None:
-        data = cli._get_import_file(import_file, "macs")
+        data = cli._get_import_file(import_file, upload_type)
     elif not data:
         cli.exit("[red]Error!![/] No import file provided")
 
-    print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid}[/]' if upload_type == 'mpsk' else ''}")
+    print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid.name}[/]' if upload_type == 'mpsk' else ''}")
+    # cloudauth accepts csv files
+    if upload_type in ["mpsk", "mac"]:
+        if upload_type == "mac":
+            Model = models.ImportMACs
+            upload_fields = {
+                "mac": "Mac Address",
+                "name": "Client Name"
+            }
+        else:
+            Model = models.ImportMPSKs
+            upload_fields = {
+                "name": "Name",
+                "role": "Client Role",
+                "status": "Status"
+            }
+            if "mpsk" in map(str.lower, data[0].keys()):
+                log.warning("MPSK can not be configured, this API only supports generation of random MPSKs, not user specified MPSKs.  It will fail if MPSK column is provided in the import.  Elliminating MPSK column.", show=True, caption=True)
+
+        try:
+            data = Model(data)
+        except ValidationError as e:
+            cli.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+
+        data: RootModel = data.model_dump()
+        # TODO cache update after successful upload
+
+        # We use a uniform set of logical field headers/spacing/case. Need to convert to the random 💩 used by Central
+        data = [{upload_fields[k]: mpsk[k] for k in mpsk} for mpsk in data]
+
+    ds = tablib.Dataset().load(json.dumps(data), format="json")
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".csv") as tmp_file:
+        tmp_path = Path(tmp_file.name)
+        tmp_file.write(ds.csv)
+        log.debug(f"CloudAuth Temp file created at: {tmp_path}")
+
+    if config.debug:
+        cli.econsole.print(f"\nContents of file prepped for upload ({str(tmp_path)}):")
+        cli.econsole.print(tmp_path.read_text())
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=import_file, ssid=ssid)
+        resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
+        tmp_path.unlink()
+        log.debug(f"CloudAuth Temp file ({tmp_path}) deleted")
 
     return resp
 
@@ -957,7 +1000,7 @@ def add(
     what: BatchAddArgs = typer.Argument(..., help="[cyan]macs[/] and [cyan]mpsk[/] are for cloud-auth", show_default=False,),
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
-    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", show_default=False,),
+    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", autocompletion=cli.cache.mpsk_network_completion, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -1004,10 +1047,12 @@ def add(
     elif what == "mpsk":
         if not ssid:
             cli.exit("[cyan]--ssid[/] option is required when uploading mpsk")
+        ssid: CacheMpskNetwork = cli.cache.get_mpsk_network_identifier(ssid)
         resp = batch_add_cloudauth("mpsk", import_file, ssid=ssid, yes=yes)
-        caption = (
-            "Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import."
-        )
+        caption = [
+            "\n [dim italic]Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import.",
+            f"Use [cyan]cencli show mpsk named {ssid} -v[/] to determine the randomly generated MPSKs[/dim italic]"  # TODO fix spacing for converting List when tablfmt=action in cli.display_results
+        ]
 
     cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what.value}", caption=caption)
 

@@ -6663,7 +6663,7 @@ class CentralApi(Session):
         Args:
             upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
             file (Path | str): The csv file to upload
-            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+            ssid (str, optional): The MPSK network (SSID), required if {upload_type} = 'mpsk'
 
         Returns:
             Response: CentralAPI Response object

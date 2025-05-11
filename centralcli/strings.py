@@ -120,7 +120,7 @@ class Example:
     """
     convert csv data as string into csv, json, and yaml
     """
-    def __init__(self, data: str, type: ExampleType = None, action: Action = None, data_format: TabLibFormats = "csv") -> None:
+    def __init__(self, data: str, type: ExampleType = None, action: Action = None, data_format: TabLibFormats = "csv", by_text_field: str = None) -> None:
         self.data = data.strip()
         self.type = type or "devices"
         self.action = action or "add"
@@ -131,9 +131,13 @@ class Example:
         self.csv = self.get_csv()
         self.mac_text = "[italic]:information:  MAC Address can be nearly any format imaginable.[/]"
         self.ignore_text = f"[italic]:information:  {self.type.capitalize()} with either [cyan]ignore[/], or [cyan]retired[/] keys set to true are ignored.[/]"
+        self.by_text_field = by_text_field
 
     def __str__(self):
         ret = [*ExampleSegment(self.csv, "csv").list, *ExampleSegment(self.json, "json").list, *ExampleSegment(self.yaml, "yaml").list,]
+        if self.txt_file_example:
+            ret += [self.txt_file_example]
+
         _by_key = self.by_parent_key
         if _by_key:
             ret += [_by_key]
@@ -235,6 +239,24 @@ class Example:
         segment_title = f"[italic]:information:  {self.type.capitalize()} keyed by [cyan]{key}[/] is also acceptable ([dark_olive_green2]json[/] or [dark_olive_green2]yaml[/]).[/italic]"
 
         return f"{segment_title}\n{segment}"
+
+    @property
+    def txt_file_example(self) -> List[str] | None:
+        if not self.by_text_field:
+            return
+        if self.by_text_field not in self.ds.dict[0]:
+            log.error(f"Example provided by_text_field {self.by_text_field}, but it does not exist in the example data")
+            return
+
+        return "\n".join(
+            [
+                "----------- [bright_green].txt example[/] ---------------",
+                f"{self.by_text_field}  <-- [dim italic]header is optional for txt[/]",
+                *[d[self.by_text_field] for d in self.ds.dict],
+                "----------------------------------------\n"
+            ]
+        )
+
 
 
 common_add_delete_end = """
@@ -595,7 +617,7 @@ any subscriptions associated with the serial will be removed.
 """
 
 # -- // ADD MACS (cloud-auth) \\ --
-data="""Mac Address,Client Name
+data="""mac,name
 00:09:B0:75:65:D1,Integra
 00:1B:4F:23:8A:3E,Avaya VoIP
 3C:A8:2A:A6:07:0B,HP Thin Client"""
@@ -603,30 +625,37 @@ data="""Mac Address,Client Name
 clibatch_add_macs = f"""[italic cyan]cencli batch add macs IMPORT_FILE[/]:
 
 Accepts the following keys (include as header row for csv import):
-    {utils.color("Mac Address", color_str="red")}, [cyan]Client Name[/] [italic red](red=required)[/]
+    [red]mac[/], [cyan]name[/] [italic red](red=required)[/]
 
-{Example(data, type="macs", action="add")}
+{Example(data, type="macs", action="add", by_text_field="mac")}
+
+[italic]:information:  Also supports {utils.color(['Mac Address', 'Client Name'], color_str='cyan')} as alternative headers.[/]
+    [dim italic] These are the headers Central Cloud-Auth Expects, headers are converted to what is required regardless.[/]
+{example.ignore_text.replace('Devices', 'MACs')}
 """
 
-# -- // ADD MPSK (cloud-auth) \\ --
-data="""Name,MPSK,Client Role,Status
-wade@example.com,chant chemo domain lugged,admin_users,enabled
-jerry@example.com,quick dumpster offset jack,dia,enabled
-stephanie@example.com,random here words go,general_users,enabled"""
+# -- // ADD MPSK (cloud-auth) \\ --  REMOVED MPSK Column does not appear to be supported
+data="""name,role,status
+wade@example.com,admin_users,enabled
+jerry@example.com,dia,enabled
+stephanie@example.com,general_users,enabled"""
 example = Example(data, type="mpsk", action="add")
 
 clibatch_add_mpsk = f"""[italic cyan]cencli batch add mpsk IMPORT_FILE --ssid <SSID>[/]:
 
 Requires the following keys (include as header row for csv import):
-    [cyan]Name[/], [cyan]Client Role[/], [cyan]Status[/]
+    [cyan]name[/], [cyan]role[/], [cyan]status[/]
+    [dim italic]:information:  All other fields are ignored[/]
 
-:information:  MPSK will be randomly generated if not provided.
-:information:  Roles must exist in Central.
+:information:  MPSK will be randomly generated.
+:information:  Roles should exist in Central.
 :information:  [cyan]--ssid[/] Option is required when uploading Named MPSKs.
 
 
 {example}
 
+[italic]:information:  Also supports {utils.color(['Name', 'Client Role', 'Status'], color_str='cyan')} as alternative headers.[/]
+    [dim italic] These are the headers Central Cloud-Auth Expects, headers are converted to what is required regardless.[/]
 {example.ignore_text.replace("Mpsk", "MPSKs")}
 """
 

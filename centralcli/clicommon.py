@@ -957,9 +957,9 @@ class CLICommon:
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
-
+        import_type = import_type or ""
         if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
-            if import_type in ["groups", "sites"]:  # accept yaml/json keyed by name for groups and sites
+            if import_type in ["groups", "sites", "mpsk", "mac"]:  # accept yaml/json keyed by name for groups and sites
                 data = [{"name": k, **v} for k, v in data.items()]
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                 data = [{"serial": k, **v} for k, v in data.items()]
