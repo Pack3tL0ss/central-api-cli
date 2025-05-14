@@ -1729,7 +1729,7 @@ def sites(
 def templates(
     name: str = typer.Argument(
         None,
-        help=f"Template: [name] or Device: {iden_meta.dev}",
+        help=f"Template: {escape('[name]')} or Device: {escape(iden_meta.dev)}",
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
@@ -1836,12 +1836,11 @@ def variables(
 
     if device and device != "all":
         device = cli.cache.get_dev_identifier(device, conductor_only=True)
-    else:
-        device = ""
 
-    resp = central.request(central.get_variables, () if not device else device.serial)
-    if device:
+    resp = central.request(central.get_variables, serial=None if not device else device.serial,)
+    if resp.ok and device:
         resp.output = resp.output.get("variables", resp.output)
+
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
     if not device and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
         all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
