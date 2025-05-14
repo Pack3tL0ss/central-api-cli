@@ -229,9 +229,6 @@ class CacheDevice(CentralObject):
         self.swack_id: str | None = data["swack_id"]
         self.switch_role: str | None = data["switch_role"]
 
-    def __bool__(self):
-        return True if self.status == "Up" else False
-
     @property
     def is_aos10(self) -> bool:
         if self.type != "ap":
