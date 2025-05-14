@@ -1262,7 +1262,7 @@ class CentralApi(Session):
                 will be fetched.  Defaults to None.
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 20.
+            limit (int, optional): Maximum number of records to be returned. Max allowed is 20. Defaults to 20.
 
         offset and limit are ignored if serial is provided.
 
