@@ -404,7 +404,7 @@ def format_data_by_key(data: List[Dict[str, Any]], output_by_key: str) -> Dict[s
 
 
 def output(
-    outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any],
+    outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any] | str,
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
     title: str = None,
     caption: str = None,
@@ -419,6 +419,9 @@ def output(
     output_by_key = utils.listify(output_by_key)
     raw_data = outdata
     _lexer = table_data = None
+
+    if isinstance(outdata, str):
+        outdata = outdata.splitlines()
 
     # sanitize output for demos
     if config and config.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
