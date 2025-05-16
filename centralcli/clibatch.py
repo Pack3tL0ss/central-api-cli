@@ -1220,7 +1220,7 @@ def subscribe(
 def unsubscribe(
     import_file: Path = cli.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
-    dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Dissasociate the device from the Aruba Central App in Green Lake"),
+    dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Disassociate the device from the Aruba Central App in Green Lake"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1233,7 +1233,7 @@ def unsubscribe(
     Unsubscribe devices specified in import file or all devices in the inventory that
     have never connected to Aruba Central ([cyan]-N[/]|[cyan]--never-connected[/])
 
-    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also dissasociate the devices from the Aruba Central app in Green Lake.
+    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also disassociate the devices from the Aruba Central app in Green Lake.
     """
     if show_example:
         print(getattr(examples, "unsubscribe"))
