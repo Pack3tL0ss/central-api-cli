@@ -35,6 +35,7 @@ from centralcli.constants import (
     BatchRenameArgs,
     IdenMetaVars,
     BatchUpdateArgs,
+    AllDevTypes,
     SendConfigTypes,
     CloudAuthUploadTypes,
 )
@@ -1110,7 +1111,9 @@ def delete(
     what: BatchDelArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
+    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type", show_default=False,),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
+    unsubscribed: bool = typer.Option(False, "--no-sub", help="Disassociate from the Aruba Central Service in GLP all devices that have no subscription assigned"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1133,14 +1136,33 @@ def delete(
     if show_example:
         print(getattr(examples, f"delete_{what}"))
         return
+    usage_msg = f"cencli batch delete {what.value} [OPTIONS] [IMPORT_FILE]"
 
-    if not import_file:
-        cli.exit(_invalid_msg("cencli batch delete [OPTIONS] [devices|sites|groups|labels] [IMPORT_FILE]"))
+    dev_only_options = {
+        "--no-sub": unsubscribed,
+        "--dev-type": dev_type,
+        "--ui-only": ui_only,
+        "--cop-only": cop_inv_only
+    }
 
-    data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
+    if what != "devices" and any(dev_only_options.values()):
+        invalid = [k for k, v in dev_only_options.items() if v is True]
+        cli.exit(_invalid_msg(usage_msg, provide=f"{utils.color(invalid, color_str='cyan')} is only valid for [bright_green]device[/] deletions not [red]{what.value}[/]"))
+
+    if import_file:
+        if unsubscribed:
+            cli.exit(_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/] or [cyan]--no-sub[/] [red]not both[/]"))
+        data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
+    elif unsubscribed:
+        resp = cli.cache.get_devices_with_inventory(device_type=dev_type.value)
+        if not resp:
+            cli.display_results(resp, exit_on_fail=True)
+        data = [d for d in resp.output if d["subscription_key"] is None]
+    else:
+        cli.exit(_invalid_msg(usage_msg))
 
     if what == "devices":
-        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, dev_type=dev_type.value, yes=yes)
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":

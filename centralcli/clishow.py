@@ -374,7 +374,7 @@ def show_devices(
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
-            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
+            resp = cli.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 

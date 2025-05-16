@@ -725,6 +725,7 @@ class CacheResponses:
         license: Response = None,
         client: Response = None,
         guest: Response = None,
+        device_type: List[constants.LibAllDevTypes] | constants.LibAllDevTypes = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -738,6 +739,7 @@ class CacheResponses:
         self._license = license
         self._client = client
         self._guest = guest
+        self._device_type = utils.listify(device_type)
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
@@ -845,6 +847,14 @@ class CacheResponses:
     @guest.setter
     def guest(self, resp: Response):
         self._guest = resp
+
+    @property
+    def device_type(self) -> List[constants.LibAllDevTypes] | None:
+        return self._device_type
+
+    @device_type.setter
+    def device_type(self, device_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes]):
+        self._device_type = utils.listify(device_type)
 
 
 class Cache:
@@ -1149,7 +1159,7 @@ class Cache:
             log.error(f'{db_str} update response: {response}{elapsed_msg}')
             return False
 
-    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
+    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, device_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -1159,7 +1169,7 @@ class Cache:
                 Defaults to False.
             inv_db (bool, optional): Update inventory cache. Defaults to None.
             dev_db (bool, optional): Update device (monitoring) cache. Defaults to None.
-            dev_type (Literal['ap', 'gw', 'switch'], optional): Filter devices by type:
+            device_type (Literal['ap', 'gw', 'switch'], optional): Filter devices by type:
                 Valid Types: 'ap', 'gw', 'switch'.  'cx' and 'sw' also accepted, both will result in 'switch' which includes both types.
                 Defalts to None (no Filter/All device types).
             status (Literal 'up', 'down', optional): Filter results by status.
@@ -1171,7 +1181,7 @@ class Cache:
                             data from Inventory and Monitoring.
         """
         if not no_refresh:
-            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=dev_type)
+            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=device_type)
         else:
             res = [self.responses.dev or Response()]
 
@@ -1181,8 +1191,8 @@ class Cache:
         else:
             _dev_by_ser = self.devices_by_serial  # TODO should be no case to ever hit this.
 
-        if dev_type:
-            _dev_types = [dev_type] if dev_type != "switch" else ["cx", "sw", "mas"]
+        if device_type:
+            _dev_types = [device_type] if device_type != "switch" else ["cx", "sw", "mas"]
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["type"] in _dev_types}
             _inv_by_ser = {serial: _inv_by_ser[serial] for serial in _inv_by_ser if _inv_by_ser[serial]["type"] in _dev_types}
 
@@ -2775,9 +2785,13 @@ class Cache:
                 update_data = [dev.model_dump() for dev in raw_models]
 
             if resp.all_ok and not filtered_resonse:
-                if not dev_type:
+                self.responses.dev = resp
+                # we update the response cache even if by dev_type now.
+                if dev_type:
+                    self.responses.device_type = dev_type
+                else:
                     self.updated.append(self.central.get_all_devices)
-                    self.responses.dev = resp
+
                 _ = await self.update_db(self.DevDB, data=update_data, truncate=True)
             else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
                 _ = await self._add_update_devices(update_data)
@@ -2837,7 +2851,7 @@ class Cache:
             if len(db_res) != len(doc_ids):
                 log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
 
-
+    # TODO need to make device_type consistent refresh_dev_db uses dev_type.  All CentralAPI methods use device_type
     async def refresh_inv_db(
             self,
             device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
@@ -2887,12 +2901,13 @@ class Cache:
         resp.raw = {r.url.path: r.raw for r in batch_resp}
         inv_model = models.Inventory(list(combined.values()))
         resp.output = inv_model.model_dump()
+
+        self.responses.inv = resp
         if device_type is None or device_type == "all":
             self.updated.append(self.central.get_device_inventory)
-            self.responses.inv = resp
-
             _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
         else:
+            self.responses.device_type = device_type
             _ = await self._add_update_devices(resp.output, "inv")
 
         return resp
@@ -3320,8 +3335,9 @@ class Cache:
             update_funcs += [self.refresh_license_db]
         async with self.central.aio_session:
             if update_funcs:
-                kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
-                db_res += [await update_funcs[0](**kwargs)]
+                kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
+                # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
+                db_res += [await update_funcs[0](**kwarg_list[0])]
                 if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
                     db_res = utils.unlistify(db_res)
 
@@ -3335,7 +3351,7 @@ class Cache:
 
                 else:
                     if len(update_funcs) > 1:
-                        db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
+                        db_res = [*db_res, *await asyncio.gather(*[f(**k) for f, k in zip(update_funcs[1:], kwarg_list[1:])])]
 
             # If all *_db params are false refresh cache for all
             # TODO make more elegant
@@ -3647,8 +3663,8 @@ class Cache:
 
             # no match found initiate cache update
             if retry and (not match or Model == CacheInvDevice) and self.responses.dev is None:
-                if dev_type and cache_updated:
-                    ...  # self.responses.dev is not currently updated if dev_type provided, but cache update may have already occured in this session.
+                if dev_type and (cache_updated or self.responses.device_type == dev_type):
+                    ...  # self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
                     _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"

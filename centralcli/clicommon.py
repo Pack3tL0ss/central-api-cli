@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import typer
 import sys
 from typing import List, Literal, Union, Tuple, Dict, Any, TYPE_CHECKING
@@ -49,7 +50,7 @@ from .ws_client import follow_audit_logs, follow_event_logs
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
     from .typedefs import CacheTableName, StrEnum
-    from .constants import LogType
+    from .constants import LogType, DeviceTypes
 
 
 tty = utils.tty
@@ -1449,7 +1450,12 @@ class CLICommon:
 
         if all([r.ok for r in arch_resp[0:2]]) and all([not r.get("failed_devices") for r in arch_resp[0:2]]):
             arch_resp[0].output = arch_resp[0].output.get("message")
-            arch_resp[1].output =  f'  {arch_resp[1].output.get("message", "")}\n  Subscriptions successfully removed for {len(arch_resp[1].output.get("succeeded_devices", []))} devices.\n  \u2139  archive/unarchive flushes all subscriptions for a device.'
+            _success_cnt = len(arch_resp[1].output.get("succeeded_devices", []))
+            arch_resp[1].output =  (
+                f'  {arch_resp[1].output.get("message", "")}\n'
+                f'  Subscriptions successfully removed for {_success_cnt} device{utils.singular_plural_sfx(_success_cnt)}.\n'
+                '  \u2139  archive/unarchive flushes all subscriptions and disassociates the Central service.'
+            )
             self.display_results(arch_resp[0:2], tablefmt="action")
         else:
             summarize_arch_res(arch_resp[0:2])
@@ -1551,7 +1557,7 @@ class CLICommon:
 
         return doc_ids
 
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, dev_type: DeviceTypes | List[DeviceTypes] = None, yes: bool = False, force: bool = False,) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 
@@ -1565,10 +1571,14 @@ class CLICommon:
         cache_devs: List[CacheDevice | CacheInvDevice | None] = []
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
-            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only)
+            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only, dev_type=dev_type)
             if this_dev is not None:
                 serial_updates[idx] = this_dev.serial
             cache_devs += [this_dev]
+
+        if dev_type:
+            dev_type = utils.listify(dev_type)
+            cache_devs = [c for c in cache_devs if c is not None and c.type and c.type in dev_type]
 
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
@@ -1588,6 +1598,7 @@ class CLICommon:
         # We always use serials with import without validation for arch/unarchive as device will not show in inventory if it's already archved
         arch_reqs = [] if ui_only or not valid_serials else [
             BR(self.central.archive_devices, valid_serials),
+            BR(asyncio.sleep, 3),  # Had to add delay between archive/unarchive as GWs would remain archived despite returning 200 to the unarchive call.
             BR(self.central.unarchive_devices, valid_serials),
         ]
 
@@ -1610,9 +1621,9 @@ class CLICommon:
         if ui_only:
             _total_reqs = len(mon_del_reqs)
         elif cop_inv_only:
-            _total_reqs = len([*arch_reqs, *cop_del_reqs])
+            _total_reqs = len([*[req for req in arch_reqs if req.func != asyncio.sleep], *cop_del_reqs])
         else:
-            _total_reqs = len([*arch_reqs, *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
+            _total_reqs = len([*[req for req in arch_reqs if req.func != asyncio.sleep], *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
 
         if not _total_reqs:
             if ui_only and delayed_mon_del_reqs:  # they select ui only, but devices are online
