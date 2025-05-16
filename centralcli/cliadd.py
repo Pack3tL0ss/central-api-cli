@@ -31,7 +31,7 @@ from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, 
 from centralcli.response import BatchRequest
 
 if TYPE_CHECKING:
-    from .cache import CachePortal, CacheGroup
+    from .cache import CachePortal, CacheGroup, CacheMpskNetwork
 
 
 
@@ -678,6 +678,34 @@ def guest(
             log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
             cli.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
+
+@app.command()
+def mpsk(
+    ssid: str = typer.Argument(..., help="The MPSK SSID to associate the MPSK with", autocompletion=cli.cache.mpsk_network_completion, show_default=False,),
+    email: str = typer.Argument(..., help=":email:  email address which is used as the name for the MPSK", show_default=False,),
+    role: str = typer.Option(..., help="The user role to associate with devices using this PSK", show_default=False,),
+    psk: str = typer.Option(None, help=":warning:  This currently has no impact, PSK is always randomly generated.", show_default=False,  hidden=True,),
+      #  The PSK/Passphrase, [dim italic]Best to wrap in single quotes.[/] {cli.help_block('Generate Random PSK')}", show_default=False,),
+    disable: bool = typer.Option(False, "-D", "--disable", is_flag=True, help="Add MPSK Configuration, but set to [red]disabled[/]", show_default=False,),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Add Named MPSK Configuration"""
+    ssid: CacheMpskNetwork = cli.cache.get_name_id_identifier("mpsk_network", ssid)
+    cli.econsole.print(f"[bright_green]Add{'ing' if yes else ''}[/] MPSK [cyan]{email}[/] with the following:")
+    cli.econsole.print(f"  Associate with MPSK SSID: [cyan]{ssid.name}[/]")
+    cli.econsole.print(f"  Assign Role: [cyan]{role}[/]")
+    if psk:
+        cli.econsole.print("  [dim italic]Configure PSK as specified, not shown[/]")
+    if disable:
+        cli.econsole.print("  Create MPSK, but set as [red]disabled[/]")
+
+    cli.confirm(yes)  # exits here if they don't confirm
+    resp = cli.central.request(cli.central.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
+    cli.display_results(resp, tablefmt="action")
+    # TODO cache update
 
 
 @app.callback()

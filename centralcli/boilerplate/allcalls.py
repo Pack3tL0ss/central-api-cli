@@ -4161,7 +4161,7 @@ class AllCalls(CentralApi):
     async def cloudauth_mpsk_namedmpsk_add_v2(
         self,
         mpsk_id: str,
-        id: str,
+        # id: str,
         mpsk: str,
         name: str,
         role: str,
@@ -4185,7 +4185,7 @@ class AllCalls(CentralApi):
         url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
 
         json_data = {
-            'id': id,
+            # 'id': id,
             'mpsk': mpsk,
             'name': name,
             'role': role,

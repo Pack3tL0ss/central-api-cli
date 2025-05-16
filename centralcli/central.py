@@ -1262,7 +1262,7 @@ class CentralApi(Session):
                 will be fetched.  Defaults to None.
             offset (int, optional): Number of items to be skipped before returning the data, useful
                 for pagination. Defaults to 0.
-            limit (int, optional): Maximum number of records to be returned. Defaults to 20.
+            limit (int, optional): Maximum number of records to be returned. Max allowed is 20. Defaults to 20.
 
         offset and limit are ignored if serial is provided.
 
@@ -5400,6 +5400,67 @@ class CentralApi(Session):
 
         return await self.post(url, json_data=json_data)
 
+    async def get_swarm_config(
+        self,
+        swarm_id: str,
+    ) -> Response:
+        """Get an existing swarm config.
+
+        Args:
+            swarm_id (str): swarm_id (guid) of the SWARM.
+                Example: 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/swarm_config/{swarm_id}"
+
+        return await self.get(url)
+
+    # API-FLAW ??  throws error if offsets are not provided, API apparently doesn't get tz offset from timezone (name) and doesn't seem to change the setting regardless
+    # It will add "clock timezone America/Chicago -06 00" if you provide name=America/Chicago tz_offset_hr = -6 tz_offset_min = 0
+    # but the DST config line "clock summer-time CDT recurring second sunday march 02:00 first sunday november 02:00" will not be added as it is from the dropdown in the UI
+    # Also the TimeZone dropdown is not changed either way.  Maybe need to send Central-Time which is what is sent via the UI???
+    # TODO update to fech current config if not all options provided the API thows an error if everything is not provided
+    async def replace_swarm_config(
+        self,
+        swarm_id: str,
+        name: str,
+        ip_address: str,
+        timezone: constants.IAP_TZ_NAMES,
+        tz_offset_hr: int,
+        tz_offset_min: int,
+    ) -> Response:
+        """Update (replace) an existing swarm config.  All values are required.
+
+        Args:
+            swarm_id (str): swarm_id (guid) of Swarm.
+                Example:6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
+            name (str): The name of the Virtual Controller
+            ip_address (str): ip_address
+            timezone (str): timezone name.
+            tz_offset_hr (int): timezone offset hours from UTC. Range value is -12 to 14.
+            tz_offset_min (int): timezone offset mins from UTC. Range value is 0 to 60.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v2/swarm_config/{swarm_id}"
+        if tz_offset_hr and not isinstance(tz_offset_hr, int):
+            tz_offset_hr = int(tz_offset_hr)
+        if tz_offset_min and not isinstance(tz_offset_min, int):
+            tz_offset_min = int(tz_offset_min)
+
+        json_data = {
+            'name': name,
+            'ip_address': ip_address,
+            'timezone_name': timezone,
+            'timezone_hr': tz_offset_hr,
+            'timezone_min': tz_offset_min
+        }
+
+        return await self.post(url, json_data=json_data)
+
     async def _add_altitude_to_config(self, data: List[str], altitude: int | float) -> List[str] | None:
             """Adds GPS altitude (meters from ground) to existing AP or swarm config
 
@@ -6602,7 +6663,7 @@ class CentralApi(Session):
         Args:
             upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
             file (Path | str): The csv file to upload
-            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
+            ssid (str, optional): The MPSK network (SSID), required if {upload_type} = 'mpsk'
 
         Returns:
             Response: CentralAPI Response object
@@ -6714,6 +6775,100 @@ class CentralApi(Session):
         }
 
         return await self.get(url, params=params)
+
+    # API-FLAW you can not set the mpsk or id
+    async def cloudauth_add_namedmpsk(
+        self,
+        mpsk_id: str,
+        name: str,
+        role: str,
+        enabled: bool = True,
+    ) -> Response:
+        """Add a named MPSK config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID.  This is the ID associated with the MPSK SSID.
+            name (str): Name to identify the mpsk password with
+            role (str): Aruba Role to be assigned to device connected using this MPSK password.
+            enabled (bool, optional): Set to False to create but disable this named MPSK. Defaults to True (enabled)
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK"
+
+        json_data = {
+            'name': name,
+            'role': role,
+            'status': "enabled" if enabled else "disabled"
+        }
+
+        return await self.post(url, json_data=json_data)
+
+    async def cloudauth_delete_namedmpsk(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+    ) -> Response:
+        """Delete a Named MPSK Config.
+
+        Args:
+            mpsk_id (str): The ID associated with the MPSK SSID
+            named_mpsk_id (str): The Named MPSK Config ID
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        return await self.delete(url)
+
+    # API-FLAW no way to update the mpsk (passphrase), even if sent in payload it has no impact
+    # There is a PUT method for the below as well, don't see the point in ever using it.
+    async def cloudauth_update_namedmpsk(
+        self,
+        mpsk_id: str,
+        named_mpsk_id: str,
+        mpsk: str = None,
+        name: str = None,
+        role: str = None,
+        enabled: bool = None,
+        reset: bool = False,
+    ) -> Response:
+        """Partially Edit a Named MPSK Config.
+
+        Args:
+            mpsk_id (str): The MPSK configuration ID
+            named_mpsk_id (str): The Named MPSK Config ID
+            mpsk (str): The password to be used to connect.
+            name (str): Name to identify the mpsk password with
+            role (str): Aruba Role to be assigned to device connected using this MPSK password.
+            enable (bool, optional): set True to enbable the MPSK, False to disable it.  Defaults to None (No change)
+            reset (bool, optional): If true, a new MPSK password is generated for this named
+                MPSK config.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
+
+        if enabled:
+            status = "enabled"
+        else:
+            status = "disabled" if enabled is False else None
+
+        params = {} if not reset else {'resetMPSK': reset}
+
+        json_data = {
+            'id': named_mpsk_id,
+            'mpsk': mpsk,
+            'name': name,
+            'role': role,
+            'status': status
+        }
+        json_data = utils.strip_none(json_data)
+
+        return await self.patch(url, json_data=json_data, params=params)
 
     async def cloudauth_download_mpsk_csv(
         self,

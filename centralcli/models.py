@@ -246,8 +246,59 @@ class ImportSites(RootModel):
             }
             for inner in _data
         ]
-        # _data = {_site_aliases.get(k, k): v for k, v in _data.items()}
+
         return _data
+
+class MPSKStatus(str, Enum):
+    enabled = "enabled"
+    disabled = "disabled"
+
+
+# API-FLAW order actually matters here, it throws an error if not Name,Client Role,Status
+# Also no longer accepts MPSK field
+class ImportMPSK(BaseModel):
+    name: str = Field(alias=AliasChoices("name", "Name"))
+    role: str = Field(alias=AliasChoices("client_role", "role", "Client Role"))
+    status: MPSKStatus = Field(MPSKStatus.enabled, alias=AliasChoices("status", "Status"))
+    # mpsk: str = Field(alias=AliasChoices("mpsk", "MPSK"))   # This does not appear to be accepted anymore
+
+
+class ImportMPSKs(RootModel):
+    root: List[ImportMPSK]
+
+    def __init__(self, data: List[Dict[str, Any]]) -> None:
+        # formatted = [ImportsMPSKAllFields(m) for m in data]
+        super().__init__([ImportMPSK(**s) for s in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+
+class ImportMAC(BaseModel):
+    model_config = ConfigDict(use_enum_values=True)
+    mac: str = Field(alias=AliasChoices("mac", "mac_address", "Mac Address"))
+    name: str = Field(alias=AliasChoices("name", "Name", "client_name", "Client Name"))
+
+class ImportMACs(RootModel):
+    root: List[ImportMAC]
+
+    def __init__(self, data: List[Dict[str, Any]]) -> None:
+        super().__init__([ImportMAC(**s) for s in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
 
 
 class GatewayRole(str, Enum):
@@ -862,6 +913,36 @@ class MpskNetworks(RootModel):
         if isinstance(data, dict) and "items" in data:
             data = data["items"]
         super().__init__([MpskNetwork(**m) for m in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+
+class MpskStatus(str, Enum):
+    enabled = "enabled"
+    disabled = "disabled"
+
+class Mpsk(BaseModel):
+    id: str
+    name: str
+    role: str
+    status: MpskStatus
+    ssid: Optional[str] = None  # We add the SSID / MPSK network associated when fetching all Named MPSKs across all SSIDs
+    # mpsk: str  #  We don't store the psk in the cache
+
+class Mpsks(RootModel):
+    root: List[Mpsk]
+
+    def __init__(self, data: List[dict]) -> None:
+        if isinstance(data, dict) and "items" in data:
+            data = data["items"]
+        super().__init__([Mpsk(**m) for m in data])
 
     def __iter__(self):
         return iter(self.root)

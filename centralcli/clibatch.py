@@ -8,11 +8,14 @@ from time import sleep
 from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
 
 import typer
-from pydantic import BaseModel, ValidationError, ConfigDict
+from pydantic import BaseModel, ValidationError, ConfigDict, RootModel
 from rich import print
 from rich.console import Console
 from rich.progress import track
 from rich.markup import escape
+import tablib
+import json
+import tempfile
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -32,6 +35,7 @@ from centralcli.constants import (
     BatchRenameArgs,
     IdenMetaVars,
     BatchUpdateArgs,
+    AllDevTypes,
     SendConfigTypes,
     CloudAuthUploadTypes,
 )
@@ -44,7 +48,7 @@ from centralcli.cache import CentralObject
 examples = ImportExamples()
 
 if TYPE_CHECKING:
-    from .cache import CacheSite
+    from .cache import CacheSite, CacheMpskNetwork
 
 iden = IdenMetaVars()
 tty = utils.tty
@@ -761,16 +765,56 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
         return resp
 
 
-def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: str = None, data: bool = None, yes: bool = False) -> Response:
+def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: CacheMpskNetwork = None, data: bool = None, yes: bool = False) -> Response:
     if import_file is not None:
-        data = cli._get_import_file(import_file, "macs")
+        data = cli._get_import_file(import_file, upload_type)
     elif not data:
         cli.exit("[red]Error!![/] No import file provided")
 
-    print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid}[/]' if upload_type == 'mpsk' else ''}")
+    print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid.name}[/]' if upload_type == 'mpsk' else ''}")
+    # cloudauth accepts csv files
+    if upload_type in ["mpsk", "mac"]:
+        if upload_type == "mac":
+            Model = models.ImportMACs
+            upload_fields = {
+                "mac": "Mac Address",
+                "name": "Client Name"
+            }
+        else:
+            Model = models.ImportMPSKs
+            upload_fields = {
+                "name": "Name",
+                "role": "Client Role",
+                "status": "Status"
+            }
+            if "mpsk" in map(str.lower, data[0].keys()):
+                log.warning("MPSK can not be configured, this API only supports generation of random MPSKs, not user specified MPSKs.  It will fail if MPSK column is provided in the import.  Elliminating MPSK column.", show=True, caption=True)
+
+        try:
+            data = Model(data)
+        except ValidationError as e:
+            cli.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+
+        data: RootModel = data.model_dump()
+        # TODO cache update after successful upload
+
+        # We use a uniform set of logical field headers/spacing/case. Need to convert to the random 💩 used by Central
+        data = [{upload_fields[k]: mpsk[k] for k in mpsk} for mpsk in data]
+
+    ds = tablib.Dataset().load(json.dumps(data), format="json")
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".csv") as tmp_file:
+        tmp_path = Path(tmp_file.name)
+        tmp_file.write(ds.csv)
+        log.debug(f"CloudAuth Temp file created at: {tmp_path}")
+
+    if config.debug:
+        cli.econsole.print(f"\nContents of file prepped for upload ({str(tmp_path)}):")
+        cli.econsole.print(tmp_path.read_text())
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=import_file, ssid=ssid)
+        resp = cli.central.request(cli.central.cloudauth_upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
+        tmp_path.unlink()
+        log.debug(f"CloudAuth Temp file ({tmp_path}) deleted")
 
     return resp
 
@@ -957,7 +1001,7 @@ def add(
     what: BatchAddArgs = typer.Argument(..., help="[cyan]macs[/] and [cyan]mpsk[/] are for cloud-auth", show_default=False,),
     import_file: Path = cli.arguments.import_file,
     show_example: bool = cli.options.show_example,
-    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", show_default=False,),
+    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with [grey42 italic]Required and valid only with mpsk argument[/]", autocompletion=cli.cache.mpsk_network_completion, show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -1004,10 +1048,12 @@ def add(
     elif what == "mpsk":
         if not ssid:
             cli.exit("[cyan]--ssid[/] option is required when uploading mpsk")
+        ssid: CacheMpskNetwork = cli.cache.get_mpsk_network_identifier(ssid)
         resp = batch_add_cloudauth("mpsk", import_file, ssid=ssid, yes=yes)
-        caption = (
-            "Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import."
-        )
+        caption = [
+            "\n [dim italic]Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import.",
+            f"Use [cyan]cencli show mpsk named {ssid.name} -v[/] to determine the randomly generated MPSKs[/dim italic]"  # TODO fix spacing for converting List when tablfmt=action in cli.display_results
+        ]
 
     cli.display_results(resp, tablefmt=tablefmt, title=f"Batch Add {what.value}", caption=caption)
 
@@ -1065,7 +1111,9 @@ def delete(
     what: BatchDelArgs = cli.arguments.what,
     import_file: Path = cli.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
+    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type", show_default=False,),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
+    unsubscribed: bool = typer.Option(False, "--no-sub", help="Disassociate from the Aruba Central Service in GLP all devices that have no subscription assigned"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1088,11 +1136,32 @@ def delete(
     if show_example:
         print(getattr(examples, f"delete_{what}"))
         return
+    usage_msg = f"cencli batch delete {what.value} [OPTIONS] [IMPORT_FILE]"
 
-    if not import_file:
-        cli.exit(_invalid_msg("cencli batch delete [OPTIONS] [devices|sites|groups|labels] [IMPORT_FILE]"))
+    dev_only_options = {
+        "--no-sub": unsubscribed,
+        "--dev-type": dev_type,
+        "--ui-only": ui_only,
+        "--cop-only": cop_inv_only
+    }
 
-    data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
+    if what != "devices" and any(dev_only_options.values()):
+        invalid = [k for k, v in dev_only_options.items() if v is True]
+        cli.exit(_invalid_msg(usage_msg, provide=f"{utils.color(invalid, color_str='cyan')} is only valid for [bright_green]device[/] deletions not [red]{what.value}[/]"))
+
+    if import_file:
+        if unsubscribed:
+            cli.exit(_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/] or [cyan]--no-sub[/] [red]not both[/]"))
+        if dev_type:
+            cli.exit("[cyan]--dev-type[/] option is currently only valid in combination with [cyan]--no-sub[/].")
+        data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
+    elif unsubscribed:
+        resp = cli.cache.get_devices_with_inventory(device_type=dev_type.value)
+        if not resp:
+            cli.display_results(resp, exit_on_fail=True)
+        data = [d for d in resp.output if d["subscription_key"] is None]
+    else:
+        cli.exit(_invalid_msg(usage_msg))
 
     if what == "devices":
         resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
@@ -1175,7 +1244,7 @@ def subscribe(
 def unsubscribe(
     import_file: Path = cli.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
-    dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Dissasociate the device from the Aruba Central App in Green Lake"),
+    dis_cen: bool = typer.Option(False, "-D", "--dis-cen", help="Disassociate the device from the Aruba Central App in Green Lake"),
     show_example: bool = cli.options.show_example,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1188,7 +1257,7 @@ def unsubscribe(
     Unsubscribe devices specified in import file or all devices in the inventory that
     have never connected to Aruba Central ([cyan]-N[/]|[cyan]--never-connected[/])
 
-    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also dissasociate the devices from the Aruba Central app in Green Lake.
+    Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also disassociate the devices from the Aruba Central app in Green Lake.
     """
     if show_example:
         print(getattr(examples, "unsubscribe"))

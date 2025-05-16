@@ -110,6 +110,16 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
+class SortSwarmOptions(str, Enum):
+    version = "version"
+    group = "group"
+    name = "name"
+    ip = "ip"
+    public_ip = "public-ip"
+    status = "status"
+    swarm_id = "swarm-id"
+
+
 class SortInsightOptions(str, Enum):
     insight_id = "insight-id"
     severity = "severity"
@@ -390,6 +400,7 @@ class CacheArgs(str, Enum):
     hook_data = "hook_data"
     hook_active = "hook_active"
     mpsk = "mpsk"
+    mpsk_networks = "mpsk_networks"
     portals = "portals"
     tables = "tables"
     guests = "guests"
@@ -555,6 +566,7 @@ class ArgToWhat:
         self.portal = self.portals = "portals"
         self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
+        self.swarms = self.swarm = "swarms"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -573,6 +585,7 @@ class ArgToWhat:
         self.wlan = self.wlans = "wlan"
         self.guest = self.guests = "guest"
         self.ap = self.aps = "ap"
+        self.swarm = self.swarms = "swarm"
 
     def _init_rename(self):
         self.group = self.groups = "group"
@@ -1898,6 +1911,324 @@ TZDB = Literal[
     "Zulu",
 ]
 
+IAP_TZ_NAMES =  Literal[
+    "none",
+    "International-Date-Line-West",
+    "Coordinated-Universal-Time-11",
+    "Hawaii",
+    "Alaska",
+    "Baja-California",
+    "Pacific-Time",
+    "Arizona",
+    "Chihuahua",
+    "La-Paz",
+    "Mazatlan",
+    "Mountain-Time",
+    "Central-America",
+    "Central-Time",
+    "Guadalajara",
+    "Mexico-City",
+    "Monterrey",
+    "Saskatchewan",
+    "Bogota",
+    "Lima",
+    "Quito",
+    "Eastern-Time",
+    "Indiana(East)",
+    "Caracas",
+    "Asuncion",
+    "Atlantic-Time(Canada)",
+    "Cuiaba",
+    "Georgetown",
+    "Manaus",
+    "San-Juan",
+    "Santiago",
+    "Newfoundland",
+    "Brasilia",
+    "Buenos-Aires",
+    "Cayenne",
+    "Fortaleza",
+    "Greenland",
+    "Montevideo",
+    "Salvador",
+    "Coordinated-Universal-Time-02",
+    "Mid-Atlantic",
+    "Azores",
+    "Cape-Verde-Is",
+    "Casablanca",
+    "Coordinated-Universal-Time",
+    "Dublin",
+    "Edinburgh",
+    "Lisbon",
+    "London",
+    "Monrovia",
+    "Reykjavik",
+    "Amsterdam",
+    "Berlin",
+    "Bern",
+    "Rome",
+    "Stockholm",
+    "Vienna",
+    "Belgrade",
+    "Bratislava",
+    "Budapest",
+    "Ljubljana",
+    "Prague",
+    "Brussels",
+    "Copenhagen",
+    "Madrid",
+    "Paris",
+    "Sarajevo",
+    "Skopje",
+    "Warsaw",
+    "Zagreb",
+    "West-Central-Africa",
+    "Windhoek",
+    "Amman",
+    "Athens",
+    "Bucharest",
+    "Beirut",
+    "Cairo",
+    "Damascus",
+    "East-Europe",
+    "Harare",
+    "Pretoria",
+    "Helsinki",
+    "Istanbul",
+    "Kyiv",
+    "Riga",
+    "Sofia",
+    "Tallinn",
+    "Vilnius",
+    "Jerusalem",
+    "Baghdad",
+    "Minsk",
+    "Kuwait",
+    "Riyadh",
+    "Nairobi",
+    "Tehran",
+    "Abu-Dhabi",
+    "Muscat",
+    "Baku",
+    "Moscow",
+    "St.Petersburg",
+    "Volgograd",
+    "Port-Louis",
+    "Tbilisi",
+    "Yerevan",
+    "Kabul",
+    "Islamabad",
+    "Karachi",
+    "Tashkent",
+    "Chennai",
+    "Kolkata",
+    "Mumbai",
+    "New-Delhi",
+    "Sri-Jayawardenepura",
+    "Kathmandu",
+    "Astana",
+    "Dhaka",
+    "Ekaterinburg",
+    "Yangon",
+    "Bangkok",
+    "Hanoi",
+    "Jakarta",
+    "Novosibirsk",
+    "Beijing",
+    "Chongqing",
+    "HongKong",
+    "Krasnoyarsk",
+    "Kuala-Lumpur",
+    "Perth",
+    "Singapore",
+    "Taipei",
+    "Urumqi",
+    "Ulaanbaatar",
+    "Irkutsk",
+    "Osaka",
+    "Sapporo",
+    "Tokyo",
+    "Seoul",
+    "Adelaide",
+    "Darwin",
+    "Brisbane",
+    "Canberra",
+    "Melbourne",
+    "Sydney",
+    "Guam",
+    "Port-Moresby",
+    "Hobart",
+    "Yakutsk",
+    "Solomon-Is.",
+    "New-Caledonia",
+    "Vladivostok",
+    "Auckland",
+    "Wellington",
+    "Coordinated-Universal-Time+12",
+    "Fiji",
+    "Magadan",
+    "Nukualofa",
+    "Samoa"
+]
+
+class IAPTimeZoneNames(str, Enum):
+    none = "none"
+    international_date_line_west = "International-Date-Line-West"
+    coordinated_universal_time_minus_11 = "Coordinated-Universal-Time-11"
+    hawaii = "Hawaii"
+    alaska = "Alaska"
+    baja_california = "Baja-California"
+    pacific_time = "Pacific-Time"
+    arizona = "Arizona"
+    chihuahua = "Chihuahua"
+    la_paz = "La-Paz"
+    mazatlan = "Mazatlan"
+    mountain_time = "Mountain-Time"
+    central_america = "Central-America"
+    central_time = "Central-Time"
+    guadalajara = "Guadalajara"
+    mexico_city = "Mexico-City"
+    monterrey = "Monterrey"
+    saskatchewan = "Saskatchewan"
+    bogota = "Bogota"
+    lima = "Lima"
+    quito = "Quito"
+    eastern_time = "Eastern-Time"
+    indiana_east = "Indiana(East)"
+    caracas = "Caracas"
+    asuncion = "Asuncion"
+    atlantic_time_Canada = "Atlantic-Time(Canada)"
+    cuiaba = "Cuiaba"
+    georgetown = "Georgetown"
+    manaus = "Manaus"
+    san_juan = "San-Juan"
+    santiago = "Santiago"
+    newfoundland = "Newfoundland"
+    brasilia = "Brasilia"
+    buenos_aires = "Buenos-Aires"
+    cayenne = "Cayenne"
+    fortaleza = "Fortaleza"
+    greenland = "Greenland"
+    montevideo = "Montevideo"
+    salvador = "Salvador"
+    coordinated_universal_time_minus_2 = "Coordinated-Universal-Time-02"
+    mid_atlantic = "Mid-Atlantic"
+    azores = "Azores"
+    cape_verde_is = "Cape-Verde-Is"
+    casablanca = "Casablanca"
+    coordinated_universal_time = "Coordinated-Universal-Time"
+    dublin = "Dublin"
+    edinburgh = "Edinburgh"
+    lisbon = "Lisbon"
+    london = "London"
+    monrovia = "Monrovia"
+    reykjavik = "Reykjavik"
+    amsterdam = "Amsterdam"
+    berlin = "Berlin"
+    bern = "Bern"
+    rome = "Rome"
+    stockholm = "Stockholm"
+    vienna = "Vienna"
+    belgrade = "Belgrade"
+    bratislava = "Bratislava"
+    budapest = "Budapest"
+    ljubljana = "Ljubljana"
+    prague = "Prague"
+    brussels = "Brussels"
+    copenhagen = "Copenhagen"
+    madrid = "Madrid"
+    paris = "Paris"
+    sarajevo = "Sarajevo"
+    skopje = "Skopje"
+    warsaw = "Warsaw"
+    zagreb = "Zagreb"
+    west_central_africa = "West-Central-Africa"
+    windhoek = "Windhoek"
+    amman = "Amman"
+    athens = "Athens"
+    bucharest = "Bucharest"
+    beirut = "Beirut"
+    cairo = "Cairo"
+    damascus = "Damascus"
+    east_europe = "East-Europe"
+    harare = "Harare"
+    pretoria = "Pretoria"
+    helsinki = "Helsinki"
+    istanbul = "Istanbul"
+    kyiv = "Kyiv"
+    riga = "Riga"
+    sofia = "Sofia"
+    tallinn = "Tallinn"
+    vilnius = "Vilnius"
+    jerusalem = "Jerusalem"
+    baghdad = "Baghdad"
+    minsk = "Minsk"
+    kuwait = "Kuwait"
+    riyadh = "Riyadh"
+    nairobi = "Nairobi"
+    tehran = "Tehran"
+    abu_dhabi = "Abu-Dhabi"
+    muscat = "Muscat"
+    baku = "Baku"
+    moscow = "Moscow"
+    st_petersburg = "St.Petersburg"
+    volgograd = "Volgograd"
+    port_louis = "Port-Louis"
+    tbilisi = "Tbilisi"
+    yerevan = "Yerevan"
+    kabul = "Kabul"
+    islamabad = "Islamabad"
+    karachi = "Karachi"
+    tashkent = "Tashkent"
+    chennai = "Chennai"
+    kolkata = "Kolkata"
+    mumbai = "Mumbai"
+    new_delhi = "New-Delhi"
+    sri_jayawardenepura = "Sri-Jayawardenepura"
+    kathmandu = "Kathmandu"
+    astana = "Astana"
+    dhaka = "Dhaka"
+    ekaterinburg = "Ekaterinburg"
+    yangon = "Yangon"
+    bangkok = "Bangkok"
+    hanoi = "Hanoi"
+    jakarta = "Jakarta"
+    novosibirsk = "Novosibirsk"
+    beijing = "Beijing"
+    chongqing = "Chongqing"
+    hongKong = "HongKong"
+    krasnoyarsk = "Krasnoyarsk"
+    kuala_lumpur = "Kuala-Lumpur"
+    perth = "Perth"
+    singapore = "Singapore"
+    taipei = "Taipei"
+    urumqi = "Urumqi"
+    ulaanbaatar = "Ulaanbaatar"
+    irkutsk = "Irkutsk"
+    osaka = "Osaka"
+    sapporo = "Sapporo"
+    tokyo = "Tokyo"
+    seoul = "Seoul"
+    adelaide = "Adelaide"
+    darwin = "Darwin"
+    brisbane = "Brisbane"
+    canberra = "Canberra"
+    melbourne = "Melbourne"
+    sydney = "Sydney"
+    guam = "Guam"
+    port_moresby = "Port-Moresby"
+    hobart = "Hobart"
+    yakutsk = "Yakutsk"
+    solomon_is = "Solomon-Is."
+    new_caledonia = "New-Caledonia"
+    vladivostok = "Vladivostok"
+    auckland = "Auckland"
+    wellington = "Wellington"
+    coordinated_universal_time_plus_12 = "Coordinated-Universal-Time+12"
+    fiji = "Fiji"
+    magadan = "Magadan"
+    nukualofa = "Nukualofa"
+    samoa = "Samoa"
 
 NO_LOAD_COMMANDS = [
     "show config cencli",

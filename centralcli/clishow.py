@@ -49,7 +49,7 @@ from centralcli.constants import (
     SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
     SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
     SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, InsightSeverity,
-    SortInsightOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
+    SortInsightOptions, SortSwarmOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
 from .objects import DateTime, ShowInterfaceFilters
@@ -374,7 +374,7 @@ def show_devices(
         resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
-            resp = cli.cache.get_devices_with_inventory(no_refresh=True, dev_type=dev_type, status=status)
+            resp = cli.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
@@ -899,6 +899,8 @@ def subscriptions(
 # TODO need sort_by enum
 @app.command()
 def swarms(
+    ap: str = typer.Argument(None, metavar=iden_meta.dev, help=f"Show settings for the Virtual Controller/Swarm associated with this AP.  {cli.help_block('Show All Swarms')}", show_default=False, autocompletion=cli.cache.dev_ap_completion),
+    config: bool = typer.Option(False, "-c", "--config", help="Get Swarm/Virtual Controller configuration for a specific swarm.  [dim italic]Valid/Applies if AP is provided[/]", show_default=False),
     group: str = cli.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False, hidden=True,),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
@@ -906,7 +908,7 @@ def swarms(
     down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
     name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
-    sort_by: str = cli.options.sort_by,
+    sort_by: SortSwarmOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -919,7 +921,7 @@ def swarms(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Show Swarms (IAP Clusters)
+    """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm
     """
     if down:
         status = "Down"
@@ -928,9 +930,30 @@ def swarms(
     else:
         status = status or state
 
-    resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    cli.display_results(resp, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
+
+    if ap:
+        device = cli.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
+        if not device:
+            cli.exit("Device is required with [cyan]-s[/]|[cyan]--swarm[/] option.")
+        if device.is_aos10:
+            cli.exit("This command is only valid for AOS8 APs")
+        if status is not None:
+            log.warning("--[bright_green]up[/]|--[red]down[/] option ignored.  Only applies when showing all swarms (no AP is provided)", caption=True)
+        if sort_by:
+            log.warning(f"[cyan]--sort[/] {sort_by.value} ignored as AP: [cyan]{device.name}[/] was specified.", caption=True)
+
+        if config:
+            title = f"Swarm config details for swarm associated with: {device.summary_text}"
+            resp = cli.central.request(cli.central.get_swarm_config, device.swack_id)
+        else:
+            title = f"Swarm details for swarm associated with: {device.summary_text}"
+            resp = cli.central.request(cli.central.get_swarm_details, device.swack_id)
+    else:
+        title = "All Swarms"
+        resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
+
+    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 class ParsedCombinedResp:
     def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
@@ -1706,7 +1729,7 @@ def sites(
 def templates(
     name: str = typer.Argument(
         None,
-        help=f"Template: [name] or Device: {iden_meta.dev}",
+        help=f"Template: {escape('[name]')} or Device: {escape(iden_meta.dev)}",
         autocompletion=cli.cache.dev_template_completion,
         show_default=False,
     ),
@@ -1813,12 +1836,11 @@ def variables(
 
     if device and device != "all":
         device = cli.cache.get_dev_identifier(device, conductor_only=True)
-    else:
-        device = ""
 
-    resp = central.request(central.get_variables, () if not device else device.serial)
-    if device:
+    resp = central.request(central.get_variables, serial=None if not device else device.serial,)
+    if resp.ok and device:
         resp.output = resp.output.get("variables", resp.output)
+
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
     if not device and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
         all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
@@ -2020,7 +2042,6 @@ def config_(
         help="Show config (sync) status. Applies to GWs.",
         hidden=True,
     ),
-    # version: str = typer.Option(None, "--ver", help="Version of AP (only applies to APs)"),
     file: bool = typer.Option(False, "-f", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
@@ -2029,7 +2050,7 @@ def config_(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Show Effective Group/Device Config (UI Group) or cencli config.
+    """Show Effective Group/Device Config (UI Group), ap speciffic settings (env) or cencli config.
 
     Group level configs are available for APs or GWs.
     Device level configs are available for all device types, however
@@ -2073,7 +2094,7 @@ def config_(
         else:
             device = group_dev
 
-    _data_key = None
+    _data_key, title, cleaner_func = None, None, None
     if do_gw or (device and device.generic_type == "gw"):
         if device:
             if device.generic_type != "gw":
@@ -2112,7 +2133,7 @@ def config_(
     if resp and _data_key:
         resp.output = resp.output[_data_key]
 
-    cli.display_results(resp, pager=pager, outfile=outfile)
+    cli.display_results(resp, title=title, pager=pager, outfile=outfile, cleaner=cleaner_func)
 
 
 @app.command( help="Show current access token from cache")

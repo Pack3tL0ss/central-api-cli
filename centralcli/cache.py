@@ -19,14 +19,14 @@ from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
 
-from centralcli import CentralApi, Response, config, constants, log, models, render, utils
+from centralcli import CentralApi, Response, config, constants, log, models, render, utils, BatchRequest
 from centralcli.response import CombinedResponse
 
 if TYPE_CHECKING:
     from tinydb.table import Table
 
     from .config import Config
-    from .typedefs import PortalAuthTypes, SiteData
+    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -58,15 +58,15 @@ LIB_DEV_TYPE = {
 }
 
 
-CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk", "portal"]
+CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal"]
 
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
+        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
         data: Document | Dict[str, Any] | List[Document | Dict[str, Any]],
     ) -> list | Dict[str, Any]:
-        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_portal = False, False, False, False, False, False, False
+        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal = False, False, False, False, False, False, False, False
         data: Dict | List[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -139,7 +139,7 @@ class CentralObject:
         if self.cache == "site":
             parts = [
                 "Site",
-                *[a for a in [self.city, self.state, self.zipcode] if a]
+                *[a for a in [self.city, self.state, self.zip] if a]
             ]
         elif self.cache == "template":
             parts = [
@@ -195,7 +195,7 @@ class CentralObject:
     @property
     def summary_text(self):
         if self.is_site:
-            parts = [a for a in [self.name, self.city, self.state, self.zipcode] if a]
+            parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
         elif self.is_dev:
             parts = [p for p in utils.unique([self.name, self.serial, self.mac, self.ip, self.site]) if p]
             if self.site:
@@ -228,9 +228,6 @@ class CacheDevice(CentralObject):
         self.version: str = data["version"]
         self.swack_id: str | None = data["swack_id"]
         self.switch_role: str | None = data["switch_role"]
-
-    def __bool__(self):
-        return True if self.status == "Up" else False
 
     @property
     def is_aos10(self) -> bool:
@@ -633,7 +630,7 @@ class CacheMpskNetwork(CentralObject):
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
-        super().__init__('mpsk', data)
+        super().__init__('mpsk_network', data)
         self.name: str = data["name"]
         self.id: int = data["id"]
 
@@ -660,7 +657,57 @@ class CacheMpskNetwork(CentralObject):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
-        return f'[bright_green]MPSK Network[/]:[cyan]{self.id}[/]|[green_yellow]{self.name})[/]'
+        return f'[bright_green]MPSK Network[/]: [cyan]{self.name}[/]|[green_yellow]{self.id}[/]'
+
+    @property
+    def rich_help_text(self) -> str:
+        return self.__rich__()
+
+    @property
+    def help_text(self) -> str:
+        return "|".join(
+            [
+                typer.style(self.name, fg="green"),
+                typer.style(self.id, fg="cyan"),
+            ]
+        )
+
+
+
+class CacheMpsk(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('mpsk', data)
+        self.name: str = data["name"]
+        self.id: int = data["id"]
+        self.role: str = data["role"]
+
+    @classmethod
+    def set_db(cls, db: Table, cache: Cache = None):
+        cls.db: Table = db
+        cls.cache: Cache = cache
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.id is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.id == self.id)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __rich__(self) -> str:
+        return f'[bright_green]MPSK[/]:[cyan]{self.name}[/]|[green_yellow]{self.id})[/]'
 
 
 class CacheResponses:
@@ -672,11 +719,13 @@ class CacheResponses:
         template: Response = None,
         group: Response = None,
         label: Response = None,
+        mpsk_network: Response = None,
         mpsk: Response = None,
         portal: Response = None,
         license: Response = None,
         client: Response = None,
         guest: Response = None,
+        device_type: List[constants.LibAllDevTypes] | constants.LibAllDevTypes = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -684,11 +733,13 @@ class CacheResponses:
         self._template = template
         self._group = group
         self._label = label
+        self._mpsk_network = mpsk_network
         self._mpsk = mpsk
         self._portal = portal
         self._license = license
         self._client = client
         self._guest = guest
+        self._device_type = utils.listify(device_type)
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call.
@@ -696,7 +747,7 @@ class CacheResponses:
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk, self._portal, self._license, self._client, self._guest] if r is not None])  # , key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest] if r is not None])  # , key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -750,6 +801,14 @@ class CacheResponses:
         self._label = resp
 
     @property
+    def mpsk_network(self) -> Response | None:
+        return self.update_rl(self._mpsk_network)
+
+    @mpsk_network.setter
+    def mpsk_network(self, resp: Response):
+        self._mpsk_network = resp
+
+    @property
     def mpsk(self) -> Response | None:
         return self.update_rl(self._mpsk)
 
@@ -789,6 +848,14 @@ class CacheResponses:
     def guest(self, resp: Response):
         self._guest = resp
 
+    @property
+    def device_type(self) -> List[constants.LibAllDevTypes] | None:
+        return self._device_type
+
+    @device_type.setter
+    def device_type(self, device_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes]):
+        self._device_type = utils.listify(device_type)
+
 
 class Cache:
     config: Config = None
@@ -824,11 +891,12 @@ class Cache:
             self.EventDB: Table = self.DevDB.table("events")
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
-            self.MpskDB: Table = self.DevDB.table("mpsk")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
+            self.MpskNetDB: Table = self.DevDB.table("mpsk_networks")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
+            self.MpskDB: Table = self.DevDB.table("mpsk")
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
             self.GuestDB: Table = self.DevDB.table("guest")  # Only updated when show guests is ran or as needed
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
-            self.Q = Query()
+            self.Q: Query = Query()
             if data:
                 raise ValueError("This should not have happened.  Passing data directly to cache object was deprecated.  Please open issue on GitHub. I apparently missed something.")
                 # TODO should be good, once soaked to be sure remove data from constructor and this conditional
@@ -980,6 +1048,10 @@ class Cache:
         return {c["mac"]: c for c in self.clients}
 
     @property
+    def mpsk_networks(self) -> list:
+        return self.MpskNetDB.all()
+
+    @property
     def mpsk(self) -> list:
         return self.MpskDB.all()
 
@@ -1087,7 +1159,7 @@ class Cache:
             log.error(f'{db_str} update response: {response}{elapsed_msg}')
             return False
 
-    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, dev_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
+    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, device_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -1097,7 +1169,7 @@ class Cache:
                 Defaults to False.
             inv_db (bool, optional): Update inventory cache. Defaults to None.
             dev_db (bool, optional): Update device (monitoring) cache. Defaults to None.
-            dev_type (Literal['ap', 'gw', 'switch'], optional): Filter devices by type:
+            device_type (Literal['ap', 'gw', 'switch'], optional): Filter devices by type:
                 Valid Types: 'ap', 'gw', 'switch'.  'cx' and 'sw' also accepted, both will result in 'switch' which includes both types.
                 Defalts to None (no Filter/All device types).
             status (Literal 'up', 'down', optional): Filter results by status.
@@ -1109,7 +1181,7 @@ class Cache:
                             data from Inventory and Monitoring.
         """
         if not no_refresh:
-            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=dev_type)
+            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=device_type)
         else:
             res = [self.responses.dev or Response()]
 
@@ -1119,8 +1191,8 @@ class Cache:
         else:
             _dev_by_ser = self.devices_by_serial  # TODO should be no case to ever hit this.
 
-        if dev_type:
-            _dev_types = [dev_type] if dev_type != "switch" else ["cx", "sw", "mas"]
+        if device_type:
+            _dev_types = [device_type] if device_type != "switch" else ["cx", "sw", "mas"]
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["type"] in _dev_types}
             _inv_by_ser = {serial: _inv_by_ser[serial] for serial in _inv_by_ser if _inv_by_ser[serial]["type"] in _dev_types}
 
@@ -1380,7 +1452,7 @@ class Cache:
         for m in out:
             yield m
 
-    def mpsk_completion(
+    def mpsk_network_completion(
         self,
         ctx: typer.Context,
         incomplete: str,
@@ -1391,7 +1463,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_mpsk_identifier(
+        match = self.get_mpsk_network_identifier(
             incomplete,
             completion=True,
         )
@@ -2713,9 +2785,13 @@ class Cache:
                 update_data = [dev.model_dump() for dev in raw_models]
 
             if resp.all_ok and not filtered_resonse:
-                if not dev_type:
+                self.responses.dev = resp
+                # we update the response cache even if by dev_type now.
+                if dev_type:
+                    self.responses.device_type = dev_type
+                else:
                     self.updated.append(self.central.get_all_devices)
-                    self.responses.dev = resp
+
                 _ = await self.update_db(self.DevDB, data=update_data, truncate=True)
             else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
                 _ = await self._add_update_devices(update_data)
@@ -2775,7 +2851,7 @@ class Cache:
             if len(db_res) != len(doc_ids):
                 log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
 
-
+    # TODO need to make device_type consistent refresh_dev_db uses dev_type.  All CentralAPI methods use device_type
     async def refresh_inv_db(
             self,
             device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
@@ -2825,12 +2901,13 @@ class Cache:
         resp.raw = {r.url.path: r.raw for r in batch_resp}
         inv_model = models.Inventory(list(combined.values()))
         resp.output = inv_model.model_dump()
+
+        self.responses.inv = resp
         if device_type is None or device_type == "all":
             self.updated.append(self.central.get_device_inventory)
-            self.responses.inv = resp
-
             _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
         else:
+            self.responses.device_type = device_type
             _ = await self._add_update_devices(resp.output, "inv")
 
         return resp
@@ -3113,14 +3190,14 @@ class Cache:
     # Not tested or used yet, until we have commands that add/del MPSK networks
     async def update_mpsk_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
         if remove:
-            return await self.update_db(self.MpskDB, doc_ids=data)
+            return await self.update_db(self.MpskNetDB, doc_ids=data)
 
         data = models.MpskNetworks(data)
         data = data.model_dump()
-        return await self.update_db(self.MpskDB, data=data, truncate=True)
+        return await self.update_db(self.MpskNetDB, data=data, truncate=True)
 
 
-    async def refresh_mpsk_db(self) -> Response:
+    async def refresh_mpsk_networks_db(self) -> Response:
         resp = await self.central.cloudauth_get_mpsk_networks()
         if resp.ok:
             self.updated.append(self.central.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
@@ -3129,7 +3206,52 @@ class Cache:
                 _update_data = models.MpskNetworks(resp.raw)
                 _update_data = _update_data.model_dump()
 
-                _ = await self.update_db(self.MpskDB, data=_update_data, truncate=True)
+                _ = await self.update_db(self.MpskNetDB, data=_update_data, truncate=True)
+
+        return resp
+
+    async def refresh_mpsk_db(self, mpsk_id: str = None, name: str = None, role: str = None, status: MPSKStatus = None) -> Response:
+        if not mpsk_id:
+            net_resp = await self.refresh_mpsk_networks_db()
+            if not net_resp.ok:
+                log.error(f"Unable to refresh named mpsks as call to fetch mpsk networks failed {net_resp.error}", show=True)
+                return net_resp
+            mpsk_networks = {net["id"]: net["ssid"] for net in net_resp.output}
+            named_reqs = [
+                BatchRequest(self.central.cloudauth_get_namedmpsk, mpsk_id, name=name, role=role, status=status)
+                for mpsk_id in mpsk_networks
+            ]
+            batch_resp = await self.central._batch_request(named_reqs)
+
+            for resp, network in zip(batch_resp, mpsk_networks.values()):
+                if not resp.ok:
+                    log.error(f"skipping cache update for MPSKs associated with {network} due to failure {resp.error}", show=True)
+                    continue
+                resp.output = [
+                    {"ssid": network, **inner}
+                    for inner in resp.output
+                ]
+            combined_output = [inner for r in batch_resp for inner in r.output if r.ok]
+            resp = sorted([r for r in batch_resp if r.ok], key=lambda r: r.rl)[-1] or batch_resp[-1]  # the or comes into play if all have failed.
+            if resp.ok:
+                resp.output = combined_output
+        else:
+            resp = await self.central.cloudauth_get_namedmpsk(mpsk_id, name=name, role=role, status=status)
+            if resp.ok:
+                ssid: CacheMpskNetwork = self.get_mpsk_network_identifier(mpsk_id, silent=True)
+                if ssid:
+                    resp.output = [{"ssid": ssid.name, **inner} for inner in resp.output]
+
+        truncate = True if not mpsk_id and not any([name, role, status]) else False
+
+        if resp.ok:
+            self.updated.append(self.central.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
+            self.responses.mpsk = resp
+            if resp.output:
+                _update_data = models.Mpsks(resp.output)
+                _update_data = _update_data.model_dump()
+
+                _ = await self.update_db(self.MpskDB, data=_update_data, truncate=truncate)
 
         return resp
 
@@ -3213,8 +3335,9 @@ class Cache:
             update_funcs += [self.refresh_license_db]
         async with self.central.aio_session:
             if update_funcs:
-                kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
-                db_res += [await update_funcs[0](**kwargs)]
+                kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
+                # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
+                db_res += [await update_funcs[0](**kwarg_list[0])]
                 if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
                     db_res = utils.unlistify(db_res)
 
@@ -3228,7 +3351,7 @@ class Cache:
 
                 else:
                     if len(update_funcs) > 1:
-                        db_res = [*db_res, *await asyncio.gather(*[f() for f in update_funcs[1:]])]
+                        db_res = [*db_res, *await asyncio.gather(*[f(**k) for f, k in zip(update_funcs[1:], kwarg_list[1:])])]
 
             # If all *_db params are false refresh cache for all
             # TODO make more elegant
@@ -3540,10 +3663,13 @@ class Cache:
 
             # no match found initiate cache update
             if retry and (not match or Model == CacheInvDevice) and self.responses.dev is None:
-                if dev_type and cache_updated:
-                    ...  # self.responses.dev is not currently updated if dev_type provided, but cache update may have already occured in this session.
+                if dev_type and (cache_updated or self.responses.device_type == dev_type):
+                    ...  # self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
-                    _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
+                    if not match:
+                        _msg = "[bright_red]No Match found[/] in Inventory or Device (monitoring) Cache"
+                    else:
+                        _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
                     if FUZZ:
@@ -3641,7 +3767,7 @@ class Cache:
             if not match or completion:
                 match += self.SiteDB.search(
                     (self.Q.id.test(lambda v: str(v) == query_str))
-                    | (self.Q.zipcode == query_str)
+                    | (self.Q.zip == query_str)
                     | (self.Q.address == query_str)
                     | (self.Q.city == query_str)
                     | (self.Q.state == query_str)
@@ -3675,7 +3801,7 @@ class Cache:
             # Last Chance try other fields case insensitive startswith provided value
             if not match or completion:
                 match += self.SiteDB.search(
-                    self.Q.zipcode.test(lambda v: v.startswith(query_str))
+                    self.Q.zip.test(lambda v: v.startswith(query_str))
                     | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.address.test(lambda v: v.lower().startswith(query_str.lower()))
@@ -4113,7 +4239,7 @@ class Cache:
             raise typer.Exit(1)
 
 
-    def get_mpsk_identifier(
+    def get_mpsk_network_identifier(
         self,
         query_str: str,
         retry: bool = True,
@@ -4124,26 +4250,26 @@ class Cache:
         retry = False if completion else retry
         for _ in range(0, 2):
             if query_str == "":
-                match = self.mpsk
+                match = self.mpsk_networks
             else:
-                match = self.MpskDB.search((self.Q.name == query_str))
+                match = self.MpskNetDB.search((self.Q.name == query_str))
 
             # case insensitive
             if not match:
-                match = self.MpskDB.search(
+                match = self.MpskNetDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
 
             # case insensitive startswith
             if not match:
-                match = self.MpskDB.search(
+                match = self.MpskNetDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
 
             # case insensitive ignore -_
             if not match:
                 if "_" in query_str or "-" in query_str:
-                    match = self.MpskDB.search(
+                    match = self.MpskNetDB.search(
                         self.Q.name.test(
                             lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
                         )
@@ -4151,24 +4277,24 @@ class Cache:
 
             # case insensitive startswith search for mspk id
             if not match:
-                match = self.MpskDB.search(
+                match = self.MpskNetDB.search(
                     self.Q.id.test(
                         lambda v: v.lower().startswith(query_str.lower())
                     )
                 )
 
-            if not match and retry and self.responses.mpsk is None:
+            if not match and retry and self.responses.mpsk_network is None:
                 if FUZZ:
                     econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                    fuzz_resp = process.extract(query_str, [mpsk["name"] for mpsk in self.mpsk], limit=1)
+                    fuzz_resp = process.extract(query_str, [net["name"] for net in self.mpsk_networks], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
                         confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = self.MpskDB.search(self.Q.name == fuzz_match)
+                            match = self.MpskNetDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
-                    self.central.request(self.refresh_mpsk_db)
+                    self.central.request(self.refresh_mpsk_networks_db)
                 _ += 1
             if match:
                 match = [CacheMpskNetwork(g) for g in match]
@@ -4184,22 +4310,22 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather MPSK data from provided identifier {query_str}", show=True)
-            valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk])
+            log.error(f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=True)
+            valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk_networks])
             econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{query_str}[/] appears to be invalid")
             econsole.print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
             raise typer.Exit(1)
         else:
             if not completion:
                 log.error(
-                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                    f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=not silent
                 )
 
 
     # TODO make this a wrapper for other specific get_portal_identifier.... calls
     def get_name_id_identifier(
         self,
-        cache_name: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"],
+        cache_name: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
         query_str: str,
         retry: bool = True,
         completion: bool = False,
@@ -4221,7 +4347,8 @@ class Cache:
         """
         name_to_model = {
             "portal": CachePortal,
-            "label": CacheLabel
+            "label": CacheLabel,
+            "mpsk_network": CacheMpskNetwork,
         }
         cache_updated = False
         Model = name_to_model.get(cache_name, CentralObject)
@@ -4318,5 +4445,6 @@ class CacheDetails:
         self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
         self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.refresh_group_db)
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
+        self.mpsk_network = CacheAttributes(name="mpsk_network", db=cache.MpskNetDB, already_updated_func=cache.central.cloudauth_get_namedmpsk, cache_update_func=cache.refresh_mpsk_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.refresh_mpsk_db)
         self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.refresh_label_db)
