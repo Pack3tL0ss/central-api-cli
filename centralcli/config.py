@@ -382,6 +382,17 @@ class Config:
         return self.cache_dir / "last_command" if self.account in ["central_info", "default"] else self.cache_dir / f"{self.account}_last_command"
 
     @property
+    def export_dir(self) -> Path:
+        # if they are already in export dir navigate back to top for output
+        outdir: Path = self.outdir / "cencli-config-export"
+        if "cencli-config-export" in outdir.parent.parts[1:]:
+            outdir = outdir.parent
+            while outdir.name != "cencli-config-export":
+                outdir = outdir.parent
+
+        return outdir
+
+    @property
     def wh_port(self):
         _acct_specific = self.webhook.port if self.webhook.port != 9443 else None
         if self.data.get("webclient_info", {}).get("port"):
