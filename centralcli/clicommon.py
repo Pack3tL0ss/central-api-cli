@@ -50,7 +50,7 @@ from .ws_client import follow_audit_logs, follow_event_logs
 if TYPE_CHECKING:
     from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
     from .typedefs import CacheTableName, StrEnum
-    from .constants import LogType, DeviceTypes
+    from .constants import LogType
 
 
 tty = utils.tty
@@ -1557,7 +1557,7 @@ class CLICommon:
 
         return doc_ids
 
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, dev_type: DeviceTypes | List[DeviceTypes] = None, yes: bool = False, force: bool = False,) -> List[Response]:
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 
@@ -1571,14 +1571,14 @@ class CLICommon:
         cache_devs: List[CacheDevice | CacheInvDevice | None] = []
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
-            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only, dev_type=dev_type)
+            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only,)  # dev_type=dev_type)
             if this_dev is not None:
                 serial_updates[idx] = this_dev.serial
             cache_devs += [this_dev]
 
-        if dev_type:
-            dev_type = utils.listify(dev_type)
-            cache_devs = [c for c in cache_devs if c is not None and c.type and c.type in dev_type]
+        # if dev_type:
+        #     dev_type = utils.listify(dev_type)
+        #     cache_devs = [c for c in cache_devs if c is not None and c.type and c.type in dev_type]
 
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
