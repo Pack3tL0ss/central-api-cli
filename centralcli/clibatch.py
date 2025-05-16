@@ -1152,6 +1152,8 @@ def delete(
     if import_file:
         if unsubscribed:
             cli.exit(_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/] or [cyan]--no-sub[/] [red]not both[/]"))
+        if dev_type:
+            cli.exit("[cyan]--dev-type[/] option is currently only valid in combination with [cyan]--no-sub[/].")
         data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
     elif unsubscribed:
         resp = cli.cache.get_devices_with_inventory(device_type=dev_type.value)
@@ -1162,7 +1164,7 @@ def delete(
         cli.exit(_invalid_msg(usage_msg))
 
     if what == "devices":
-        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, dev_type=dev_type.value, yes=yes)
+        resp = cli.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     elif what == "sites":
         resp = batch_delete_sites(data, yes=yes)
     elif what == "groups":
