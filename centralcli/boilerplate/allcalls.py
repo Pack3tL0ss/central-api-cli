@@ -217,7 +217,7 @@ class AllCalls(CentralApi):
         url = f"/aiops/v1/connectivity/global/stage/{stage}/export"
 
         params = {
-            'from_ms': from_ms,
+            'from': from_ms,
             'to': to
         }
 
