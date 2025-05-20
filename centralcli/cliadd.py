@@ -532,12 +532,12 @@ def webhook(
 # TODO ?? add support for converting j2 template to central template
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
-    name: str = typer.Argument(..., show_default=False,),
+    name: str = typer.Argument(..., help="Template name", show_default=False,),
     group: str = typer.Argument(..., help="Group to upload template to", autocompletion=cli.cache.group_completion, show_default=False,),
-    template: Path = typer.Argument(None, exists=True, show_default=False,),
-    dev_type: DevTypes = typer.Option(DevTypes.sw),
-    model: str = typer.Option("ALL"),
-    version: str = typer.Option("ALL", "--ver"),
+    template: Path = typer.Argument(None, help="Path to file containing template", exists=True, show_default=False,),
+    dev_type: DevTypes = typer.Option(DevTypes.cx, metavar="[ap|sw|cx]", help="Device Type Template applies to",),
+    model: str = typer.Option("ALL", help="Constrain template to specific model",),
+    version: str = typer.Option("ALL", "--ver", help="Constrain template to specific version"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -555,26 +555,28 @@ def template(
     print(f"    Device Type: [cyan]{dev_type.value}[/]")
     print(f"    Model: [cyan]{model}[/]")
     print(f"    Version: [cyan]{version}[/]")
-    if cli.confirm(yes):
-        template_hash, resp = cli.central.batch_request(
-            [
-                BatchRequest(cli.get_file_hash, template),
-                BatchRequest(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
-            ]
+    cli.confirm(yes)
+
+    template_hash, resp = cli.central.batch_request(
+        [
+            BatchRequest(cli.get_file_hash, template),
+            BatchRequest(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+        ]
+    )
+
+    cli.display_results(resp, tablefmt="action")
+    if resp.ok:
+        _ = cli.central.request(
+            cli.cache.update_template_db, data={
+                "device_type": lib_to_api(dev_type, "template"),
+                "group": group.name,
+                "model": model,
+                "name": name,
+                "template_hash": template_hash,
+                "version": version,
+            },
+            add=True
         )
-        cli.display_results(resp, tablefmt="action")
-        if resp.ok:
-            _ = cli.central.request(
-                cli.cache.update_template_db, data={
-                    "device_type": lib_to_api(dev_type, "template"),
-                    "group": group.name,
-                    "model": model,
-                    "name": name,
-                    "template_hash": template_hash,
-                    "version": version,
-                },
-                add=True
-            )
 
 
 @app.command()
