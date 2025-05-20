@@ -6,7 +6,6 @@ Collection of functions used to clean output from Aruba Central API into a consi
 """
 from __future__ import annotations
 
-import functools
 import ipaddress
 import logging
 import sys
@@ -36,82 +35,6 @@ from .objects import DateTime, ShowInterfaceFilters
 from .models import CloudAuthUploadResponse, Sites
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
-
-def epoch_convert(func):
-    @functools.wraps(func)
-    def wrapper(epoch):
-        if str(epoch).isdigit() and len(str(int(epoch))) > 10:
-            epoch = epoch / 1000
-        return func(epoch)
-
-    return wrapper
-
-
-# show certificates
-def _convert_datestring(date_str: str) -> str:
-    return pendulum.from_format(date_str.rstrip("Z"), "YYYYMMDDHHmmss").to_formatted_date_string()
-
-
-# show fw list
-def _convert_iso_to_words(iso_date: str) -> str:
-    return pendulum.parse(iso_date).to_formatted_date_string()
-
-
-@epoch_convert
-def _convert_epoch(epoch: float) -> str:
-    # Thu, May 7, 2020 3:49 AM
-    return pendulum.from_timestamp(epoch, tz="local").to_day_datetime_string()
-
-
-@epoch_convert
-def _duration_words(secs: Union[int, str]) -> str:
-    return pendulum.duration(seconds=int(secs)).in_words()
-
-
-@epoch_convert
-def _duration_words_short(secs: Union[int, str]) -> str:
-    words = pendulum.duration(seconds=int(secs)).in_words()
-    # a bit cheesy, but didn't want to mess with regex
-    replace_words = [
-        (" years", "y"),
-        (" year", "y"),
-        (" weeks", "w"),
-        (" week", "w"),
-        (" days", "d"),
-        (" day", "d"),
-        (" hours", "h"),
-        (" hour", "h"),
-        (" minutes", "m"),
-        (" minute", "m"),
-        (" seconds", "s"),
-        (" second", "s"),
-    ]
-    for orig, short in replace_words:
-        words = words.replace(orig, short)
-    return words
-
-
-@epoch_convert
-def _time_diff_words(epoch: float | None) -> str:
-    return "" if epoch is None else pendulum.from_timestamp(epoch, tz="local").diff_for_humans()
-
-
-@epoch_convert
-def _log_timestamp(epoch: float) -> str:
-    if isinstance(epoch, str):
-        try:
-            epoch = float(epoch)
-        except TypeError:
-            return epoch
-
-    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD h:mm:ss A")
-
-
-@epoch_convert
-def _mdyt_timestamp(epoch: float) -> str:
-    # May 07, 2020 3:49:24 AM
-    return pendulum.from_timestamp(epoch, tz="local").format("MMM DD, YYYY h:mm:ss A")
-
 
 
 def _short_connection(value: str) -> str:
@@ -1022,7 +945,7 @@ def get_alerts(data: List[dict],) -> List[dict]:
         if d.get("acknowledged"):
             d["acknowledged"] = f'{"by " if d.get("acknowledged_by") else ""}' \
                 f'{d.get("acknowledged_by")}{" @ " if d.get("acknowledged_by") else ""}' \
-                f'{"" if not d.get("acknowledged_timestamp") else _log_timestamp(d["acknowledged_timestamp"])}'
+                f'{"" if not d.get("acknowledged_timestamp") else DateTime(d["acknowledged_timestamp"], "log")}'
         else:
             d["acknowledged"] = None
 
@@ -1110,7 +1033,10 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         )
         return data
     else:
-        data = [{short_keys[k]: d[k] if k != "expire_date" else _convert_datestring(d[k]) for k in short_keys} for d in data]
+        data = [
+            {short_keys[k]: d[k] if k != "expire_date" else DateTime(pendulum.from_format(d[k].rstrip("Z"), "YYYYMMDDHHmmss").timestamp(), "date-string") for k in short_keys}
+            for d in data
+        ]
         return data
 
 
