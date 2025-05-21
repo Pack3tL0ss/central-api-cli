@@ -337,6 +337,8 @@ def config_(
 
 
 # FIXME typer is not handling List[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
+# TODO check... Default for group ATM-LOCAL had "wlan cert-assignment-profile" no sub-commands below it...  it did not have "cp-cert-checksum ..."
+#   update cp-cert ... added cp-cert-checksum, which removed "wlan cert-assignment-profile".  Need to verify what that is, thought the default was cp-cert-checksum pointing to default aruba cert.
 @app.command()
 def cp_cert(
     certificate: str = typer.Argument(
