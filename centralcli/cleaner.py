@@ -12,7 +12,7 @@ import sys
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Union, Literal
+from typing import Any, Dict, List, Union, Literal, TYPE_CHECKING
 
 import pendulum
 from rich.console import Console
@@ -33,6 +33,9 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes, InsightSeverityType
 from .objects import DateTime, ShowInterfaceFilters
 from .models import CloudAuthUploadResponse, Sites
+
+if TYPE_CHECKING:
+    from .typedefs import CertType
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
@@ -1013,7 +1016,10 @@ def sites(data: Union[List[dict], dict]) -> Union[List[dict], dict]:
     return data.model_dump()
 
 
-def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def get_certificates(data: Dict[str, Any], valid: bool = None, cert_types: List[CertType] = None) -> List[Dict[str, Any]]:
+    if not data:
+        return data
+
     data = utils.listify(data)
     short_keys = {
         "cert_name": "name",
@@ -1023,6 +1029,24 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         "cert_md5_checksum": "md5 checksum",
         "cert_sha1_checksum": "sha1 checksum",
     }
+    _unfiltered_cnt = len(data)
+    if valid is not None:
+        data = [cert for cert in data if "expire" not in cert or cert["expire"] is not valid]
+    if cert_types:
+        data = [cert for cert in data if "cert_type" not in cert or cert["cert_type"] in cert_types]
+    if not data:
+        econsole = Console(stderr=True)
+        econsole.print(f"[dark_orange3]:warning:[/]  Provided filters have filtered out all results.  Cache was updated with {_unfiltered_cnt} certificates prior to applying filters. ")
+        econsole.print("   Use [cyan]cencli show cache certs[/] [dim italic]to see results from cache [green](No additional API call)[/green][/dim italic]")
+        econsole.print("   or [cyan]cencli show certs[/] again, without filters [dim italic]to see unfiltered response[/]")
+        return data
+
+    def format_expire_fields(field_name: Literal["expire_date", "expired"], value: bool | str) -> DateTime | str:
+        if field_name == "expire_date":
+            return DateTime(pendulum.from_format(value.rstrip("Z"), "YYYYMMDDHHmmss").timestamp(), "date-string")
+
+        return f"[bright_red]{value}[/]" if value is True else value
+
 
     if data and len(data[0]) != len(short_keys):
         log = logging.getLogger()
@@ -1034,7 +1058,7 @@ def get_certificates(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         return data
     else:
         data = [
-            {short_keys[k]: d[k] if k != "expire_date" else DateTime(pendulum.from_format(d[k].rstrip("Z"), "YYYYMMDDHHmmss").timestamp(), "date-string") for k in short_keys}
+            {short_keys[k]: d[k] if not k.startswith("expire") else format_expire_fields(k, d[k]) for k in short_keys}
             for d in data
         ]
         return data

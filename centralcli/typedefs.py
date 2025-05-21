@@ -29,6 +29,8 @@ CacheTableName = Literal["devices", "sites", "groups", "labels", "macs", "mpsk"]
 DynamicAntenna = Literal["narrow", "wide"]
 RadioType = Literal["2.4", "5", "6"]
 MPSKStatus = Literal["enabled", "disabled"]
+CertType = Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"]
+CertFormat = Literal["PEM", "DER", "PKCS12"]
 
 # StrEnum available python 3.11+
 try:

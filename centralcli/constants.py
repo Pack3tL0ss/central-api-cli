@@ -404,6 +404,7 @@ class CacheArgs(str, Enum):
     portals = "portals"
     tables = "tables"
     guests = "guests"
+    certs = "certs"
 
 
 class KickArgs(str, Enum):
