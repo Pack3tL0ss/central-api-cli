@@ -9,21 +9,21 @@
           "id": "cliArgs",
           "description": "Select Arguments",
           // The default is updated automatically by the script, could not get vscode debugger to do it.
-          "default": "show clients --rich"  // VSC_PREV_ARGS
+          "default": "update cp-cert le_may25 -G all"  // VSC_PREV_ARGS
         },
         {
             "type": "pickString",
             "id": "cliArgsHistory",
             "description": "Select Arguments",
             // The default is updated automatically by the script, could not get vscode debugger to do it.
-            "options": ["show clients --rich", "show clients", "show lldp neighbors br1 --rich", "show lldp neighbors br1", "show lldp neighbors 2930f-branch13", "show lldp 2930f-branch1", "show lldp neighbors 2930f-branch1", "show aps", "do update-vars bsmt-2930f if_2_nopoe = 0", "do cycle poe bsmt-2930f 4 -y"],  // VSC_ARG_HISTORY
-            "default": "show clients --rich"  // VSC_PREV_ARGS
+            "options": ["update cp-cert le_may25 -G all", "show certs 379f", "show cache certs", "show certs", "show clients -w -d", "show config FD-Comcast-Production --ap", "show config FD-Comcast-Production", "show config \u001b[200~~", "show groups --account fd", "batch delete devices /home/wade/git/myrepos/cencli-batch/aug-2024-retired-no-sub.yaml --dev-type gw"],  // VSC_ARG_HISTORY
+            "default": "update cp-cert le_may25 -G all"  // VSC_PREV_ARGS
           },
       ],
     "configurations": [
         {
             "name": "cli arg INPUT",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/centralcli/cli.py",
             "console": "integratedTerminal",
@@ -36,7 +36,7 @@
         },
         {
             "name": "cli arg INPUT Path Test",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${env:HOME}/git/myrepos/central-api-cli/centralcli/cli.py",
             "console": "integratedTerminal",
@@ -49,7 +49,7 @@
         },
         {
             "name": "code generator",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/.vscode/central_json_schemas/_gen_code.py",
             "console": "integratedTerminal",
@@ -61,7 +61,7 @@
         },
         {
             "name": "cli arg SELECT",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
@@ -71,7 +71,7 @@
         },
         {
             "name": "cli package debug",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${env:HOME}/.local/bin/cencli",
             "console": "integratedTerminal",
@@ -82,7 +82,7 @@
         },
         {
             "name": "DEVCLI interactive arg selection",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "devcli.py",
             "console": "integratedTerminal",
@@ -92,7 +92,7 @@
         },
         {
             "name": "test_show",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/tests/test_show.py",
             "console": "integratedTerminal",
@@ -104,7 +104,7 @@
         // could not get it to work.  Not via debugger (even with "envFile": "${workspaceFolder}/.env",)
         {
             "name": "cli interactive arg selection WIP",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
@@ -114,7 +114,7 @@
         },
         {
             "name": "Python: central.py bulk-edit",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "lib/centralCLI/central.py",
             "console": "integratedTerminal",
@@ -125,7 +125,7 @@
         },
         {
             "name": "Python: cli.py interactive",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
@@ -136,7 +136,7 @@
         },
         {
             "name": "Python: cli.py bulk-edit",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
@@ -147,7 +147,7 @@
         },
         {
             "name": "Python: cli.py show dev gateways",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "cli.py",
             "console": "integratedTerminal",
@@ -158,7 +158,7 @@
         },
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal"
