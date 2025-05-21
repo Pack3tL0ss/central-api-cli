@@ -2102,7 +2102,14 @@ def config_(
         if device:
             device: CacheDevice = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
-            cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            if "ap" in group_dev.allowed_types and "gw" in group_dev.allowed_types:
+                cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            elif "ap" in group_dev.allowed_types:
+                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--ap[/] as [magenta]dev type[/]: [cyan]gw[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_ap = True
+            elif "gw" in group_dev.allowed_types:
+                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--gw[/] as [magenta]dev type[/]: [cyan]ap[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_gw = True
     else:  # group_dev is a device iden
         group = cli.cache.get_group_identifier(group_dev.group)
         if device is not None:
