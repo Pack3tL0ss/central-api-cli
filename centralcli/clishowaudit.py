@@ -256,7 +256,7 @@ def logs(
 
     if log_id is not None:
         if resp and "body" in resp.output:
-            body = utils.unlistify(resp.output["body"])
+            body = utils.unlistify(resp.output["body"], replace_underscores=False)
             if body:
                 body = body.replace("\t", "  ")
                 body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'

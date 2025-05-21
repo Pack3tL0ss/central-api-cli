@@ -228,19 +228,19 @@ class Utils:
         return var if isinstance(var, list) or var is None else [var]
 
     @staticmethod
-    def unlistify(data: Any):
+    def unlistify(data: Any, replace_underscores: bool = True):
         """Remove unnecessary outer lists.
 
         Returns:
             [] = ''
-            ['single_item'] = 'single item'
+            ['single_item'] = 'single item' by default 'single_item' if replace_underscores=False
             [[item1], [item2], ...] = [item1, item2, ...]
         """
         if isinstance(data, list):
             if not data:
                 data = ""
             elif len(data) == 1:
-                data = data[0] if not isinstance(data[0], str) else data[0].replace("_", " ")
+                data = data[0] if not replace_underscores or not isinstance(data[0], str) else data[0].replace("_", " ")
             elif all([isinstance(d, list) and len(d) == 1 for d in data]):
                 out = [i for ii in data for i in ii if not isinstance(i, list)]
                 if out:
