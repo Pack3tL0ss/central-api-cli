@@ -161,6 +161,8 @@ class CLICommon:
         if not result and abort:
             self.econsole.print("[red]Aborted[/]")
             self.exit(code=0)
+        elif yes:  # The default prompt has a newline before the prompt, this is so -y without prompt still gets a newline to avoid jamming the response text with the confirmation msg.
+            print()
 
         return result
 

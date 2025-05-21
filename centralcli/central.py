@@ -5469,7 +5469,7 @@ class CentralApi(Session):
                 altitude (int | float): The ap-altitude to add to the provided config.
 
             Raises:
-                typer.Exit: If no commands remain after stripping empty lines.
+                CentralCliException: If no commands remain after stripping empty lines.
 
             Returns:
                 List[str] | None Original config with 2 additional lines to define ap-altitude for gps
@@ -5495,7 +5495,7 @@ class CentralApi(Session):
 
     async def update_ap_altitude(
         self,
-        iden: str | List[str] = None,
+        iden: str = None,
         altitude: int | float = None,
         as_dict: Dict[str, int | float] = None,
     ) -> List[Response]:
@@ -5522,7 +5522,7 @@ class CentralApi(Session):
         if iden:
             if not altitude:
                 raise ValueError("altitude is required when iden is provided")
-            as_dict = {**as_dict, **{iden, altitude}}
+            as_dict = {**as_dict, **{iden: altitude}}
         if not as_dict:
             raise ValueError("Missing required parameter: iden and altitude and/or as_dict is required")
 
@@ -5548,6 +5548,100 @@ class CentralApi(Session):
         update_resp = await self._batch_request(update_reqs)
 
         return [*update_resp, *skipped, *list(failed.values())]
+
+    async def _update_cp_cert_in_config(self, data: List[str], cp_cert_md5: str) -> List[str] | None:
+            """Updates cp-cert-checksum in AP group level config
+
+            Args:
+                data (str): str representing the current configuration.
+                cp_cert_md5 (str): The cp-cert-md5 checksum to reference in the config.
+
+            Raises:
+                CentralCliException: If no commands remain after stripping empty lines.
+                    This really should not happen.
+
+            Returns:
+                List[str] | None Original config with cp-cert-checksum updated with provided value
+                    Returns None if desired cp-cert-checksum is already in current configuration
+            """
+            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+
+            if not cli_cmds:
+                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+
+            if f"cp-cert-checksum {cp_cert_md5}" in cli_cmds:
+                return # No change cp-cert-checksum already as desired
+            else:
+                line_index = [idx for idx, line in [(idx, line) for idx, line in enumerate(cli_cmds)] if line.strip().startswith("cp-cert-checksum")]
+                if line_index:
+                    line_index = line_index[0]
+                    _ = cli_cmds.pop(line_index)
+                else:  # cp-cert-checksum does not exist in the config
+                    line_index = cli_cmds.index("cluster-security")
+                cli_cmds.insert(line_index, f"cp-cert-checksum {cp_cert_md5}")
+
+            return cli_cmds
+
+    async def update_group_cp_cert(
+        self,
+        group: str | List[str] = None,
+        cp_cert_md5: str = None,
+        as_dict: Dict[str, str] = None,
+    ) -> List[Response]:
+        """Update cp-cert-checksum at group level for APs (UI group).
+
+        Pulls existing config andupdates with provided cp-cert-checksum.
+        Performs 2 API calls per AP.
+
+        Multiple APs can be provided using as_dict.
+
+        Args:
+            group (str | List[str], optional): Group name, must be an AP group.
+            cp_cert_md5 (str | float, optional): The Captive Portal Certificate md5 checksum.
+            as_dict: (Dict[str, int | float], optional): A dict providing group names and cp cert md5 checksums
+                i.e.: {"ap-group1": cp-cert-md5-checksum-goes-here, ap-group2: cp-cert-md5-checksum-goes-here ...}
+                if the checksums are all the same just use group and and cp_cert_md5 arguments as group can take a list.
+
+        Returns:
+            List[Response]: Returns a List of Response objects.
+        """
+        as_dict = as_dict or {}
+        if group:
+            group = utils.listify(group)
+            if not cp_cert_md5:
+                raise ValueError("altitude is required when iden is provided")
+            as_dict = {**as_dict, **{g: cp_cert_md5 for g in group}}
+        if not as_dict:
+            raise ValueError("Missing required parameter: iden and altitude and/or as_dict is required")
+
+        base_url = "/configuration/v1/ap_cli"
+        current_reqs = [self.BatchRequest(self.get, f"{base_url}/{g}") for g in as_dict]
+        current_resp = await self._batch_request(current_reqs)
+
+        passed: Dict[str, Response] = {}
+        failed: Dict[str, Response] = {}
+        for group, resp in zip(as_dict.keys(), current_resp):
+            if resp.ok:
+                passed[group] = resp
+            else:
+                failed[group] = resp
+
+        if not passed:
+            return current_resp
+
+        updated_clis_list = [await self._update_cp_cert_in_config(resp.output, cp_cert_md5=as_dict[group]) for group, resp in passed.items()]
+
+        # skipped = [Response(error="No CHANGES", output=f"Certificate Update skipped for {group}. cp-cert-checksum {as_dict[group]} exists in current configuration as desired.") for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        skipped = [group for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        if skipped:
+            skipped_msg = f"Certificate Update skipped for groups: {', '.join(skipped)}. cp-cert-checksum already configured as desired."
+        update_reqs = [BatchRequest(self.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+
+        update_resp = await self._batch_request(update_reqs)
+        if skipped:
+            log.info(skipped_msg, caption=True, log=False)
+
+        return [*update_resp, *list(failed.values())]
 
     async def get_per_ap_config(
         self,

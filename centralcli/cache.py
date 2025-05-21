@@ -302,6 +302,7 @@ class CacheInvDevice(CentralObject):
         return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
 
+# TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
     db: Table | None = None
 
@@ -1046,6 +1047,14 @@ class Cache:
         return {g["name"]: CacheGroup(g) for g in self.groups}
 
     @property
+    def group_names(self) -> list:
+        return [g["name"] for g in self.GroupDB.all()]
+
+    @property
+    def ap_groups(self) -> list:
+        return [CacheGroup(g) for g in self.groups if "ap" in g["allowed_types"] and g["name"] != "default"]
+
+    @property
     def labels(self) -> list:
         return self.LabelDB.all()
 
@@ -1139,10 +1148,6 @@ class Cache:
     @property
     def event_ids(self) -> list:
         return [f'{x["id"]}' for x in self.EventDB.all()]
-
-    @property
-    def group_names(self) -> list:
-        return [g["name"] for g in self.GroupDB.all()]
 
     @property
     def label_names(self) -> list:
@@ -2354,6 +2359,39 @@ class Cache:
 
         for m in out:
             yield m
+
+    def group_ap_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ) -> Iterator[Tuple[str, str]]:
+        """Completion for AP groups (by name).
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Iterator[Tuple[str, str]]: Name and help_text for the group, or
+                Returns None if config is invalid
+        """
+        match: List[CacheGroup] = self.get_group_identifier(
+            incomplete,
+            completion=True,
+            dev_type=["ap"],
+        )
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+                    # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])] # FIXME case insensitive and group completion now broken used to work
+                    # FIXME zsh is displaying "name name name --help-text"  (name x 3 the help text on each line)
+
+        for m in out:
+            yield m
+
 
     def label_completion(
         self,
@@ -3863,7 +3901,7 @@ class Cache:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
-                    if FUZZ:
+                    if FUZZ and not silent:
                         if dev_type:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
                         else:
@@ -4034,6 +4072,7 @@ class Cache:
     def get_group_identifier(
         self,
         query_str: str,
+        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
@@ -4041,6 +4080,12 @@ class Cache:
     ) -> CacheGroup | List[CacheGroup]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
+
+        if dev_type:
+            dev_type = utils.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
+
         for _ in range(0, 2):
             # TODO change all get_*_identifier functions to continue to look for matches when match is found when
             #       completion is True
@@ -4080,10 +4125,18 @@ class Cache:
                     )
                 )
 
-            if not match and retry and self.central.get_all_groups not in self.updated:
-                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
+            if match and dev_type:
+                all_match: List[Document] = match.copy()
+                match = [d for d in all_match if bool([t for t in d.get("allowed_types", []) if t in dev_type])]
+
+            if not match and retry and self.central.get_all_groups not in self.updated:  # TODO self.responses.group is None
+                dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
                 if FUZZ and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
+                    if dev_type:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups if "name" in g and bool([t for t in g["allowed_types"] if t in dev_type])], limit=1)[0]
+                    else:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.GroupDB.search(self.Q.name == fuzz_match)
@@ -4105,7 +4158,14 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
+            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent)
+            if all_match:
+                all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
+                _dev_type_str = escape(str(utils.unlistify(dev_type)))
+                log.error(
+                    f"The Following groups matched {all_match_msg} excluded as allowed device types don't include any of {_dev_type_str}",
+                    show=True,
+                )
 
             if exit_on_fail:
                 valid_groups = utils.summarize_list(self.group_names, max=50)

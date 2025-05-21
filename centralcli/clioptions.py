@@ -164,8 +164,8 @@ class CLIOptions:
     def get(
         self,
         option: str,
+        *param_decls,
         default: Optional[Any] = None,
-        *,
         callback: Optional[Callable[..., Any]] = None,
         metavar: Optional[str] = None,
         expose_value: bool = None,
@@ -279,7 +279,8 @@ class CLIOptions:
         }
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         combined = {**attr.__dict__, **kwargs}
-        args = (combined["default"], *combined["param_decls"])
+        param_decls = param_decls or combined["param_decls"]
+        args = (combined["default"], *param_decls)
         kwargs_out = {k: v for k, v in combined.items() if k not in ["default", "param_decls"]}
         return typer.Option(*args, **kwargs_out)
 
