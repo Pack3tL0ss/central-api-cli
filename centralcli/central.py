@@ -5549,7 +5549,7 @@ class CentralApi(Session):
 
         return [*update_resp, *skipped, *list(failed.values())]
 
-    async def _update_cp_cert_in_config(self, data: List[str], cp_cert_md5: str) -> List[str] | None:
+    async def _update_cp_cert_in_config(self, data: List[str], cp_cert_md5: str,) -> List[str] | None:
             """Updates cp-cert-checksum in AP group level config
 
             Args:
@@ -5576,9 +5576,11 @@ class CentralApi(Session):
                 if line_index:
                     line_index = line_index[0]
                     _ = cli_cmds.pop(line_index)
+                    log.debug(f"Removed {_} from config")
                 else:  # cp-cert-checksum does not exist in the config
                     line_index = cli_cmds.index("cluster-security")
                 cli_cmds.insert(line_index, f"cp-cert-checksum {cp_cert_md5}")
+                log.debug(f'Added "cp-cert-checksum {cp_cert_md5}" to line {line_index + 1} of the config')
 
             return cli_cmds
 
