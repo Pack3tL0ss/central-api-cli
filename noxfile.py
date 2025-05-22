@@ -3,7 +3,9 @@ from pathlib import Path
 
 @nox.session(python=['venv3.9/bin/python3', 'venv3.10/bin/python3', 'venv3.11/bin/python3', 'venv3.12/bin/python3', 'venv3.13/bin/python3'])
 def tests(session):
-    requirements = nox.project.load_toml("pyproject.toml")["project"]["dependencies"]
+    deps = nox.project.load_toml("pyproject.toml")["project"]["dependencies"]
+    speedups = nox.project.load_toml("pyproject.toml")["project"]["optional-dependencies"]["speedups"]
+    requirements = [*deps, *speedups]
     session.install(*requirements)
     session.install('pytest')
     session.run('pytest')
