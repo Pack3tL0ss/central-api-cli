@@ -1156,7 +1156,7 @@ def delete(
             cli.exit("[cyan]--dev-type[/] option is currently only valid in combination with [cyan]--no-sub[/].")
         data = cli._get_import_file(import_file, import_type=what, text_ok=what == "labels")
     elif unsubscribed:
-        resp = cli.cache.get_devices_with_inventory(device_type=dev_type.value)
+        resp = cli.cache.get_devices_with_inventory(device_type=dev_type)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
         data = [d for d in resp.output if d["subscription_key"] is None]
