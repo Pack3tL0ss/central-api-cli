@@ -370,6 +370,8 @@ def cp_cert(
     :information:  Not supported on Template Groups.  [dim italic](They are filtered out if [cyan]all[/] is specified)[/]
     """
     cert: CacheCert = cli.cache.get_cert_identifier(certificate)
+    if cert.expired:
+        cli.exit(f"Aborting as {cert.summary_text} - is [bright_red bold]Expired[/].")
     if groups != ["all"]:
         groups: List[CacheGroup] = [cli.cache.get_group_identifier(g, dev_type="ap") for g in groups]
     else:

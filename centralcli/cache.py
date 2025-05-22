@@ -16,6 +16,7 @@ import typer
 from rich import print
 from rich.console import Console
 from rich.markup import escape
+from rich.text import Text
 from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
@@ -713,13 +714,20 @@ class CacheMpsk(CentralObject):
         return f'[bright_green]MPSK[/]:[cyan]{self.name}[/]|[green_yellow]{self.id})[/]'
 
 
-class CacheCert(CentralObject):
+class CacheCert(CentralObject, Text):
     def __init__(self, name: str, type: CertType, expired: bool, expiration: int | float | DateTime | str, md5_checksum: str, **kwargs):
         self.name = name
         self.type = type.upper()
         self.expired = expired
         self._expiration = expiration
         self.md5_checksum = md5_checksum
+
+    @property
+    def text(self) -> Text:
+        return Text.from_markup(
+            f'Certificate: [bright_green]{self.name}[/]|[magenta]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]|'
+            f'[magenta]expiration[/]: [cyan]{DateTime(self.expiration, "date-string")}[/]|[magenta]md5[/]: [cyan]{self.md5_checksum}[/]'
+        )
 
     def ok(self) -> bool:
         return not self.expired
@@ -737,13 +745,19 @@ class CacheCert(CentralObject):
 
         self._expiration = DateTime(expiration, "date-string")
 
+    def __str__(self) -> str:
+        return self.text.plain
 
     def __rich__(self) -> str:
-        return f'[bright_green]Certificate[/]:[bright_green]{self.name}[/]|[cyan]{self.expiration}[/]|[cyan]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]|[cyan]md5[/]: [cyan]{self.md5_checksum}[/]'
+        return self.text.markup
+
+    @property
+    def summary_text(self) -> str:
+        return self.text.markup
 
     @property
     def help_text(self):
-        return render.rich_capture(self.__rich__())
+        return render.rich_capture(self.text.markup)
 
 class CacheResponses:
     def __init__(

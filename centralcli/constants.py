@@ -568,6 +568,7 @@ class ArgToWhat:
         self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
         self.swarms = self.swarm = "swarms"
+        self.certs = self.cert = self.certificates = "certs"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -618,6 +619,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
         self.guest = self.guests = "guest"
+        self.certificate = self.cert = "certificate"
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"
