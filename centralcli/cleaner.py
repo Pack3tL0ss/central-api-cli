@@ -2099,3 +2099,9 @@ def show_ai_insights(data: List[Dict[str, str | bool | int]], severity: InsightS
         data = [{k: v for k, v in inner.items() if inner.get("severity") is None or inner["severity"] == severity} for inner in data]
 
     return simple_kv_formatter(data, key_order=field_order, strip_null=True, emoji_bools=True, show_false=False)
+
+def get_dirty_diff(data: List[Dict[str, str]],) -> List[Dict[str, str]]:
+    if not data:
+        return data
+
+    return [{"ap": f"{item.get('name', 'err-no-name-field')} [dim]({item.get('id', 'err-no-id-field')})[/]", "dirty diff": item["dirty_diff"]} for item in data]

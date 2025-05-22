@@ -567,7 +567,7 @@ def aps(
         group = cli.cache.get_group_identifier(group)
         resp = cli.central.request(cli.central.get_dirty_diff, group.name)
         tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
     elif neighbors:
         if site is None:
             cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
