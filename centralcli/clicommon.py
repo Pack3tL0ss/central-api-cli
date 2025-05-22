@@ -1302,7 +1302,7 @@ class CLICommon:
                 self.exit("No devices found")
 
 
-        site_rm_reqs, batch_reqs, confirm_msgs = [], [], [""]
+        site_rm_reqs, batch_reqs, confirm_msgs = [], [], []
         if do_site:
             site_ops = self._check_site(cache_devs=cache_devs, import_data=devices)
             batch_reqs += site_ops.move.reqs
@@ -1325,7 +1325,7 @@ class CLICommon:
         if _tot_req > 1:
             confirm_msgs += [f"\n[italic dark_olive_green2]Will result in {_tot_req} additional API Calls."]
 
-        clean_console.print("\n".join(confirm_msgs))
+        clean_console.print("\n".join(confirm_msgs).strip())  # stripping as we have a \n before and after coming from somewhere.
         if self.confirm(yes):
             site_rm_res = []
             if site_rm_reqs:
