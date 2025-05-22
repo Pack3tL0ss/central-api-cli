@@ -13,7 +13,7 @@ from rich.console import Console
 from typing_extensions import Self
 
 from centralcli import log, utils
-from centralcli.constants import DevTypes, DynamicAntMode, RadioBandOptions, SiteStates, state_abbrev_to_pretty
+from centralcli.constants import DevTypes, DynamicAntMode, RadioBandOptions, SiteStates, state_abbrev_to_pretty, CertTypes
 from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
@@ -981,6 +981,37 @@ class Portals(RootModel):
 
     def __init__(self, data: List[dict]) -> None:
         super().__init__([Portal(**p) for p in data])
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+
+class Cert(BaseModel):
+    model_config = ConfigDict(use_enum_values=True,)
+    name: str = Field(alias=AliasChoices("name", "cert_name"))
+    type: CertTypes = Field(alias=AliasChoices("type", "cert_type"))
+    md5_checksum: str = Field(alias=AliasChoices("md5_checksum", "cert_md5_checksum"))
+    # sha1_checksum: str = Field(alias=AliasChoices("sha1_checksum", "cert_sha1_checksum"))  # We don't need this in cache as we don't use it for anything
+    expired: bool = Field(alias=AliasChoices("expired", "expire"))
+    expiration: int = Field(alias=AliasChoices("expiration", "expire_date"))
+
+    @field_validator("expiration", mode="before")
+    @classmethod
+    def convert_expiration(cls, expiration: str) -> int:
+        return pendulum.from_format(expiration.rstrip("Z"), "YYYYMMDDHHmmss").int_timestamp
+
+
+class Certs(RootModel):
+    root: List[Cert]
+
+    def __init__(self, data: List[dict]) -> None:
+        super().__init__([Cert(**p) for p in data])
 
     def __iter__(self):
         return iter(self.root)

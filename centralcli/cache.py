@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import pendulum
 from collections.abc import Iterator
 from copy import deepcopy
 from enum import Enum
@@ -21,12 +22,13 @@ from yarl import URL
 
 from centralcli import CentralApi, Response, config, constants, log, models, render, utils, BatchRequest
 from centralcli.response import CombinedResponse
+from .objects import DateTime
 
 if TYPE_CHECKING:
-    from tinydb.table import Table
+    from tinydb.table import Table, Document
 
     from .config import Config
-    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus
+    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus, CertType
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -58,15 +60,15 @@ LIB_DEV_TYPE = {
 }
 
 
-CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal"]
+CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
+        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert"],
         data: Document | Dict[str, Any] | List[Document | Dict[str, Any]],
     ) -> list | Dict[str, Any]:
-        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal = False, False, False, False, False, False, False, False
+        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert = False, False, False, False, False, False, False, False, False
         data: Dict | List[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -300,6 +302,7 @@ class CacheInvDevice(CentralObject):
         return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
 
+# TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
     db: Table | None = None
 
@@ -710,6 +713,38 @@ class CacheMpsk(CentralObject):
         return f'[bright_green]MPSK[/]:[cyan]{self.name}[/]|[green_yellow]{self.id})[/]'
 
 
+class CacheCert(CentralObject):
+    def __init__(self, name: str, type: CertType, expired: bool, expiration: int | float | DateTime | str, md5_checksum: str, **kwargs):
+        self.name = name
+        self.type = type.upper()
+        self.expired = expired
+        self._expiration = expiration
+        self.md5_checksum = md5_checksum
+
+    def ok(self) -> bool:
+        return not self.expired
+
+    @property
+    def expiration(self) -> DateTime:
+        return self._expiration
+
+    @expiration.setter
+    def expiration(self, expiration: int | float | DateTime | str):
+        if isinstance(expiration, DateTime):
+            self._expiration = expiration
+        if isinstance(expiration, str):
+            self._expiration = DateTime(pendulum.from_format(expiration.rstrip("Z"), "YYYYMMDDHHmmss").timestamp(), "date-string")
+
+        self._expiration = DateTime(expiration, "date-string")
+
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Certificate[/]:[bright_green]{self.name}[/]|[cyan]{self.expiration}[/]|[cyan]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]|[cyan]md5[/]: [cyan]{self.md5_checksum}[/]'
+
+    @property
+    def help_text(self):
+        return render.rich_capture(self.__rich__())
+
 class CacheResponses:
     def __init__(
         self,
@@ -725,6 +760,7 @@ class CacheResponses:
         license: Response = None,
         client: Response = None,
         guest: Response = None,
+        cert: Response = None,
         device_type: List[constants.LibAllDevTypes] | constants.LibAllDevTypes = None,
     ) -> None:
         self._dev = dev
@@ -739,6 +775,7 @@ class CacheResponses:
         self._license = license
         self._client = client
         self._guest = guest
+        self._cert = cert
         self._device_type = utils.listify(device_type)
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
@@ -747,7 +784,7 @@ class CacheResponses:
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest] if r is not None])  # , key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert] if r is not None])  # , key=lambda k: k.remain_day)
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -849,6 +886,14 @@ class CacheResponses:
         self._guest = resp
 
     @property
+    def cert(self) -> Response | None:
+        return self.update_rl(self._cert)
+
+    @cert.setter
+    def cert(self, resp: Response):
+        self._cert = resp
+
+    @property
     def device_type(self) -> List[constants.LibAllDevTypes] | None:
         return self._device_type
 
@@ -895,6 +940,7 @@ class Cache:
             self.MpskDB: Table = self.DevDB.table("mpsk")
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
             self.GuestDB: Table = self.DevDB.table("guest")  # Only updated when show guests is ran or as needed
+            self.CertDB: Table = self.DevDB.table("certs")  # Only updated when show certs is ran or as needed
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q: Query = Query()
             if data:
@@ -1001,6 +1047,14 @@ class Cache:
         return {g["name"]: CacheGroup(g) for g in self.groups}
 
     @property
+    def group_names(self) -> list:
+        return [g["name"] for g in self.GroupDB.all()]
+
+    @property
+    def ap_groups(self) -> list:
+        return [CacheGroup(g) for g in self.groups if "ap" in g["allowed_types"] and g["name"] != "default"]
+
+    @property
     def labels(self) -> list:
         return self.LabelDB.all()
 
@@ -1072,6 +1126,18 @@ class Cache:
         return {p["id"]: p for p in self.guests}
 
     @property
+    def certs(self) -> List[Document]:
+        return self.CertDB.all()
+
+    @property
+    def certs_by_name(self) -> Dict[str, CacheCert]:
+        return {c["name"]: CacheCert(**c) for c in self.certs}
+
+    @property
+    def certs_by_md5(self) -> Dict[str, Dict[str, str | bool | int]]:
+        return {cert["md5_checksum"]: cert for cert in self.certs}
+
+    @property
     def logs(self) -> list:
         return self.LogDB.all()
 
@@ -1082,10 +1148,6 @@ class Cache:
     @property
     def event_ids(self) -> list:
         return [f'{x["id"]}' for x in self.EventDB.all()]
-
-    @property
-    def group_names(self) -> list:
-        return [g["name"] for g in self.GroupDB.all()]
 
     @property
     def label_names(self) -> list:
@@ -1530,7 +1592,7 @@ class Cache:
         """Get guest info from Guest Cache"""
         retry = False if completion else retry
         if not query_str and completion:
-            return [CacheGuest(g) for g in self.guests]
+            return [CacheGuest(**g) for g in self.guests]
 
         match, all_match = None, None
         for _ in range(0, 2 if retry else 1):
@@ -1650,6 +1712,113 @@ class Cache:
                     out += [tuple([m.phone, m.help_text])]
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
+    def get_cert_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CacheCert | List[CacheCert]:
+        """Get certificate info from Certificate Cache"""
+        retry = False if completion else retry
+        if not query_str and completion:
+            return list(self.certs_by_name.values())
+
+        match = None
+        for _ in range(0, 2 if retry else 1):
+            # exact
+            match = self.CertDB.search(
+                (self.Q.name == query_str)
+                | (self.Q.md5_checksum == query_str)
+            )
+
+            # case insensitive
+            if not match:
+                match = self.CertDB.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                    | self.Q.md5.checksum.test(lambda v: v and v.lower() == query_str.lower())
+                )
+
+            # case insensitive with -/_ swap
+            if not match:
+                if "_" in query_str:
+                    match = self.CertDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("_", "-")))
+                elif "-" in query_str:
+                    match = self.CertDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
+
+            # startswith - phone has all non digit characters stripped
+            if not match:
+                match = self.CertDB.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.md5_checksum.test(lambda v: v and v.lower().startswith(query_str.lower()))
+                )
+
+            if retry and not match and self.responses.cert is None:
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
+                if FUZZ:
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]
+                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        match = self.GuestDB.search(self.Q.name == fuzz_match)
+                if not match:
+                    econsole.print(":arrows_clockwise: Updating certificate Cache")
+                    self.central.request(self.refresh_cert_db)
+            if match:
+                match = [CacheCert(**c) for c in match]
+                break
+
+        if match:
+            if completion:
+                return match
+
+            if len(match) > 1:
+                match = self.handle_multi_match(
+                    match,
+                    query_str=query_str,
+                    query_type="certificate",
+                )
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Unable to gather certificate from provided identifier {query_str}", show=not silent, log=silent)
+            raise typer.Exit(1)
+        else:
+            if not completion and not silent:
+                log.warning(f"Unable to gather certificate from provided identifier {query_str}", show=False)
+
+    def cert_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str = "",
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            econsole.print(":warning:  Invalid config")
+            return
+
+        match = self.get_cert_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
+
+        if match:
+            # remove items that are already on the command line
+            # match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete) and m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+                elif m.md5_checksum.startswith(incomplete) and m.md5_checksum not in args:
+                    out += [tuple([m.md5_checksum, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
@@ -2190,6 +2359,39 @@ class Cache:
 
         for m in out:
             yield m
+
+    def group_ap_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ) -> Iterator[Tuple[str, str]]:
+        """Completion for AP groups (by name).
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Iterator[Tuple[str, str]]: Name and help_text for the group, or
+                Returns None if config is invalid
+        """
+        match: List[CacheGroup] = self.get_group_identifier(
+            incomplete,
+            completion=True,
+            dev_type=["ap"],
+        )
+
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+                    # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])] # FIXME case insensitive and group completion now broken used to work
+                    # FIXME zsh is displaying "name name name --help-text"  (name x 3 the help text on each line)
+
+        for m in out:
+            yield m
+
 
     def label_completion(
         self,
@@ -3255,14 +3457,14 @@ class Cache:
 
         return resp
 
-    async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = True) -> bool:
+    async def update_portal_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = False) -> bool:
         if remove:
             return await self.update_db(self.PortalDB, doc_ids=data)
 
         portal_models = models.Portals(data)
         data_by_id = {p.id: p.model_dump() for p in portal_models}
         update_data = {**self.portals_by_id, **data_by_id}
-        return await self.update_db(self.PortalDB, data=update_data, truncate=True)
+        return await self.update_db(self.PortalDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_portal_db(self) -> Response:
             resp = await self.central.get_portals()
@@ -3275,6 +3477,31 @@ class Cache:
             portal_model = models.Portals(deepcopy(resp.output))
             update_data = portal_model.model_dump()
             _ = await self.update_db(self.PortalDB, data=update_data, truncate=True)
+
+            return resp
+
+    async def update_cert_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = False) -> bool:
+        if remove:
+            return await self.update_db(self.CertDB, doc_ids=data)
+
+        cert_models = models.Certs(data)
+        data_by_md5 = {p["md5_checksum"]: p for p in cert_models.model_dump()}
+        update_data = {**self.certs_by_md5, **data_by_md5}
+        return await self.update_db(self.CertDB, data=list(update_data.values()), truncate=True)
+
+    async def refresh_cert_db(self, query: str = None) -> Response:
+            resp = await self.central.get_certificates(query)
+            if not resp.ok:
+                return resp
+
+            self.responses.cert = resp
+
+            if not query:
+                cert_models = models.Certs(deepcopy(resp.output))
+                update_data = cert_models.model_dump()
+                _ = await self.update_db(self.CertDB, data=update_data, truncate=True)
+            else:
+                _ = await self.update_cert_db(resp.output)
 
             return resp
 
@@ -3448,6 +3675,8 @@ class Cache:
             fields = ("serial", "mac")
         elif query_type == "client":
             fields = {"name", "mac", "ip", "connected_port", "connected_name", "site"}
+        elif query_type == "certificate":
+            fields = {"name", "type", "expired", "expiration", "md5_checksum",}
         else:  # device
             fields = ("name", "serial", "mac", "type")
 
@@ -3672,7 +3901,7 @@ class Cache:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
-                    if FUZZ:
+                    if FUZZ and not silent:
                         if dev_type:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
                         else:
@@ -3843,6 +4072,7 @@ class Cache:
     def get_group_identifier(
         self,
         query_str: str,
+        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
@@ -3850,6 +4080,12 @@ class Cache:
     ) -> CacheGroup | List[CacheGroup]:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
+
+        if dev_type:
+            dev_type = utils.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
+
         for _ in range(0, 2):
             # TODO change all get_*_identifier functions to continue to look for matches when match is found when
             #       completion is True
@@ -3889,10 +4125,18 @@ class Cache:
                     )
                 )
 
-            if not match and retry and self.central.get_all_groups not in self.updated:
-                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
+            if match and dev_type:
+                all_match: List[Document] = match.copy()
+                match = [d for d in all_match if bool([t for t in d.get("allowed_types", []) if t in dev_type])]
+
+            if not match and retry and self.central.get_all_groups not in self.updated:  # TODO self.responses.group is None
+                dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
                 if FUZZ and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
+                    if dev_type:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups if "name" in g and bool([t for t in g["allowed_types"] if t in dev_type])], limit=1)[0]
+                    else:
+                        fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.GroupDB.search(self.Q.name == fuzz_match)
@@ -3914,7 +4158,14 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=True)
+            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent)
+            if all_match:
+                all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
+                _dev_type_str = escape(str(utils.unlistify(dev_type)))
+                log.error(
+                    f"The Following groups matched {all_match_msg} excluded as allowed device types don't include any of {_dev_type_str}",
+                    show=True,
+                )
 
             if exit_on_fail:
                 valid_groups = utils.summarize_list(self.group_names, max=50)

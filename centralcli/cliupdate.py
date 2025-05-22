@@ -29,7 +29,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, IAPTimeZoneNames
 from . import render
-from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal
+from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal, CacheCert
 from .caas import CaasAPI
 
 
@@ -334,6 +334,63 @@ def config_(
         else:
             resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
+
+
+# FIXME typer is not handling List[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
+# TODO check... Default for group ATM-LOCAL had "wlan cert-assignment-profile" no sub-commands below it...  it did not have "cp-cert-checksum ..."
+#   update cp-cert ... added cp-cert-checksum, which removed "wlan cert-assignment-profile".  Need to verify what that is, thought the default was cp-cert-checksum pointing to default aruba cert.
+@app.command()
+def cp_cert(
+    certificate: str = typer.Argument(
+        ...,
+        help="The certificate name or md5 checksum to use for Captive Portal. [dim italic red]Certificate must exist[/]",
+        autocompletion=cli.cache.cert_completion,
+        show_default=False,
+    ),
+    groups: List[str] = cli.options.get(
+        "group_many", "-G", "--group",
+        default=...,
+        metavar=iden_meta.group.replace("NAME]", "NAME|all]"),
+        help="The Group [dim italic](AP Group)[/] to be updated to use the Captive Portal certificate. [dark_orange3]:warning:[/]  [cyan]all[/] Will push to all AP groups",
+        autocompletion=cli.cache.group_ap_completion
+    ),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.account,
+) -> None:
+    """Update the Captive Portal certificate for APs at the group level
+
+    This will update the certificate usage (cp-cert-checksum) at the group level (for APs) to reference the specified certificate.
+    The certificate must be uploaded to Aruba Central first.  Use [cyan]cencli add certificate[/] to upload the certificate.
+    and [cyan]cencli show certs[/] to see the available certificates.
+
+    [dark_orange3]:warning:[/]  "--group|-G [red]all[/]" Will update Captive Portal certificate usage for **all** AP groups.
+
+    :information:  Not supported on Template Groups.  [dim italic](They are filtered out if [cyan]all[/] is specified)[/]
+    """
+    cert: CacheCert = cli.cache.get_cert_identifier(certificate)
+    if groups != ["all"]:
+        groups: List[CacheGroup] = [cli.cache.get_group_identifier(g, dev_type="ap") for g in groups]
+    else:
+        groups: List[CacheGroup] = cli.cache.ap_groups
+
+    # filter out Template Groups and CNX managed groups.
+    groups = [g for g in groups if g.cnx is not True and not g.wlan_tg]
+
+    _confirm_msg = f"Updat{'ing' if yes else 'e'} Captive Portal Certificate to {cert.name}|checksum: {cert.md5_checksum}\n  "
+    if len(groups) > 1:
+        _groups_txt = utils.color([g.name for g in groups], pad_len=4, sep='\n')
+        _confirm_msg += f"in the following {len(groups)} groups:\n{_groups_txt}"
+        _confirm_msg += f"\n\n[italic dark_olive_green2]Operation will result in {len(groups) * 2} API Calls."
+    else:
+        _confirm_msg += f"in group [bright_green]{groups[0].name}[/]"
+    cli.console.print(_confirm_msg)
+
+    cli.confirm(yes)
+    group_names = [g.name for g in groups]
+    resp = cli.central.request(cli.central.update_group_cp_cert, group_names, cp_cert_md5=cert.md5_checksum)
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)

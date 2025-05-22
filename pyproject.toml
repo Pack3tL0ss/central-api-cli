@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "8.4.2"
+version = "8.5.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -82,6 +82,7 @@ filterwarnings = [
 
 [tool.ruff]
 line-length = 181
+exclude = ["dashboard", "wh_proxy_service.py"]
 # Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.

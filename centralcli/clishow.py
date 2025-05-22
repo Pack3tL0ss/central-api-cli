@@ -567,7 +567,7 @@ def aps(
         group = cli.cache.get_group_identifier(group)
         resp = cli.central.request(cli.central.get_dirty_diff, group.name)
         tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
     elif neighbors:
         if site is None:
             cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
@@ -896,7 +896,6 @@ def subscriptions(
     )
 
 
-# TODO need sort_by enum
 @app.command()
 def swarms(
     ap: str = typer.Argument(None, metavar=iden_meta.dev, help=f"Show settings for the Virtual Controller/Swarm associated with this AP.  {cli.help_block('Show All Swarms')}", show_default=False, autocompletion=cli.cache.dev_ap_completion),
@@ -1932,7 +1931,15 @@ def lldp(
 
 @app.command(short_help="Show certificates/details")
 def certs(
-    name: str = typer.Argument(None, metavar='[certificate name|certificate hash]',),
+    query: str = typer.Argument(None, metavar='[name|hash]', autocompletion=cli.cache.cert_completion, help="Show details for certificates matching query [dim italic]name or hash[/]", show_default=False,),
+    valid: bool = typer.Option(None, help="Filter by certificate validity [dim italic]expiration status[/]", show_default=False,),
+    server_cert: bool = typer.Option(None, "--svr", help="Filter by certificate type: Server Certificate", show_default=False,),
+    ca_cert: bool = typer.Option(None, "--ca", help="Filter by certificate type: CA", show_default=False,),
+    crl: bool = typer.Option(None, "--crl", help="Filter by certificate type: CRL", show_default=False,),
+    int_ca_cert: bool = typer.Option(None, "--int-ca", help="Filter by certificate type: Intermediate CA", show_default=False,),
+    ocsp_resp_cert: bool = typer.Option(None, "--ocsp-resp", help="Filter by certificate type: OCSP responder", show_default=False,),
+    ocsp_signer_cert: bool = typer.Option(None, "--ocsp-signer", help="Filter by certificate type: OCSP signer", show_default=False,),
+    ssh_pub_key: bool = typer.Option(None, "--public", help="Filter by certificate type: SSH Public cert", show_default=False, hidden=True,),
     sort_by: SortCertOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -1946,11 +1953,21 @@ def certs(
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    resp = cli.central.request(cli.central.get_certificates, name, callback=cleaner.get_certificates)
+    resp = cli.central.request(cli.cache.refresh_cert_db, query)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    type_filter = {
+        "SERVER_CERT": server_cert,
+        "CA_CERT": ca_cert,
+        "CRL": crl,
+        "INTERMEDIATE_CA": int_ca_cert,
+        "OCSP_RESPONDER_CERT": ocsp_resp_cert,
+        "OCSP_SIGNER_CERT": ocsp_signer_cert,
+        "PUBLIC_CERT": ssh_pub_key
+    }
+    cert_types = [k for k, v in type_filter.items() if v is True]
 
     cli.display_results(
-        resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse
+        resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_certificates, valid=valid, cert_types=cert_types
     )
 
 # TODO show task --device  look up task by device if possible
@@ -2085,7 +2102,14 @@ def config_(
         if device:
             device: CacheDevice = cli.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
-            cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            if "ap" in group_dev.allowed_types and "gw" in group_dev.allowed_types:
+                cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            elif "ap" in group_dev.allowed_types:
+                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--ap[/] as [magenta]dev type[/]: [cyan]gw[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_ap = True
+            elif "gw" in group_dev.allowed_types:
+                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--gw[/] as [magenta]dev type[/]: [cyan]ap[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_gw = True
     else:  # group_dev is a device iden
         group = cli.cache.get_group_identifier(group_dev.group)
         if device is not None:
@@ -3002,7 +3026,7 @@ def last(
     kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
     if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
         kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
-                        f"{cleaner._convert_epoch(int(config.last_command_file.stat().st_mtime))}"  # Update to use DateTime
+                        f"{DateTime(int(config.last_command_file.stat().st_mtime))}"
     data = kwargs["outdata"]
     del kwargs["outdata"]
 

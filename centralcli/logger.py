@@ -6,7 +6,6 @@ from typing import Union, List, Any
 from logging.handlers import RotatingFileHandler
 from time import sleep
 from rich.console import Console
-from rich.markup import escape
 # from rich.logging import RichHandler
 
 import logging
