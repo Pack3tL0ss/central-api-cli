@@ -92,6 +92,17 @@ CLUSTER_URLS = {
     "cn1": "https://app1-apigw.central.arubanetworks.com.cn"
 }
 
+CNX_URLS = {
+    "internal": "https://internal.api.central.arubanetworks.com",
+    "us1": "https://us1.api.central.arubanetworks.com",
+    "us2": "https://us2.api.central.arubanetworks.com",
+    "us4": "https://us4.api.central.arubanetworks.com",
+    "us5": "https://us5.api.central.arubanetworks.com",
+    "can1": "cn1.api.central.arubanetworks.com"  # NOT USED yet AFAIK
+}
+
+GLP_BASE_URL = "https://global.api.greenlake.hpe.com"
+
 BYPASS_FIRST_RUN_FLAGS = [
     "--install-completion",
     "--show-completion",
@@ -224,6 +235,23 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
         raise exc
 
 
+class Glcp:
+    def __init__(self, base_url: str = GLP_BASE_URL, *, client_id: str = None, client_secret: str = None):
+        self.base_url = base_url
+        self.client_id = client_id
+        self.client_secret = client_secret
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+    @property
+    def ok(self) -> bool:
+        return False if not self.client_id or not self.client_secret else True
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({'VALID' if self.ok else 'CONFIG MISSING/INVALID'}) object at {hex(id(self))}>"
+
+
 class Config:
     def __init__(self, base_dir: Path = None):
         #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
@@ -305,6 +333,8 @@ class Config:
         self.wss_key: str = self.data.get(self.account, {}).get("token", {}).get("wss_key")
         self.limit: int | None = self.data.get("limit")  # Allows override of paging limit for pagination testing
         self.cache_client_days: int = self.data.get("cache_client_days", 90)
+        _glp_config: Dict[str, Any] = self.data.get(self.account, {}).get("glcp", {})
+        self.glp = Glcp(**_glp_config)
         try:
             self.webhook = WebHook(**self.data.get(self.account, {}).get("webhook", {}))
         except ValidationError:
