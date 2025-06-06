@@ -120,7 +120,7 @@ def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase
 class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
         self.silent = False  # toggled in _batch_request to squelch Auto logging in Response
-        if config.valid and constants.do_load_pycentral():
+        if config.valid and constants.do_load_pycentral():  # TODO constants is a strange place for this to live
             self.auth = get_conn_from_file(account_name)
             super().__init__(auth=self.auth)
 
