@@ -1430,7 +1430,7 @@ def get_fw_version_list(data: List[dict], format: TableFormat = "rich", verbose:
 
     return data
 
-def get_subscriptions(data: List[dict],) -> List[dict]:
+def get_subscriptions(data: List[dict], default_sort: bool = True) -> List[dict]:
     field_order = [
         "license_type",
         "sku",
@@ -1441,9 +1441,16 @@ def get_subscriptions(data: List[dict],) -> List[dict]:
         "start_date",
         "end_date",
     ]
-    return [
+    data = [
         dict(short_value(k, d[k]) for k in field_order) for d in data
     ]
+    if default_sort:
+        data = sorted(data, key=lambda s: s["name"])
+        ok_subs = [sub for sub in data if sub["status"] == "OK"]
+        expired_subs = [sub for sub in data if sub["status"] != "OK"]
+        data = [*ok_subs, *expired_subs]
+
+    return data
 
 def get_portals(data: List[dict],) -> List[dict]:
     field_order = [

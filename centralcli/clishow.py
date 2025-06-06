@@ -860,27 +860,38 @@ def subscriptions(
     """Show subscription/license details or stats
     """
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
+
+    _cleaner = None
+    set_width_cols = None
+    _cleaner_kwargs = {}
+    caption = None
     if what is None or what == "details":
         resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)
         title = "Subscription Details"
-        _cleaner = cleaner.get_subscriptions
-        set_width_cols = {"name": {"min": 39}}
+        if resp.ok:
+            _cleaner = cleaner.get_subscriptions
+            set_width_cols = {"name": {"min": 39}}
+            if sort_by:
+                _cleaner_kwargs = {"default_sort": False}
+            try:
+                _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
+                _ok_cnt = len(resp.output) - _expired_cnt
+                caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
+            except Exception as e:
+                log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
+                caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
+
     elif what == "auto":
         resp = cli.central.request(cli.central.get_auto_subscribe)
         if resp and "services" in resp.output:
             resp.output = resp.output["services"]
         title = "Services with auto-subscribe enabled"
-        _cleaner = None
-        set_width_cols = None
     elif what == "stats":
         resp = cli.central.request(cli.central.get_subscription_stats)
         title = "Subscription Stats"
-        _cleaner = None
-        set_width_cols = None
     elif what == "names":
         resp = cli.central.request(cli.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
-        _cleaner = None
         set_width_cols = {"name": {"min": 39}}
     else:
         raise ValueError("Error in logic evaluating what")
@@ -889,10 +900,12 @@ def subscriptions(
         resp,
         tablefmt=tablefmt,
         title=title,
+        caption=caption,
         sort_by=sort_by,
         reverse=reverse,
+        set_width_cols=set_width_cols,
         cleaner=_cleaner,
-        set_width_cols=set_width_cols
+        **_cleaner_kwargs
     )
 
 
