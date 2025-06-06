@@ -31,29 +31,31 @@ app = typer.Typer()
 @app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
-    serial_nums: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
+    devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.account,
 ) -> None:
-    """Assign Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+    """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+
+    If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
 
     Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
     Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
     """
     # TODO add confirmation method builder to output class
-    do_auto = True if "auto" in [s.lower() for s in serial_nums] else False
+    do_auto = True if "auto" in [s.lower() for s in devices] else False
     if do_auto:
         _msg = f"Enable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
-        if len(serial_nums) > 1:
+        if len(devices) > 1:
             cli.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
     else:
         _msg = f"Assign [bright_green]{license.value}[/bright_green] to"
         try:
-            _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in serial_nums]
+            _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in devices]
         except Exception:
-            _serial_nums = serial_nums
+            _serial_nums = devices
         if len(_serial_nums) > 1:
             _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
             _msg = f"{_msg}:\n    {_dev_msg}"
