@@ -3699,7 +3699,7 @@ class Cache:
         else:
             data = [{k: d[k] for k in d.data if k in fields} for d in match]
 
-        out = utils.output(
+        out = render.output(
             data,
             title=f"Ambiguous identifier. Select desired {query_type}.",
             set_width_cols=set_width_cols,
