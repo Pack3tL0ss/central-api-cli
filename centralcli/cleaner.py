@@ -347,18 +347,6 @@ def _unlist(data: Any):
     return data
 
 
-def _check_inner_dict(data: Any) -> Any:
-    if isinstance(data, list):
-        if True in set([isinstance(inner, dict) for inner in data]):
-            if list(set([dk for d in data for dk in d.keys()]))[0] == "port":
-                return _unlist([d["port"] for d in data])
-            else:
-                return _unlist(
-                    [dict(short_value(vk, vv) for vk, vv in pre_clean(inner).items() if vk != "index") for inner in data]
-                )
-    return data
-
-
 def short_key(key: str) -> str:
     return _short_key.get(key, key.replace("_", " "))
 
