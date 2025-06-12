@@ -248,12 +248,14 @@ class CLICommon:
         if ctx.resilient_parsing:  # tab completion, return without validating, so does use of "test method" command
             return account
 
-        emoji_console = Console()
+        # dev commands that change files, we don't need to verify the account.
+        if sys.argv[1:] and sys.argv[1] == "dev":
+            return account
 
         # cencli test method requires --account when using non default, we do not honor forget_account_after
         if " ".join(sys.argv[1:]).startswith("test method"):
             if account:
-                emoji_console.print(f":information:  Using account [bright_green]{account}[/]\n",)
+                self.econsole.print(f":information:  Using account [bright_green]{account}[/]\n",)
                 return account
             else:
                 return "default" if "default" in config.data else "central_info"
@@ -261,7 +263,7 @@ class CLICommon:
         account = account or config.default_account  # account only has value if --account flag is used.
 
         if default:  # They used the -d flag
-            emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
+            self.econsole.print(":information:  [bright_green]Using default central account[/]\n",)
             if config.sticky_account_file.is_file():
                 config.sticky_account_file.unlink()
             if account in config.data:
@@ -276,7 +278,7 @@ class CLICommon:
                 if config.forget is not None:
                     if config.last_account_expired:
                         msg = self.AcctMsg(account)
-                        emoji_console.print(msg.forgot)
+                        self.econsole.print(msg.forgot)
                         if config.sticky_account_file.is_file():
                             config.sticky_account_file.unlink()
 
@@ -287,7 +289,7 @@ class CLICommon:
                             clean_console.print(msg.previous_will_forget)
                             config.update_last_account_file(account, config.last_cmd_ts, True)
                         else:
-                            emoji_console.print(msg.previous_short)
+                            self.econsole.print(msg.previous_short)
 
                 else:
                     account = config.last_account
@@ -296,7 +298,7 @@ class CLICommon:
                         clean_console.print(msg.previous)
                         config.update_last_account_file(account, config.last_cmd_ts, True)
                     else:
-                        emoji_console.print(msg.previous_short)
+                        self.econsole.print(msg.previous_short)
 
         elif account in config.data:
             if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
@@ -312,14 +314,14 @@ class CLICommon:
             return account
         else:  # -- Error messages config invalid or account not found in config --
             _def_msg = False
-            emoji_console.print(
+            self.econsole.print(
                 f":warning:  [bright_red]Error:[/] The specified account: [cyan]{config.account}[/] is not defined in the config @\n"
                 f"  {config.file}\n"
             )
 
             if "central_info" not in config.data and "default" not in config.data:
                 _def_msg = True
-                emoji_console.print(
+                self.econsole.print(
                     ":warning:  [cyan]central_info[/] is not defined in the config.  This is the default when not overridden by\n"
                     "--account flag or [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
                 )
