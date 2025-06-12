@@ -59,7 +59,14 @@ else:
 
 from .logger import MyLogger
 from . import constants
+from .utils import Utils
+utils = Utils()
 from .config import Config
+
+if os.environ.get("TERM_PROGRAM") == "vscode":
+    from .vscodeargs import vscode_arg_handler
+    vscode_arg_handler()
+
 config = Config(base_dir=base_dir)
 
 log_file = config.log_dir / f"{__name__}.log"
@@ -130,8 +137,6 @@ if os.name == "nt":  # pragma: no cover
 
 
 from pycentral.base import ArubaCentralBase
-from .utils import Utils
-utils = Utils()
 from .response import Response, BatchRequest
 from .central import CentralApi
 from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
@@ -144,10 +149,6 @@ from . import cleaner, render
 #     +G so (start with output scrolled to end) so scroll-back contains all contents
 # if not os.environ.get("LESS"):
 os.environ["LESS"] = "-RX +G"
-
-if os.environ.get("TERM_PROGRAM") == "vscode":
-    from .vscodeargs import vscode_arg_handler
-    vscode_arg_handler()
 
 # These are global hidden flags/args that are stripped before sending to cli
 raw_out = False
@@ -169,7 +170,11 @@ if "--debugv" in sys.argv:
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
 if "--again" in sys.argv:
-    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug", "--account"]
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug"]
+    if "--account" in sys.argv:
+        account_idx = sys.argv.index("--account") + 1
+        if len(sys.argv) - 1 >= account_idx:
+            valid_options += ["--account", sys.argv[account_idx]]
     out_args = []
     if "--out" in sys.argv:
         outfile = sys.argv[sys.argv.index("--out") + 1]
