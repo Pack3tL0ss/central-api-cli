@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 from time import sleep
 from typing import List
-import typer
 
+import typer
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -25,26 +25,24 @@ clean_err_console = Console(emoji=False, stderr=True)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (BatchRequest, cli, cliadd, cliassign,
-                            clibatch, clicaas, cliclone, clidel, clikick, cliset,
-                            clirefresh, clirename, clishow, clitest, clitshoot,
-                            cliunassign, cliupdate, cliupgrade, cliexport, clicheck,
-                            clicancel, config, log, utils)
+    from centralcli import BatchRequest
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (BatchRequest, cli, cliadd, cliassign,
-                                clibatch, clicaas, cliclone, clidel, clikick,
-                                cliset, clirefresh, clirename, clishow, clitest,
-                                clitshoot, cliunassign, cliupdate, cliupgrade,
-                                clicancel, cliexport, clicheck, config, log, utils)
+        from centralcli import BatchRequest
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.cache import CentralObject  # noqa
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
+from . import (  # NoQA
+    cli, cliadd, cliassign, clibatch, clicaas, clicancel,
+    clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
+    clirename, cliset, clishow, clitest, clitshoot, cliunassign,
+    cliupdate, cliupgrade, config, log, utils,
+)
+from .cache import CentralObject  # noqa
+from .constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
 
 iden = IdenMetaVars()
 
@@ -73,6 +71,7 @@ app.add_typer(cliset.app, name="set",)
 app.add_typer(cliexport.app, name="export",)
 app.add_typer(clicheck.app, name="check",)
 app.add_typer(clicancel.app, name="cancel",)
+app.add_typer(clidev.app, name="dev", hidden=True)
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
