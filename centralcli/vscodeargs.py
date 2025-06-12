@@ -1,8 +1,22 @@
-from centralcli import log
 from pathlib import Path
 import sys
+import logging
 
-batch_dir = Path("/home/wade/git/myrepos/cencli-batch")
+
+debug = True if "--debug" in str(sys.argv) else False
+fmt_str = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+date_str = "%m/%d/%Y %I:%M:%S %p"
+logging.basicConfig(
+    level=logging.DEBUG if debug else logging.INFO,
+    format=fmt_str,
+    datefmt=date_str,
+    handlers=[
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger()
+
+batch_dir = Path().home() / "git/myrepos/cencli-batch"
 
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():
@@ -56,7 +70,7 @@ def vscode_arg_handler():
                         sys.argv += vsc_args.split()
 
     except Exception as e:
-        log.exception(f"Exception in vscode arg handler (arg split) {e.__class__.__name__}.{e}", show=True)
+        log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}")
         return
 
     # update launch.json default if launched by vscode debugger
@@ -102,7 +116,7 @@ def vscode_arg_handler():
                         log_old_line = line.split('"')[-2]
                         log_new_line = new_line.split('"')[-2]
                         do_update = True
-                        log.debugv(
+                        log.debug(
                             f"changing default arg for promptString:\n"
                             f"    from: {log_old_line}\n"
                             f"    to: {log_new_line}"
@@ -115,7 +129,7 @@ def vscode_arg_handler():
                     new_line = f'{" ":{_spaces}}"options": {json.dumps(history_lines)},  // VSC_ARG_HISTORY'
                     if line != new_line:
                         do_update = True
-                        log.debugv(
+                        log.debug(
                             f"changing options arg for pickString:\n"
                             f"    from: {line.strip()}\n"
                             f"    to: {new_line.strip()}"
@@ -132,4 +146,4 @@ def vscode_arg_handler():
             launch_file.write_text("\n".join(launch_data) + "\n")
 
     except Exception as e:
-        log.exception(f"Exception in vscode arg handler (launch.json update) {e.__class__.__name__}.{e}", show=True)
+        log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}")
