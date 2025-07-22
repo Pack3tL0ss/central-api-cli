@@ -20,16 +20,20 @@ import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import MyLogger, cache, central, config, models, exceptions
+    from centralcli import MyLogger, cache, central, config, exceptions
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         import sys
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import MyLogger, cache, central, config, models, exceptions  # type: ignore
+        from centralcli import MyLogger, cache, central, config, exceptions  # type: ignore
     else:
         print(pkg_dir.parts)
         raise e
+
+from .models.webhook import WebHook
+from .models import snow as models
+
 
 def init_logs():
     log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
@@ -174,7 +178,7 @@ class Hook2Snow:
         if not resp:
             log.error(f"Unable to gather alerts from Central REST API\n{resp}")
         else:
-            return [models.WebHook(**{**data, **{"text": data.get("text", data.get("description"))}}) for data in resp.output]
+            return [WebHook(**{**data, **{"text": data.get("text", data.get("description"))}}) for data in resp.output]
 
     async def post2snow(self, data: dict) -> aiohttp.ClientResponse | None:
         # success response = 201 for both create and update
@@ -190,7 +194,7 @@ class Hook2Snow:
 
     async def format_payload(self, data: dict) -> models.SnowCreate | models.SnowUpdate:
         snow_data = {}
-        data = models.WebHook(data)
+        data = WebHook(data)
         if data.state == "Open":
             snow_data["u_assignment_group"] = config.snow.assignment_group
             snow_data["u_short_description"] = "".join(data.alert_type[0:161])
@@ -305,7 +309,7 @@ class Hook2Snow:
     @app.post("/webhook", status_code=200, response_model=HookResponse, responses=wh_resp_schema)
     async def webhook(
         self,
-        data: dict,  # models.WebHook
+        data: dict,  # models.webhook.WebHook
         request: Request,
         response: Response,
         content_length: int = Header(...),
@@ -357,7 +361,7 @@ class Hook2Snow:
                 "updated": True  #  if updated else False
             }
 
-    async def startup(self) -> List[models.WebHook] | None:
+    async def startup(self) -> List[WebHook] | None:
         tok_updated, current_alerts = await asyncio.gather(self.snow_token_refresh(), self.get_current_alerts())
         # TODO verify any closed alerts don't have open entry in cache, verify snow has incident for any open alerts
         return current_alerts

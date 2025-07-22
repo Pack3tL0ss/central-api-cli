@@ -90,7 +90,7 @@ def acp_logs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show ACP audit logs
 
@@ -195,7 +195,7 @@ def logs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show Audit Event Logs.

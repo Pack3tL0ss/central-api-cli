@@ -34,7 +34,7 @@ def upgrade(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Cancel a previously initiated firmware upgrade
     """

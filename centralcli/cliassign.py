@@ -22,6 +22,8 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import iden_meta
 from centralcli.cache import CentralObject
+from .cnx.api.glp.devices import GlpDevicesApi
+from . import config
 
 app = typer.Typer()
 
@@ -35,7 +37,7 @@ def license(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
 
@@ -81,7 +83,7 @@ def label_(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     "Assign label to device(s)"
     label: CentralObject = cli.cache.get_label_identifier(label)
@@ -111,6 +113,41 @@ def label_(
         cli.display_results(resp, tablefmt="action")
         # We don't cache device label assignments
 
+@app.command()
+def subscription(
+    subscription: str = typer.Argument(..., show_default=False),  # type: ignore
+    devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
+    yes: bool = cli.options.yes,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    account: str = cli.options.workspace,
+) -> None:
+    """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+
+    If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
+
+    Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
+    Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
+    """
+    api = GlpDevicesApi(config.workspace)
+    _msg = f"Assign [bright_green]{subscription}[/bright_green] to"
+    try:
+        _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in devices]
+    except Exception:
+        _serial_nums = devices
+    if len(_serial_nums) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
+        _msg = f"{_msg}:\n    {_dev_msg}"
+    else:
+        dev = _serial_nums[0]
+        _msg = f"{_msg} [cyan]{dev}[/]"
+
+    cli.econsole.print(_msg)
+    if cli.confirm(yes):
+        resp = api.request(api.assign_subscription_to_device, _serial_nums, subscription_ids=subscription)
+
+        cli.display_results(resp, tablefmt="action")
+
 
 @app.callback()
 def callback():
@@ -121,5 +158,4 @@ def callback():
 
 
 if __name__ == "__main__":
-    print("hit")
     app()

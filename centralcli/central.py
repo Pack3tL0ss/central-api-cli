@@ -84,20 +84,21 @@ def get_conn_from_file(account_name, logger: MyLogger = log) -> ArubaCentralBase
         [pycentral.ArubaCentralBase]: An instance of class:`pycentral.ArubaCentralBase`,
             Used to manage Auth and Tokens.
     """
-    if account_name in config.data:
-        central_info = config.data[account_name]
-    else:
-        # Account name callback will kick back errors
-        # falling back to default for load of central for auto completion
-        central_info = config.data["central_info"]
+    # if account_name in config.data:
+    #     central_info = config.data[account_name]
+    # else:
+    #     # Account name callback will kick back errors
+    #     # falling back to default for load of central for auto completion
+    #     central_info = config.data["central_info"]
+    central_info = config.central_info
     token_store = config.token_store
 
     conn = ArubaCentralBase(central_info, token_store=token_store, logger=logger, ssl_verify=config.ssl_verify)
     token_cache = Path(tokenLocalStoreUtil(token_store, central_info["customer_id"], central_info["client_id"]))
 
     # always create token cache if it doesn't exist and always use it first
-    # however if config has been modified more recently any tokens in the config will be tried first
-    # if both fail user will be prompted for token if no user/pass or on Internal Cluster.
+    # unless config has been modified more recently, if so,  any tokens in the config will be tried first.
+    # if both fail user will be prompted for token if no user/pass or on Internal Cluster w/ @hpe.com user.
     if token_cache.is_file():
         cache_token = conn.loadToken()
         if cache_token:
@@ -120,8 +121,10 @@ class CentralApi(Session):
     def __init__(self, account_name: str = "central_info"):
         self.silent = False  # toggled in _batch_request to squelch Auto logging in Response
         if config.valid and constants.do_load_pycentral():  # TODO constants is a strange place for this to live
-            self.auth = get_conn_from_file(account_name)
-            super().__init__(auth=self.auth)
+            auth = get_conn_from_file(account_name)
+        else:
+            auth = None
+        super().__init__(auth=auth)
 
     @staticmethod
     def _make_form_data(data: dict):
@@ -913,6 +916,8 @@ class CentralApi(Session):
         combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
         if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
             raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
+            # TODO refactor to send failed Response if this happens otherwise cache can be truncated if props_resp was OK but others failed.
+            # log.error("Unexpected error in get_all_groups, length of responses differs.", show=True, caption=True, log=True)
 
         combined_resp = Response(props_resp._response)
         combined_resp.output = [{"group": k, **v} for k, v in combined.items()]
@@ -954,7 +959,7 @@ class CentralApi(Session):
         passed = batch_resp if not failed else [r for r in batch_resp if r.ok]
         if failed:
             log.error(f"{len(failed)} of {len(batch_reqs)} API requests to {url} have failed.", show=True, caption=True)
-            fail_msgs = list(set([r.output.get("description", str(r.output)) for r in failed]))
+            fail_msgs = list(set([r.output if isinstance(r.output, str) else r.output.get("description", str(r.output)) for r in failed]))
             for msg in fail_msgs:
                 log.error(f"Failure description: {msg}", show=True, caption=True)
 
@@ -1395,7 +1400,7 @@ class CentralApi(Session):
             cluster_id (str, optional): Filter by Mobility Controller serial number
             calculate_total (bool, optional): Whether to calculate total APs
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
-                +swarm_id, -swarm_id.Default is '+serial'
+                +swarm_id, -swarm_id. Default is '+serial'
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
 
@@ -3489,7 +3494,7 @@ class CentralApi(Session):
         passed = batch_resp if not failed else [r for r in batch_resp if r.ok]
         if failed:
             log.error(f"{len(failed)} of {len(batch_reqs)} API requests to {url} have failed.", show=True, caption=True)
-            fail_msgs = list(set([r.output.get("description", str(r.output)) for r in failed]))
+            fail_msgs = list(set([r.output if isinstance(r.output, str) else r.output.get("description", str(r.output)) for r in failed]))
             for msg in fail_msgs:
                 log.error(f"Failure description: {msg}", show=True, caption=True)
 
@@ -5224,12 +5229,6 @@ class CentralApi(Session):
                 resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
                 resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
                 resp.output = [*resp.output, *batch_res[idx].output]
-
-        # try:
-        #     wids_model = models.Wids(resp.output)
-        #     resp.output = wids_model.model_dump()
-        # except Exception as e:
-        #     log.warning(f"dev note. pydantic conversion did not work\n{e}", show=True)
 
         return resp
 

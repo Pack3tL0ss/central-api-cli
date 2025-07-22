@@ -33,7 +33,7 @@ def license(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
     """
@@ -77,7 +77,7 @@ def label(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Unassign label from device(s)"""
     label = cli.cache.get_label_identifier(label)

@@ -71,7 +71,7 @@ def routes(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show gateway routes advertised or learned from route/tunnel orchestrator
     """
@@ -118,7 +118,7 @@ def interfaces(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show overlay interfaces
     """
@@ -154,7 +154,7 @@ def connection(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show overlay connection (OTO/ORO) details (Valid on SD-Branch GWs/ VPNCs Only)
 

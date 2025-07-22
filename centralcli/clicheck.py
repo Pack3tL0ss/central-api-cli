@@ -30,7 +30,7 @@ def firmware_available(
     version: str = typer.Argument(..., show_default=False,),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Check if a firmware version is available for a given device type"""
     resp = cli.central.request(cli.central.check_firmware_available, device_type=device_type, firmware_version=version)

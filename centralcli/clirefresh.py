@@ -60,7 +60,7 @@ def token(
         if account_list:
             verified_account_list = []
             for account in account_list:
-                if account in config.defined_accounts:
+                if account in config.defined_workspaces:
                     verified_account_list += [account]
                 else:
                     console.print(f":warning:  Ignoring account {account} as it's not defined in the config.")
@@ -68,9 +68,9 @@ def token(
             if len(verified_account_list) != len(account_list):
                 console.print(f"Performing token refresh for {len(verified_account_list)} of {len(account_list)} provided accounts.")
 
-            account_list = [config.default_account,  *verified_account_list]
+            account_list = [config.default_workspace,  *verified_account_list]
         else:
-            account_list = [config.default_account,  *config.defined_accounts]
+            account_list = [config.default_workspace,  *config.defined_workspaces]
 
         async def refresh_multi(account_list: List[str]):
             success_list = await asyncio.gather(*[

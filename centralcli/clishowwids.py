@@ -25,7 +25,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import iden_meta  # noqa
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
-from centralcli.models import Wids
+from centralcli.models.wids import Wids
 
 app = typer.Typer()
 
@@ -118,7 +118,7 @@ def rogues(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show Detected Rogue APs"""
     resp = get_wids_response("rogue", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -158,7 +158,7 @@ def interfering(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show interfering APs"""
     resp = get_wids_response("interfering", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -198,7 +198,7 @@ def neighbors(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show Neighbor APs"""
     resp = get_wids_response("neighbor", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -238,7 +238,7 @@ def suspect(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show Suspected Rogue APs"""
     resp = get_wids_response("suspect", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -277,7 +277,7 @@ def all(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show All WIDS Classifications"""
     resp = get_wids_response("all", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -325,7 +325,7 @@ def callback(ctx: typer.Context):
             "pager": False,
             "debug": False,
             "default": None,
-            "account": cli.account,
+            "account": cli.workspace,
         }
         ctx.invoke(all, **kwargs)
 

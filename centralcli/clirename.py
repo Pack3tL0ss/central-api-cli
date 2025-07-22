@@ -35,7 +35,7 @@ def site(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """
     :office: [bright_green]Rename A Site.[/] :office:
@@ -54,7 +54,7 @@ def ap(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """
     [bright_green]Rename an Access Point[/]
@@ -76,7 +76,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """
     [green3]Rename a group.[/] [red]AOS8 Only use clone for AOS10 groups[/]

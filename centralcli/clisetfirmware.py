@@ -57,12 +57,12 @@ def compliance(
         show_default=False,
         formats=["%m/%d/%Y_%H:%M", "%d_%H:%M"],
         ),
-    allow_unsupported: bool = typer.Option(False, "--allow-unsupported", "-U", help="Allow Unsupported (custom) version."),
+    allow_unsupported: bool = typer.Option(False, "--allow-unsupported", "-u", help="Allow Unsupported (custom) version."),
     reboot: bool = typer.Option(False, "-R", help="Automatically reboot device after firmware download [green3](Only applies to MAS, others will reboot regardless)[/]", hidden=True),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Set firmware compiance
     """

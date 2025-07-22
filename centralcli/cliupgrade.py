@@ -41,7 +41,7 @@ def device(
     yes: int = typer.Option(0, "-Y", "-y", "--yes", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on a device
     """
@@ -105,7 +105,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices by group
 
@@ -178,7 +178,7 @@ def swarm(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices in an IAP cluster
     """

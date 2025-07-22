@@ -11,6 +11,8 @@ from rich.console import Console
 import logging
 import typer
 
+from . import utils
+
 
 log_colors = {
     "error": typer.colors.RED,
@@ -47,7 +49,7 @@ PYCENTRAL_SILENT_EXIT = [
 
 
 class MyLogger:
-    def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False):
+    def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | List[str] = None):
         self._DEBUG: bool = debug
         self.log_msgs: List[str] = []
         self.verbose: bool = verbose
@@ -58,7 +60,7 @@ class MyLogger:
         self._log: logging.Logger = self.get_logger()
         self.name: str = self._log.name
         self.show: bool = show  # Sets default log behavior (other than debug)
-        self._caption: List[str] = []  # Log messages will be logged and displayed in caption output
+        self._caption: List[str] = utils.listify(deprecation_warnings) or []  # Log messages will be logged and displayed in caption output
 
     def __getattr__(self, name: str) -> Any:
         if hasattr(self, "_log") and hasattr(self._log, name):

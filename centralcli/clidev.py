@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
 from pathlib import Path
 import sys
@@ -68,7 +69,7 @@ def no_config(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Configure [cyan]cencli[/] as if there is no config.
 
@@ -85,7 +86,7 @@ def no_config(
 def restore_config(
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Restore previously stashed [cyan]cencli[/] configuration file.
 
@@ -103,7 +104,7 @@ def no_cache(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Configure [cyan]cencli[/] as if there is no cache.
 
@@ -119,7 +120,7 @@ def no_cache(
 def restore_cache(
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Restore previously stashed [cyan]cencli[/] cache file.
 

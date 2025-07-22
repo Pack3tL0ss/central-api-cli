@@ -5,6 +5,7 @@ import importlib
 import sys
 from pathlib import Path
 from typing import List
+from .constants import SortGroupOptions
 
 import typer
 
@@ -33,7 +34,7 @@ def webhook(
     wid: str = cli.arguments.wid,
     default: bool = cli.options.default,
     debug: bool = cli.options.debug,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     resp = cli.central.request(cli.central.test_webhook, wid)
 
@@ -53,7 +54,7 @@ def method(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
     debugv: bool = typer.Option(
         False, "--debugv",
         envvar="ARUBACLI_VERBOSE_DEBUG",
@@ -191,6 +192,8 @@ def method(
 @app.command(hidden=True,)
 def command(
     import_file: Path = cli.arguments.import_file,
+    sort_by: SortGroupOptions = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
     yes: bool = cli.options.yes,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
@@ -201,7 +204,7 @@ def command(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    workspace: str = cli.options.workspace,
     debugv: bool = typer.Option(
         False, "--debugv",
         envvar="ARUBACLI_VERBOSE_DEBUG",
@@ -217,13 +220,30 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    ...
+    from .classic.client import Session
+    from . import config, cleaner
+    from .models import cache as models
+    from .classic.api.configuration import ConfigAPI
+    from .clishow import _build_groups_caption
+    session = Session(config.base_url)
+
+    api = ConfigAPI(session=session)
+    resp = session.request(api.get_all_groups)
+    if resp.ok:
+        groups = models.Groups(resp.output)
+        resp.output = groups.model_dump()
+
+    caption = _build_groups_caption(resp.output)
+
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
+
 
 
 @app.callback()
 def callback():
     """
-    Test Webhook or run a centralcli function directly (all Aruba Central API endpoints are available)
+    Test Webhook or run a centralcli function directly (all Aruba Central [dim italic](classic)[/] API endpoints are available)
     """
     pass
 

@@ -692,3 +692,55 @@ cron_weekly = """#!/usr/bin/env bash
     logger -t centralcli "Token Refreshed via cron" ||
     logger -t centralcli "Token Refresh returned error"
 """
+
+cencli_config_example = """CFG_VERSION: 2
+
+workspaces:
+  default:
+    cluster: internal
+    ssl_verify: true                                                  # Optional, Can be set globally or within a workspace.  Defaults to True if not provided anywhere.
+    glp:                                                              # --- GreenLake ---
+      client_id: 7268afzt-4d84-2b14-ac3c-4c3gcvra11a9                 # Refer to: https://developer.arubanetworks.com/new-central/docs/generating-and-managing-access-tokens
+      client_secret: 1349d637688a330a81d3423df566e7b0
+      base_url: https://global.api.greenlake.hpe.com                  # Optional The glp base url is the same for all public clusters, this is potentially required for VPC/On Prem deployments.
+    central:                                                          # --- New Central ---
+      base_url: https://internal.api.central.arubanetworks.com        # Optional, Can provide the 'cluster' at the parent level.  cencli can then determine the base_url
+    classic:                                                          # --- Classic Central ---
+      base_url: https://internal-apigw.central.arubanetworks.com      # Optional, Can provide the 'cluster' at the parent level.  cencli can then determine the base_url
+      client_id: CZ3r5b7ctiaHr6PaL3R00155dc048Fe                      # Refer to: https://developer.arubanetworks.com/central/docs/api-gateway
+      client_secret: jqXrs7lsf28557f2wADeIssOc001O3s
+      username: wade@example.com                                      # Optional, but allow cencli to create a new set of token if the current refresh token expires
+      password: somepassword                                          # Use 'cencli show cron' to see how to setup cron to automatically refresh the tokens once a week.
+      tokens:
+        access: M4wADeIsS0c00148KGipv1v09k4uB3cM                      # FYI: the tokens in the config become stale as soon as they are refreshed by cencli.  The refreshed tokens
+        refresh: s4lhIvwADeIsS0c00Lxlo7Llr0OURQMT                     #   are stored elsewhere in the cache.  This allows for an easy place to update them if needed.
+        webhook: 7RSaW8hZQkO1qVAqzPsE                                 # Port this system would listen on for webhooks from Aruba Central.  Only applies if optional extra 'hook-proxy' is installed.  See README
+        wss_key: ezkGbGd_really_long_key_blah_blah                    # Optional, but required to use -f option with 'cencli show logs -f' and 'cencli show audit logs -f'.  Streaming should be subscribed for Audit and Monitoring.
+      webhook:                                                        # This section only applies if optional extra 'hook-proxy' is installed.  See README
+        port: 9443                                                    # Optional, Port this system would listen on for webhooks from Aruba Central.  Only applies if optional extra 'hook-proxy' is installed.  See README
+        token: 7RSaW8hZQkO1qVAqzPsE                                   # Optional, you can put the token here, or under the tokens key.
+    other-workspace:                                                  # webhook proxy will listen on 9443 by default
+      cluster: us5
+      # ... Same format as above.  Repeat for any other workspaces you want to interact with
+
+# -- The following items are optional --
+ssl_verify: true      # Can be set globally or in a workspace config.  Workspace config takes precedence if set.  Defaults to True.
+debug: false          # Enable debug, for more logs/messages.  Default is False
+debugv: false         # Verbose debug.  Default is False
+cache_client_days: 90 # The local cache will store clients that have connected within the last 90 days.
+forget_ws_after: 90   # when using an alternate workspace via --ws myotherws.  If this is set, cencli will continue to use
+                      # myotherws workspace until no command has been issued for n minutes (90 in this case),
+                      # or until -d (use default) or --account some_other_ws is used
+
+                      # By default it will remember the last account used forever and only switch back to the default account when -d is used
+                      # Set to 0 to disable sticky account functionality.  (Would use default account unless --account <account-name> is provided.)
+
+                      # You can also set env var ARUBA_ACCOUNT to the workspace name configured in this file.
+
+dev_options:          # --- Developer Options ---
+  limit: 10           # Overrides the default pagination limit requested for each API call.  To test pagination/rate-limiting
+  sanitize: false     # Sanitize output (for video demo, animated GIF creation).
+  capture_raw: false  # Captures the raw response of all get commands in a common file.  So they can be used for automated testing.
+  # There are also hidden command line flags supported globally for these options
+  # --debug-limit --sanitize --capture-raw
+"""

@@ -41,7 +41,7 @@ def networks(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show all MPSK networks (SSIDs)
     """
@@ -70,7 +70,7 @@ def named(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show named MPSK definitions for a provided network (SSID)
     """

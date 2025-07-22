@@ -21,7 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import iden_meta
 from .cache import CacheClient
-from .models import Clients
+from .models.cache import Clients
 
 app = typer.Typer()
 
@@ -38,7 +38,7 @@ def all(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Disconnect all WLAN clients from an AP optionally for a specific SSID
 
@@ -64,7 +64,7 @@ def client(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Disconnect a WLAN client.
 

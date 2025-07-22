@@ -32,7 +32,8 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import DevTypes, StatusOptions, LLDPCapabilityTypes, LibAllDevTypes, InsightSeverityType
 from .objects import DateTime, ShowInterfaceFilters
-from .models import CloudAuthUploadResponse, Sites
+from .models.formatter import CloudAuthUploadResponse
+from .models.cache import Sites
 
 if TYPE_CHECKING:
     from .typedefs import CertType
@@ -113,6 +114,14 @@ vlan_modes = {
     3: "Trunk",
 }
 
+class radio_modes(Enum):
+    access = 0
+    mesh = 1
+    mesh_point = 2
+    monitor = 3
+    spectrum = 4
+
+
 _short_value = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
@@ -180,6 +189,8 @@ _short_value = {
     "model": lambda v: v.removeprefix("Aruba").replace(" switch", "").replace("Switch", "").replace(" Swch", "").replace(" Sw ", "").replace("1.3.6.1.4.1.14823.1.2.140", "AP-605H"),
     "device_claim_type": lambda v: None if v and v == "UNKNOWN" else v,
     "radio_name": lambda v: v.removeprefix("Radio "),
+    "ip_address_v6": lambda v: v if v and v != "::" else None,
+    "ip_v6_address": lambda v: v if v and v != "::" else None,
     # "enabled": lambda v: not v, # field is changed to "enabled"
     # "allowed_vlan": lambda v: str(sorted(v)).replace(" ", "").strip("[]")
 }
@@ -193,8 +204,8 @@ _short_key = {
     "public_ip_address": "public ip",
     "ip_address": "ip",
     "ip_addr": "ip",
-    "ip_address_v6": "ip (v6)",
-    "ip_v6_address": "ip (v6)",
+    "ip_address_v6": "ipv6",
+    "ip_v6_address": "ipv6",
     "macaddr": "mac",
     "mac_address": "mac",
     "switch_type": "type",
@@ -856,7 +867,6 @@ def get_devices(data: List[dict] | dict, *, verbosity: int = 0, output_format: T
         _ = verbosity_keys[0].pop(verbosity_keys[0].index("subscription_key"))
         if "client_count" in all_keys:
             _ = verbosity_keys[0].pop(verbosity_keys[0].index("client_count"))
-
 
     data = sort_result_keys(data)
 
@@ -2021,6 +2031,15 @@ def get_swarm_firmware_details(data: List[Dict[str, Any]]) -> List[Dict[str, Any
 
 def show_radios(data: List[Dict[str, str | int]]) -> List[Dict[str, str | int]]:
     key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
+    def pretty_mode(mode: int) -> str | int:
+        try:
+            mode: Enum = radio_modes(mode)
+            return mode.name
+        except ValueError:
+            return mode
+
+    global _short_value
+    _short_value["mode"] = lambda m: pretty_mode(m)
     data = simple_kv_formatter(data, key_order=key_order)
 
     return data

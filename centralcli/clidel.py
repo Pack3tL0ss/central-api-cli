@@ -37,7 +37,7 @@ def certificate(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     print(f"[bright_red]Delete[/] certificate [cyan]{name}[/]")
     if cli.confirm(yes):
@@ -56,7 +56,7 @@ def site(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     sites: List[CacheSite] = [cli.cache.get_site_identifier(s) for s in sites]
 
@@ -78,7 +78,7 @@ def label_(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Delete label(s)
 
@@ -94,7 +94,7 @@ def portal(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Delete portal(s)
 
@@ -129,7 +129,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     groups = [cli.cache.get_group_identifier(g) for g in groups]
     reqs = [cli.central.BatchRequest(cli.central.delete_group, g.name) for g in groups]
@@ -157,7 +157,7 @@ def wlan(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]")
@@ -173,7 +173,7 @@ def webhook(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Delete Webhook
 
@@ -194,7 +194,7 @@ def template(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     # allow unnecessary keyword group "cencli delete template NAME group GROUP"
     if group:
@@ -272,7 +272,7 @@ def device(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Delete device(s).
 
@@ -299,7 +299,7 @@ def guest(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Add a guest user to a configured portal"""
     portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)

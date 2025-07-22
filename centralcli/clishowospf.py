@@ -41,7 +41,7 @@ def neighbors(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show OSPF Neighbors for a device
     """
@@ -91,7 +91,7 @@ def interfaces(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show OSPF Interfaces for a device
     """
@@ -143,7 +143,7 @@ def area(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show OSPF area information for a device
     """
@@ -193,7 +193,7 @@ def database(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ):
     """Show OSPF database for a device
     """

@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 
 from __future__ import annotations
 
@@ -21,13 +21,14 @@ from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
 
-from centralcli import CentralApi, Response, config, constants, log, models, render, utils, BatchRequest
+from centralcli import CentralApi, Response, config, constants, log, render, utils, BatchRequest
 from centralcli.response import CombinedResponse
 from .objects import DateTime
+from .models import cache as models
+from functools import partial
 
 if TYPE_CHECKING:
     from tinydb.table import Table, Document
-
     from .config import Config
     from .typedefs import PortalAuthTypes, SiteData, MPSKStatus, CertType
 
@@ -575,7 +576,7 @@ class CacheClient(CentralObject):
     # mac, name, ip, type, network_port, connected_serial, connected_name, site, group, last_connected
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
-        super().__init__('group', data)
+        super().__init__('client', data)
         self.name: str = data["name"]
         self.ip: str = data["ip"]
         self.mac: str = data["mac"]
@@ -605,6 +606,10 @@ class CacheClient(CentralObject):
 
         return self._doc_id
 
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
     def get_group(self) -> CacheGroup:
         if self.cache is None:
             return None
@@ -614,10 +619,6 @@ class CacheClient(CentralObject):
         if self.cache is None:
             return None
         return self.cache.get_site_identifier(self.site)
-
-    @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
-        self._doc_id = doc_id
 
     def __rich__(self) -> str:
         return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s:[green_yellow]{self.site})[/]'
@@ -916,6 +917,8 @@ class CacheResponses:
         self._device_type = utils.listify(device_type)
 
 
+# TODO Verify, but the set_config class method should be able to be removed as ordering
+# changed in __init__
 class Cache:
     config: Config = None
 
@@ -934,6 +937,7 @@ class Cache:
         self.updated: list = []  # TODO change from list of methods to something easier
         self.central = central
         self.responses = CacheResponses()
+        self.get_label_identifier: CacheLabel | List[CacheLabel] = partial(self.get_name_id_identifier, "label")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
@@ -955,6 +959,8 @@ class Cache:
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
             self.GuestDB: Table = self.DevDB.table("guest")  # Only updated when show guests is ran or as needed
             self.CertDB: Table = self.DevDB.table("certs")  # Only updated when show certs is ran or as needed
+            if config.glp.ok:
+                self.SubDB: Table = self.DevDB.table("subscriptions")
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q: Query = Query()
             if data:
@@ -967,7 +973,6 @@ class Cache:
         if refresh:
             self.check_fresh(refresh)
 
-    # def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
     def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
         yield from self.all_tables
 
@@ -1300,7 +1305,7 @@ class Cache:
 
     @staticmethod
     def account_completion(ctx: typer.Context, args: List[str], incomplete: str):
-        for a in config.defined_accounts:
+        for a in config.defined_workspaces:
             if a.lower().startswith(incomplete.lower()):
                 yield a
 
@@ -2428,7 +2433,16 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match: List[CacheLabel] = self.get_label_identifier(
+        if incomplete.startswith("'"):
+            pfx = "'"
+        elif incomplete.startswith('"'):
+            pfx = '"'
+        else:
+            pfx = ""
+        if pfx:
+            incomplete = incomplete.lstrip(pfx)
+        match: List[CacheLabel] = self.get_name_id_identifier(
+            "label",
             incomplete,
             completion=True,
         )
@@ -2436,9 +2450,21 @@ class Cache:
         out = []
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
         if match:
+            match = [m for m in match if m.name not in args and str(m.id) not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name not in args:
-                    out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]
+                if m.name.lower().startswith(incomplete.lower()):
+                    if not pfx:
+                        out += [(m.name if " " not in m.name else f"'{m.name}'", m.help_text)]
+                    elif pfx == '"':
+                        out += [(f'"{m.name}"', m.help_text)]
+                    elif pfx == "'":
+                        out += [(f"'{m.name}'", m.help_text)]
+                elif str(m.id).startswith(incomplete):
+                    out += [(str(m.id), m.help_text)]
+
+
+                elif str(m.id).startswith(incomplete):
+                    out += [(m.id, m.help_text)]
 
         for m in out:
             yield m
@@ -2463,6 +2489,15 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
+        # econsole.print(f"{incomplete = }", end="")
+        if incomplete.startswith("'"):
+            pfx = "'"
+        elif incomplete.startswith('"'):
+            pfx = '"'
+        else:
+            pfx = ""
+        if pfx:
+            incomplete = incomplete.lstrip(pfx)
         match: List[CacheClient] = self.get_client_identifier(
             incomplete,
             completion=True,
@@ -2470,11 +2505,18 @@ class Cache:
         out = []
         args = args or []
         if match:
+            # econsole.print(match, end="")
             # remove clients that are already on the command line
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
+                # econsole.print(f"{c.name = } {incomplete = } {pfx = }")
                 if c.name.lower().startswith(incomplete.lower()):
-                    out += [(c.name, c.help_text)]
+                    if pfx == '"':
+                        out += [(f'"{c.name}"', c.help_text)]
+                    elif pfx == "'":
+                        out += [(f"'{c.name}'", c.help_text)]
+                    else:
+                        out += [(c.name if " " not in c.name else f"'{c.name}'", c.help_text)]
                 elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
                     out += [(c.mac, c.help_text)]
                 elif c.ip.startswith(incomplete):
@@ -3855,17 +3897,17 @@ class Cache:
             match = self.DevDB.search(
                 (self.Q.name == query_str)
                 | (self.Q.ip.test(lambda v: v and v.split("/")[0] == query_str))
-                | (self.Q.mac == utils.Mac(query_str).cols)
+                | (self.Q.mac == utils.Mac(query_str))
                 | (self.Q.serial == query_str)
             )
             if match:
                 Model = CacheDevice
 
-            # Inventory must be exact match expecting full serial numbers but will allow MAC if exact match
+            # Inventory must be exact match expecting full serial numbers MAC just needs to be the same effective MAC regardless of format
             if not match and include_inventory:
                 match = self.InvDB.search(
                     (self.Q.serial == query_str)
-                    | (self.Q.mac == utils.Mac(query_str).cols)
+                    | (self.Q.mac == utils.Mac(query_str))
                 )
                 if match:
                     Model = CacheInvDevice
@@ -3874,7 +3916,6 @@ class Cache:
             if not match:
                 match = self.DevDB.search(
                     (self.Q.name.test(lambda v: v.lower() == query_str.lower()))
-                    | self.Q.mac.test(lambda v: v.lower() == utils.Mac(query_str).cols.lower())
                     | self.Q.serial.test(lambda v: v.lower() == query_str.lower())
                 )
 
@@ -4194,7 +4235,8 @@ class Cache:
                     f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent
                 )
 
-    def get_label_identifier(
+    # TODO No longer used see attribute in initializer using functools.partial... can do for all where name and id are only valid fields
+    def _get_label_identifier(
         self,
         query_str: str,
         retry: bool = True,
@@ -4618,6 +4660,7 @@ class Cache:
         cache_updated = False
         Model = name_to_model.get(cache_name, CentralObject)
         retry = False if completion else retry
+
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
         elif not isinstance(query_str, str):

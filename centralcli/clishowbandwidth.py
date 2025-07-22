@@ -75,7 +75,7 @@ def ap(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show AP(s) bandwidth usage graph.
 
@@ -158,7 +158,7 @@ def switch(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show Bandwidth usage for a switch or a specific port on a switch.
 
@@ -208,7 +208,7 @@ def client(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show client bandwidth usage graph.
 
@@ -297,7 +297,7 @@ def uplink(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show bandwidth usage graph for a switch or gateway uplink
 
@@ -350,7 +350,7 @@ def wlan(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show bandwidth usage graph for a network/SSID
 

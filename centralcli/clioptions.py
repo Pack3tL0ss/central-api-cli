@@ -7,6 +7,7 @@ from rich.markup import escape
 from typing import Optional, Any, List, Type
 from collections.abc import Callable
 import click
+from .environment import env_var
 
 import typer
 
@@ -48,7 +49,7 @@ class CLIOptions:
         self.site_many: OptionInfo = typer.Option(None, help="Filter by Site(s)", metavar=iden_meta.site_many, autocompletion=cache.site_completion, show_default=False,)
         self.label: OptionInfo = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion,show_default=False,)
         self.label_many: OptionInfo = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion,show_default=False,)
-        self.debug: OptionInfo = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
+        self.debug: OptionInfo = typer.Option(False, "--debug", envvar=env_var.debug, help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
         self.debugv: OptionInfo = typer.Option(False, "--debugv", help="Enable Verbose Debug Logging", rich_help_panel="Common Options",)
         self.do_json: OptionInfo = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",)
         self.do_yaml: OptionInfo = typer.Option(False, "--yaml", is_flag=True, help="Output in YAML", show_default=False, rich_help_panel="Formatting",)
@@ -79,11 +80,12 @@ class CLIOptions:
             show_default=False,
             rich_help_panel="Formatting",
         )
-        self.default: OptionInfo = typer.Option(False, "-d", help="Use default central account", show_default=False, rich_help_panel="Common Options",)
-        self.account: OptionInfo = typer.Option(
-            "central_info",
-            envvar="ARUBACLI_ACCOUNT",
-            help="The Aruba Central Account to use (must be defined in the config)",
+        self.default: OptionInfo = typer.Option(False, "-d", help="Use default central workspace", show_default=False, rich_help_panel="Common Options",)
+        self.workspace: OptionInfo = typer.Option(
+            "default",
+            "--ws", "--workspace",
+            envvar=env_var.workspace,
+            help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace to use [dim italic](must be defined in the config)[/]",
             rich_help_panel="Common Options",
             autocompletion=cache.account_completion,
         )
@@ -219,10 +221,14 @@ class CLIOptions:
         resolve_path: bool = None,
         allow_dash: bool = None,
         path_type: None | Type[str] | Type[bytes] = None,
-        # Rich settings
-        rich_help_panel: str | None = None,
+        # Rich settings... set to False to disable
+        rich_help_panel: str | bool = None,
 
     ) -> OptionInfo:
+        """Same fingerprint as typer.Option
+
+        set rich_help_panel="Options" to force the default panel
+        """
         attr = getattr(self, option)
         kwargs = {
             "default": default,
@@ -274,7 +280,7 @@ class CLIOptions:
             "resolve_path": resolve_path,
             "allow_dash": allow_dash,
             "path_type": path_type,
-            # Rich settings
+            # Rich settings  ... Set to "Options" for the default panel
             "rich_help_panel": rich_help_panel,
         }
         kwargs = {k: v for k, v in kwargs.items() if v is not None}

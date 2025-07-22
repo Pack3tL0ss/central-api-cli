@@ -258,11 +258,11 @@ class CaasAPI(BuildCLI):
 
         url = "/caasapi/v1/exec/cmd"
 
-        if not config.customer_id:
+        if not config.classic.customer_id:
             typer.secho(f"customer_id attribute not found in {config.file}")
             raise typer.Exit(1)
         else:
-            params = {"cid": config.customer_id, key: group_dev}
+            params = {"cid": config.classic.customer_id, key: group_dev}
             json_data = {"cli_cmds": cli_cmds or []}
 
             return await self.central.post(url, params=params, json_data=json_data)

@@ -41,8 +41,9 @@ from centralcli.constants import (
 )
 
 from centralcli.strings import ImportExamples
-from centralcli.models import Groups, ImportSites, Labels
 from centralcli.cache import CentralObject
+from .models.cache import Groups, Labels
+from .models.imports import ImportSites
 
 # from centralcli.models import GroupImport
 examples = ImportExamples()
@@ -972,7 +973,7 @@ def deploy(
     yes: int = typer.Option(False, "-Y", "-y", count=True, help="Bypass confirmation prompts - Assume Yes.  Use multiples i.e. -yy -yyy to bypass each prompt in the deploy process (groups, sites, labels, devices).",),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch Deploy from import.
 
@@ -1005,7 +1006,7 @@ def add(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Perform batch Add operations using import data from file
     """
@@ -1119,7 +1120,7 @@ def delete(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Perform batch delete operations using import data from file.
 
@@ -1214,7 +1215,7 @@ def subscribe(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch subscribe devices
 
@@ -1250,7 +1251,7 @@ def unsubscribe(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch Unsubscribe devices
 
@@ -1333,7 +1334,7 @@ def rename(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Perform AP rename in batch from import file or automatically based on LLDP"""
     if show_example:
@@ -1416,7 +1417,7 @@ def update(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update per-ap-settings or ap-altitude (at AP level) in mass based on settings from import file
 
@@ -1455,7 +1456,7 @@ def move(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch move devices to any or all of group / site / label based on import data from file.
 
@@ -1493,7 +1494,7 @@ def archive(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch archive devices based on import data from file.
 
@@ -1540,7 +1541,7 @@ def unarchive(
     debug: bool = cli.options.debug,
     debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Batch unarchive devices based on import data from file.
 

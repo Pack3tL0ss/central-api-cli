@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import os
+from os import environ as env
 import subprocess
 import sys
 from pathlib import Path
@@ -25,24 +25,29 @@ clean_err_console = Console(emoji=False, stderr=True)
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import BatchRequest
+    from centralcli import (
+        BatchRequest, cli, cliadd, cliassign, clibatch, clicaas, clicancel,
+        clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
+        clirename, cliset, clishow, clitest, clitshoot, cliunassign,
+        cliupdate, cliupgrade, cliconvert, config, log, utils,
+    )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import BatchRequest
+        from centralcli import (
+            BatchRequest, cli, cliadd, cliassign, clibatch, clicaas, clicancel,
+            clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
+            clirename, cliset, clishow, clitest, clitshoot, cliunassign,
+            cliupdate, cliupgrade, cliconvert, config, log, utils,
+        )
     else:
         print(pkg_dir.parts)
         raise e
 
-from . import (  # NoQA
-    cli, cliadd, cliassign, clibatch, clicaas, clicancel,
-    clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
-    clirename, cliset, clishow, clitest, clitshoot, cliunassign,
-    cliupdate, cliupgrade, config, log, utils,
-)
-from .cache import CentralObject  # noqa
-from .constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
+from centralcli.cache import CentralObject  # noqa
+from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
+from centralcli.environment import env_var, env  #noqa
 
 iden = IdenMetaVars()
 
@@ -71,6 +76,7 @@ app.add_typer(cliset.app, name="set",)
 app.add_typer(cliexport.app, name="export",)
 app.add_typer(clicheck.app, name="check",)
 app.add_typer(clicancel.app, name="cancel",)
+app.add_typer(cliconvert.app, name="convert",)
 app.add_typer(clidev.app, name="dev", hidden=True)
 
 
@@ -127,7 +133,7 @@ def move(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Move device(s) to a defined group and/or site.
     """
@@ -168,7 +174,7 @@ def bounce(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Bounce interface(s) or PoE on interface(s) (Valid on switches)
 
@@ -203,7 +209,7 @@ def remove(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Remove a device from a site
     """
@@ -246,7 +252,7 @@ def reboot(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Reboot devices or swarms
 
@@ -291,7 +297,7 @@ def reset(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Reset overlay control connection (OTO/ORO)
     """
@@ -316,7 +322,7 @@ def blink(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     command = f'blink_led_{action.value}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
@@ -331,7 +337,7 @@ def nuke(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Reset a device to factory default, erase all configuration (Valid on ArubaOS-SW or IAP Clusters)
 
@@ -371,7 +377,7 @@ def save(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
@@ -383,7 +389,7 @@ def sync(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Sync/Refresh device config with Aruba Central
 
@@ -419,12 +425,12 @@ def start(
         "hook-proxy",
         help="See documentation for info on what each webhook receiver does",
     ),
-    port: int = typer.Option(config.wh_port, help="Port to listen on (overrides config value if provided)", show_default=True),
+    port: int = typer.Option(config.webhook.port, help="Port to listen on (overrides config value if provided)", show_default=True),
     collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", hidden=True),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     if config.deprecation_warning:  # TODO remove at 2.0.0+
         print(config.deprecation_warning)
@@ -491,7 +497,7 @@ def stop(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Stop WebHook Proxy (background process).
     """
@@ -547,7 +553,7 @@ def archive(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
 
@@ -586,7 +592,7 @@ def unarchive(
     serials: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Unacrchive devices
 
@@ -621,7 +627,7 @@ def enable(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Enable auto subscribe for service.
 
@@ -654,7 +660,7 @@ def disable(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Disable auto subscribe for service.
 
@@ -685,7 +691,7 @@ def renew_license(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Renew-Licenses on devices.
 
@@ -719,120 +725,95 @@ def renew_license(
     # i.e. Foundation-90/70xx vs foundation_70xx
 
 
-@app.command(short_help="convert j2 templates")
-def convert(
-    template: Path = typer.Argument(..., help="j2 template to convert", exists=True),
-    var_file: Path = typer.Argument(
-        None,
-        help="Optional variable file, will automatically look for file with same name as template and supported extension/format.",
-        exists=True,
-        ),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    account: str = cli.options.account,
-) -> None:
-    """Convert specified j2 template into final form based on variable file.
-
-    --var-file is optional, If not provided cencli will look in the same dir as the template
-    for a file with the same name and supported extension.
-
-    cencli supports most common extension for variable import:
-    '.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf'
-
-    """
-    if not var_file:
-        var_file = [
-            template.parent / f"{template.stem}{sfx}"
-            for sfx in config.valid_suffix
-            if Path.joinpath(template.parent, f"{template.stem}{sfx}").exists()
-        ]
-        if not var_file:
-            print(f":x: No variable file found matching template base-name [cyan]{template.stem}[/]")
-            print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
-            raise typer.Exit(1)
-        elif  len(var_file) > 1:
-            cli.exit(f"Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
-        else:
-            var_file = var_file[0]
-    final_config = utils.generate_template(template, var_file=var_file)
-    cli.display_results(data=final_config.splitlines(), outfile=outfile)
-
-
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
     # --raw and --debug-limit are honored and stripped out in init
     if ctx.resilient_parsing:
         config.is_completion = True
-    if not ctx.resilient_parsing:
-        version, account, debug, debugv, default, update_cache = None, None, None, None, None, None
-        for idx, arg in enumerate(sys.argv[1:]):
-            if idx == 0 and arg in ["-v", "-V", "--version"]:
-                version = True
-            if arg == "--debug":
-                debug = True
-            if arg == "--debugv":
-                debugv = True
-            elif arg == "-d":
+        return
+
+    # if not ctx.resilient_parsing:
+    version, workspace, debug, debugv, default, update_cache = None, None, None, None, None, None
+    for idx, arg in enumerate(sys.argv[1:]):
+        if idx == 0 and arg in ["-v", "-V", "--version"]:
+            version = True
+        if arg == "--debug":
+            debug = True
+        if arg == "--debugv":
+            debugv = True
+        elif arg == "-d":
+            default = True
+        elif arg in ["--ws", "--workspace"] and "-d" not in sys.argv:
+            workspace = sys.argv[idx + 2]  # sys.argv enumeration is starting at index 1 so need to adjust idx by 2 for next arg
+        elif arg == "-U":
+            update_cache = True
+        elif arg.startswith("-") and not arg.startswith("--"):  # -dU is allowed
+            if "d" in arg:
                 default = True
-            elif arg == "--account" and "-d" not in sys.argv:
-                account = sys.argv[idx + 2]  # sys.argv enumeration is starting at index 1 so need to adjust idx by 2 for next arg
-            elif arg == "-U":
+            if "U" in arg:
                 update_cache = True
-            elif arg.startswith("-") and not arg.startswith("--"):  # -dU is allowed
-                if "d" in arg:
-                    default = True
-                if "U" in arg:
-                    update_cache = True
 
-        account = account or os.environ.get("ARUBACLI_ACCOUNT")
-        debug = debug or os.environ.get("ARUBACLI_DEBUG", False)
+    workspace = workspace or env.workspace
+    debug = debug or env.debug
 
-        if version:
-            cli.version_callback(ctx)
-            raise typer.Exit(0)
-        if default:
-            if "--account " in str(sys.argv) and account not in ["central_info", "default"]:
-                err_console.print(f":warning:  Both [cyan]-d[/] and [cyan]--account[/] flag used.  Honoring [cyan]-d[/], ignoring account [cyan]{account}[/]")
-                account = config.default_account
-            cli.account_name_callback(ctx, account=config.default_account, default=True)
-        else:
-            cli.account_name_callback(ctx, account=account)
+    if version:
+        cli.version_callback(ctx)
+        cli.exit(code=0)
+    if default:
+        if ("--ws" in sys.argv or "--workspace" in sys.argv) and workspace != config.default_workspace:
+            ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
+            cli.econsole.print(f":warning:  Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
+            workspace = config.default_workspace
+        cli.workspace_name_callback(ctx, workspace=config.default_workspace, default=True)
+    else:
+        cli.workspace_name_callback(ctx, workspace=workspace)
 
-        if debug:
-            cli.debug_callback(ctx, debug=debug)
-        if debugv:
-            log.DEBUG = config.debug = log.verbose = config.debugv = debugv
-            _ = sys.argv.pop(sys.argv.index("--debugv"))
-        if update_cache:
-            cli.cache(refresh=True)
-            _ = sys.argv.pop(sys.argv.index("-U"))
-            # TODO can do cache update here once update is removed from all commands
-            pass
+    if debug:
+        cli.debug_callback(ctx, debug=debug)
+    if debugv:
+        log.DEBUG = config.debug = log.verbose = config.debugv = debugv
+        _ = sys.argv.pop(sys.argv.index("--debugv"))
+    if update_cache:
+        cli.econsole.print("Pretend I'm updating the cache...")
+        # cli.cache(refresh=True)
+        # _ = sys.argv.pop(sys.argv.index("-U"))
+        # TODO ensure cache update is removed from all commands as we are doing it here now
 
 
 @app.callback()
 def callback(
     # ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version.",),
-    debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    # debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
+    #                         #    callback=all_commands_callback),
+    # debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging", hidden=True,),
                             #    callback=all_commands_callback),
-    debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging", hidden=True,),
-                            #    callback=all_commands_callback),
-    default: bool = typer.Option(
-        False,
-        "-d",
-        is_flag=True,
-        help="Use default central account",
-        show_default=False,
-    ),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion,
-    ),
-    update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
+    # default: bool = typer.Option(
+    #     False,
+    #     "-d",
+    #     is_flag=True,
+    #     help="Use default central account",
+    #     show_default=False,
+    # ),
+    debug: bool = cli.options.get("debug", rich_help_panel="Options"),
+    debugv: bool = cli.options.get("debugv", hidden=True),
+    default: bool = cli.options.get("default", rich_help_panel="Options"),
+    # account: str = typer.Option(
+    #     "default",
+    #     envvar="ARUBACLI_ACCOUNT",
+    #     help="The Aruba Central Account to use (must be defined in the config)",
+    #     autocompletion=cli.cache.account_completion,
+    #     hidden=True
+    # ),
+    # workspace: str = typer.Option(
+    #     "default",
+    #     "-ws", "--workspace",
+    #     envvar="CENCLI_WORKSPACE",
+    #     help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace to use (must be defined in the config)",
+    #     autocompletion=cli.cache.account_completion,
+    # ),
+    workspace: str = cli.options.get("workspace", rich_help_panel="Options"),
+    # update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
+    update_cache: bool = cli.options.get("update_cache", lazy=True, callback=all_commands_callback)
 ) -> None:
     """
     Aruba Central API CLI.  A CLI for interacting with Aruba Central APIs.
@@ -845,7 +826,9 @@ def callback(
        - Useful if you want to see the same output in a different format or you want to output to file (--out <FILE>)
        - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
-    pass
+    ...
+    # if account != "default":
+    #     workspace = account if workspace == "default" else workspace
 
 
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')

@@ -15,6 +15,7 @@ dynamic_antenna_models = ["679"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete  # TODO make separate one without sdwan and refactor, won't be valid in most places
+SwitchTypes = Literal["cx", "sw"]
 DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
 EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
@@ -25,6 +26,97 @@ CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 LogType = Literal["event", "audit"]
 InsightSeverityType = Literal["high", "med", "low"]
+
+
+CLUSTER_URLS = {
+    "internal": {
+        "cnx": "https://internal.api.central.arubanetworks.com",
+        "classic": "https://internal-apigw.central.arubanetworks.com",
+        "aka": None
+    },
+    "us1": {
+        "cnx": "https://us1.api.central.arubanetworks.com",
+        "classic": "https://app1-apigw.central.arubanetworks.com",
+        "aka": "prod"
+    },
+    "us2": {
+        "cnx": "https://us2.api.central.arubanetworks.com",
+        "classic": "https://apigw-prod2.central.arubanetworks.com",
+        "aka": "central-prod2"
+    },
+    "us4": {
+        "cnx": "https://us4.api.central.arubanetworks.com",
+        "classic": "https://apigw-uswest4.central.arubanetworks.com",
+        "aka": "uswest4"
+    },
+    "us5": {
+        "cnx": "https://us5.api.central.arubanetworks.com",
+        "classic": "https://apigw-uswest5.central.arubanetworks.com",
+        "aka": "uswest5"
+    },
+    "us6": {
+        "cnx": "https://us6.api.central.arubanetworks.com",
+        "classic": "https://apigw-us-east-1.central.arubanetworks.com",
+        "aka": "us-east-1"
+    },
+    "eu1": {
+        "cnx": "https://de1.api.central.arubanetworks.com",
+        "classic": "https://eu-apigw.central.arubanetworks.com",
+        "aka": "de1"
+    },
+    "eu2": {
+        "cnx": "https://de2.api.central.arubanetworks.com",
+        "classic": "https://apigw-eucentral2.central.arubanetworks.com",
+        "aka": "de2"
+    },
+    "eu3": {
+        "cnx": "https://de3.api.central.arubanetworks.com",
+        "classic": "https://apigw-eucentral3.central.arubanetworks.com",
+        "aka": "de3"
+    },
+    "ca1": {
+        "cnx": "https://ca1.api.central.arubanetworks.com",
+        "classic": "https://app1-apigw.central.arubanetworks.com.cn",
+        "aka": "Canada-1 / starman"
+    },
+    "in1": {
+        "cnx": "https://in.api.central.arubanetworks.com",
+        "classic": "https://api-ap.central.arubanetworks.com",
+        "aka": "apac1 / India"
+    },
+    "jp1": {
+        "cnx": "https://jp1.api.central.arubanetworks.com",
+        "classic": "https://apigw-apaceast.central.arubanetworks.com",
+        "aka": "apac-east-1 / Japan"
+    },
+    "au1": {
+        "cnx": "https://au1.api.central.arubanetworks.com",
+        "classic": "https://apigw-apacsouth.central.arubanetworks.com",
+        "aka": "apac-south-1 / Australia"
+    },
+    "ae1": {
+        "cnx": "https://ae1.api.central.arubanetworks.com",
+        "classic": "https://apigw-uaenorth1.central.arubanetworks.com",
+        "aka": "uae-north1"
+    }
+}
+
+
+class ClusterName(str, Enum):
+    internal = "internal"
+    us1 = "us1"
+    us2 = "us2"
+    us4 = "us4"
+    us5 = "us5"
+    us6 = "us6"
+    eu1 = "eu1"
+    eu2 = "eu2"
+    eu3 = "eu3"
+    ca1 = "ca1"
+    in1 = "in1"
+    jp1 = "jp1"
+    au1 = "au1"
+    ae1 = "ae1"
 
 
 class AllDevTypes(str, Enum):
@@ -572,6 +664,9 @@ class ArgToWhat:
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
+
+    def _init_assign(self):
+        self.subscription = self.subscriptions = "subscription"
 
     def _init_cancel(self):
         self.device = self.devices = "device"

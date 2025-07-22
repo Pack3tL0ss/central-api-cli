@@ -12,12 +12,14 @@ from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
+from functools import wraps
 from rich import print
 from rich.console import Console
 from rich.status import Status
 from rich.text import Text
 from rich.markup import escape
 
+from .cnx.client import NewCentralBase
 if TYPE_CHECKING:
     from rich.style import StyleType
     from rich.console import RenderableType
@@ -43,7 +45,6 @@ DEFAULT_SPIN_TXT = "\U0001f4a9 DEFAULT_SPIN_TXT \U0001f4a9"  # should never see 
 err_console = Console(stderr=True)
 
 
-# TODO args should be expanded here *args simplifies instantiation
 class BatchRequest:
     def __init__(self, func: callable, *args, **kwargs) -> None:
         """Constructor object for for api requests.
@@ -405,7 +406,7 @@ class Response:
 
         # sanitize sensitive data for demos
         if config.sanitize and config.sanitize_file.is_file():
-            r = utils.Output().sanitize_strings(r)
+            r = render.Output().sanitize_strings(r)
 
         return f"{status_code}{r}"
 
@@ -565,16 +566,18 @@ class Response:
 class Session():
     def __init__(
         self,
-        auth: ArubaCentralBase = None,
+        auth: ArubaCentralBase | NewCentralBase = None,
+        base_url: StrOrURL = None,
         aio_session: ClientSession = None,
         silent: bool = True,
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
         self.auth = auth
+        if base_url and not base_url.endswith("/"):
+            base_url = f"{base_url}/"
+        self.base_url = base_url
         self._aio_session = aio_session
-        self.headers = DEFAULT_HEADERS
-        self.headers["authorization"] = f"Bearer {auth.central_info['token']['access_token']}"
-        self.ssl = auth.ssl_verify
+        self.ssl = config.ssl_verify
         self.req_cnt = 1
         self.requests: List[LoggedRequests] = []
         self.throttle: int = 0
@@ -584,19 +587,41 @@ class Session():
         self.BatchRequest = BatchRequest
         self.running_spinners: List[str] = []
 
+    # @property
+    # def aio_session(self):
+    #     # base_url = None if not hasattr(self, "base_url") else self.base_url
+    #     if not hasattr(self, "_aio_session") or not self._aio_session or self._aio_session.closed:
+    #         self._aio_session = ClientSession(base_url=self.base_url)
+
+    #     return self._aio_session
+
     @property
     def aio_session(self):
         if self._aio_session:
             if self._aio_session.closed:
-                return ClientSession()
+                self._aio_session = ClientSession(base_url=self.base_url)
+                return self._aio_session
             return self._aio_session
         else:
-            self._aio_session = ClientSession()
+            self._aio_session = ClientSession(base_url=self.base_url)
             return self._aio_session
 
     @aio_session.setter
     def aio_session(self, session: ClientSession):
         self._aio_session = session
+
+    async def close(self) -> None:
+        if self._aio_session is not None and not self._aio_session.closed:
+            await self._aio_session.close()
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        headers = DEFAULT_HEADERS
+        if self.auth is not None:
+            headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
+
+        return headers
+
 
     def _get_spin_text(self, spin_txt: str = None):
         if spin_txt:
@@ -653,10 +678,12 @@ class Session():
         for _ in range(0, 2):
             spin_txt_run = spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
 
-            token_msg = (
-                f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
-                f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
-            )
+            token_msg = ""
+            if auth is not None:
+                token_msg = (
+                    f"\n    access token: {auth.central_info.get('token', {}).get('access_token', {})}"
+                    f"\n    refresh token: {auth.central_info.get('token', {}).get('refresh_token', {})}"
+                )
             # TODO This DEBUG messasge won't hit for COP, need conditional to compare url to config.base_url
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
@@ -681,7 +708,8 @@ class Session():
                 self.spinner.start(self._get_spin_text(spin_txt_run), spinner="dots")
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
 
-                async with self.aio_session as client:
+                # async with self.aio_session as client:
+                async with ClientSession(base_url=self.base_url) as client:
                     resp = await client.request(
                         method=method,
                         url=url,
@@ -727,9 +755,23 @@ class Session():
                 if self.running_spinners:
                     self.spinner.start(self._get_spin_text(), spinner="dots")
 
+                # TODO need CNX retry here
+                # status code: 401
+                # Access Forbidden
+                # Unformatted response from Aruba Central API GW
+                # {
+                #     'httpStatusCode': 401,
+                #     'errorCode': 'HPE_GL_ERROR_FORBIDDEN',
+                #     'message': 'JWT verification failed, JWT verification failed for claims: Signature has expired',
+                #     'debugId': 'hHtoh-ahwJ6IwMT6Qp3OyhDNBWUB8LpFnWeNH30NkWse-SzdjJ-swA=='
+                # }
                 if "invalid_token" in resp.output:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
+                elif "errorCode" in resp.raw and "HPE_GL_ERROR" in resp.raw["errorCode"] and "signature has expired" in resp.raw.get("message", "").lower():
+                    spin_txt_retry =  "(retry after token refresh)"
+                    if hasattr(self.auth, "handle_expired_token"):
+                        self.auth.handle_expired_token()
                 elif resp.status == 500:
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
@@ -808,13 +850,13 @@ class Session():
 
         return paged_raw, paged_output
 
-    async def api_call(self, url: str, data: dict = None, json_data: Union[dict, list] = None,
+    async def api_call(self, url: StrOrURL, data: dict = None, json_data: Union[dict, list] = None,
                        method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
                        callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
         """Perform API calls and handle paging
 
         Args:
-            url (str): The API Endpoint URL
+            url (StrOrURL): The API Endpoint URL
             data (dict, optional): Data passed to aiohttp.ClientSession. Defaults to None.
             json_data (Union[dict, list], optional): passed to aiohttp.ClientSession. Defaults to None.
             method (str, optional): Request Method (POST, GET, PUT,...). Defaults to "GET".
@@ -835,9 +877,9 @@ class Session():
         offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
 
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
-        if params and params.get("limit") and config.limit:
-            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.limit}')
-            params["limit"] = config.limit
+        if params and params.get("limit") and config.dev_options.limit:
+            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.dev_options.limit}')
+            params["limit"] = config.dev_options.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
@@ -892,6 +934,7 @@ class Session():
                     # Handle failures during batch execution
                     if not successful and failures:
                         log.error(f"Error returned during batch {method} calls to {url}. Stopping execution.", show=True, caption=True)
+                        await self.close()
                         return failures
                     elif failures:
                         log_sfx = "" if len(failures) > 1 else f"?{offset_key}={failures[-1].url.query.get(offset_key)}&limit={failures[-1].url.query.get('limit')}..."
@@ -937,6 +980,7 @@ class Session():
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
 
+        await self.close()
         return r
 
     def _refresh_token(self, token_data: dict | List[dict], silent: bool = False) -> bool:
@@ -1149,52 +1193,65 @@ class Session():
         """
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail, retry_failed=retry_failed))
 
+    def build_url(func):
+        @wraps(func)
+        def wrapper(self: Session, url: StrOrURL, *args, **kwargs):
+            url = url if url.startswith("http") or self.base_url is not None else self.auth.central_info["base_url"] + url
+            return func(self, url, *args, **kwargs)
+
+        return wrapper
+
+    @build_url
     async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response:
-        f_url = url if url.startswith("http") else self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, params=params, headers=headers, count=count, **kwargs)
+        return await self.api_call(url, params=params, headers=headers, count=count, **kwargs)
 
+    @build_url
     async def post(
-        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
-    ) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        if json_data:
-            json_data = self.strip_none(json_data)
-        return await self.api_call(
-            f_url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
-        )
-
-    async def put(
-        self, url, params: dict = {}, payload: dict = None, json_data: Union[dict, list] = None, headers: dict = None, **kwargs
-    ) -> Response:
-
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(
-            f_url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs
-        )
-
-    async def patch(self, url, params: dict = {}, payload: dict = None,
-                    json_data: Union[dict, list] = None, headers: dict = None, **kwargs) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, method="PATCH", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
-
-    async def delete(
         self,
-        url,
+        url: StrOrURL,
         params: dict = {},
         payload: dict = None,
         json_data: Union[dict, list] = None,
         headers: dict = None,
         **kwargs
     ) -> Response:
-        f_url = self.auth.central_info["base_url"] + url
-        params = self.strip_none(params)
-        return await self.api_call(f_url, method="DELETE", data=payload,
-                                   json_data=json_data, params=params, headers=headers, **kwargs)
+        return await self.api_call(url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
+
+    @build_url
+    async def put(
+        self,
+        url: StrOrURL,
+        params: dict = {},
+        payload: dict = None,
+        json_data: Union[dict, list] = None,
+        headers: dict = None,
+        **kwargs
+    ) -> Response:
+        return await self.api_call(url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
+
+    @build_url
+    async def patch(
+        self,
+        url: StrOrURL,
+        params: dict = {},
+        payload: dict = None,
+        json_data: Union[dict, list] = None,
+        headers: dict = None,
+        **kwargs
+    ) -> Response:
+        return await self.api_call(url, method="PATCH", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
+
+    @build_url
+    async def delete(
+        self,
+        url: StrOrURL,
+        params: dict = {},
+        payload: dict = None,
+        json_data: Union[dict, list] = None,
+        headers: dict = None,
+        **kwargs
+    ) -> Response:
+        return await self.api_call(url, method="DELETE", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
 
 class CombinedResponse(Response):

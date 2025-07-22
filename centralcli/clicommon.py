@@ -17,7 +17,7 @@ from rich import print
 import json
 from importlib.metadata import version, PackageNotFoundError
 from importlib.util import find_spec
-import os
+# from os import environ as env
 import pendulum
 from datetime import datetime
 import time
@@ -43,8 +43,9 @@ from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
 from centralcli.constants import flex_dual_models, dynamic_antenna_models
-from .models import APUpdates, APUpdate
+from .models.common import APUpdates, APUpdate
 from .ws_client import follow_audit_logs, follow_event_logs
+from .environment import env_var, env
 
 
 if TYPE_CHECKING:
@@ -145,8 +146,8 @@ class APRequestInfo:
 
 
 class CLICommon:
-    def __init__(self, account: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
-        self.account = account
+    def __init__(self, workspace: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
+        self.workspace = workspace
         self.cache = cache
         self.central = central
         self.raw_out = raw_out
@@ -171,9 +172,9 @@ class CLICommon:
         ask = Prompt(prompt, console=console, password=True, show_default=False, show_choices=False)
         _ = ask()
 
-    class AcctMsg:
-        def __init__(self, account: str = None, msg: MsgType = None) -> None:
-            self.account = account
+    class WorkSpaceMsg:
+        def __init__(self, workspace: str = None, msg: MsgType = None) -> None:
+            self.workspace = workspace
             self.msg = msg
 
         def __repr__(self) -> str:
@@ -183,40 +184,40 @@ class CLICommon:
             if self.msg and hasattr(self, self.msg):
                 return getattr(self, self.msg)
             else:
-                return self.initial if not os.environ.get("ARUBACLI_ACCOUNT") else self.envvar
+                return self.initial if not env.workspace else self.envvar
 
         def __call__(self) -> str:
             return self.__str__()
 
         @property
         def envvar(self):
-            return f'[magenta]Using Account[/]: [cyan]{self.account}[/] [italic]based on env var[/] [dark_green]ARUBACLI_ACCOUNT[/]'
+            return f'[magenta]Using Workspace[/]: [cyan]{self.workspace}[/] [italic]based on env var[/] [dark_green]{env_var.workspace}[/]'
 
         @property
         def initial(self):
             msg = (
-                f'[magenta]Using Account[/]: [cyan]{self.account}[/].\n'
-                f'[bright_red blink]Account setting is sticky.[/]  '
-                f'[cyan]{self.account}[/] [magenta]will be used for subsequent commands until[/]\n'
-                f'[cyan]--account <account name>[/] or [cyan]-d[/] (revert to default). is used.\n'
+                f'[magenta]Using Workspace[/]: [cyan]{self.workspace}[/].\n'
+                f'[bright_red blink]Workspace setting is sticky.[/]  '
+                f'[cyan]{self.workspace}[/] [magenta]will be used for subsequent commands until[/]\n'
+                f'[cyan]--ws[/]|[cyan]--workspace[/] [dark_olive_green2]<workspace name>[/] or [cyan]-d[/] (revert to default workspace). is used.\n'
             )
             return msg
 
         @property
         def previous(self):
             return (
-                f'[magenta]Using previously specified account[/]: [cyan blink]{self.account}[/]'
-                f'\n[magenta]Use[/] [cyan]--account <account name>[/] [magenta]to switch to another account.[/]'
-                f'\n    or [cyan]-d[/] [magenta]flag to revert to default account[/].'
+                f'[magenta]Using previously specified workspace[/]: [cyan blink]{self.workspace}[/]'
+                f'\n[magenta]Use[/] [cyan]--ws[/]|[cyan]--workspace[/] [dark_olive_green2]<workspace name>[/] [magenta]to switch to another workspace.[/]'
+                f'\n    or [cyan]-d[/] [magenta]flag to revert to default workspace[/].'
             )
 
         @property
         def forgot(self):
-                return ":information:  Forget option set for account, and expiration has passed.  [bright_green]reverting to default account\n[/]"
+                return ":information:  Forget option set for workspace, and expiration has passed.  [bright_green]reverting to default workspace\n[/]"
 
         @property
         def will_forget(self):
-            will_forget_msg = "[magenta]Forget options is configured, will revert to default account[/]\n"
+            will_forget_msg = "[magenta]Forget options is configured, will revert to default workspace[/]\n"
             will_forget_msg = f"{will_forget_msg}[cyan]{config.forget}[/][magenta] mins after last command[/]\n"
             return will_forget_msg
 
@@ -226,17 +227,17 @@ class CLICommon:
 
         @property
         def previous_short(self):
-            return f":information:  Using previously specified account: [bright_green]{self.account}[/].\n"
+            return f":information:  Using previously specified workspace: [bright_green]{self.workspace}[/].\n"
 
-    def account_name_callback(self, ctx: typer.Context, account: str, default: bool = False) -> str:
-        """Responsible for account messaging.  Actual account is determined in config.
+    def workspace_name_callback(self, ctx: typer.Context, workspace: str | None, default: bool = False) -> str:
+        """Responsible for workspace messaging.  Actual workspace is determined in config.
 
-        Account has to be collected prior to CLI for completion to work specific to the account.
+        Workspace has to be collected prior to CLI for completion to work specific to the workspace.
 
         Args:
             ctx (typer.Context): Typer context
-            account (str): account name.  Will only have value if --account flag was used.
-                Otherwise we use the default account, or envvar, or the last account (if forget timer not expired.)
+            workspace (str): workspace name.  Will only have value if --ws|--workspace flag was used.
+                Otherwise we use the default workspace, or envvar, or the last workspace (if forget timer not expired.)
             default (bool, optional): If default flag was used to call this func. Defaults to False.
 
         Raises:
@@ -246,96 +247,95 @@ class CLICommon:
             str: account name
         """
         if ctx.resilient_parsing:  # tab completion, return without validating, so does use of "test method" command
-            return account
+            return workspace
 
-        # dev commands that change files, we don't need to verify the account.
+        # dev commands that change files, we don't need to verify the workspace.
         if sys.argv[1:] and sys.argv[1] == "dev":
-            return account
+            return workspace
 
-        # cencli test method requires --account when using non default, we do not honor forget_account_after
+        # cencli test method requires --ws when using non default, we do not honor forget_account_after
         if " ".join(sys.argv[1:]).startswith("test method"):
-            if account:
-                self.econsole.print(f":information:  Using account [bright_green]{account}[/]\n",)
-                return account
+            if workspace:
+                self.econsole.print(f":information:  Using workspace [bright_green]{workspace}[/]\n",)
+                return workspace
             else:
-                return "default" if "default" in config.data else "central_info"
+                return config.default_workspace
 
-        account = account or config.default_account  # account only has value if --account flag is used.
+        workspace = workspace or config.default_workspace  # workspace only has value if --ws flag is used.
 
         if default:  # They used the -d flag
-            self.econsole.print(":information:  [bright_green]Using default central account[/]\n",)
-            if config.sticky_account_file.is_file():
-                config.sticky_account_file.unlink()
-            if account in config.data:
-                return account
-            elif "default" in config.data:
-                return "default"
+            self.econsole.print(":information:  [bright_green]Using default central workspace[/]\n",)
+            if config.sticky_workspace_file.is_file():
+                config.sticky_workspace_file.unlink()
+            if workspace in config.defined_workspaces:
+                return workspace
+            return config.default_workspace
 
         # -- // sticky last account messaging account is loaded in config.py \\ --
-        elif account in ["central_info", "default"]:
-            if config.last_account:
+        elif workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
+            if config.last_workspace:
                 # last account messaging.
                 if config.forget is not None:
-                    if config.last_account_expired:
-                        msg = self.AcctMsg(account)
+                    if config.last_workspace_expired:
+                        msg = self.WorkSpaceMsg(workspace)
                         self.econsole.print(msg.forgot)
-                        if config.sticky_account_file.is_file():
-                            config.sticky_account_file.unlink()
+                        if config.sticky_workspace_file.is_file():
+                            config.sticky_workspace_file.unlink()
 
                     else:
-                        account = config.last_account
-                        msg = self.AcctMsg(account)
-                        if not config.last_account_msg_shown:
-                            clean_console.print(msg.previous_will_forget)
-                            config.update_last_account_file(account, config.last_cmd_ts, True)
+                        workspace = config.last_workspace
+                        msg = self.WorkSpaceMsg(workspace)
+                        if not config.last_workspace_msg_shown:
+                            self.econsole.print(msg.previous_will_forget)
+                            config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
                         else:
                             self.econsole.print(msg.previous_short)
 
                 else:
-                    account = config.last_account
-                    msg = self.AcctMsg(account)
-                    if not config.last_account_msg_shown:
-                        clean_console.print(msg.previous)
-                        config.update_last_account_file(account, config.last_cmd_ts, True)
+                    workspace = config.last_workspace
+                    msg = self.WorkSpaceMsg(workspace)
+                    if not config.last_workspace_msg_shown:
+                        self.econsole.print(msg.previous)
+                        config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
                     else:
                         self.econsole.print(msg.previous_short)
 
-        elif account in config.data:
-            if account == os.environ.get("ARUBACLI_ACCOUNT", ""):
-                msg = self.AcctMsg(account)
-                clean_console.print(msg.envvar)
+        elif workspace in config.defined_workspaces:
+            if workspace == (env.workspace or ""):
+                msg = self.WorkSpaceMsg(workspace)
+                self.econsole.print(msg.envvar)
             elif config.forget is not None and config.forget > 0:
-                clean_console.print(self.AcctMsg(account).initial)
+                self.econsole.print(self.WorkSpaceMsg(workspace).initial)
             # No need to print account msg if forget is set to zero
 
 
 
         if config.valid:
-            return account
+            return workspace
         else:  # -- Error messages config invalid or account not found in config --
             _def_msg = False
             self.econsole.print(
-                f":warning:  [bright_red]Error:[/] The specified account: [cyan]{config.account}[/] is not defined in the config @\n"
+                f":warning:  [bright_red]Error:[/] The specified workspace: [cyan]{config.workspace}[/] is not defined in the config @\n"
                 f"  {config.file}\n"
             )
 
-            if "central_info" not in config.data and "default" not in config.data:
+            if "default" not in config.defined_workspaces:
                 _def_msg = True
                 self.econsole.print(
-                    ":warning:  [cyan]central_info[/] is not defined in the config.  This is the default when not overridden by\n"
-                    "--account flag or [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
+                    ":warning:  [cyan]default[/] workspace is not defined in the config.  This is the default when not overridden by\n"
+                    f"--ws|--workspace flag or [cyan]{env_var.workspace}[/] environment variable.\n"
                 )
 
-            if account not in ["central_info", "default"]:
-                if config.defined_accounts:
-                    clean_console.print(f"[bright_green]The following accounts are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_accounts)}[reset]\n")
+            if workspace != "default":
+                if config.defined_workspaces:
+                    clean_console.print(f"[bright_green]The following workspaces are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_workspaces)}[reset]\n")
                     if not _def_msg:
                         clean_console.print(
-                            f"The default account [cyan]{config.default_account}[/] is used if no account is specified via [cyan]--account[/] flag.\n"
-                            "or the [cyan]ARUBACLI_ACCOUNT[/] environment variable.\n"
+                            f"The default workspace [cyan]{config.default_workspace}[/] is used if no workspace is specified via [cyan]--ws[/]|[cyan]--workspace[/] flag.\n"
+                            f"or the [cyan]{env_var.workspace}[/] environment variable.\n"
                         )
 
-            raise typer.Exit(code=1)
+            self.exit()
 
     def version_callback(self, ctx: typer.Context | None = None,):
         if ctx is not None and ctx.resilient_parsing:  # tab completion, return without validating
@@ -377,10 +377,10 @@ class CLICommon:
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 
-        if default and config.sticky_account_file.is_file():
+        if default and config.sticky_workspace_file.is_file():
             emoji_console = Console()
             emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
-            config.sticky_account_file.unlink()
+            config.sticky_workspace_file.unlink()
             return default
 
     @staticmethod
@@ -422,16 +422,16 @@ class CLICommon:
         do_json: bool = False, do_yaml: bool = False, do_csv: bool = False, do_table: bool = False, default: str = "rich"
     ) -> TableFormat:
         """Simple helper method to return the selected output format type (str)"""
+        if do_yaml:
+            return "yaml"
         if do_json:
             return "json"
-        elif do_yaml:
-            return "yaml"
-        elif do_csv:
+        if do_csv:
             return "csv"
-        elif do_table:
+        if do_table:
             return "rich" if default != "rich" else "tabulate"
-        else:
-            return default
+
+        return default
 
     def write_file(self, outfile: Path, outdata: str) -> None:
         """Output data to file
@@ -549,21 +549,33 @@ class CLICommon:
 
         return data if not reverse else data[::-1], caption
 
+
     @staticmethod
-    def _add_captions_from_cleaner(caption: str) -> str:
-        """Need to append any captions added from cleaners.
+    def _update_captions(caption: List[str] | str, resp: Response | List[Response] = None, suppress_rl: bool = False) -> Tuple[str, str | None]:
+        resp = utils.listify(resp)
+        if isinstance(caption, list):
+            caption = "\n ".join(caption)
 
-        TODO make more elegant.  Redesign to remove the need for this.
-        """
-        if not log.caption:
-            return caption
+        caption = "" if not caption else f"{caption}\n"
+        if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji # TODO see if table has option to only do emoji in caption
+            _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
+            if resp is not None and len(resp) > 1 and ":warning:" in log.caption:
+                caption = f'{caption}[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
+            else:
+                caption = f'{caption}{_log_caption}'
 
-        caption = caption.splitlines()
-        _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")
-        new_captions = [f" {c.lstrip()}" for c in _log_caption.splitlines() if c.strip() not in [cap.strip() for cap in caption]]
-        rl_str = [] if not caption else [caption.pop(-1)]
-        caption = [*caption, *new_captions, *rl_str]
-        return "\n".join(caption)
+        rl_str = None
+        if resp is not None and not suppress_rl:
+            try:
+                last_rl = sorted(resp, key=lambda r: r.rl)
+                if last_rl:
+                    rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
+                    caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
+            except Exception as e:
+                rl_str = ""
+                log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}", show=True)
+
+        return caption, rl_str
 
     def _display_results(
         self,
@@ -594,7 +606,6 @@ class CLICommon:
             with clean_console.status("Cleaning Output..."):
                 _start = time.perf_counter()
                 data = cleaner(data, **cleaner_kwargs)
-                caption = self._add_captions_from_cleaner(caption)
                 data = utils.listify(data)
                 _duration = time.perf_counter() - _start
                 log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
@@ -609,7 +620,7 @@ class CLICommon:
             "tablefmt": tablefmt,
             "title": title,
             "caption": caption,
-            "account": None if config.account in ["central_info", "default"] else config.account,
+            "account": None if config.workspace in ["central_info", "default"] else config.workspace,
             "config": config,
             "output_by_key": output_by_key,
             "group_by": group_by,
@@ -629,7 +640,7 @@ class CLICommon:
 
         # if "Limit:" not in outdata and caption is not None and cleaner is not None and cleaner.__name__ != "parse_caas_response":
         #     print(caption)
-        if caption and tablefmt != "rich":
+        if caption and tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
             cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
         if outfile and outdata:
@@ -697,34 +708,13 @@ class CLICommon:
             fold_cols (Union[List[str], str], optional): columns that will be folded (wrapped within the same column). Applies to tablfmt=rich. Defaults to [].
             cleaner (callable, optional): The Cleaner function to use.
         """
-        if isinstance(caption, list):
-            caption = "\n ".join(caption)
+        caption, rl_str = self._update_captions(caption, resp=resp, suppress_rl=suppress_rl)
+
         if resp is not None:
             resp = utils.listify(resp)
 
             if self.raw_out:
                 tablefmt = "raw"
-
-
-            caption = "" if not caption else f"{caption}\n"
-            if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji
-                # TODO see if table has option to only do emoji in caption
-                _log_caption = log.caption.replace(":warning:", "\u26a0").replace(":information:", "\u2139")  # warning ⚠, information: ℹ
-                if len(resp) > 1 and ":warning:" in log.caption:
-                    caption = f'{caption}[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
-                else:
-                    caption = f'{caption}{_log_caption}'
-
-            # update caption with rate limit
-            if not suppress_rl:
-                try:
-                    last_rl = sorted(resp, key=lambda r: r.rl.remain_day)
-                    if last_rl:
-                        rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
-                        caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
-                except Exception as e:
-                    rl_str = ""
-                    log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}")
 
             for idx, r in enumerate(resp):
                 try:
@@ -749,7 +739,7 @@ class CLICommon:
                 fg = "bright_green" if r else "red"
 
                 # last condition below and after this block is for aiops insight details where raw["success"] is bool, but can't rely on that being the case elsewhere.  So converting to str to avoid potential errors elsewhere.
-                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")) == "False")]
+                conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")).capitalize() == "False")]
                 if any(conditions):
                     if isinstance(title, list) and len(title) == len(resp):
                         print(title[idx])
@@ -760,7 +750,7 @@ class CLICommon:
                         print(f" [{fg}]Response[reset]:")
 
 
-                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")) == "False")]
+                conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")).capitalize() == "False")]
                 if any(conditions):
                     # raw output (unformatted response from Aruba Central API GW)
                     if tablefmt in ["raw", "clean"]:
@@ -793,12 +783,13 @@ class CLICommon:
                     # Success
                     else:
                         if not r.url.path == "/caasapi/v1/exec/cmd":
-                            clean_console.print(r)
+                            self.console.print(r, emoji=False)
                         else:
-                            clean_console.print(Text.from_ansi(clean.parse_caas_response(r.output)))  # TODO still need to covert everything from cleaners to rich MarkUp so we can use rich print consistently vs typer.echo
+                            self.console.print(Text.from_ansi(clean.parse_caas_response(r.output)), emoji=False)  # TODO still need to covert everything from cleaners to rich MarkUp so we can use rich print consistently vs typer.echo
                             # TODO make __rich__ renderable method in Response object with markups
 
-                    if idx + 1 == len(resp):
+                    # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
+                    if rl_str and idx + 1 == len(resp):
                         if caption.replace(rl_str, "").lstrip():
                             _caption = caption.replace(rl_str, "") if r.output else f'  {render.unstyle(caption.replace(rl_str, "")).strip()}'
                             if not r.output:  # Formats any caption directly under Empty Response msg
@@ -830,7 +821,7 @@ class CLICommon:
             if exit_on_fail and not all([r.ok for r in resp]):
                 if cache_update_pending:
                     self.econsole.print(":warning:  [italic]Cache update skipped due to failed API response(s)[/].")
-                raise typer.Exit(1)
+                self.exit(code=1)
 
         elif data:
             self._display_results(
@@ -1836,6 +1827,7 @@ class CLICommon:
 
         Args:
             default_txt (str): The default value to display in the help text.  Do not include the word 'default: '
+            help_type (Literal["default", "requires"], optional): Impacts the coloring/format of the help_block. Defaults to "default".
 
         Returns:
             str: Formatted default text.  i.e. [default: some value] (with color markups)

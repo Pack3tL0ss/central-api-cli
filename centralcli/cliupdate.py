@@ -75,7 +75,7 @@ def template(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     if group:
         group = cli.cache.get_group_identifier(group).name
@@ -128,7 +128,7 @@ def variables(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     serial = dev.serial
@@ -192,7 +192,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
 
@@ -290,7 +290,7 @@ def config_(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update group or device level config (ap or gw).
     """
@@ -357,7 +357,7 @@ def cp_cert(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update the Captive Portal certificate for APs at the group level
 
@@ -406,7 +406,7 @@ def swarm(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update AOS8 IAP swarm settings
 
@@ -497,7 +497,7 @@ def ap(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update per-ap-settings (ap env) and/or add/update gps ap-altitude to ap level config
 
@@ -552,7 +552,7 @@ def webhook(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update webhook details
 
@@ -595,7 +595,7 @@ def site(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """
     Update details for an existing site.
@@ -675,7 +675,7 @@ def wlan(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update configuration options of an existing WLAN/SSID
     """
@@ -784,7 +784,7 @@ def guest(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Update a previously created guest account"""
     if disable and enable:

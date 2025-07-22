@@ -68,7 +68,7 @@ def bulk_edit(
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                callback=cli.workspace_name_callback),
 ) -> None:
     caasapi = caas.CaasAPI(central=cli.central)
     cmds = caasapi.build_cmds(file=input_file)
@@ -104,7 +104,7 @@ def add_vlan(
     account: str = typer.Option("central_info",
                                 envvar="ARUBACLI_ACCOUNT",
                                 help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.account_name_callback),
+                                callback=cli.workspace_name_callback),
 ) -> None:
     caasapi = caas.CaasAPI(central=cli.central)
     cmds = []
@@ -131,7 +131,7 @@ def import_vlan(
     file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Add VLAN from stored_tasks file.
 
@@ -173,7 +173,7 @@ def caas_batch(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Run Supported caas commands providing parameters via stored-tasks file
 
@@ -293,7 +293,7 @@ def send_cmds(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Send commands to gateway(s) (group or device level)
 

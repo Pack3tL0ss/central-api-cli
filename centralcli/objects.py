@@ -206,7 +206,12 @@ class Encoder(JSONEncoder):
     """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
     def default(self, obj):
-        return obj if not isinstance(obj, DateTime) and not isinstance(obj, Path) else str(obj)
+        if isinstance(obj, DateTime) or isinstance(obj, Path):
+            return str(obj)
+        elif hasattr(obj, "as_dict"):
+            return obj.as_dict
+        else:
+            return obj
 
 class ShowInterfaceFilters:
     def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):

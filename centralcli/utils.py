@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import json
@@ -103,6 +103,13 @@ class Mac(Convert):
 
     def __bool__(self):
         return self.ok
+
+    def __eq__(self, value):
+        other = Convert(value)
+        return other.dec == self.dec
+
+    def __hash__(self):
+        return self.dec
 
 
 class Utils:
@@ -342,11 +349,12 @@ class Utils:
         Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
         """
         console = console or Console()
+        econsole = Console(stderr=True)
         def abort():
-            console.print(":warning:  [red]Aborted[/]", emoji=True)
-            raise typer.Exit(1)
+            econsole.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
+            sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
 
-        choices = choices if choices is not None and "abort" in choices else ["abort", *choices]
+        choices = choices if choices is None or "abort" in choices else ["abort", *choices]
 
         try:
             choice = Prompt.ask(

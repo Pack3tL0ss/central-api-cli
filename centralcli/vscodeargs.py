@@ -3,7 +3,7 @@ import sys
 import logging
 
 
-debug = True if "--debug" in str(sys.argv) else False
+debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
 fmt_str = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
 date_str = "%m/%d/%Y %I:%M:%S %p"
 logging.basicConfig(

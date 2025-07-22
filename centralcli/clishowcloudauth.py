@@ -40,7 +40,7 @@ def registered_macs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show Cloud-Auth MAC registrations.
     """
@@ -80,7 +80,7 @@ def upload(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     """Show Cloud-Auth Upload Status.
 

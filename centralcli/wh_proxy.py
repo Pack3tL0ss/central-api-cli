@@ -217,8 +217,8 @@ def _batch_resp_all_ok(responses: List[Response]) -> bool:
 
 
 def get_current_branch_state():
-    if config.account not in ["central_info", "default"]:
-        log.info(f"hook_proxy is using alternate account '{config.account}'", show=True)
+    if config.workspace not in ["central_info", "default"]:
+        log.info(f"hook_proxy is using alternate account '{config.workspace}'", show=True)
     _reqs = [
         central.BatchRequest(central.get_branch_health),
         central.BatchRequest(central.get_devices, "gateways"),
@@ -477,7 +477,7 @@ if __name__ == "__main__":
     else:
         COLLECT = False
 
-    port = config.wh_port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
+    port = config.webhook.port if len(sys.argv) == 1 or not sys.argv[1].isdigit() else int(sys.argv[1])
     _ = get_current_branch_state()
     try:
         uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")

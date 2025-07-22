@@ -32,7 +32,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.account,
+    account: str = cli.options.workspace,
 ) -> None:
     print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
     if aos10:

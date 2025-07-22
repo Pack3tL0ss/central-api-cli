@@ -8,7 +8,7 @@ Features of Central CLI:
   - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
   - Multiple output formats + Output to file
   - Numerous import formats (csv, yaml, json, etc.)
-  - Multiple account support (easily switch between different central accounts --account myotheraccount)
+  - Multiple workspace support (easily switch between different central workspaces --ws myotherworkspace)
   - Batch Operation based on data from input file. i.e. Add sites in batch based on data from a csv.
   - Automatically rename APs in mass using portions or all of:
     - The switch hostname the AP is connected to, switch port, AP MAC, AP model, AP serial, and the Site it's assigned to in Aruba Central
@@ -33,11 +33,13 @@ import click
 from rich.traceback import install
 install(show_locals=True, suppress=[click])
 
-# TODO after install if you --install-completion prior to configuration completion will freeze the terminal (first_run is running with no interactive prompt)
-# TODO first command after config is provided updates the cache but returns no output.  Bug.  Works fine from then on.
+from .utils import Utils
+utils = Utils()
+from .environment import env
+
 
 _calling_script = Path(sys.argv[0])
-if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
+if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM", "") == "vscode":
     _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
 
 if _calling_script.name == "cencli":
@@ -59,8 +61,6 @@ else:
 
 from .logger import MyLogger
 from . import constants
-from .utils import Utils
-utils = Utils()
 from .config import Config
 
 if os.environ.get("TERM_PROGRAM") == "vscode":
@@ -71,13 +71,13 @@ config = Config(base_dir=base_dir)
 
 log_file = config.log_dir / f"{__name__}.log"
 
-if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in ["1", "true"]:
+if '--debug' in sys.argv or env.debug:
     config.debug = True  # for the benefit of the 2 log messages below
-if '--debugv' in str(sys.argv):
+if '--debugv' in sys.argv:
     config.debug = config.debugv = True
     # debugv is stripped from args below
 
-log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
+log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv, deprecation_warnings=config.deprecation_warnings)
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
 
@@ -150,16 +150,21 @@ from . import cleaner, render
 # if not os.environ.get("LESS"):
 os.environ["LESS"] = "-RX +G"
 
-# These are global hidden flags/args that are stripped before sending to cli
+# Most of these are global hidden flags/args that are stripped before sending to cli
+# We do it this way, as we then don't need to include them in each CLI command
+# Most would be hidden flags anyway.
 raw_out = False
 if "--raw" in sys.argv:
     raw_out = True
     _ = sys.argv.pop(sys.argv.index("--raw"))
+if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
+    config.capture_raw = True
+    _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 if "--debug-limit" in sys.argv:
     _idx = sys.argv.index("--debug-limit")
     _ = sys.argv.pop(sys.argv.index("--debug-limit"))
     if len(sys.argv) - 1 >= _idx and sys.argv[_idx].isdigit():
-        config.limit = int(sys.argv[_idx])
+        config.dev_options.limit = int(sys.argv[_idx])
         _ = sys.argv.pop(_idx)
 if "--sanitize" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--sanitize"))
@@ -169,12 +174,16 @@ if "--debugv" in sys.argv:
     # config var updated above, just stripping flag here.
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
+if "--account" in sys.argv:  # bachward compat TODO remove anytime after 12.2025
+    sys.argv = [item if item != "--account" else "--ws" for item in sys.argv]
+    print("--account flag is deprecated.  Use --ws or --workspace.", file=sys.stderr)
 if "--again" in sys.argv:
     valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug"]
-    if "--account" in sys.argv:
-        account_idx = sys.argv.index("--account") + 1
-        if len(sys.argv) - 1 >= account_idx:
-            valid_options += ["--account", sys.argv[account_idx]]
+    ws_flag = "--workspace" if "--workspace" in sys.argv else "--ws"
+    if ws_flag in sys.argv:
+        ws_idx = sys.argv.index(ws_flag) + 1
+        if len(sys.argv) - 1 >= ws_idx:
+            valid_options += ["--ws", sys.argv[ws_idx]]
     out_args = []
     if "--out" in sys.argv:
         outfile = sys.argv[sys.argv.index("--out") + 1]
@@ -182,11 +191,9 @@ if "--again" in sys.argv:
 
     args = [*[arg for arg in sys.argv if arg in valid_options], *out_args]
     sys.argv = [sys.argv[0], "show", "last", *args]
-if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
-    config.capture_raw = True
-    _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 
-central = CentralApi(config.account)
+
+central = CentralApi(config.workspace)
 Cache.set_config(config)
 cache = Cache(central)
 if config.valid:
@@ -201,7 +208,7 @@ if config.valid:
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
-cli = CLICommon(config.account, cache, central, raw_out=raw_out)
+cli = CLICommon(config.workspace, cache, central, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
 # show switches / show switch, delete label / labels ...
