@@ -30,7 +30,9 @@ dependencies = [
     "uniplot>=0.13.0",
     "protobuf",
     "eval_type_backport;python_version<'3.10'",
-    "colorama;platform_system == 'Windows'"
+    "colorama;platform_system == 'Windows'",
+    "oauthlib>=3.2.2",
+    "requests_oauthlib>=2.0.0",
 ]
 
 keywords = [
