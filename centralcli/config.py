@@ -4,7 +4,7 @@ from __future__ import annotations
 import sys
 # from os import environ as env
 from pathlib import Path
-from typing import Any, List, TextIO, Tuple, Optional, Dict
+from typing import Any, TextIO, Optional
 import tablib
 from tablib.exceptions import UnsupportedFormat
 import json
@@ -138,7 +138,7 @@ class CentralURLs(Mapping):
 clusters = CentralURLs()
 
 
-def _get_config_file(dirs: List[Path]) -> Path:
+def _get_config_file(dirs: list[Path]) -> Path:
     dirs = [dirs] if not isinstance(dirs, list) else dirs
     for _dir in dirs:
         for f in list(Path.glob(_dir, "config.*")):
@@ -424,7 +424,7 @@ class Config:
 
         return default
 
-    def get_last_workspace(self) -> Tuple[str | None, float | None, bool | None]:
+    def get_last_workspace(self) -> tuple[str | None, float | None, bool | None]:
         """Gathers contents of last_workspace returns tuple with values.
 
         last_workspace file stores: name of last workspace, timestamp of last command, numeric bool if big (will forget) msg has been displayed.
@@ -432,7 +432,7 @@ class Config:
 
 
         Returns:
-            Tuple[None, str | None, float | bool | None, bool]:
+            tuple[None, str | None, float | bool | None, bool]:
                 last_workspace, timestamp of last cmd using the workspace, if initial will_forget_msg has been displayed, if workspace is expired
         """
         if self.sticky_workspace_file.is_file():
