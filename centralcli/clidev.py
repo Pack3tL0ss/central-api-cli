@@ -46,6 +46,8 @@ def toggle_bak_file(file: StrPath, *, conf_msg: str = None, yes: bool | None = N
     new_name = f"{str(file)}.bak" if file.suffix != ".bak" else str(file).removesuffix(".bak")
     new = Path(new_name)
 
+    if new.exists():
+        cli.exit(f"[cyan]{new.name}[/] [red]already exists[/] in {new.parent}.\nAborting...")
     if not file.exists():
         new_msg = "" if not new.exists() else f" and [dark_olive_green2]{new.name}[/] already exists."
         cli.exit(f"[cyan]{file.name}[/] [red]not found[/]{new_msg} in {file.parent}. Nothing to do.\nAborting...")
@@ -130,6 +132,44 @@ def restore_cache(
     conf_msg = f"Restoring [cyan]cencli[/] cache from [cyan]{cache_bak.name}[/]..."
     toggle_bak_file(cache_bak, conf_msg=conf_msg)
 
+
+@app.command()
+def colors(
+    debug: bool = cli.options.debug,
+    filter: str = typer.Option(None, "-c", "--color", help="Display only colors with this value in the name", show_default=False,),
+) -> None:
+    """Show text in each color available in the rich library.
+    """
+    from rich.color import ANSI_COLOR_NAMES
+    from rich.markup import escape
+    from rich.table import Table
+    from rich.console import Console
+    from rich.text import Text
+
+    console = Console()
+
+    table = Table(show_footer=False, show_edge=True)
+    max_color_name = max([len(color) for color in ANSI_COLOR_NAMES])
+    table.add_column("Name", justify="right", width=max_color_name)
+    table.add_column("Color", width=15)
+    table.add_column("Example")
+
+    colors = sorted(ANSI_COLOR_NAMES.keys())
+    for color in colors:
+        if filter and filter not in color:
+            continue
+        elif "grey" in color:
+            continue
+        color_cell = Text(" " * 10, style=f"on {color}")
+        example_cell = (
+            f"[{color}]The quick brown {escape('[dim]')} [dim]fox jumps over[/dim] {escape('[italic]')} [italic]the lazy dog[/italic]. "
+            f"1234567890!? {escape('[bold]')} [bold]Pack my box with five dozen liquor jugs[/bold][/]"
+        )
+        table.add_row(
+            f"[{color}{'' if color not in ['black', 'gray0', 'gray7', 'gray11'] else ' on white'}]{color}[/]", color_cell, example_cell
+        )
+
+    console.print(table)
 
 @app.callback()
 def callback():
