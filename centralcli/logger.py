@@ -117,6 +117,11 @@ class MyLogger:
         else:
             return "\n".join([f' {msg}' for msg in self._caption])
 
+    @caption.setter
+    def caption(self, caption: str | list[str]):
+        caption = caption if not isinstance(caption, str) else [caption]
+        self._caption += caption
+
     @staticmethod
     def _remove_rich_markups(log_msg: str) -> str:
         # Need to include [/] as closing markup style to print color for log messages.  Logs with API endpoints ... [/configuration/v2...] will cause MarkupError otherwise
