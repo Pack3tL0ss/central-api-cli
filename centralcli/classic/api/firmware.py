@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from ..client import Session
-from ... import Response, constants
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
+from ... import Response, constants
+
+if TYPE_CHECKING:
+    from ... import Session
 
 class FirmwareAPI:
     def __init__(self, session: Session):
@@ -40,7 +42,7 @@ class FirmwareAPI:
                 'limit': limit
             }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def get_firmware_version_list(
         self,
@@ -71,7 +73,7 @@ class FirmwareAPI:
             'serial': serial
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     # API-FLAW no API to upgrade cluster
     # https://internal-ui.central.arubanetworks.com/firmware/controller/clusters/upgrade is what the UI calls when you upgrade via UI
@@ -123,7 +125,7 @@ class FirmwareAPI:
             'forced': forced
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cancel_upgrade(
         self,
@@ -155,7 +157,7 @@ class FirmwareAPI:
             'group': group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     # API-FLAW only accepts swarm id for IAP, AOS10 show as IAP but no swarm id.  serial is rejected.
     # CX will return resp like it works, but nothing ever happens
@@ -178,7 +180,7 @@ class FirmwareAPI:
             "serial": serial
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def get_firmware_compliance(self, device_type: constants.DeviceTypes, group: str = None) -> Response:
         """Get Firmware Compliance Version.
@@ -201,7 +203,7 @@ class FirmwareAPI:
             'group': group
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def delete_firmware_compliance(self, device_type: constants.DeviceTypes, group: str = None) -> Response:
         """Clear Firmware Compliance Version.
@@ -223,7 +225,7 @@ class FirmwareAPI:
             'group': group
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def set_firmware_compliance(
         self,
@@ -265,7 +267,7 @@ class FirmwareAPI:
             'compliance_scheduled_at': compliance_scheduled_at
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def get_device_firmware_details(
         self,
@@ -281,7 +283,7 @@ class FirmwareAPI:
         """
         url = f"/firmware/v1/devices/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def get_device_firmware_details_by_type(
         self,
@@ -314,7 +316,7 @@ class FirmwareAPI:
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def get_all_swarms_firmware_details(
         self,
@@ -340,7 +342,7 @@ class FirmwareAPI:
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
 
     async def get_swarm_firmware_details(
@@ -358,7 +360,7 @@ class FirmwareAPI:
         """
         url = f"/firmware/v1/swarms/{swarm_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def check_firmware_available(
         self,
@@ -381,4 +383,4 @@ class FirmwareAPI:
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)

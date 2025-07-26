@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from ..client import Session
+from typing import TYPE_CHECKING
+
 from ... import Response
 
+if TYPE_CHECKING:
+    from ... import Session
 
 class KmsAPI:
     def __init__(self, session: Session):

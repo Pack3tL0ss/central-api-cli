@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Literal, Dict
-from ...response import Response
-from ... import constants, log, utils, config
-from ...exceptions import CentralCliException
-from ..client import BatchRequest
-from ...typedefs import RadioType, DynamicAntenna
-from pathlib import Path
+import base64
 import json
 from copy import deepcopy
+from pathlib import Path
+from typing import TYPE_CHECKING, Dict, List, Literal
+
 from yarl import URL
-import base64
+
+from ... import BatchRequest, Response, config, constants, log, utils
+from ...exceptions import CentralCliException
+from ...typedefs import DynamicAntenna, RadioType
 
 if TYPE_CHECKING:
-    from ..client import Session
+    from ... import Session
 
 
 DEFAULT_ACCESS_RULES = {

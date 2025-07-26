@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from ..client import Session
-from ... import config, utils, constants, Response, BatchRequest
-from .configuration import ConfigAPI
-from typing import Dict, List, Literal
 from datetime import datetime
+from typing import TYPE_CHECKING, Dict, List, Literal
+
+from ... import BatchRequest, Response, config, constants, utils
+from .configuration import ConfigAPI
+
+if TYPE_CHECKING:
+    from ...client import Session
 
 class PlatformAPI:
     def __init__(self, session: Session):

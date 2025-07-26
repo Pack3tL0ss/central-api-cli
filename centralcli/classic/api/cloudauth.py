@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-from ..client import Session
-from ... import utils, Response, constants, log
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+import aiohttp
 import tablib
 import yaml
-import aiohttp
 from yarl import URL
 
+from ... import Response, constants, log, utils
+
+if TYPE_CHECKING:
+    from ... import Session
 
 class CloudAuthAPI:
     def __init__(self, session: Session):

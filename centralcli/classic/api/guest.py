@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from ..client import Session
-from ... import utils, Response, constants
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
+from ... import Response, constants, utils
+
+if TYPE_CHECKING:
+    from ... import Session
 
 class GuestAPI:
     def __init__(self, session: Session):

@@ -17,13 +17,16 @@ from .topology import TopologyAPI
 from .troubleshooting import TroubleShootingAPI
 from .kms import KmsAPI
 from .aiops import AiOpsAPI
+from ... import Session
+
 
 if TYPE_CHECKING:
-    from ..client import Session
+    from ...typedefs import StrOrURL
+    from aiohttp.client import ClientSession
 
 class ClassicAPI:
-    def __init__(self, session: Session):
-        self._session = session
+    def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):
+        self._session = Session(base_url=base_url, aio_session=aio_session, silent=silent)
 
     @property
     def session(self) -> Session:

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from ..client import Session, BatchRequest
-from ... import Response, utils, constants, config, log
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from ... import BatchRequest, Response, config, constants, log, utils
 from ...response import CombinedResponse
 from ...utils import Mac
-from datetime import datetime
 
+if TYPE_CHECKING:
+    from ... import Session
 
 class MonitoringAPI:
     def __init__(self, session: Session):
@@ -556,8 +559,8 @@ class MonitoringAPI:
 
     async def get_all_devices(
             self,
-            cache: bool = False,
             dev_types: constants.GenericDeviceTypes | list[constants.GenericDeviceTypes] = None,
+            *,
             group: str = None,
             site: str = None,
             label: str = None,
@@ -575,6 +578,7 @@ class MonitoringAPI:
             fields: list = None,
             offset: int = 0,
             limit: int = 1000,  # max allowed 1000
+            cache: bool = False,
         ) -> CombinedResponse | list[Response]:
         """Get all devices from Aruba Central.
 
@@ -597,6 +601,7 @@ class MonitoringAPI:
             fields (list, optional): fields to return. Defaults to None.
             offset (int, optional): pagination offset. Defaults to 0.
             limit (int, optional): pagination limit max 1000. Defaults to 1000.
+            cache (bool, optional): Indicates if response will be used to update cache.
 
         Returns:
             CombinedResponse: CombinedResponse object.
@@ -607,7 +612,7 @@ class MonitoringAPI:
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
         reqs = [
-            self.BatchRequest(
+            BatchRequest(
                 self.get_devices,
                 dev_type,
                 calculate_client_count=calculate_client_count,
@@ -630,7 +635,7 @@ class MonitoringAPI:
             )
             for dev_type in dev_types
         ]
-        batch_resp = await self._batch_request(reqs)
+        batch_resp = await self.session._batch_request(reqs)
         if all([not r.ok for r in batch_resp]):
             return utils.unlistify(batch_resp)
 

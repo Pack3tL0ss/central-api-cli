@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from ..client import Session
+import time
+from typing import TYPE_CHECKING, Literal
+from rich.progress import track
+
 from ... import Response
-from typing import Literal
-from time import time
+
+if TYPE_CHECKING:
+    from ... import Session
 
 class DeviceManagementAPI:
     def __init__(self, session: Session):
@@ -65,14 +69,13 @@ class DeviceManagementAPI:
         url = f"/device_management/v1/device/{serial}/action/{command}"
 
         # TODO cacth invalid actions (not supported on dev)
-        resp = await self.session.post(url)
-        if resp and duration and "blink_led" in command and "off" not in command:
-            print(f"Blinking Led... {duration}. ", end="")
-            for i in range(1, duration + 1):
+        responses: list[Response] = []
+        responses += await [self.session.post(url)]
+        if responses[0].ok and duration and "blink_led" in command and "off" not in command:
+            for _ in track(range(1, duration + 1), description="[turquoise2 blink]Blinking LED[/]..."):
                 time.sleep(1)
-                print(f"{duration - i}. ", end="" if i % 20 else "\n")
-            resp = await self.session.post(url.replace("_on", "_off"))
-        return resp
+            responses += await self.session.post(url.replace("_on", "_off"))
+        return responses
 
     async def kick_users(
         self,
@@ -83,14 +86,13 @@ class DeviceManagementAPI:
         ssid: str = None,
     ) -> Response:
         url = f"/device_management/v1/device/{serial}/action/disconnect_user"
+        payload = None
         if kick_all:
             payload = {"disconnect_user_all": True}
         elif mac:
             payload = {"disconnect_user_mac": f"{mac}"}
         elif ssid:
             payload = {"disconnect_user_network": f"{ssid}"}
-        else:
-            payload = {}
 
         if payload:
             return await self.session.post(url, json_data=payload)
