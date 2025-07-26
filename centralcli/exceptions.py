@@ -1,7 +1,14 @@
-
+# Aruba Central API GW ISSUES
 class ArubaCentralException(Exception):
     pass
 
+class DevException(ArubaCentralException):
+    pass
+
+class TimeoutException(ArubaCentralException):
+    pass
+
+# CentralCLI Exceptions
 class CentralCliException(Exception):
     pass
 
@@ -11,12 +18,14 @@ class MissingFieldException(CentralCliException):
 class ImportException(CentralCliException):
     pass
 
-class DevException(ArubaCentralException):
+class InvalidConfigException(CentralCliException):
     pass
 
-class TimeoutException(ArubaCentralException):
+class WorkSpaceNotFoundException(CentralCliException):
     pass
 
+
+# SNOW
 class ServiceNowException(Exception):
     pass
 
