@@ -57,14 +57,6 @@ from .response import CombinedResponse
 from .models.cache import Device
 from .caas import CaasAPI
 
-# from .classic.api import ClassicAPI
-# api = ClassicAPI(config.classic.base_url)
-
-# if config.glp.ok:
-#     from .cnx.api import GlpApi
-#     glp_api = GlpApi(config.glp.base_url)
-# else:
-#     glp_api = None
 from .clicommon import APIClients
 
 if TYPE_CHECKING:
