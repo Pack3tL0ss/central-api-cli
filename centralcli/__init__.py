@@ -138,8 +138,8 @@ if os.name == "nt":  # pragma: no cover
 
 from pycentral.base import ArubaCentralBase
 from .response import Response, BatchRequest
-from .central import CentralApi
-from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
+from .client import Session
+from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
 from .clicommon import CLICommon
 from . import cleaner, render
 
@@ -193,9 +193,7 @@ if "--again" in sys.argv:
     sys.argv = [sys.argv[0], "show", "last", *args]
 
 
-central = CentralApi(config.workspace)
-Cache.set_config(config)
-cache = Cache(central)
+cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
     CacheInvDevice.set_db(cache.InvDB)
@@ -208,7 +206,7 @@ if config.valid:
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
-cli = CLICommon(config.workspace, cache, central, raw_out=raw_out)
+cli = CLICommon(config.workspace, cache, raw_out=raw_out)
 
 # allow singular form and common synonyms for the defined show commands
 # show switches / show switch, delete label / labels ...
