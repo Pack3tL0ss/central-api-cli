@@ -8,6 +8,7 @@ from random import randint
 from datetime import datetime
 import json
 import pendulum
+from functools import cached_property
 
 from .. import utils, log
 from ..constants import DevTypes, CertTypes
@@ -25,17 +26,22 @@ class DevType(str, Enum):
     sw = "sw"
     cx = "cx"
     gw = "gw"
+    sdwan = "sdwan"
+    bridge = "bridge"
 
 
 class InventoryDevice(BaseModel):
-    serial: str
-    mac: str = Field(alias=AliasChoices("mac", "macaddr"))
-    type: Optional[str] = Field(None, alias=AliasChoices("type", "device_type"))
+    id: Optional[str] = None
+    serial: str = Field(alias=AliasChoices("serial", "serialNumber"))
+    mac: str = Field(alias=AliasChoices("mac", "macaddr", "macAddress"))
+    type: Optional[str] = Field(None, alias=AliasChoices("type", "device_type", "deviceType"))
     model: Optional[str] = None
-    sku: Optional[str] = Field(None, alias=AliasChoices("aruba_part_no", "sku"))
-    services: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services"))
-    subscription_key: Optional[str] = None
-    subscription_expires: Optional[int] = None
+    sku: Optional[str] = Field(None, alias=AliasChoices("aruba_part_no", "sku", "PartNumber"))
+    services: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services", "tier"))
+    subscription_key: Optional[str] = Field(None, alias=AliasChoices("subscription_key", "key"))
+    subscription_expires: Optional[int] = Field(None, alias=AliasChoices("subscription_expires", "end_time"))
+    assigned: Optional[bool] = None
+    archived: Optional[bool] = None
 
 
 class Inventory(RootModel):
@@ -58,10 +64,10 @@ class Inventory(RootModel):
         def format_value(key: str, value: str, device: Dict[str, str | int | float]) -> str:
             if key.startswith("mac"):
                 return self._normalize_mac(value)
-            if key in ["device_type", "type"]:
+            if key in ["device_type", "type", "deviceType"]:
                 return self._inv_type(value, model=device.get("model"))
             if key == "subscription_expires" and value:
-                return value / 1000  # convert ts in ms to ts in seconds
+                return value if len(str(value)) == 10 else value / 1000  # convert ts in ms to ts in seconds
             return value
 
         return [{k: format_value(k, v, device=dev) for k, v in dev.items()} for dev in data]
@@ -87,6 +93,26 @@ class Inventory(RootModel):
     @property
     def by_serial(self) -> Dict[int, Dict[str, str | int | float]]:
         return {s.serial: s.model_dump() for s in self.root}
+
+    @cached_property
+    def counts(self) -> str:
+        _expired_cnt = len([s for s in self.root if s.subscription_expires and pendulum.now(tz="UTC") >= pendulum.from_timestamp(s.subscription_expires)])
+        _ok_cnt = len(self) - _expired_cnt
+        _exp_in_3_mos_cnt = len([s for s in self.root if s.subscription_expires and pendulum.now(tz="UTC") + pendulum.duration(months=3) >= pendulum.from_timestamp(s.subscription_expires)])
+        _exp_in_3_mos_cnt -= _expired_cnt
+        _exp_in_6_mos_cnt = len([s for s in self.root if s.subscription_expires and pendulum.now(tz="UTC") + pendulum.duration(months=6) >= pendulum.from_timestamp(s.subscription_expires)])
+        _exp_in_6_mos_cnt -= _exp_in_3_mos_cnt
+        count_str = f"[magenta]Subscription counts[/] Total: [cyan]{len(self)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
+        if _exp_in_6_mos_cnt:
+            count_str += f", [dark_orange3]Expiring within 6 months[/]: [cyan]{_exp_in_6_mos_cnt}[/]"
+        if _exp_in_3_mos_cnt:
+            count_str += f", [red]Expiring within 3 months[/]: [cyan]{_exp_in_3_mos_cnt}[/]"
+
+        return count_str
+
+
+    def cache_dump(self) -> list[dict[str, str | int | bool]]:
+        return utils.strip_no_value(self.model_dump())
 
 class DeviceStatus(str, Enum):
     Up = "Up"

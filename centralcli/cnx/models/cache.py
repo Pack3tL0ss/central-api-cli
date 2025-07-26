@@ -1,33 +1,56 @@
 from __future__ import annotations
 
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional, Literal
 
 from pydantic import BaseModel, Field, AliasChoices, field_validator, model_validator
 import pendulum
+from functools import cached_property
+from centralcli.render import unstyle
+from centralcli import utils, log
 
 class Subscription(BaseModel):
     id: str
-    # type: str
-    type: str = Field(alias=AliasChoices("subscription_type", "subscriptionType"))
-    created_at: int = Field(alias=AliasChoices("created_at", "createdAt"))
-    updated_at: int = Field(alias=AliasChoices("updated_at", "updatedAt"))
+    name: str = Field(alias=AliasChoices("tier", "name"))
+    type: str = Field(alias=AliasChoices("type", "subscriptionType"))
     key: str
-    quantity: int
-    available_quantity: int = Field(alias=AliasChoices("available_quantity", "availableQuantity"))
+    qty: int = Field(alias=AliasChoices("qty", "quantity"))
+    available: int = Field(alias=AliasChoices("available", "availableQuantity"))
     is_eval: bool = Field(alias=AliasChoices("is_eval", "isEval"))
     sku: str
-    sku_description: str = Field(alias=AliasChoices("sku_description", "skuDescription"))
+    start_date: int = Field(alias=AliasChoices("start_date", "startTime"))
+    end_date: int = Field(alias=AliasChoices("end_date", "endTime"))
+    # -- Available fields that are not used --
+    # created_at: int = Field(alias=AliasChoices("created_at", "createdAt"))
+    # updated_at: int = Field(alias=AliasChoices("updated_at", "updatedAt"))
+    # sku_description: str = Field(alias=AliasChoices("sku_description", "skuDescription"))
     # contract: Any
-    start_time: int = Field(alias=AliasChoices("start_time", "startTime"))
-    end_time: int = Field(alias=AliasChoices("end_time", "endTime"))
-    subscription_status: str | None = Field(alias=AliasChoices("subscription_status", "subscriptionStatus"))
-    tags: List[str] | None
-    product_type: str = Field(alias=AliasChoices("product_type", "productType"))
-    tier: str
+    # subscription_status: str | None = Field(alias=AliasChoices("subscription_status", "subscriptionStatus"))
+    # tags: List[str] | None
+    # product_type: str = Field(alias=AliasChoices("product_type", "productType"))
     # tier_description: Any = Field(alias=AliasChoices("tier_description", "tierDescription"))
     # quote: Optional[str]
     # po: Any
     # reseller_po: Any
+
+    @cached_property
+    def expired(self) -> bool:
+        return pendulum.now(tz="UTC").timestamp() >= self.end_date
+
+    @cached_property
+    def expiring_soon(self) -> bool:
+        return not self.expired and (pendulum.now(tz="UTC") + pendulum.duration(months=3) >= pendulum.from_timestamp(self.end_date))
+
+    @cached_property
+    def started(self) -> bool:
+        return pendulum.now(tz="UTC").timestamp() >= self.start_date
+
+    @cached_property
+    def valid(self) -> bool:
+        return self.started and not self.expired
+
+    @property
+    def subscription_expires(self) -> int:
+        return self.end_date
 
     @field_validator("type", mode="before")
     @classmethod
@@ -37,12 +60,34 @@ class Subscription(BaseModel):
     @model_validator(mode="before")
     def convert_none_strings(data: dict) -> Dict[str, Any]:
         def convert_dates(date_str: str):
-            return pendulum.from_format(date_str.rstrip("Z"), "YYYY-MM-DDTHH:mm:ss.SSS").int_timestamp
+            return pendulum.from_format(date_str.rstrip("Z"), "YYYY-MM-DDTHH:mm:ss.SSS", tz="UTC").int_timestamp
 
         time_fields = ["created_at", "createdAt", "updated_at", "updatedAt", "start_time", "startTime", "end_time", "endTime"]
         data = {k: v if not isinstance(v, str) or v != "NONE" else None for k, v in data.items()}
-        return {k: v if k not in time_fields else convert_dates(v) for k, v in data.items()}
+        return {k: v if k not in time_fields else convert_dates(v) for k, v in data.items() if v != "subscriptions/subscription"}
 
+
+class SubCounts:
+    __slots__ = ["total", "expired", "valid", "expiring_soon", "not_started"]
+
+    def __init__(self, subs: List[Subscription]):
+        self.total = len(subs)
+        self.expired = len([s for s in subs if s.expired])
+        self.valid = len([s for s in subs if s.valid])
+        self.expiring_soon = len([s for s in subs if s.expiring_soon])
+        self.not_started = len([s for s in subs if not s.started])
+
+    def __rich__(self):
+        ret = f"[magenta]Subscription counts[/] Total: [cyan]{self.total}[/], [green]Valid[/]: [cyan]{self.valid}[/], [red]Expired[/]: [cyan]{self.expired}[/]"
+        if self.not_started:
+            ret += f", [yellow]Not Started[/]: [cyan]{self.not_started}[/]"
+        if self.expiring_soon:
+            ret += f", [dark_orange3]Expiring Soon[/]: [cyan]{self.expiring_soon}[/]"
+
+        return ret
+
+    def __str__(self):
+        return unstyle(self.__rich__())
 
 class Subscriptions(BaseModel):
     items: List[Subscription]
@@ -50,853 +95,164 @@ class Subscriptions(BaseModel):
     offset: int
     total: int
 
-if __name__ == "__main__":
-    data = {
-    'items': [
-        {
-            'id': '0f347acf-e390-580f-afaf-fa990f54263d',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:06:50.331Z',
-            'updatedAt': '2022-06-14T01:26:40.066Z',
-            'key': 'ERSQ9EOWKD7DEQ9O',
-            'quantity': '5',
-            'availableQuantity': '5',
-            'isEval': True,
-            'sku': 'R3K03-EVALS',
-            'skuDescription': 'Aruba Central 84/83/64/54xx F 90D Eval',
-            'contract': None,
-            'startTime': '2021-01-25T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_8XXX_9XXX_10XXX',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '1c2ced3d-0c60-5b4b-835d-8f9f3c04d12d',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'SERVICE',
-            'createdAt': '2022-03-24T02:51:50.126Z',
-            'updatedAt': '2022-03-24T02:51:50.126Z',
-            'key': 'E36A7AB22C4C148A0A',
-            'quantity': '1',
-            'availableQuantity': '1',
-            'isEval': True,
-            'sku': 'JZ115-EVALS',
-            'skuDescription': 'Aruba NetInsight 90 Day Eval Subscription per 1 Network Device',
-            'contract': None,
-            'startTime': '2022-03-24T02:51:42.000Z',
-            'endTime': '2022-06-22T02:51:42.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'SERVICE',
-            'tier': 'ANALYTICS',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '24799073-78ad-5fe6-82ea-498198d6e384',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'UXI_ZEBRA_AGENT_CLOUD',
-            'createdAt': '2024-05-03T18:12:00.207Z',
-            'updatedAt': '2024-05-03T18:12:00.208Z',
-            'key': 'E0F33AEAEB5F8420CB',
-            'quantity': '150',
-            'availableQuantity': '150',
-            'isEval': True,
-            'sku': 'S0J30AAE',
-            'skuDescription': 'HPE ANW UXI Zebra Eval 90-day Sub E-STU',
-            'contract': None,
-            'startTime': '2024-05-03T00:00:00.000Z',
-            'endTime': '2024-08-01T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'SERVICE',
-            'tier': 'FOUNDATION_ZEBRA_AGENT_CLOUD',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '26ce4510-af34-590f-8054-e05fe35b997d',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-14T20:59:07.574Z',
-            'updatedAt': '2022-03-14T20:59:07.574Z',
-            'key': 'EF65D61B3AACA4F529',
-            'quantity': '5',
-            'availableQuantity': '5',
-            'isEval': True,
-            'sku': 'R8L80-EVALS',
-            'skuDescription': 'Aruba Central 64/54xx F 90D Eval',
-            'contract': None,
-            'startTime': '2022-03-14T20:58:45.000Z',
-            'endTime': '2022-06-12T20:58:45.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6400',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '29697e0b-e9ba-58ee-a483-8eaeb0f8c142',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'UXI_SENSOR_CLOUD',
-            'createdAt': '2024-05-03T18:12:00.102Z',
-            'updatedAt': '2024-05-03T18:12:00.103Z',
-            'key': 'EAD87F8FE083F43BEB',
-            'quantity': '50',
-            'availableQuantity': '50',
-            'isEval': True,
-            'sku': 'S0J28AAE',
-            'skuDescription': 'HPE ANW UXI Cloud Eval 90-day Sub E-STU',
-            'contract': None,
-            'startTime': '2024-05-03T00:00:00.000Z',
-            'endTime': '2024-08-01T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SENSOR_CLOUD',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '44d406a3-c668-5b8f-8bb0-65839d1f3a7a',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:02:52.525Z',
-            'updatedAt': '2022-03-06T06:02:52.525Z',
-            'key': 'EX6JZ454PNWUBAQI',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'R4E03-EVAL',
-            'skuDescription': 'Aruba 90xx Gwy Adv Sec 90D Eval Lic',
-            'contract': None,
-            'startTime': '2020-05-07T08:49:24.000Z',
-            'endTime': '2020-08-06T08:49:24.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_90XX_SEC',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '4ef08710-d81d-5e91-ad78-09f922332c76',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:06:50.271Z',
-            'updatedAt': '2022-04-24T00:09:45.061Z',
-            'key': 'ECEAJHMKFASZ7AAU',
-            'quantity': '5',
-            'availableQuantity': '4',
-            'isEval': True,
-            'sku': 'Q9Y68-EVALS',
-            'skuDescription': 'Aruba Central 25xx or 8-16p F 90D Eval',
-            'contract': None,
-            'startTime': '2021-01-25T00:00:00.000Z',
-            'endTime': '2030-12-29T18:30:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6100',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '5631b35b-44db-5811-8a50-b0bd542f1286',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:07:11.962Z',
-            'updatedAt': '2022-03-06T06:07:11.962Z',
-            'key': 'EN7DRMUQP4KVOJKN',
-            'quantity': '5',
-            'availableQuantity': '5',
-            'isEval': True,
-            'sku': 'ALP-CNP-SW-6300-F',
-            'skuDescription': 'Aruba Central 63/38xx Foundation Alpha sku',
-            'contract': None,
-            'startTime': '2016-09-06T17:22:47.000Z',
-            'endTime': '2026-09-06T17:22:47.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6300',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '60979b36-edf6-5c8f-92b0-2b7099ff0f7a',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_AP',
-            'createdAt': '2022-03-06T06:07:11.992Z',
-            'updatedAt': '2022-03-06T06:07:11.992Z',
-            'key': 'ADURDXCTOYTUXKJE',
-            'quantity': '2',
-            'availableQuantity': '2',
-            'isEval': True,
-            'sku': 'ALP-CNP-AP-F',
-            'skuDescription': 'Aruba Central AP Foundation Alpha SKU',
-            'contract': None,
-            'startTime': '2016-09-06T17:22:47.000Z',
-            'endTime': '2026-09-06T17:22:47.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_AP',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '68bbb67b-5763-5f98-8502-e98d3dab019d',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:08:46.603Z',
-            'updatedAt': '2022-03-06T06:08:46.603Z',
-            'key': 'A8Y3HE4LT8VX4RUS',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-7005-A',
-            'skuDescription': 'Alpha License for Advance-Base-7005',
-            'contract': None,
-            'startTime': '2018-12-10T09:15:16.000Z',
-            'endTime': '2028-12-10T09:15:16.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_7005',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '744d208c-d4ef-51d9-8912-4264beaca4df',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'SERVICE',
-            'createdAt': '2022-03-06T06:11:17.009Z',
-            'updatedAt': '2022-03-06T06:11:17.009Z',
-            'key': 'A5WLDHQSWG5KALKA',
-            'quantity': '1',
-            'availableQuantity': '1',
-            'isEval': True,
-            'sku': 'R0Z70-EVALS',
-            'skuDescription': 'Aruba Optik NL 5000 DE 1-year 90-D Eval',
-            'contract': None,
-            'startTime': '2020-01-13T21:36:34.000Z',
-            'endTime': '2030-01-13T21:36:34.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'DEVICE_PROFILING',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '7658e672-2af5-5646-aa37-406af19c6d41',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_AP',
-            'createdAt': '2022-03-06T06:13:18.844Z',
-            'updatedAt': '2022-06-22T02:37:40.516Z',
-            'key': 'ENCYHFWQLJNQCWDU',
-            'quantity': '1000',
-            'availableQuantity': '987',
-            'isEval': True,
-            'sku': 'Q9Y63-EVALS',
-            'skuDescription': 'Aruba Central AP Adv 1y Sub 90D Eval Lic',
-            'contract': None,
-            'startTime': '2021-01-25T00:00:00.000Z',
-            'endTime': '2030-12-31T00:00:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCED_AP',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '7f544748-f80e-50e4-b664-024cfaefd97a',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:06:50.359Z',
-            'updatedAt': '2022-06-17T05:35:31.737Z',
-            'key': 'EFT5SVWTPBSSDRJT',
-            'quantity': '5',
-            'availableQuantity': '4',
-            'isEval': True,
-            'sku': 'Q9Y73-EVALS',
-            'skuDescription': 'Aruba Central 62/29xx F 90D Eval Lic',
-            'contract': None,
-            'startTime': '2021-01-25T00:00:00.000Z',
-            'endTime': '2030-12-29T18:30:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6200',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '864e1754-22fe-5989-9aa0-4bb1b139d8f0',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:08:46.602Z',
-            'updatedAt': '2022-03-06T06:08:46.602Z',
-            'key': 'AB55MBEUPRWSHA8E',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-7005-F',
-            'skuDescription': 'Alpha License for Foundation-Base-7005',
-            'contract': None,
-            'startTime': '2018-12-10T09:15:15.000Z',
-            'endTime': '2028-12-10T09:15:15.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_7005',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '91871f73-31e1-56f1-8981-cc600b77ff59',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:06:50.331Z',
-            'updatedAt': '2022-03-08T07:07:36.062Z',
-            'key': 'EVCDJKWUWBHHJFUC',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'JZ121-EVALS',
-            'skuDescription': 'Aruba 70xx Gateway Advanced 90D Eval E-STU',
-            'contract': None,
-            'startTime': '2020-05-07T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_70XX',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '91ed832c-e3fe-559e-bd1b-d2626144215b',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2024-10-02T17:31:23.601Z',
-            'updatedAt': '2024-10-02T17:32:22.102Z',
-            'key': 'E4F3CD74160DC4FE18',
-            'quantity': '100',
-            'availableQuantity': '97',
-            'isEval': True,
-            'sku': 'JZ525-EVALS',
-            'skuDescription': 'Aruba Central 25xx/6100 A EVAL',
-            'contract': None,
-            'startTime': '2024-10-02T00:00:00.000Z',
-            'endTime': '2030-12-30T18:30:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCED_SWITCH_6100',
-            'tierDescription': None,
-            'quote': 'SM-EVAL-9c9dd18a-f9f0-4843-8511-dcf5af3a6e6c',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '98417836-86c9-5440-886d-b9249756e1c4',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2024-10-02T17:31:23.587Z',
-            'updatedAt': '2024-10-02T17:31:51.275Z',
-            'key': 'EC5C0481E85EB4DB79',
-            'quantity': '2',
-            'availableQuantity': '0',
-            'isEval': True,
-            'sku': 'R0X99-EVALS',
-            'skuDescription': 'Aruba vGateway 500Mbps 30D Eval Lic',
-            'contract': None,
-            'startTime': '2024-10-02T00:00:00.000Z',
-            'endTime': '2030-12-30T18:30:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'VGW_500M',
-            'tierDescription': None,
-            'quote': 'SM-EVAL-2df1dd5f-69ee-4364-9049-19dccbc4db4e',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '9954f265-771c-52e2-ac4f-95566a4e2e4f',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2023-08-11T04:33:27.839Z',
-            'updatedAt': '2024-10-03T18:40:03.773Z',
-            'key': 'EE81C9FCF27EA405A8',
-            'quantity': '100',
-            'availableQuantity': '100',
-            'isEval': True,
-            'sku': 'JZ540-EVALS',
-            'skuDescription': 'Aruba Central 8/9/10xxx A EVAL',
-            'contract': None,
-            'startTime': '2023-08-11T00:00:00.000Z',
-            'endTime': '2030-12-29T18:30:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCED_SWITCH_8XXX_9XXX_10XXX',
-            'tierDescription': None,
-            'quote': 'SM-EVAL-44cc7fa7-c7c3-4b68-b0be-4c9421fb0439',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '995c227b-798a-5a74-946c-0dc56ba390d1',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:06:50.299Z',
-            'updatedAt': '2022-03-06T06:06:50.299Z',
-            'key': 'EJP5QBCVEFBAWFTA',
-            'quantity': '2',
-            'availableQuantity': '2',
-            'isEval': True,
-            'sku': 'JZ198-EVALS',
-            'skuDescription': 'Aruba 72xx Gateway Advanced 90D Eval E-STU',
-            'contract': None,
-            'startTime': '2020-05-07T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_72XX',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': '9a368245-ee4f-54c9-b02e-043708654623',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:08:46.603Z',
-            'updatedAt': '2022-03-06T06:08:46.603Z',
-            'key': 'ARI76TMSFHXNJBJH',
-            'quantity': '10',
-            'availableQuantity': '7',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-70XX-A',
-            'skuDescription': 'Alpha License for Advance-70XX',
-            'contract': None,
-            'startTime': '2018-12-10T09:15:15.000Z',
-            'endTime': '2028-12-10T09:15:15.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_70XX',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'bcb790a6-3b07-5537-ba85-01527d9026a2',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'UXI_SENSOR_LTE',
-            'createdAt': '2024-05-03T18:12:00.207Z',
-            'updatedAt': '2024-05-03T18:12:00.208Z',
-            'key': 'E939A3C362B2C44148',
-            'quantity': '50',
-            'availableQuantity': '50',
-            'isEval': True,
-            'sku': 'S0J29AAE',
-            'skuDescription': 'HPE ANW UXI LTE Eval 90-day Sub E-STE',
-            'contract': None,
-            'startTime': '2024-05-03T00:00:00.000Z',
-            'endTime': '2024-08-01T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SENSOR_LTE',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'c967f6e3-1c12-5d9c-88e5-33df67774575',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:08:46.602Z',
-            'updatedAt': '2022-03-06T06:08:46.602Z',
-            'key': 'ATI4XZSA24BZKSQP',
-            'quantity': '2',
-            'availableQuantity': '2',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-72XX-F',
-            'skuDescription': 'Alpha License for Foundation-72XX',
-            'contract': None,
-            'startTime': '2018-12-10T09:15:14.000Z',
-            'endTime': '2028-12-10T09:15:14.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_72XX',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'caf43a74-4ee3-50cc-aa29-34b9d7929f2d',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:07:11.986Z',
-            'updatedAt': '2022-06-17T06:32:18.329Z',
-            'key': 'AXYPTFBWQNSDG7ZE',
-            'quantity': '1',
-            'availableQuantity': '1',
-            'isEval': True,
-            'sku': 'ALP-CNP-SW-6200-F',
-            'skuDescription': 'Aruba Central 62/29xx Foundation Alpha sku',
-            'contract': None,
-            'startTime': '2016-09-06T17:22:47.000Z',
-            'endTime': '2026-09-06T17:22:47.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6200',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'ceb9f3e4-5a18-52ce-915e-f484a04da127',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:12:20.154Z',
-            'updatedAt': '2022-03-08T07:07:30.447Z',
-            'key': 'AOMICKXID6EF5UFV',
-            'quantity': '10',
-            'availableQuantity': '9',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-90XX-AS',
-            'skuDescription': 'Alpha License Gateway Advance Security',
-            'contract': None,
-            'startTime': '2020-05-16T11:17:34.000Z',
-            'endTime': '2030-05-16T11:17:34.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_90XX_SEC',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'd106ef2e-f6c0-579f-818e-3eb334103f86',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:06:50.300Z',
-            'updatedAt': '2022-03-06T06:06:50.300Z',
-            'key': 'EYVK2GZMJYBEZUL2',
-            'quantity': '2',
-            'availableQuantity': '2',
-            'isEval': True,
-            'sku': 'JZ198-EVALS',
-            'skuDescription': 'Aruba 92xx/72xx Gateway Advanced 90d Sb E-STU',
-            'contract': None,
-            'startTime': '2020-05-07T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_72XX',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'd6a73ac0-a629-5a16-a40d-0d2d423e8810',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:08:46.572Z',
-            'updatedAt': '2022-03-06T06:08:46.572Z',
-            'key': 'ADRGMIN9S5GFQVVW',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'ALP-CNP-GW-70XX-F',
-            'skuDescription': 'Alpha License for Foundation-70XX',
-            'contract': None,
-            'startTime': '2018-12-10T09:15:14.000Z',
-            'endTime': '2028-12-10T09:15:14.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_70XX',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'dbbde6cf-07a4-512f-91fb-41be839b2e03',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:06:50.358Z',
-            'updatedAt': '2022-03-06T06:06:50.358Z',
-            'key': 'ETB3ARETQJ3JNZPT',
-            'quantity': '5',
-            'availableQuantity': '5',
-            'isEval': True,
-            'sku': 'Q9Y78-EVALS',
-            'skuDescription': 'Aruba Central 63/38xx F 90D Eval Lic',
-            'contract': None,
-            'startTime': '2021-01-25T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6300',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'e6f49b0c-d15a-5ce0-a4ee-7e0b08def19e',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:03:44.993Z',
-            'updatedAt': '2022-09-23T18:26:32.829Z',
-            'key': 'EKT3ATNQW4HXJTHD',
-            'quantity': '20',
-            'availableQuantity': '18',
-            'isEval': True,
-            'sku': 'R4G90-EVALS',
-            'skuDescription': 'Aruba Central WLAN GW Sub 90D Eval Lic',
-            'contract': None,
-            'startTime': '2021-01-25T09:09:44.000Z',
-            'endTime': '2032-09-23T07:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_WLAN_GW',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'ebf5723b-bae9-55bd-b917-025c69297b5b',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:07:11.962Z',
-            'updatedAt': '2022-03-06T06:07:11.962Z',
-            'key': 'EZVZIAHXXRCTGYWK',
-            'quantity': '3',
-            'availableQuantity': '3',
-            'isEval': True,
-            'sku': 'ALP-CNP-SW-6200-F',
-            'skuDescription': 'Aruba Central 62/29xx Foundation Alpha sku',
-            'contract': None,
-            'startTime': '2016-09-06T17:22:47.000Z',
-            'endTime': '2026-09-06T17:22:47.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6200',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'ec25b3ea-2a97-55c5-a9e5-fa23d5dd6dba',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_GW',
-            'createdAt': '2022-03-06T06:06:50.331Z',
-            'updatedAt': '2022-03-06T06:06:50.331Z',
-            'key': 'EK3GQC46DLUOA9X8',
-            'quantity': '10',
-            'availableQuantity': '10',
-            'isEval': True,
-            'sku': 'JZ121-EVALS',
-            'skuDescription': 'Aruba 90xx/70xx Gateway Advanced 90d Sb E-STU',
-            'contract': None,
-            'startTime': '2020-05-07T00:00:00.000Z',
-            'endTime': '2024-10-27T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCE_70XX',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'f3a2cafe-e37c-54ee-9c49-02aaedf00abd',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2022-03-06T06:07:11.963Z',
-            'updatedAt': '2022-03-09T18:35:28.333Z',
-            'key': 'AZFG8CVMXQB23NNQ',
-            'quantity': '4',
-            'availableQuantity': '4',
-            'isEval': True,
-            'sku': 'ALP-CNP-SW-6100-F',
-            'skuDescription': 'Aruba Central 25xx or 8-16p Foundation Alpha sku',
-            'contract': None,
-            'startTime': '2016-09-06T17:22:47.000Z',
-            'endTime': '2026-09-06T17:22:47.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'FOUNDATION_SWITCH_6100',
-            'tierDescription': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'f3b2bd8d-1223-53da-9d72-8ccd2dacdb52',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2023-08-11T04:31:26.739Z',
-            'updatedAt': '2024-10-03T18:39:46.954Z',
-            'key': 'E4F587FF6F6F848289',
-            'quantity': '100',
-            'availableQuantity': '98',
-            'isEval': True,
-            'sku': 'JZ535-EVALS',
-            'skuDescription': 'Aruba Central 63/38xx A EVAL',
-            'contract': None,
-            'startTime': '2023-08-11T00:00:00.000Z',
-            'endTime': '2030-12-29T18:30:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCED_SWITCH_6300',
-            'tierDescription': None,
-            'quote': 'SM-EVAL-2b5fb082-0498-47af-b3e2-146f99cb6c45',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'f7984779-cd55-53eb-818e-811d88f7d78f',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'CENTRAL_SWITCH',
-            'createdAt': '2024-10-02T17:31:23.607Z',
-            'updatedAt': '2024-10-02T17:32:36.486Z',
-            'key': 'EB28ABB5C9A7B44628',
-            'quantity': '100',
-            'availableQuantity': '98',
-            'isEval': True,
-            'sku': 'JZ530-EVALS',
-            'skuDescription': 'Aruba Central 62/29xx A EVAL',
-            'contract': None,
-            'startTime': '2024-10-02T00:00:00.000Z',
-            'endTime': '2030-12-30T18:30:00.000Z',
-            'subscriptionStatus': 'STARTED',
-            'tags': None,
-            'productType': 'DEVICE',
-            'tier': 'ADVANCED_SWITCH_6200',
-            'tierDescription': None,
-            'quote': 'SM-EVAL-4526a001-7f6d-4dc4-8b46-1208c251d2ae',
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'f7c9e0e2-0f82-57aa-a961-b83e6a71757e',
-            'type': 'subscriptions/subscription',
-            'subscriptionType': 'UXI_AGENT_CLOUD',
-            'createdAt': '2024-05-03T18:12:00.221Z',
-            'updatedAt': '2024-05-03T18:12:00.222Z',
-            'key': 'E7E728137AF8144A5B',
-            'quantity': '150',
-            'availableQuantity': '150',
-            'isEval': True,
-            'sku': 'S0J31AAE',
-            'skuDescription': 'HPE ANW UXI Agent Eval 90-day Sub E-STU',
-            'contract': None,
-            'startTime': '2024-05-03T00:00:00.000Z',
-            'endTime': '2024-08-01T00:00:00.000Z',
-            'subscriptionStatus': 'NONE',
-            'tags': None,
-            'productType': 'SERVICE',
-            'tier': 'FOUNDATION_AGENT_CLOUD',
-            'tierDescription': None,
-            'quote': None,
-            'po': None,
-            'resellerPo': None
-        },
-        {
-            'id': 'feb3a94f-2890-5288-88bd-b89aa46c5d31',
-            'type': 'subscriptions/subscription',
-            'subscription_type': 'CENTRAL_GW',
-            'created_at': '2022-03-06T06:08:46.603Z',
-            'updated_at': '2022-03-06T06:08:46.603Z',
-            'key': 'AVC7IMRVCZPKYMYM',
-            'quantity': '2',
-            'available_quantity': '2',
-            'is_eval': True,
-            'sku': 'ALP-CNP-GW-72XX-A',
-            'sku_description': 'Alpha License for Advance-72XX',
-            'contract': None,
-            'start_time': '2018-12-10T09:15:15.000Z',
-            'end_time': '2028-12-10T09:15:15.000Z',
-            'subscription_status': 'NONE',
-            'tags': None,
-            'product_type': 'DEVICE',
-            'tier': 'ADVANCE_72XX',
-            'tier_description': None,
-            'quote': 'MIGRATED',
-            'po': None,
-            'resellerPo': None
+    @cached_property
+    def by_id(self) -> dict[str, dict[str, Any]]:
+        return {
+            sub.id: {k: v for k, v in sub.model_dump().items() if k != "id"}
+            for sub in self.items
         }
-    ],
-    'count': 35,
-    'offset': 0,
-    'total': 35
-}
-    mdata = Subscriptions(**data)
-    ...
+
+    def __len__(self) -> int:
+        return self.total
+
+    def __bool__(self) -> bool:
+        return bool(self.total)
+
+    @cached_property
+    def counts(self) -> SubCounts:
+        return SubCounts(self.items)
+
+    def dump(self):
+        return [
+            {**sub.model_dump(), "status": "OK" if sub.valid else "EXPIRED" if sub.expired else ""}
+            for sub in self.items
+        ]
+
+    def get_inv_cache_fields(self, sub_id: str) -> dict[str, str | int]:
+        if not sub_id or sub_id[0] not in self.by_id:
+            return {
+                "subscription_expires": None,
+                "subscription_key": None,
+                "services": None
+            }
+
+        sub = self.by_id[sub_id[0]]
+        return {
+            "subscription_expires": sub["end_date"],
+            "subscription_key": sub["key"],
+            "services": sub["name"]
+        }
+
+
+class InventoryDevice(BaseModel):
+    id: str
+    mac: str = Field(alias=AliasChoices("mac", "macAddress"))
+    serial: str = Field(alias=AliasChoices("serial", "serialNumber"))
+    sku: Optional[str] = Field(None, alias=AliasChoices("sku", "partNumber"))
+    type: Optional[str] = Field(None, alias=AliasChoices("type", "deviceType"))
+    model: Optional[str] = None
+    created_at: int = Field(alias=AliasChoices("created_at", "createdAt"))
+    updated_at: int = Field(alias=AliasChoices("updated_at", "updatedAt"))
+    archived: Optional[bool] = None
+    assigned: Optional[bool | None] = Field(None, alias=AliasChoices("assigned", "assignedState"))
+    region: Optional[str] = None
+    subscription: list[str] | str| None = None
+    application: str | None = None
+
+    @field_validator("application", mode="before")
+    @classmethod
+    def get_app_id(cls, app: dict[str, str] | None) -> list[str] | None:
+        return None if not app else app["id"]
+
+    @field_validator("subscription", mode="before")
+    @classmethod
+    def get_sub_ids(cls, subs: list[dict[str, str]] | None) -> list[str] | None:
+        return None if not subs else [s["id"] for s in subs]
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def convert_dates(cls, date_str: str) -> int:
+        return pendulum.from_format(date_str.rstrip("Z"), "YYYY-MM-DDTHH:mm:ss.SSS", tz="UTC").int_timestamp
+
+    @field_validator("mac", mode="after")
+    @classmethod
+    def _normalize_mac(cls, mac: str) -> str:
+        mac_out = utils.Mac(mac)
+        if not mac_out.ok:
+            log.warning(f"MAC Address {mac} passed into Inventory via import does not appear to be valid.", show=True, caption=True, log=True)
+        return mac_out.cols.upper()
+
+    @field_validator("assigned", mode="before")
+    @classmethod
+    def _assigned_to_bool(cls, value: str) -> bool | None:
+        if value is None:
+            return value
+
+        return value == "ASSIGNED_TO_SERVICE"
+
+    @cached_property
+    def subscribed(self) -> bool:
+        return bool(self.subscription)
+
+
+class InvCounts:
+    __slots__ = ["total", "expired", "expiring_soon", "subscribed", "no_subscription", "archived", "assigned"]
+
+    def __init__(self, devs: list[InventoryDevice]):
+        self.total = len(devs)
+        self.subscribed = len([d for d in devs if d.subscribed])
+        self.no_subscription = self.total - self.subscribed
+        self.archived = len([d for d in devs if d.archived])
+        self.assigned = len([d for d in devs if d.assigned])
+
+    def __rich__(self):
+        ret = f"[magenta]Inventory counts[/] Total: [cyan]{self.total}[/], [green]Subscription Assigned[/]: [cyan]{self.subscribed}[/]"
+        if self.no_subscription:
+            ret += f", [yellow]No Subscription Assigned[/]: [cyan]{self.no_subscription}[/]"
+        if self.assigned:
+            ret += f", [green]Assinged to Service[/]: [cyan]{self.assigned}[/]"
+        if self.archived:
+            ret += f", [dim][red]Archived[/]: [cyan]{self.archived}[/][/dim]"
+
+        return ret
+
+    def __str__(self):
+        return unstyle(self.__rich__())
+
+
+class Inventory(BaseModel):
+    items: list[InventoryDevice]
+    count: int
+    offset: int
+    total: int
+
+    def __len__(self) -> int:
+        return self.total
+
+    def __bool__(self) -> bool:
+        return bool(self.total)
+
+    @property
+    def by_id(self) -> dict[str, dict[str, Any]]:
+        return {
+            dev.id: {k: v for k, v in dev.model_dump().items() if k != "id"}
+            for dev in self.items
+        }
+
+    @property
+    def counts(self) -> InvCounts:
+        return InvCounts(self.items)
+
+    @model_validator(mode="before")
+    def prep_for_cache(data: list[dict[str, int | dict[str, Any]]]) -> list[dict[str, int | dict[str, Any]]]:
+        def _inv_type(dev_type: str, model: str | None) -> Literal["ap", "gw", "sw", "cx", "bridge", "sdwan"] | None:
+                if dev_type is None:  # Only occurs when import data is passed into this model, inventory data from API should have the type
+                    return None
+
+                if dev_type == "IAP":
+                    return "ap"
+                if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY, BRIDGE, SDWAN
+                    aos_sw_models = ["2530", "2540", "2920", "2930", "3810", "5400"]  # current as of 2.5.8 not expected to change.  MAS not supported.
+                    return "sw" if model[0:4] in aos_sw_models else "cx"
+
+                return "gw" if dev_type == "GATEWAY" else dev_type.lower()
+
+        items = [{k: v if k not in ["deviceType"] else _inv_type(v, model=dev.get("model")) for k, v in dev.items() if v != 'devices/device'} for dev in data.get("items", [])]
+        return {**data, "items": items}
+
+    @cached_property
+    def by_serial(self) -> dict[str, dict[str, Any]]:
+        return {s.serial: s.model_dump() for s in self.items}
+
+async def get_inventory_with_sub_data(inv_data: Inventory, sub_data: Subscriptions) -> list[dict[str, Any]]:
+    return [{"id": devid, **dev_data, **sub_data.get_inv_cache_fields(dev_data["subscription"])} for devid, dev_data in inv_data.by_id.items()]
