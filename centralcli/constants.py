@@ -480,6 +480,7 @@ class CacheArgs(str, Enum):
     all = "all"
     devices = "devices"
     inventory = "inventory"
+    subscriptions = "subscriptions"
     sites = "sites"
     clients = "clients"
     templates = "templates"
