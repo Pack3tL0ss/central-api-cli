@@ -1,60 +1,52 @@
-from pathlib import Path
-import typer
 import csv
-from centralcli import config, Response, utils, log
+from pathlib import Path
+from typing import Any
+
+from centralcli import Response, config, utils, cli
+
+from .classic.api import ClassicAPI
+api = ClassicAPI(config.classic.base_url)
 
 
-def eval_caas_response(resp) -> None:
+def eval_caas_response(resp: Response) -> None:
     if not resp.ok:
-        typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
+        # typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
+        cli.console.print(resp)
         return
     else:
         resp = resp.output
 
-    lines = "-" * 22
+    lines = f'[turquoise4]{"-" * 22}[/]'
 
-    typer.echo("")
-    typer.echo(lines)
+    cli.console.print(f"\n{lines}")
     if resp.get("_global_result", {}).get("status", '') == 0:
-        typer.echo(f"Global Result: {typer.style('Success', fg='bright_green')}")
+        cli.console.print("Global Result: [bright_green]Success[/]")
     else:
-        typer.echo(f"Global Result: {typer.style('Failure', fg='red')}")
-    typer.echo(lines)
+        cli.console.print("Global Result: [red1]Failure[/]")
+    cli.console.print(lines)
 
-    _bypass = None
     if resp.get("cli_cmds_result"):
-        typer.secho("\n -- Command Results --", fg="cyan")
+        cli.console.print("\n -- [cyan]Command Results[/] --")
         for cmd_resp in resp["cli_cmds_result"]:
             for _c, _r in cmd_resp.items():
                 _r_code = _r.get("status")
                 if _r_code == 0:
-                    _r_pretty = typer.style("OK", fg="bright_green")
+                    _r_pretty = "[bright_green]OK[/]"
                 elif _r_code == 2:
-                    _r_pretty = typer.style("WARNING", fg="bright_red")
+                    _r_pretty = "[red1]WARNING[/]"
                 else:
-                    _r_pretty = typer.style(f"ERROR {_r_code}", fg="red")
+                    _r_pretty = f"[red1]ERROR[/] {_r_code}"
                 _r_txt = _r.get("status_str")
-                typer.echo(f" [{_bypass or _r_pretty}] {_c}")
+                cli.console.print(f" [{_r_pretty}] {_c}")
                 if _r_txt:
-                    typer.echo(f"{lines}\n{_r_txt}\n{lines}")
-                # if _r_code not in [0, 2]:
-                #     _bypass = "bypassed"
-                #     if _r_txt:
-                #         typer.echo(f"\n{lines}{_r_txt}\n{lines}\n")
-                #     typer.echo("-" * 65)
-                #     typer.echo("!! Remaining Commands bypassed due to Error in previous object !!")
-                #     typer.echo("-" * 65)
-                # elif _r_txt and not _bypass:
-                #     typer.echo(f"\t{_r_txt}")
-        typer.echo("")
+                    cli.console.print(f"{lines}\n{_r_txt}\n{lines}")
+        cli.console.print("")
 
 
 class BuildCLI:
     """Build equivalent cli commands for caas API from bulk-edit.csv import file"""
-    def __init__(self, central=None, data: dict = None, ) -> None:
-        self.central = central
-
-        # Updated in build_cmds
+    def __init__(self, data: dict = None) -> None:
+        # Values updated in build_cmds
         self.dev_info = None
         self.data = data
         self.cmds = []
@@ -125,10 +117,10 @@ class BuildCLI:
             self.data = self.get_bulkedit_data(file)
 
         for dev in self.data:
-            common = self.data[dev]["_common"]
+            common: dict[str, Any] = self.data[dev]["_common"]
             vlans = self.data[dev]["vlans"]
-            _pretty_name = typer.style(common.get('hostname', dev), fg="bright_green")
-            resp = self.central.request(self.central.get_devices, "gateways")
+            _pretty_name = f"[bright_green]{common.get('hostname', dev)}[/]"
+            resp = api.session.request(api.monitoring.get_devices, "gateways")
             gateways = resp.output
             self.dev_info = [_dev for _dev in gateways if _dev.get('mac', '').lower() == dev.lower()]
 
@@ -136,16 +128,12 @@ class BuildCLI:
             if self.dev_info:
                 self.dev_info = self.dev_info[0]
                 if common["group"] != self.dev_info["group"]:
-                    # print(" it is *Not*", end="\n")
-                    typer.echo(f"Moving {_pretty_name} to Group {common['group']}")
-                    res = self.central.move_devices_to_group(common["group"], self.dev_info["serial"])
+                    cli.console.print(f"Moving {_pretty_name} to Group [cyan]{common['group']}[/]")
+                    res = api.session.request(api.configuration.move_devices_to_group, common["group"], serials=self.dev_info["serial"])
                     if not res:
-                        typer.secho(
-                            f"Error Returned Moving {common['hostname']} to Group {common['group']}", fg="red"
-                        )
-                        raise typer.Exit(1)
+                        cli.exit(f"[red1]Error[/] Returned Moving [cyan]{common['hostname']}[/] to Group [cyan]{common['group']}[/]")
 
-            typer.echo(f"Building cmds for {_pretty_name}")
+            cli.console.print(f"Building cmds for {_pretty_name}")
             if common.get("hostname"):
                 self.cmds += [f"hostname {common['hostname']}", "!"]
 
@@ -153,7 +141,7 @@ class BuildCLI:
                 self.cmds += [f"vlan {v['vlan_id']}", "!"]
                 if v.get("vlan_ip"):
                     if not v.get("vlan_subnet"):
-                        print(f"Validation Error No subnet mask for VLAN {v['vlan_id']} ")
+                        cli.econsole.print(f":warning:  [red1]Validation Error[/] No subnet mask for VLAN [cyan]{v['vlan_id']}[/]")
                         # TODO handle the error
                     self.cmds += [f"interface vlan {v['vlan_id']}", f"ip address {v['vlan_ip']} {v['vlan_subnet']}"]
                     # TODO should VLAN description also be vlan name - check what bulk edit does
@@ -208,10 +196,10 @@ class BuildCLI:
                 if v.get("bg_peer_ip"):
                     # _as = self.session.get_bgp_as()
                     # self.cmds.append(f"router bgp neighbor {v['bg_peer_ip']} as {_as}")
-                    print("bgp peer ip Not Supported by Script yet")
+                    cli.econsole.print(":warning:  bgp peer ip Not Supported by Script yet")
 
                 if v.get("zs_site_to_site_map_name") or v.get("source_fqdn"):
-                    print("Zscaler Configuration Not Supported by Script Yet")
+                    cli.econsole.print(":warning:  Zscaler Configuration Not Supported by Script Yet")
 
             return self.cmds
 
@@ -223,10 +211,9 @@ class BuildCLI:
             if mac:
                 url = f"{url}/{mac.url}"
             else:
-                log.error(f"{dev_mac} does not appear to be a valid MAC address.", show=True)
-                raise typer.Exit(1)
+                cli.exit(f"{dev_mac} does not appear to be a valid MAC address.")
 
-        return await self.central.get(url)
+        return await api.session.get(url)
 
 
     # FIXME
@@ -239,16 +226,15 @@ class BuildCLI:
         """
         url = "/caas/v1/status/device"
         params = {"serial_num": serial}
-        return await self.central.get(url, params=params)
+        return await api.session.get(url, params=params)
 
 class CaasAPI(BuildCLI):
-    def __init__(self, central=None, data: dict = None, file: Path = None) -> None:
+    def __init__(self, data: dict = None, *, file: Path = None) -> None:
         self.data = data
-        self.central = central
         self.file = file
         self.dev_info = None
         self.cmds = []
-        super().__init__(central=central, data=data)
+        super().__init__(data=data)
 
     async def send_commands(self, group_dev: str, cli_cmds: list = None):
         if ":" in group_dev and len(group_dev) == 17:
@@ -259,10 +245,9 @@ class CaasAPI(BuildCLI):
         url = "/caasapi/v1/exec/cmd"
 
         if not config.classic.customer_id:
-            typer.secho(f"customer_id attribute not found in {config.file}")
-            raise typer.Exit(1)
+            cli.exit(f"customer_id attribute not found in {config.file}")
         else:
             params = {"cid": config.classic.customer_id, key: group_dev}
             json_data = {"cli_cmds": cli_cmds or []}
 
-            return await self.central.post(url, params=params, json_data=json_data)
+            return await api.session.post(url, params=params, json_data=json_data)
