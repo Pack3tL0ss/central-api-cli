@@ -19,8 +19,8 @@ from rich.status import Status
 from rich.text import Text
 from rich.markup import escape
 
-from .cnx.client import NewCentralBase
 if TYPE_CHECKING:
+    from .cnx.base import NewCentralBase
     from rich.style import StyleType
     from rich.console import RenderableType
 
@@ -157,6 +157,10 @@ class RateLimit():
         full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
         return full_text if self.call_performed else str(self)
 
+    @property
+    def has_value(self) -> bool:
+        return self.total_day > 0
+
 
 class Spinner(Status):
     """A Spinner Object that adds methods to rich.status.Status object
@@ -238,6 +242,7 @@ class Response:
         elapsed: Union[int, float] = 0,
         rl_str: str = None,
         data_key: str = None,
+        caption: str | list[str] = None
     ):
         """Response Constructor
 
@@ -259,6 +264,7 @@ class Response:
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
             rl_str (str, optional): Rate Limit String. Defaults to None.
             data_key: (str, optional): The dict key where the actual data is held in the response.
+            caption: (str | list[str], optional): Optional captions to be displayed with the response.
         """
         self.rl = rl_str or RateLimit(response)
         self._response = response
@@ -268,6 +274,7 @@ class Response:
         self.method = ""
         self.elapsed = elapsed
         self.data_key = data_key
+        self.caption = caption
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason
