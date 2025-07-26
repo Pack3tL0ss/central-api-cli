@@ -162,8 +162,8 @@ _short_value = {
     "AOS-CX": "cx",
     "type": lambda t: t.lower(),
     "release_status": lambda v: u"\u2705" if "beta" in v.lower() else "",
-    "start_date": lambda x: DateTime(x, "mdyt"),
-    "end_date": lambda x: DateTime(x, "mdyt", format_expiration=True,),
+    "start_date": lambda x: DateTime(x, "date-string"),
+    "end_date": lambda x: DateTime(x, "date-string", format_expiration=True,),
     "auth_type": lambda v: v if v != "None" else "-",
     "vlan_mode": lambda v: vlan_modes.get(v, v),
     "allowed_vlan": lambda v: v if not isinstance(v, list) or len(v) == 1 else ",".join([str(sv) for sv in sorted(v)]),
@@ -668,7 +668,7 @@ def get_clients(
 
     return data
 
-
+# TODO moved to utils remove references and point everything to method in utils.Utils.strip_no_value
 def strip_no_value(data: List[dict] | Dict[dict], aggressive: bool = False) -> List[dict] | Dict[dict]:
     """strip out any columns that have no value in any row
 
@@ -1366,6 +1366,7 @@ def _inv_type(model: str, dev_type: str) -> DevTypes:
 
 def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
     field_order = [
+        "id",
         "serial",
         "mac",
         "type",
@@ -1374,13 +1375,15 @@ def get_device_inventory(data: List[dict], sub: bool = None) -> List[dict]:
         "services",
         "subscription_key",
         "subscription_expires",
+        "archived"
     ]
 
     _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
-    data = [
-        dict(short_value(k, d.get(k, "")) for k in field_order) for d in data
-    ]
-    data = sorted(strip_no_value(data), key=lambda i: (i["type"], i["model"]))
+    # data = [
+    #     dict(short_value(k, d.get(k, "")) for k in field_order if k in d) for d in data
+    # ]
+    data = simple_kv_formatter(data, key_order=field_order, emoji_bools=True)
+    data = sorted(strip_no_value(data), key=lambda i: (i["services"] or "", i["model"]))
 
     if sub is not None:
         if sub:
@@ -1430,23 +1433,29 @@ def get_fw_version_list(data: List[dict], format: TableFormat = "rich", verbose:
 
 def get_subscriptions(data: List[dict], default_sort: bool = True) -> List[dict]:
     field_order = [
+        "id",
+        "tier",
         "license_type",
+        "type",
         "sku",
         "status",
         "subscription_type",
         "quantity",
+        "qty",
+        "available",
         "subscription_key",
         "start_date",
         "end_date",
     ]
-    data = [
-        dict(short_value(k, d[k]) for k in field_order) for d in data
-    ]
+    _short_value["status"] = lambda s: f"[red]{s}[/]" if s == "EXPIRED" else f"[bright_green]{s}[/]"
     if default_sort:
-        data = sorted(data, key=lambda s: s["name"])
+        data = sorted(data, key=lambda s: s.get("name", s.get("tier", s.get("license_type", 0))))
         ok_subs = [sub for sub in data if sub["status"] == "OK"]
         expired_subs = [sub for sub in data if sub["status"] != "OK"]
         data = [*ok_subs, *expired_subs]
+    data = [
+        dict(short_value(k, d[k]) for k in field_order if k in d) for d in data
+    ]
 
     return data
 
