@@ -6,10 +6,10 @@ import oauthlib
 from requests_oauthlib import OAuth2Session
 from oauthlib.oauth2 import BackendApplicationClient
 from pathlib import Path
-from typing import Dict, Literal
 from .. import config, log
 import json
 import pendulum
+from typing import Literal
 
 
 
@@ -47,10 +47,10 @@ class NewCentralURLs:
         "SERVICE_MANAGER_BY_REGION": "/service-catalog/v1/per-region-service-managers",
     }
 
-urls = NewCentralURLs()
+urls = NewCentralURLs()  # currently only using Authentication url
 
 
-def _load_token_info(token_info: Path | str | Dict[str, Dict[str, str]]) -> Dict[str, Dict[str, str]]:
+def _load_token_info(token_info: Path | str | dict[str, dict[str, str]]) -> dict[str, dict[str, str]]:
     if isinstance(token_info, dict):
         return token_info
     if isinstance(token_info, str):
@@ -66,7 +66,7 @@ def _load_token_info(token_info: Path | str | Dict[str, Dict[str, str]]) -> Dict
 
 
 class NewCentralBase:
-    def __init__(self, token_info: Path | str | Dict[str, Dict[str, str]]):
+    def __init__(self, token_info: Path | str | dict[str, dict[str, str]]):
         """Initialize NewCentralBase class.
 
         Args:
