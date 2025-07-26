@@ -89,7 +89,7 @@ def configs(
     """
     br = BatchRequest
     console = Console(emoji=False)
-    caasapi = caas.CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI()
     gw_reqs, ap_reqs, ap_env_reqs, gw_grp_reqs, ap_grp_reqs, aps, gws, ap_groups, gw_groups, ap_template_reqs = [], [], [], [], [], [], [], [], [], []
 
     if do_switch:

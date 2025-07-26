@@ -28,26 +28,32 @@ Then run via
 
 """
 # from enum import auto
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import List
+
+import typer
 from rich import print
 from rich.console import Console
-import typer
-from typing import List
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, config, utils, caas, constants, cleaner
+    from centralcli import caas, cleaner, cli, config, constants, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, config, utils, caas, constants, cleaner
+        from centralcli import caas, cleaner, cli, config, constants, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.cache import CentralObject
+from centralcli.cache import CentralObject, CacheDevice
+
+from . import BatchRequest
+from .classic.api import ClassicAPI
+
+api = ClassicAPI(config.classic.base_url)
 cache = cli.cache
 
 tty = utils.tty
@@ -58,31 +64,29 @@ SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 console = Console(emoji=False)
 
 
-@app.command(short_help="Import Apply settings from bulk-edit.csv")
+@app.command()
 def bulk_edit(
     input_file: Path = typer.Argument(config.bulk_edit_file,),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.workspace_name_callback),
+    yes: bool = cli.options.yes,
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    caasapi = caas.CaasAPI(central=cli.central)
+    """"Import and Apply settings from bulk-edit.csv"
+    """
+    caasapi = caas.CaasAPI()
     cmds = caasapi.build_cmds(file=input_file)
     # TODO log cli
     if cmds:
-        typer.secho("Commands:", fg="bright_green")
-        typer.echo("\n".join(cmds))
-        if typer.confirm("Send Commands"):
-            for dev in caasapi.data:
-                group_dev = f"{caasapi.data[dev]['_common'].get('group')}/{dev}"
-                resp = cli.central.request(caasapi.send_commands, group_dev, cmds)
-                caas.eval_caas_response(resp)
-        else:
-            raise typer.Abort()
+        cli.console.print(f"[bright_green]Send{'ing' if yes else ''} Commands[/]:")
+        cli.console.print("\n".join(cmds))
+
+        cli.confirm(yes)
+        for dev in caasapi.data:
+            group_dev = f"{caasapi.data[dev]['_common'].get('group')}/{dev}"
+            resp = api.session.request(caasapi.send_commands, group_dev, cmds)
+            caas.eval_caas_response(resp)
+
 
 
 # FIXME
@@ -97,16 +101,11 @@ def add_vlan(
     vrid: str = None,
     vrrp_ip: str = None,
     vrrp_pri: int = None,
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account",
-                                 callback=cli.default_callback),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",
-                               callback=cli.debug_callback),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                callback=cli.workspace_name_callback),
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    caasapi = caas.CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI()
     cmds = []
     cmds += [f"vlan {pvid}", "!"]
     if name:
@@ -120,7 +119,7 @@ def add_vlan(
             cmds += [f"priority {vrrp_pri}"]
         cmds += ["no shutdown", "!"]
 
-    resp = cli.central.request(caasapi.send_commands, group_dev, cmds)
+    resp = api.session.request(caasapi.send_commands, group_dev, cmds)
     caas.eval_caas_response(resp)
 
 
@@ -131,7 +130,7 @@ def import_vlan(
     file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add VLAN from stored_tasks file.
 
@@ -146,23 +145,21 @@ def import_vlan(
     if key:
         data = data.get(key)
 
-    if data:
-        args = data.get("arguments", [])
-        kwargs = data.get("options", {})
-        _msg = (
-            f"\n{typer.style('add-vlan', fg='bright_green')}"
-            f'\n{typer.style("  settings:", fg="cyan")}'
-            f"\n    args: {', '.join(args)}\n    kwargs: {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
-        )
-        typer.echo(f"{_msg}")
-        confirm_msg = typer.style("Proceed?", fg="bright_green")
-        if typer.confirm(confirm_msg):
-            add_vlan(*args, **kwargs)
-        else:
-            raise typer.Abort()
-    else:
-        typer.secho(f"{key} Not found in {import_file}")
-        raise typer.Exit(1)
+    if not data:
+        cli.exit(f"[cyan]{key}[/] Not found in [cyan]{import_file}[/]")
+
+    args = data.get("arguments", [])
+    kwargs = data.get("options", {})
+    _msg = (
+        f"\n{typer.style('add-vlan', fg='bright_green')}"
+        f'\n{typer.style("  settings:", fg="cyan")}'
+        f"\n    args: {', '.join(args)}\n    kwargs: {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
+    )
+    typer.echo(f"{_msg}")
+    if cli.confirm():
+        add_vlan(*args, **kwargs)
+
+
 
 
 @app.command("batch")
@@ -173,7 +170,7 @@ def caas_batch(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Run Supported caas commands providing parameters via stored-tasks file
 
@@ -211,7 +208,7 @@ def caas_batch(
         - access-list session dmz-firewall
         - "!"
     """
-    caasapi = caas.CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI()
     if file == config.stored_tasks_file and not key:
         cli.exit("key is required when using the default import file")
 
@@ -220,43 +217,44 @@ def caas_batch(
 
     if not data:
         cli.exit(f"[cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
-    else:
-        args = data.get("arguments", [])
-        kwargs = data.get("options", {})
-        cmds = data.get("cmds", [])
 
-        if not args:
-            cli.exit("import data requires an argument specifying the group / device")
+    args = data.get("arguments", [])
+    kwargs = data.get("options", {})
+    cmds = data.get("cmds", [])
 
-        if command:
-            command = command.replace('-', '_')
-            _msg1 = typer.style(
-                f"Proceed with {command}:",
-                fg="cyan"
-            )
-            _msg2 = f"{', '.join(args)} {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
-            confirm_msg = typer.style(f"{_msg1} {_msg2}?", fg="bright_green")
+    if not args:
+        cli.exit("import data requires an argument specifying the group / device")
 
-            if command in globals():
-                fn = globals()[command]
-                if typer.confirm(confirm_msg):
-                    fn(*args, **kwargs)  # type: ignore # NoQA
-                else:
-                    raise typer.Abort()
+    if command:
+        command = command.replace('-', '_')
+        _msg1 = typer.style(
+            f"Proceed with {command}:",
+            fg="cyan"
+        )
+        _msg2 = f"{', '.join(args)} {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
+        confirm_msg = typer.style(f"{_msg1} {_msg2}?", fg="bright_green")
+
+        if command in globals():
+            fn = globals()[command]
+            if typer.confirm(confirm_msg):
+                fn(*args, **kwargs)  # type: ignore # NoQA
             else:
-                typer.echo(f"{command} doesn't appear to be valid")
+                raise typer.Abort()
+        else:
+            typer.echo(f"{command} doesn't appear to be valid")
 
-        elif cmds:
-            print(f"\nSending the following to [cyan]{utils.unlistify(args)}[/]")
-            if kwargs:
-                print("\n  With the following options:")
-                _ = [print(f"    {k} : {v}") for k, v in kwargs.items()]
-                print("  [bold]cli cmds:[/]")
-            _ = [print(f"    [cyan]{c}[/]") for c in cmds]
-            if typer.confirm("Proceed:"):
-                kwargs = {**kwargs, **{"cli_cmds": cmds}}
-                resp = cli.central.request(caasapi.send_commands, *args, **kwargs)
-                caas.eval_caas_response(resp)
+    elif cmds:
+        print(f"\nSending the following to [cyan]{utils.unlistify(args)}[/]")
+        if kwargs:
+            print("\n  With the following options:")
+            _ = [print(f"    {k} : {v}") for k, v in kwargs.items()]
+            print("  [bold]cli cmds[/]:")
+        _ = [print(f"    [cyan]{c}[/]") for c in cmds]
+
+        cli.confirm()
+        kwargs = {**kwargs, **{"cli_cmds": cmds}}
+        resp = api.session.request(caasapi.send_commands, *args, **kwargs)
+        caas.eval_caas_response(resp)
 
 
 @app.command()
@@ -293,7 +291,7 @@ def send_cmds(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Send commands to gateway(s) (group or device level)
 
@@ -305,14 +303,14 @@ def send_cmds(
     if kw1 == "group":
         if all:
             g = cache.get_group_identifier(nodes)
-            nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
+            nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
             action = f"all devices in {g.name} group."
         else:
             nodes = cache.get_group_identifier(nodes)
             action = f"group level gateway config for {nodes.name} group."
     elif kw1 == "site":
         s = cache.get_group_identifier(nodes)
-        nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
+        nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
         action = f"all devices in site: {s.name}"
     elif kw1 == "file":  # TODO break this out into sep func
         dev_file = Path(nodes)
@@ -327,9 +325,9 @@ def send_cmds(
             if devices:
                 nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data["devices"]]
             elif "groups" in file_data:
-                nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
+                nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
             elif "sites" in file_data:
-                nodes = [CentralObject("dev", d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
+                nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
             else:
                 cli.exit(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
 
@@ -341,9 +339,9 @@ def send_cmds(
         action = f'{", ".join(n.name for n in nodes)} defined in {dev_file.name}'
     elif kw1 == "device":
         if not isinstance(nodes, str):
-            print(f"nodes is of type {type(nodes)} this is unexpected.")
+            cli.econsole.print(f":warning:  nodes is of type {type(nodes)} this is unexpected.", emoji=False)
 
-        nodes: List[CentralObject] = [cache.get_identifier(nodes, qry_funcs=["dev"], device_type="gw")]
+        nodes: List[CacheDevice] = [cache.get_identifier(nodes, qry_funcs=["dev"], device_type="gw")]
         action = f'{", ".join(n.name for n in nodes)}'
 
     if cmd_file:
@@ -355,21 +353,21 @@ def send_cmds(
     # TODO common command confirmation func
     if not commands:
         cli.exit("Error No commands provided")
-    else:
-        console.print(f"Sending the following to [cyan]{action}[/]")
-        _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
+
+    console.print(f"Sending the following to [cyan]{action}[/]")
+    _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
 
     if cli.confirm(yes):
-        caasapi = caas.CaasAPI(central=cli.central)
+        caasapi = caas.CaasAPI()
         _reqs = [
-            cli.central.BatchRequest(
+            BatchRequest(
                 caasapi.send_commands,
                 n.name if not n.is_dev else n.mac,
                 cli_cmds=commands
             )
             for n in utils.listify(nodes)
         ]
-        batch_res = cli.central.batch_request(_reqs)
+        batch_res = api.session.batch_request(_reqs)
         cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
 
 @app.callback()

@@ -15,7 +15,6 @@ from pathlib import Path
 import getpass
 from jinja2 import Template
 from rich import print
-from rich.console import Console
 from rich.markup import escape
 
 
@@ -30,7 +29,7 @@ except (ImportError, ModuleNotFoundError):
 try:
     from centralcli import (
         Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
-        BatchRequest, caas, render, cli, utils, config, log
+        BatchRequest, caas, render, cli, utils, config, log, cache
     )
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
@@ -38,7 +37,7 @@ except (ImportError, ModuleNotFoundError) as e:
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (
             Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
-            BatchRequest, caas, render, cli, utils, config, log
+            BatchRequest, caas, render, cli, utils, config, log, cache
         )
     else:
         print(pkg_dir.parts)
@@ -58,10 +57,15 @@ from .response import CombinedResponse
 from .models.cache import Device
 from .caas import CaasAPI
 
-from .classic.api import ClassicAPI
-from .classic.client import Session
-api = ClassicAPI(Session(config.classic.base_url))
+# from .classic.api import ClassicAPI
+# api = ClassicAPI(config.classic.base_url)
 
+# if config.glp.ok:
+#     from .cnx.api import GlpApi
+#     glp_api = GlpApi(config.glp.base_url)
+# else:
+#     glp_api = None
+from .clicommon import APIClients
 
 if TYPE_CHECKING:
     from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
@@ -82,6 +86,10 @@ app.add_typer(clishowbandwidth.app, name="bandwidth")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()
+
+api_clients = APIClients()
+api = api_clients.classic
+glp_api = api_clients.glp
 
 class Counts:
     def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
@@ -254,7 +262,8 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         resp = cli.cache.get_devices_with_inventory(status=status)
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
     elif not cli.cache.responses.dev:
-        resp = cli.central.request(cli.cache.refresh_dev_db, **params)
+        resp = api.session.request(cli.cache.refresh_dev_db, **params)
+        # resp = api.session.request(cli.cache.refresh_dev_db, **params)
         caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
@@ -266,7 +275,7 @@ def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[Cac
     try:
         data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
         model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
-        cli.central.request(cli.cache.update_dev_db, model_data)
+        api.session.request(cli.cache.update_dev_db, model_data)
     except Exception as e:
         log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
         log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
@@ -281,15 +290,15 @@ def _get_details_for_specific_devices(
         caption = None
 
         # Build requests
-        br = cli.central.BatchRequest
+        br = BatchRequest
         devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [br(cli.central.get_dev_details, dev.type, dev.serial) for dev in devs]
+        reqs = [br(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
-        batch_res = cli.central.batch_request(reqs)
+        batch_res = api.session.batch_request(reqs)
         if include_inventory:  # Combine results with inventory results
-            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
+            _ = api.session.request(cli.cache.refresh_inv_db_classic, device_type=dev_type)
             for r, dev in zip(batch_res, devs):
                 r.output = {**r.output, **cli.cache.inventory_by_serial.get(dev.serial, {})}
 
@@ -335,13 +344,13 @@ def show_devices(
     do_table: bool = False
 ) -> None:
 
-    if config.is_old_cfg:
-        log.info("\u2728 There is a new format for the cencli config [dim italic](config.yaml)[/] file with support for GreenLake and New Central!", caption=True)
-        log.info(f"  Use [cyan]cencli convert config[/] to convert the existing config @ {config.file} to the new format.", caption=True)
+    # if config.is_old_cfg:
+    #     log.info("\u2728 There is a new format for the cencli config [dim italic](config.yaml)[/] file with support for GreenLake and New Central!", caption=True)
+    #     log.info(f"  Use [cyan]cencli convert config[/] to convert the existing config @ {config.file} to the new format.", caption=True)
 
     # include subscription implies include_inventory
     if update_cache:
-        cli.central.request(cli.cache.refresh_dev_db)
+        api.session.request(cli.cache.refresh_dev_db)
 
     if group:
         group: CacheGroup = cli.cache.get_group_identifier(group)
@@ -379,9 +388,9 @@ def show_devices(
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
-        resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
+        resp = api.session.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
+            _ = api.session.request(cli.cache.refresh_inv_db_classic, device_type=dev_type)
             resp = cli.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
@@ -458,7 +467,7 @@ def all_(
     account: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
-    """Show details for All devices
+    """Show details for All devices [dim italic](that have checked in with Central).[/]
     """
     if down:
         status = "Down"
@@ -572,16 +581,16 @@ def aps(
         if not group:
             cli.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
 
-        group = cli.cache.get_group_identifier(group)
-        resp = cli.central.request(cli.central.get_dirty_diff, group.name)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
+        resp = api.session.request(api.configuration.get_dirty_diff, group.name)
         tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
         cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
     elif neighbors:
         if site is None:
             cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
 
-        site: CentralObject = cli.cache.get_site_identifier(site)
-        resp: Response = cli.central.request(cli.central.get_topo_for_site, site.id, )
+        site: CacheSite = cli.cache.get_site_identifier(site)
+        resp: Response = api.session.request(api.topo.get_topo_for_site, site.id, )
         tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
         cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
@@ -749,16 +758,16 @@ def stacks(
         status = StatusOptions("Up")
 
     if group:
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
 
     cleaner_kwargs = {"status": status}
     args = ()
     kwargs = {}
-    func = cli.central.get_switch_stacks
+    func = api.monitoring.get_switch_stacks
     if switches:
         devs: List[CentralObject] = [cli.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
         if len(devs) == 1:  # if the specify a we use the details call
-            func = cli.central.get_switch_stack_details
+            func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
         else: # if the specify multiple hosts we grab info for all stacks and filter in the cleaner
             cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
@@ -766,7 +775,7 @@ def stacks(
                 kwargs = {"group": group.name}
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = cli.central.request(func, *args, **kwargs)
+    resp = api.session.request(func, *args, **kwargs)
 
     title = "Switch stack details"
     caption = ""
@@ -785,7 +794,6 @@ def inventory(
         help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {cli.help_block('show all')}",
         show_default=False,
     ),
-    glp: bool = typer.Option(False, "--glp", help="Get Device List via GreenLake API", show_default=False,),
     verbose: int = cli.options.verbose,
     sort_by: SortInventoryOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -830,20 +838,15 @@ def inventory(
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    if not glp:
-        resp = cli.central.request(cli.cache.refresh_inv_db, device_type=dev_type)
-        caption = _build_device_caption(resp, inventory=True)
-    else:
-        from .cnx.api.glp.devices import GlpDevicesApi
-        central = GlpDevicesApi()
-        resp = central.request(central.get_glp_devices)
-        caption = None
+    _api = glp_api or api
+    resp = _api.session.request(cli.cache.refresh_inv_db, dev_type=dev_type)
+    # caption = None if glp_api else _build_device_caption(resp, inventory=True)
 
     cli.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        caption=caption,
+        # caption=caption,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -860,7 +863,6 @@ def subscriptions(
     what: SubscriptionArgs = typer.Argument("details"),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
     service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
-    glp: bool = typer.Option(False, "--glp", help="Get Device List via GreenLake API", show_default=False,),
     sort_by: SortSubscriptionOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -872,7 +874,7 @@ def subscriptions(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show subscription/license details or stats
     """
@@ -882,41 +884,34 @@ def subscriptions(
     set_width_cols = None
     _cleaner_kwargs = {}
     caption = None
-    if glp:
-        from .cnx.api.glp.subscriptions import GlpSubscriptionsApi
-        from .cnx.cleaners import glp as cleaner
-        _cleaner = cleaner.get_subscriptions
-        central = GlpSubscriptionsApi(config.workspace)
-        resp = central.request(central.get_subscriptions)
-        title = "GLP Subscriptions"
-    elif what is None or what == "details":
-        # resp = cli.central.request(cli.central.get_subscriptions, license_type=service, device_type=dev_type)
-        resp = api.session.request(api.platform.get_subscriptions, license_type=service, device_type=dev_type)
-        title = "Subscription Details"
-        from . import cleaner
+    _api = glp_api or api
+    if what is None or what == "details":
+        resp = _api.session.request(cache.refresh_sub_db, license_type=service, dev_type=dev_type)
+        title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
         if resp.ok:
             _cleaner = cleaner.get_subscriptions
             set_width_cols = {"name": {"min": 39}}
             if sort_by:
                 _cleaner_kwargs = {"default_sort": False}
-            try:
-                _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
-                _ok_cnt = len(resp.output) - _expired_cnt
-                caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
-            except Exception as e:
-                log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
-                caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
+            if not glp_api:
+                try:
+                    _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
+                    _ok_cnt = len(resp.output) - _expired_cnt
+                    caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
+                except Exception as e:
+                    log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
+                    caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
 
     elif what == "auto":
-        resp = cli.central.request(cli.central.get_auto_subscribe)
+        resp = api.session.request(api.platform.get_auto_subscribe)
         if resp and "services" in resp.output:
             resp.output = resp.output["services"]
         title = "Services with auto-subscribe enabled"
     elif what == "stats":
-        resp = cli.central.request(cli.central.get_subscription_stats)
+        resp = api.session.request(api.platform.get_subscription_stats)
         title = "Subscription Stats"
     elif what == "names":
-        resp = cli.central.request(cli.cache.refresh_license_db)
+        resp = api.session.request(cli.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         set_width_cols = {"name": {"min": 39}}
     else:
@@ -983,13 +978,13 @@ def swarms(
 
         if config:
             title = f"Swarm config details for swarm associated with: {device.summary_text}"
-            resp = cli.central.request(cli.central.get_swarm_config, device.swack_id)
+            resp = api.session.request(api.configuration.get_swarm_config, device.swack_id)
         else:
             title = f"Swarm details for swarm associated with: {device.summary_text}"
-            resp = cli.central.request(cli.central.get_swarm_details, device.swack_id)
+            resp = api.session.request(api.monitoring.get_swarm_details, device.swack_id)
     else:
         title = "All Swarms"
-        resp = cli.central.request(cli.central.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
+        resp = api.session.request(api.monitoring.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
 
     cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
@@ -1146,7 +1141,7 @@ def interfaces(
 
         # Update cache basesd on provided filters
         kwargs = {"site": site} if site else {"group": group}  # monitoring API only allows 1 filter
-        dev_resp = cli.central.request(cli.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
+        dev_resp = api.session.request(cli.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
         if not dev_resp:
             cli.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
 
@@ -1165,13 +1160,13 @@ def interfaces(
             cli.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
 
     if dev_type == "gw":
-        batch_reqs = [BatchRequest(cli.central.get_gateway_ports, d.serial) for d in devs]
+        batch_reqs = [BatchRequest(api.monitoring.get_gateway_ports, d.serial) for d in devs]
     elif dev_type == "ap":
-        batch_reqs = [BatchRequest(cli.central.get_dev_details, "ap", d.serial) for d in devs]
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, "ap", d.serial) for d in devs]
     else:
         batch_reqs = [
                 BatchRequest(
-                    cli.central.get_switch_ports,
+                    api.monitoring.get_switch_ports,
                     d.swack_id or d.serial,
                     slot=slot,
                     stack=d.swack_id is not None,
@@ -1183,7 +1178,7 @@ def interfaces(
         cli.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
         cli.confirm(yes)
 
-    batch_resp = cli.central.batch_request(batch_reqs)
+    batch_resp = api.session.batch_request(batch_reqs)
 
     # We need to include name and dev_type from cache for multi-device listings (not included in payload of all the interface endpoints)
     if len(batch_resp) > 1:
@@ -1256,7 +1251,7 @@ def poe(
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
-    resp = cli.central.request(cli.central.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
+    resp = api.session.request(api.monitoring.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
     resp.output = utils.unlistify(resp.output)
     caption = "  Power values are in watts."
     if resp:
@@ -1319,7 +1314,6 @@ def vlans(
     Command applies to sites, gateways, or switches
     """
     # TODO cli command lacks the filtering options available from method currently.
-    central = cli.central
     obj: CentralObject = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
 
     if up:
@@ -1331,7 +1325,7 @@ def vlans(
             status = state
 
     if obj.is_site:
-        resp = central.request(central.get_site_vlans, obj.id)
+        resp = api.session.request(api.topo.get_site_vlans, obj.id)
     elif obj.is_dev:
         if obj.generic_type == "switch":
             if obj.swack_id:
@@ -1341,9 +1335,9 @@ def vlans(
                 iden = obj.serial
                 stack = False
 
-            resp = central.request(central.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw")
+            resp = api.session.request(api.monitoring.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw")
         elif obj.type.lower() == 'gw':
-            resp = central.request(central.get_gateway_vlans, obj.serial)
+            resp = api.session.request(api.monitoring.get_gateway_vlans, obj.serial)
         else:
             print("Command is only valid on gateways and switches")
             raise typer.Exit(1)
@@ -1400,8 +1394,8 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     if not reservations:
         return resp
 
-    caas = CaasAPI(central=cli.central)
-    cfg_resp = cli.central.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
+    caas = CaasAPI(api=api)
+    cfg_resp = api.session.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
     if not cfg_resp.ok:
         log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
         return resp
@@ -1462,13 +1456,12 @@ def dhcp(
 
     -v (verbose) will extract hostnames for defined reservations from GW config
     """
-    central = cli.central
     dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
 
     if what == "pools":
-        resp = central.request(central.get_dhcp_pools, dev.serial)
+        resp = api.session.request(api.monitoring.get_dhcp_pools, dev.serial)
     else:  # clients
-        resp = central.request(central.get_dhcp_clients, dev.serial, reservation=not no_res)
+        resp = api.session.request(api.monitoring.get_dhcp_clients, dev.serial, reservation=not no_res)
         if resp.ok and not no_res and verbosity:
             resp = _get_reservation_info_from_config(resp, dev=dev)
 
@@ -1509,7 +1502,6 @@ def upgrade(
 ):
     """Show firmware upgrade status (by device)
     """
-    central = cli.central
     # Allow unnecessary keyword status `cencli show upgrade status <dev>` or `cencli show upgrade device <dev>`
     ignored_subcommands = ["status", "device"]
     devices = [d for d in devices if d not in ignored_subcommands]
@@ -1519,8 +1511,8 @@ def upgrade(
 
     devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
-    batch_reqs: List[BatchRequest] = [BatchRequest(central.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
-    batch_resp: List[Response] = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
     failed = [r for r in batch_resp if not r.ok]
     passed = [r for r in batch_resp if r.ok]
 
@@ -1621,6 +1613,7 @@ def cache_(
                 output_by_key=None,
                 stash=False,
                 caption=caption,
+                full_cols=[] if "subscriptions" not in args else "tier",
             )
             if not no_page and cli.econsole.is_terminal and not idx == len(args):
                 cli.pause()
@@ -1665,7 +1658,7 @@ def groups(
     default: bool = cli.options.default,
     account: str = cli.options.workspace,
 ) -> None:
-    resp = cli.central.request(cli.cache.refresh_group_db)
+    resp = api.session.request(cli.cache.refresh_group_db)
     caption = _build_groups_caption(resp.output)
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
@@ -1688,7 +1681,7 @@ def labels(
     account: str = cli.options.workspace,
 ) -> None:
     """Show labels/details"""
-    resp = cli.central.request(cli.cache.refresh_label_db)
+    resp = api.session.request(cli.cache.refresh_label_db)
     tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
     cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
@@ -1733,16 +1726,15 @@ def sites(
     default: bool = cli.options.default,
     account: str = cli.options.workspace,
 ):
-    central = cli.central
     sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
 
     site = None if site and site.lower() == "all" else site
     if not site:
-        resp = cli.central.request(cli.cache.refresh_site_db)
+        resp = api.session.request(cli.cache.refresh_site_db)
         cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
         site: CacheSite = cli.cache.get_site_identifier(site)
-        resp = central.request(central.get_site_details, site.id)
+        resp = api.session.request(api.central.get_site_details, site.id)
         cleaner_func = cleaner.sites
 
     # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
@@ -1803,8 +1795,6 @@ def templates(
     account: str = cli.options.workspace,
 ) -> None:
     """Show templates/details"""
-    central = cli.central
-
     # Allows unnecessary keyword group "cencli show templates group WadeLab"
     if name and name.lower() == "group":
         name = None
@@ -1826,19 +1816,19 @@ def templates(
     if obj:
         title = f"{obj.name.title()} Template"
         if obj.is_dev:  # They provided a dev identifier
-            resp = central.request(central.get_variablised_template, obj.serial)
+            resp = api.session.request(api.configuration.get_variablised_template, obj.serial)
         else:  #  obj.is_template
-            resp = central.request(central.get_template, group=obj.group, template=obj.name)
+            resp = api.session.request(api.configuration.get_template, group=obj.group, template=obj.name)
     elif group:
         title = "Templates in Group {} {}".format(group.name, ', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
-        resp = central.request(central.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
+        resp = api.session.request(api.configuration.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
     elif params:  # show templates - Full update and show data from cache
         title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
-        resp = central.request(central.get_all_templates, **params)  # Can't use cache due to filtering options
+        resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
         title = "All Templates"
-        if central.get_all_templates not in cli.cache.updated:
-            resp = cli.central.request(cli.cache.refresh_template_db)
+        if not cli.cache.responses.template:
+            resp = api.session.request(cli.cache.refresh_template_db)
         else:
             resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
@@ -1870,12 +1860,10 @@ def variables(
     account: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
-    central = cli.central
-
     if device and device != "all":
         device = cli.cache.get_dev_identifier(device, conductor_only=True)
 
-    resp = central.request(central.get_variables, serial=None if not device else device.serial,)
+    resp = api.session.request(api.configuration.get_variables, serial=None if not device else device.serial,)
     if resp.ok and device:
         resp.output = resp.output.get("variables", resp.output)
 
@@ -1922,12 +1910,11 @@ def lldp(
 
     NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
-    central = cli.central
-
-    _devs: List[CacheDevice] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+    _devs: list[CacheDevice] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
 
     # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
-    stack_ids, devs = [], []
+    stack_ids = []
+    devs: list[CacheDevice] = []
     for dev in _devs:
         if dev.swack_id:
             if dev.swack_id not in stack_ids:
@@ -1937,21 +1924,20 @@ def lldp(
             devs.append(dev)
 
 
-    reqs = {dev: BatchRequest(central.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
-    reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
-    reqs = {**reqs, **{dev: BatchRequest(central.get_cx_switch_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
+    reqs = {dev: BatchRequest(api.topo.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
+    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
+    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
 
 
-    batch_resp = central.batch_request(list(reqs.values()))
+    batch_resp = api.session.batch_request(list(reqs.values()))
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
-    console = Console()
     last_resp = sorted(batch_resp, key=lambda r: r.rl)
     rl = last_resp[0].rl
     for idx, (dev, r) in enumerate(zip(list(reqs.keys()), batch_resp), start=1):
         title = f"{dev.summary_text} [cyan bold]LLDP Neighbor information[/]"
         if tablefmt not in ["table", "rich"]:
-            console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
+            cli.console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
 
         if idx == len(reqs):  # ensure rate limit caption reflects last call made.
             r.rl = rl
@@ -1968,7 +1954,7 @@ def lldp(
             cleaner=cleaner.get_lldp_neighbor,
         )
 
-@app.command(short_help="Show certificates/details")
+@app.command()
 def certs(
     query: str = typer.Argument(None, metavar='[name|hash]', autocompletion=cli.cache.cert_completion, help="Show details for certificates matching query [dim italic]name or hash[/]", show_default=False,),
     valid: bool = typer.Option(None, help="Filter by certificate validity [dim italic]expiration status[/]", show_default=False,),
@@ -1992,7 +1978,10 @@ def certs(
     default: bool = cli.options.default,
     account: str = cli.options.workspace,
 ) -> None:
-    resp = cli.central.request(cli.cache.refresh_cert_db, query)
+    """"Show certificates/details"
+    """
+    # resp = api.session.request(cli.cache.refresh_cert_db, query)
+    resp = api.session.request(cli.cache.refresh_cert_db, api.configuration.get_certificates, query=query)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     type_filter = {
         "SERVER_CERT": server_cert,
@@ -2025,7 +2014,7 @@ def task(
         Example: [cyan]cencli bounce interface idf1-6300-sw 1/1/11[/] will queue the command
                 and provide the task_id.
     """
-    resp = cli.central.request(cli.central.get_task_status, task_id)
+    resp = api.session.request(api.device_management.get_task_status, task_id)
     if "reason" in resp.output and "expired" in resp.output:
         resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
@@ -2048,7 +2037,6 @@ def run(
     APs get the last known running config from Central
     Switches and GWs request the running config from the device
     """
-    central = cli.central
     dev = cli.cache.get_dev_identifier(device)
 
     if dev.type == "cx":
@@ -2057,10 +2045,11 @@ def run(
         clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
     elif dev.type == "gw":
         clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
-    # Above device types will exit above
+    # Above device types will exit
 
     # APs
-    resp = central.request(central.get_device_configuration, dev.serial)
+    # resp = api.session.request(central.get_device_configuration, dev.serial)
+    resp = api.session.request(api.configuration.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
             cli_config = json.loads(resp.output)
@@ -2168,7 +2157,7 @@ def config_(
             if device.generic_type != "gw":
                 cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
 
-        caasapi = caas.CaasAPI(central=cli.central)
+        caasapi = caas.CaasAPI(api=api)
         if not status:
             func = caasapi.show_config
             args = [group.name,]
@@ -2179,12 +2168,12 @@ def config_(
             func = caasapi.get_config_status
             args = [device.serial]
     elif do_ap or (device and device.generic_type == "ap"):
-        func = cli.central.get_ap_config
+        func = api.configuration.get_ap_config
         if device:
             if device.generic_type == "ap":
                 args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
                 if ap_env:
-                    func = cli.central.get_per_ap_config
+                    func = api.configuration.get_per_ap_config
                     args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
                 elif not device.is_aos10:
                     cli.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
@@ -2196,7 +2185,8 @@ def config_(
     if not device:
         args = [group.name]
 
-    resp = cli.central.request(func, *args)
+    # resp = api.session.request(func, *args)
+    resp = api.session.request(func, *args)
 
     if resp and _data_key:
         resp.output = resp.output[_data_key]
@@ -2204,19 +2194,20 @@ def config_(
     cli.display_results(resp, title=title, pager=pager, outfile=outfile, cleaner=cleaner_func)
 
 
-@app.command( help="Show current access token from cache")
+@app.command()
 def token(
     no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     account: str = cli.options.workspace,
 ) -> None:
+    """Show current access token from cache"""
     if not no_refresh:
-        cli.central.refresh_token()
+        api.session.refresh_token()
 
-    tokens = cli.central.auth.getToken()
+    tokens = api.session.auth.getToken()
     if tokens:
-        if cli.workspace not in ["central_info", "default"]:
+        if cli.workspace != "default":
             print(f"Account: [cyan]{cli.workspace}")
         print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
 
@@ -2243,11 +2234,10 @@ def routes(
     :information:  This command is only valid on Gateways
     """
     device = device[-1]  # allow unnecessary keyword "device"
-    central = cli.central
-    device = cli.cache.get_dev_identifier(device, dev_type="gw")
+    device: CacheDevice = cli.cache.get_dev_identifier(device, dev_type="gw")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    resp = central.request(central.get_device_ip_routes, device.serial)
+    resp = api.session.request(api.routing.get_device_ip_routes, device.serial)
     caption = ""
     if "summary" in resp.raw:
         s = resp.raw["summary"]
@@ -2318,8 +2308,6 @@ def wlans(
     Shows summary of all WLANs in Central by default.  Each SSID is only listed once.
     Use -v (fetch details for wlans in each group) or specify [cyan]--group[/] for more details.
     """
-    central = cli.central
-
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
         _group: CentralObject = cli.cache.get_group_identifier(group)
@@ -2351,19 +2339,19 @@ def wlans(
     # TODO specifying WLAN name ... is ignored if verbose
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
-        resp = central.request(central.get_full_wlan_list, group)
+        resp = api.session.request(api.configuration.get_full_wlan_list, group)
         caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
         cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif swarm:
-        resp = central.request(central.get_full_wlan_list, swarm)
+        resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
         caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
         cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
-        group_res = central.request(central.get_groups_properties)
+        group_res = api.session.request(api.configuration.get_groups_properties)
         if group_res:
             ap_groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
-            batch_req = [BatchRequest(central.get_full_wlan_list, group) for group in ap_groups]
-            batch_resp = cli.central.batch_request(batch_req)
+            batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
+            batch_resp = api.session.batch_request(batch_req)
             resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
         else:
             resp = group_res
@@ -2371,7 +2359,7 @@ def wlans(
         group_by = "group" if not sort_by else None
         cli.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
-        resp = central.request(central.get_wlans, **params)
+        resp = api.session.request(api.monitoring.get_wlans, **params)
         caption = None
         if resp and not name:
             caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
@@ -2400,7 +2388,7 @@ def cluster(
     """
     caption = None
     group: CacheGroup = cli.cache.get_group_identifier(group)
-    resp = cli.central.request(cli.central.get_wlan_cluster_by_group, group.name, ssid)
+    resp = api.session.request(api.other.get_wlan_cluster_by_group, group.name, ssid)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if resp and not resp.output:
         caption = [
@@ -2441,13 +2429,12 @@ def vsx(
 ) -> None:
     """Show VSX details for a CX switch
     """
-    central = cli.central
     device: CentralObject = cli.cache.get_dev_identifier(device, dev_type="switch")  # update to cx once get_dev_iden... refactored to support type vs generic_type
     if device.type == "sw":
         cli.exit("This command is only valid for [cyan]CX[/] switches, not [cyan]AOS-SW[/]")
 
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
-    resp = central.request(central.get_switch_vsx_detail, device.serial)
+    resp = api.session.request(api.monitoring.get_switch_vsx_detail, device.serial)
     cli.display_results(
         resp,
         tablefmt=tablefmt,
@@ -2501,7 +2488,6 @@ def clients(
 
     Shows clients that have connected within the last 3 hours by default.
     """
-    central = cli.central
     if [site, group, label].count(None) < 2:
         cli.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
 
@@ -2590,9 +2576,9 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = central.request(cli.cache.refresh_client_db, **kwargs)
+        resp = api.session.request(cli.cache.refresh_client_db, **kwargs)
     else:
-        resp = central.request(cli.central.get_denylist_clients, **kwargs)
+        resp = api.session.request(api.configuration.central.get_denylist_clients, **kwargs)
 
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
@@ -2646,7 +2632,7 @@ def tunnels(
 ) -> None:
     """Show Branch Gateway/VPNC Tunnel details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
-    resp = cli.central.request(cli.central.get_gw_tunnels, dev.serial, timerange=time_range.value)
+    resp = api.session.request(api.monitoring.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
     if resp:
         if resp.output.get("total"):
@@ -2678,7 +2664,7 @@ def uplinks(
 ) -> None:
     """Show Branch Gateway/VPNC Uplink details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
-    resp = cli.central.request(cli.central.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
+    resp = api.session.request(api.monitoring.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
@@ -2721,7 +2707,7 @@ def roaming(
     title = "Roaming history"
 
     if refresh or drop:
-        resp = cli.central.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
+        resp = api.session.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
@@ -2734,7 +2720,7 @@ def roaming(
         title = f'{title} for {mac.cols}'
 
 
-    resp = cli.central.request(cli.central.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
+    resp = api.session.request(api.monitoring.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
     caption = None if not resp else f"{len(resp)} roaming events"
     caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
     cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
@@ -2881,8 +2867,7 @@ def logs(
         "count": count,
     }
 
-    central = cli.central
-    resp = central.request(central.get_events, **kwargs)
+    resp = api.session.request(api.monitoring.get_events, **kwargs)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
@@ -2968,8 +2953,7 @@ def alerts(
         'ack': ack,
     }
 
-    central = cli.central
-    resp = central.request(central.get_alerts, **kwargs)
+    resp = api.session.request(api.central.get_alerts, **kwargs)
 
     caption = "in past 24 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
     caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
@@ -3026,8 +3010,7 @@ def notifications(
 
     Display alerty types, notification targets, and rules.
     """
-    central = cli.central
-    resp = central.request(central.central_get_notification_config, search=search)
+    resp = api.session.request(api.central.central_get_notification_config, search=search)
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
@@ -3064,15 +3047,14 @@ def last(
 
     kwargs = config.last_command_file.read_text()
     import json
-    kwargs = json.loads(kwargs)
+    kwargs: dict[str, Any] = json.loads(kwargs)
 
     last_format = kwargs.get("tablefmt", "rich")
     kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
     if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
         kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
                         f"{DateTime(int(config.last_command_file.stat().st_mtime))}"
-    data = kwargs["outdata"]
-    del kwargs["outdata"]
+    data = kwargs.pop("outdata")
 
     cli.display_results(
         data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=pager, stash=False, **kwargs
@@ -3097,7 +3079,7 @@ def webhooks(
     if sort_by is not None:
         sort_by = sort_by.name
     ...
-    resp = cli.central.request(cli.central.get_all_webhooks)
+    resp = api.session.request(api.central.get_all_webhooks)
     caption = None
     if resp.ok and resp.output:
         caption = f"Counts: Webhooks: [cyan]{len(resp.output)}[/] | Destination URLs: [cyan]{sum([len(wh['urls']) for wh in resp.output])}[/]"
@@ -3179,7 +3161,8 @@ def archived(
     account: str = cli.options.workspace,
 ) -> None:
     """Show archived devices"""
-    resp = cli.central.request(cli.central.get_archived_devices)
+    # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
+    resp = api.session.request(api.platform.get_archived_devices)
     if resp.raw and "devices" in resp.raw:
         plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
         caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
@@ -3233,11 +3216,11 @@ def portals(
         portal = portal[0]
 
     if portal is None:
-        resp: Response = cli.central.request(cli.cache.refresh_portal_db)
+        resp: Response = api.session.request(cli.cache.refresh_portal_db)
         _cleaner = cleaner.get_portals
     else:
-        p: CentralObject = cli.cache.get_name_id_identifier("portal", portal)
-        resp: Response = cli.central.request(cli.central.get_portal_profile, p.id)
+        p: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+        resp: Response = api.session.request(api.guest.get_portal_profile, p.id)
         _cleaner = cleaner.get_portal_profile
         if logo and resp.ok:
             download_logo(resp, path, p)  # this will exit CLI after writing to file
@@ -3269,22 +3252,22 @@ def guests(
     title="Guest Users"
     if portal:
         portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
-        resp = cli.central.request(cli.cache.refresh_guest_db, portal.id, )
+        resp = api.session.request(cli.cache.refresh_guest_db, portal.id, )
         title = f"{title} for {portal.name} portal"
 
     else:
         if refresh:
-            _ = cli.central.request(cli.cache.refresh_portal_db)
+            _ = api.session.request(cli.cache.refresh_portal_db)
         portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
         for idx in range(0, 2):
             portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
             if not portals:
                 if idx == 0 and not refresh:
-                    _ = cli.central.request(cli.cache.refresh_portal_db)
+                    _ = api.session.request(cli.cache.refresh_portal_db)
                 else:
                     cli.exit(":information:  No portals configured with Username/Password auth type", code=0)
 
-        batch_resp = cli.central.batch_request([BatchRequest(cli.cache.refresh_guest_db, portal["id"]) for portal in portals])
+        batch_resp = api.session.batch_request([BatchRequest(cli.cache.refresh_guest_db, portal["id"]) for portal in portals])
         resp_by_name = {resp: portal for portal, resp in zip(portals, batch_resp)}
         passed = [r for r in batch_resp if r.ok]
         failed = [] if len(passed) == len(batch_resp) else [r for r in batch_resp if not r.ok]
@@ -3392,7 +3375,7 @@ def radios(
 
     if aps:
         aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
-        resp = cli.central.batch_request([BatchRequest(cli.central.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
+        resp = api.session.batch_request([BatchRequest(api.monitoring.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
         passed = [r for r in resp if r.ok]
         failed = [r for r in resp if not r.ok]
         if passed:
@@ -3402,7 +3385,7 @@ def radios(
         if failed:
             cli.display_results(failed, tablefmt="action")
     else:
-        resp = cli.central.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
+        resp = api.session.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
             resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
 
@@ -3460,7 +3443,7 @@ def insights(
         log.info(f":information:  Specified time range ({duration.in_words()}), exceeds the retention period for AI Insights (1 month).  Showing all available insights.", caption=True)
 
     if insight_id:
-        resp = cli.central.request(cli.central.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
+        resp = api.session.request(api.aiops.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
         title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
         cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
         cli.exit(0)
@@ -3484,7 +3467,7 @@ def insights(
     title = f"{title} for past {duration.in_words()}"
     caption="Use [cyan]show insight <id>[/] to see details for an insight."
 
-    resp = cli.central.request(cli.central.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
+    resp = api.session.request(api.aiops.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
 
     cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
 

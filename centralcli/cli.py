@@ -19,9 +19,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
-err_console = Console(stderr=True)
-clean_console = Console(emoji=False)
-clean_err_console = Console(emoji=False, stderr=True)
+
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -45,9 +43,15 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.cache import CentralObject  # noqa
+from centralcli.cache import CentralObject, CacheDevice, CacheSite
 from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
-from centralcli.environment import env_var, env  #noqa
+from centralcli.environment import env  #noqa
+from centralcli.classic.api import ClassicAPI
+
+api = ClassicAPI(config.classic.base_url)
+err_console = Console(stderr=True)
+clean_console = Console(emoji=False)
+clean_err_console = Console(emoji=False, stderr=True)
 
 iden = IdenMetaVars()
 
@@ -133,7 +137,7 @@ def move(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Move device(s) to a defined group and/or site.
     """
@@ -150,11 +154,11 @@ def move(
     group = group or _group
 
     if reset_group and not group:
-        default_group_resp = cli.central.request(cli.central.get_default_group)
+        default_group_resp = api.session.request(api.configuration.get_default_group)
         default_group = default_group_resp.output
         group = default_group
     elif reset_group and group:
-        err_console.print(f":warning: [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
+        cli.econsole.print(f":warning: [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
 
     site = site or _site
 
@@ -174,7 +178,7 @@ def bounce(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Bounce interface(s) or PoE on interface(s) (Valid on switches)
 
@@ -192,7 +196,7 @@ def bounce(
     if len(ports) > 1:
         print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
     if cli.confirm(yes):
-        resp = cli.central.batch_request([cli.central.BatchRequest(cli.central.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
+        resp = api.session.batch_request([BatchRequest(api.device_management.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
         cli.display_results(resp, tablefmt="action")
         # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
 
@@ -209,13 +213,13 @@ def remove(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Remove a device from a site
     """
     devices = (d for d in devices if d != "site")
-    devices = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
-    site = cli.cache.get_site_identifier(site)
+    devices: list[CacheDevice] = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
+    site: CacheSite = cli.cache.get_site_identifier(site)
 
     print(
         f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
@@ -228,19 +232,19 @@ def remove(
             else:
                 devs_by_type[d.generic_type] += [d.serial]
         reqs = [
-            cli.central.BatchRequest(
-                cli.central.remove_devices_from_site,
+            BatchRequest(
+                api.central.remove_devices_from_site,
                 site.id,
                 serials=serials,
                 device_type=dev_type,
             ) for dev_type, serials in devs_by_type.items()
         ]
-        resp = cli.central.batch_request(reqs)
+        resp = api.session.batch_request(reqs)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
         # central will show the stack_id and all member serials in the success output.  So we strip the stack id
         swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
         update_data = [{**dict(cli.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
-        cli.central.request(cli.cache.update_dev_db, data=update_data)
+        api.session.request(cli.cache.update_dev_db, data=update_data)
 
 
 
@@ -252,7 +256,7 @@ def reboot(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Reboot devices or swarms
 
@@ -264,7 +268,7 @@ def reboot(
     _confirm_pfx = "Reboot:" if not yes else "Rebooting:"
     for dev in devs:
         conf_msg = dev.rich_help_text
-        func = cli.central.send_command_to_device
+        func = api.device_management.send_command_to_device
         arg = dev.serial
 
         if swarm:  # TODO reboot swarm has not been tested
@@ -273,7 +277,7 @@ def reboot(
             elif dev.version.startswith("10."):
                 print(":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
             else:
-                func = cli.central.send_command_to_swarm
+                func = api.device_management.send_command_to_swarm
                 arg = dev.swack_id
                 conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
@@ -286,7 +290,7 @@ def reboot(
         print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
     if cli.confirm(yes):
-        batch_resp = cli.central.batch_request(batch_reqs)
+        batch_resp = api.session.batch_request(batch_reqs)
         cli.display_results(batch_resp, tablefmt="action")
 
 
@@ -297,20 +301,19 @@ def reset(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Reset overlay control connection (OTO/ORO)
     """
     # Not sure this works on APs/MB AP
     dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
 
-    console = Console(emoji=False)
     _msg = "Reset" if not yes else "Resetting"
     _msg = f"{_msg} ORO connection for [cyan]{dev.rich_help_text}[/]"
-    console.print(_msg)
+    cli.console.print(_msg, emoji=False)
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.reset_overlay_connection, dev.serial)
+        resp = api.session.request(api.routing.reset_overlay_connection, dev.serial)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -319,14 +322,13 @@ def blink(
     device: str = typer.Argument(..., show_default=False, metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for {secs} seconds.", show_default=False,),
-    yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     command = f'blink_led_{action.value}'
     dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
-    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, command, duration=secs)
+    resp = api.session.request(api.device_management.send_command_to_device, dev.serial, command, duration=secs)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -337,7 +339,7 @@ def nuke(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Reset a device to factory default, erase all configuration (Valid on ArubaOS-SW or IAP Clusters)
 
@@ -349,12 +351,12 @@ def nuke(
 
     conf_msg = dev.rich_help_text
     if dev.type == "cx":
-        func = cli.central.send_command_to_device
+        func = api.device_management.send_command_to_device
         arg = dev.serial
         if swarm:
             print(f"[dark_orange3]:warning:[/]  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
     else:  # AP all others will error in get_dev_identifier
-        func = cli.central.send_command_to_swarm
+        func = api.device_management.send_command_to_swarm
         arg = dev.swack_id
         if dev.is_aos10:
             cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
@@ -363,12 +365,11 @@ def nuke(
         else:
             conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
-    console = Console(emoji=False)
     _msg = "Factory Default" if not yes else "Factory Defaulting"
     _msg = f"[bright_red blink]{_msg}[/] {conf_msg}"
-    console.print(_msg)
+    cli.console.print(_msg, emoji=False)
     if cli.confirm(yes):
-        resp = cli.central.request(func, arg, 'erase_configuration')
+        resp = api.session.request(func, arg, 'erase_configuration')
         cli.display_results(resp, tablefmt="action")
 
 
@@ -377,10 +378,10 @@ def save(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
-    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'save_configuration')
+    resp = api.session.request(api.device_management.send_command_to_device, dev.serial, 'save_configuration')
     cli.display_results(resp, tablefmt="action")
 
 
@@ -389,14 +390,14 @@ def sync(
     device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Sync/Refresh device config with Aruba Central
 
     Only valid for gateways (aka controllers)
     """
     dev = cli.cache.get_dev_identifier(device, dev_type="gw")
-    resp = cli.central.request(cli.central.send_command_to_device, dev.serial, 'config_sync')
+    resp = api.session.request(api.device_management.send_command_to_device, dev.serial, 'config_sync')
     cli.display_results(resp, tablefmt="action")
 
 
@@ -430,10 +431,8 @@ def start(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    if config.deprecation_warning:  # TODO remove at 2.0.0+
-        print(config.deprecation_warning)
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
@@ -497,7 +496,7 @@ def stop(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Stop WebHook Proxy (background process).
     """
@@ -553,7 +552,7 @@ def archive(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
 
@@ -568,7 +567,7 @@ def archive(
     _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
     serials = []
-    cache_devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    cache_devs: List[CacheDevice] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
     for dev_in, cache_dev in zip(devices, cache_devs):
         if cache_dev:
             _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
@@ -579,10 +578,10 @@ def archive(
             _msg = f"{_msg}\n    {dev_in}"
             serials += [dev_in]
 
-    console = Console(emoji=False)
-    console.print(_msg, _emsg, sep="\n")
+
+    cli.console.print(_msg, _emsg, sep="\n", emoji=False)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.archive_devices, serials)
+        resp = api.session.request(api.platform.archive_devices, serials)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -592,7 +591,7 @@ def unarchive(
     serials: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Unacrchive devices
 
@@ -616,7 +615,7 @@ def unarchive(
         _msg = f"{_msg}\n    {_dev_msg}\n"
     cli.console.print(_msg, emoji=False)
 
-    resp = cli.central.request(cli.central.unarchive_devices, serials)
+    resp = api.session.request(api.platform.unarchive_devices, serials)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -627,7 +626,7 @@ def enable(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Enable auto subscribe for service.
 
@@ -649,7 +648,7 @@ def enable(
     if cli.confirm(yes):
         services = [s.name for s in services]
 
-        resp = cli.central.request(cli.central.enable_auto_subscribe, services=services)
+        resp = api.session.request(api.platform.enable_auto_subscribe, services=services)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -660,7 +659,7 @@ def disable(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Disable auto subscribe for service.
 
@@ -682,7 +681,7 @@ def disable(
     if cli.confirm(yes):
         services = [s.name for s in services]
 
-        resp = cli.central.request(cli.central.disable_auto_subscribe, services=services)
+        resp = api.session.request(api.platform.disable_auto_subscribe, services=services)
         cli.display_results(resp, tablefmt="action")
 
 @app.command(hidden=True)
@@ -691,7 +690,7 @@ def renew_license(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Renew-Licenses on devices.
 
@@ -719,7 +718,7 @@ def renew_license(
         dev_types += ["switch" if dev.type in ["cx", "sw"] else dev.type]
         for sub in dev.services:
             calls_by_sub = utils.update_dict(calls_by_sub, normalize_sub(sub), dev.serial)
-    # subs_resp = cli.central.request(cli.central.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
+    # subs_resp = api.session.request(cli.central.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
     # subs_by_name = {f'{normalize_sub(sub["license_type"])}_{sub["subscription_key"]}': sub["end_date"] / 1000 for sub in subs_resp.output if sub["available"] and sub["status"] != "EXPIRED"}
     # Gave up on this for now, the names from the inventory don't map well with the names from get_subscriptions.  Would need to build a map
     # i.e. Foundation-90/70xx vs foundation_70xx
@@ -783,36 +782,12 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
 def callback(
     # ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version.",),
-    # debug: bool = typer.Option(False, "--debug", is_flag=True, envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    #                         #    callback=all_commands_callback),
-    # debugv: bool = typer.Option(False, "--debugv", is_flag=True, help="Enable Verbose Debug Logging", hidden=True,),
-                            #    callback=all_commands_callback),
-    # default: bool = typer.Option(
-    #     False,
-    #     "-d",
-    #     is_flag=True,
-    #     help="Use default central account",
-    #     show_default=False,
-    # ),
+
     debug: bool = cli.options.get("debug", rich_help_panel="Options"),
     debugv: bool = cli.options.get("debugv", hidden=True),
     default: bool = cli.options.get("default", rich_help_panel="Options"),
-    # account: str = typer.Option(
-    #     "default",
-    #     envvar="ARUBACLI_ACCOUNT",
-    #     help="The Aruba Central Account to use (must be defined in the config)",
-    #     autocompletion=cli.cache.account_completion,
-    #     hidden=True
-    # ),
-    # workspace: str = typer.Option(
-    #     "default",
-    #     "-ws", "--workspace",
-    #     envvar="CENCLI_WORKSPACE",
-    #     help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace to use (must be defined in the config)",
-    #     autocompletion=cli.cache.account_completion,
-    # ),
+
     workspace: str = cli.options.get("workspace", rich_help_panel="Options"),
-    # update_cache: bool = typer.Option(False, "-U", hidden=True, lazy=True, callback=all_commands_callback),
     update_cache: bool = cli.options.get("update_cache", lazy=True, callback=all_commands_callback)
 ) -> None:
     """
@@ -827,8 +802,6 @@ def callback(
        - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
     ...
-    # if account != "default":
-    #     workspace = account if workspace == "default" else workspace
 
 
 log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')

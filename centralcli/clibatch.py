@@ -452,7 +452,7 @@ def _build_pre_config(node: str, dev_type: SendConfigTypes, cfg_file: Path, var_
         cli.exit(f"[cyan]{node}[/] specified config: {cfg_file} [red]not found[/].  [red italic]Unable to generate config[/].")
 
     br = cli.central.BatchRequest
-    caasapi = caas.CaasAPI(central=cli.central)
+    caasapi = caas.CaasAPI()
     config_out = utils.generate_template(cfg_file, var_file=var_file)
     commands = utils.validate_config(config_out)
 
@@ -702,7 +702,7 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         resp = cli.central.request(cli.central.add_devices, device_list=data)
         # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
         _data = None if not all([r.ok for r in resp]) else data
-        update_func = cli.cache.refresh_inv_db
+        update_func = cli.cache.refresh_inv_db_classic
         kwargs = {}
         if _data:
             try:

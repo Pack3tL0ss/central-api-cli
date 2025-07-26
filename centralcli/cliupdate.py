@@ -312,7 +312,7 @@ def config_(
         if device and device.generic_type != "gw":
             cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
         use_caas = True
-        caasapi = CaasAPI(central=cli.central)
+        caasapi = CaasAPI()
         node_iden = group_dev.name if group_dev.is_group else group_dev.mac
     elif do_ap or (device and device.generic_type == "ap"):
         if device and device.generic_type != "ap":

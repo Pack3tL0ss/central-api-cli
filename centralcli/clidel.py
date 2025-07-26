@@ -241,7 +241,7 @@ def update_dev_inv_cache(console: Console, batch_resp: List[Response], cache_dev
                     )
                 ]
             else:
-                cache_update_reqs += [br(cli.cache.refresh_inv_db)]
+                cache_update_reqs += [br(cli.cache.refresh_inv_db_classic)]
 
         # Update cache remove deleted items by doc_id
         if cache_update_reqs:

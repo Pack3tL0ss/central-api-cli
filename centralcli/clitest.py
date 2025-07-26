@@ -21,7 +21,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi, Response  # noqa
+# from centralcli.central import CentralApi, Response  # noqa
+from . import Response, config
+from .classic.api import ClassicAPI
 
 app = typer.Typer()
 
@@ -100,7 +102,8 @@ def method(
     """
     # Find function (method)
     cli.cache(refresh=update_cache)
-    central = CentralApi(account)
+    # central = CentralApi(account)
+    central = ClassicAPI(config.base_url)
     bpdir = Path(__file__).parent / "boilerplate"
     all_calls = [
         importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
@@ -220,8 +223,7 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    from .classic.client import Session
-    from . import config, cleaner
+    from . import config, cleaner, Session
     from .models import cache as models
     from .classic.api.configuration import ConfigAPI
     from .clishow import _build_groups_caption

@@ -33,6 +33,10 @@ from centralcli.response import BatchRequest
 if TYPE_CHECKING:
     from .cache import CachePortal, CacheGroup, CacheMpskNetwork
 
+from .clicommon import APIClients
+
+api_clients = APIClients()
+api = api_clients.classic
 
 
 app = typer.Typer()
@@ -85,12 +89,13 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
             except Exception as e:
                 log.warning(f"Unable to extract sku after inventory update ({e}), value will be omitted from inv cache.")
 
-    cli.central.request(cli.cache.update_inv_db, data=inv_data)
+    api.session.request(cli.cache.update_inv_db, data=inv_data)
 
 
 # TODO update completion with mac serial partial completion
 # TODO mac with colons breaks arg completion that follows unless enclosed in single quotes
 # FIXME Not all flows work on 2.5.5  I think license may be broken
+# TOGLP
 @app.command()
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="serial", show_default=False,),
@@ -109,7 +114,7 @@ def device(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add a Device to Aruba Central
 
@@ -159,7 +164,7 @@ def device(
     console.print("".join(_msg))
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_devices, **kwargs)
+        resp = api.session.request(api.platform.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
 
@@ -189,7 +194,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add a group to Aruba Central"""
     allowed_types = []
@@ -251,8 +256,8 @@ def group(
     print(f"{_msg}")
 
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.create_group,
+        resp = api.session.request(
+            api.configuration.create_group,
             group,
             wired_tg=wired_tg,
             wlan_tg=wlan_tg,
@@ -280,7 +285,7 @@ def group(
             'monitor_only_cx': mon_only_cx,
             'cnx': cnx
         }
-        cli.central.request(
+        api.session.request(
             cli.cache.update_group_db,
             data=data
         )
@@ -313,7 +318,7 @@ def wlan(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     group = cli.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
@@ -335,7 +340,7 @@ def wlan(
 
     print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.create_wlan, group.name, name, **kwargs)
+        resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -363,7 +368,7 @@ def site(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add a site to Aruba Central
 
@@ -395,9 +400,9 @@ def site(
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.create_site, site_name, **address_fields)
+        resp = api.session.request(api.central.create_site, site_name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
-        cli.central.request(cli.cache.update_site_db, data=resp.raw)
+        api.session.request(cli.cache.update_site_db, data=resp.raw)
 
 
 
@@ -408,7 +413,7 @@ def label(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add label(s) to Aruba Central
 
@@ -426,12 +431,12 @@ def label(
             else:
                 cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, label/site names must be unique (sites included)")
 
-    batch_reqs = [BatchRequest(cli.central.create_label, label) for label in labels]
+    batch_reqs = [BatchRequest(api.central.create_label, label) for label in labels]
     if cli.confirm(yes):
-        batch_resp = cli.central.batch_request(batch_reqs)
+        batch_resp = api.session.batch_request(batch_reqs)
         cli.display_results(batch_resp, tablefmt="action")
         update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"]} for resp in batch_resp if resp.ok]
-        cli.central.request(cli.cache.update_label_db, data=update_data)
+        api.session.request(cli.cache.update_label_db, data=update_data)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
@@ -455,7 +460,7 @@ def certificate(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add/Upload a Certificate to Aruba Central
     """
@@ -507,7 +512,7 @@ def certificate(
         if k not in  ["passphrase", "cert_data"]
         ]
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.upload_certificate, **kwargs)
+        resp = api.session.request(api.configuration.upload_certificate, **kwargs)
         cli.display_results(resp, tablefmt="action")
 
 
@@ -518,11 +523,11 @@ def webhook(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_webhook, name, urls)
+        resp = api.session.request(api.central.add_webhook, name, urls)
 
         cli.display_results(resp, tablefmt="action")
         if not resp:
@@ -541,7 +546,7 @@ def template(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     group: CacheGroup = cli.cache.get_group_identifier(group)
     if not template:
@@ -557,16 +562,16 @@ def template(
     print(f"    Version: [cyan]{version}[/]")
     cli.confirm(yes)
 
-    template_hash, resp = cli.central.batch_request(
+    template_hash, resp = api.session.batch_request(
         [
             BatchRequest(cli.get_file_hash, template),
-            BatchRequest(cli.central.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+            BatchRequest(api.configuration.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
         ]
     )
 
     cli.display_results(resp, tablefmt="action")
     if resp.ok:
-        _ = cli.central.request(
+        _ = api.session.request(
             cli.cache.update_template_db, data={
                 "device_type": lib_to_api(dev_type, "template"),
                 "group": group.name,
@@ -585,7 +590,7 @@ def variables(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Upload variables for a device from file
 
@@ -600,8 +605,8 @@ def variables(
     print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] the following variables for device with serial [cyan]{serial}[/]")
     _ = [cli.console.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.create_device_template_variables,
+        resp = api.session.request(
+            api.configuration.create_device_template_variables,
             serial,
             mac,
             var_dict=var_dict
@@ -624,7 +629,7 @@ def guest(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add a guest user to a configured portal"""
     portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
@@ -667,7 +672,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_guest, **kwargs)
+        resp = api.session.request(api.guest.add_guest, **kwargs)
         password = kwargs = None
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
         # TODO calc expiration based on portal config Kabrew portal appears to be 3 days
@@ -675,7 +680,7 @@ def guest(
             created = pendulum.now(tz="UTC")
             expires = created.add(days=3)
             cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
-            _ = cli.central.request(cli.cache.update_db, cli.cache.GuestDB, cache_data, truncate=False)
+            _ = api.session.request(cli.cache.update_db, cli.cache.GuestDB, cache_data, truncate=False)
         except Exception as e:
             log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
             cli.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
@@ -687,12 +692,12 @@ def mpsk(
     email: str = typer.Argument(..., help=":email:  email address which is used as the name for the MPSK", show_default=False,),
     role: str = typer.Option(..., help="The user role to associate with devices using this PSK", show_default=False,),
     psk: str = typer.Option(None, help=":warning:  This currently has no impact, PSK is always randomly generated.", show_default=False,  hidden=True,),
-      #  The PSK/Passphrase, [dim italic]Best to wrap in single quotes.[/] {cli.help_block('Generate Random PSK')}", show_default=False,),
+    #  The PSK/Passphrase, [dim italic]Best to wrap in single quotes.[/] {cli.help_block('Generate Random PSK')}", show_default=False,),
     disable: bool = typer.Option(False, "-D", "--disable", is_flag=True, help="Add MPSK Configuration, but set to [red]disabled[/]", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Add Named MPSK Configuration"""
     ssid: CacheMpskNetwork = cli.cache.get_name_id_identifier("mpsk_network", ssid)
@@ -705,7 +710,7 @@ def mpsk(
         cli.econsole.print("  Create MPSK, but set as [red]disabled[/]")
 
     cli.confirm(yes)  # exits here if they don't confirm
-    resp = cli.central.request(cli.central.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
+    resp = api.session.request(api.cloudauth.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
     cli.display_results(resp, tablefmt="action")
     # TODO cache update
 

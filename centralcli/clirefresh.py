@@ -1,91 +1,90 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import typer
-import sys
 import asyncio
+import sys
 from pathlib import Path
 from typing import List
 
+import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, config
+    from centralcli import cli, config, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, config
+        from centralcli import cli, config, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi  # noqa
+# from centralcli.central import CentralApi  # noqa
 from rich.console import Console
+
+from . import Session
+from .classic.api import ClassicAPI
+
+api = ClassicAPI(config.classic.base_url)
 
 app = typer.Typer()
 
 tty = utils.tty
 
 
-@app.command(short_help="Refresh access token")
+@app.command()
 def token(
-    account_list: List[str] = typer.Argument(
+    workspace_list: List[str] = typer.Argument(
         None,
-        help="A list of accounts to refresh tokens for (must be defined in the config).  This is useful automated for cron/task-scheduler refresh.",
+        help="A list of workspaces to refresh tokens for (must be defined in the config).  This is useful automated for cron/task-scheduler refresh.",
         autocompletion=cli.cache.account_completion,
         show_default=False,
     ),
     all: bool = typer.Option(False, "-A", "--all", help="Refresh Tokens for all defined workspaces in config.",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
+    default: bool = typer.Option(False, "-d", is_flag=True, help="Use 'default' central workspace", show_default=False,),
     debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion
-    ),
+    workspace: str = cli.options.workspace,
 ):
-    """Refresh Central API access/refresh tokens.
+    """Refresh Classic Central API access/refresh tokens.
 
     This is not necessary under normal circumstances as the cli will automatically refresh the tokens if they are expired.
     This can be useful for automated runs via cron/task-scheduler.  Ensuring the access token does not expire even if the
     cli is not used.
     """
-    # TODO expand help text to include URL with example
-    if not all and not account_list:
-        cli.central.refresh_token()
+    if not all and not workspace_list:
+        api.session.refresh_token()
     else:
         console = Console()
-        if account_list:
-            verified_account_list = []
-            for account in account_list:
-                if account in config.defined_workspaces:
-                    verified_account_list += [account]
+        if workspace_list:
+            verified_workspace_list = []
+            for workspace in workspace_list:
+                if workspace in config.defined_workspaces:
+                    verified_workspace_list += [workspace]
                 else:
-                    console.print(f":warning:  Ignoring account {account} as it's not defined in the config.")
+                    console.print(f":warning:  Ignoring workspace {workspace} as it's not defined in the config.")
                     console.print(f"  [italic]Update config @ {config.file}[/]")
-            if len(verified_account_list) != len(account_list):
-                console.print(f"Performing token refresh for {len(verified_account_list)} of {len(account_list)} provided accounts.")
+            if len(verified_workspace_list) != len(workspace_list):
+                console.print(f"Performing token refresh for {len(verified_workspace_list)} of {len(workspace_list)} provided workspaces.")
 
-            account_list = [config.default_workspace,  *verified_account_list]
+            workspace_list = [config.default_workspace,  *verified_workspace_list]
         else:
-            account_list = [config.default_workspace,  *config.defined_workspaces]
+            workspace_list = [config.default_workspace,  *config.defined_workspaces]
 
-        async def refresh_multi(account_list: List[str]):
+        async def refresh_multi(workspaces: List[str]):
             success_list = await asyncio.gather(*[
-                asyncio.to_thread(CentralApi(account_name=account).refresh_token, silent=True)
-                for account in account_list
+                asyncio.to_thread(Session(workspace_name=workspace).refresh_token, silent=True)
+                for workspace in workspaces
                 ]
             )
 
             return success_list
 
-        with console.status(f"Refreshing Tokens for {len(account_list)} accounts defined in config", spinner="runner",):
-            success_list = asyncio.run(refresh_multi(account_list))
+        with console.status(f"Refreshing Tokens for {len(workspace_list)} accounts defined in config", spinner="runner",):
+            success_list = asyncio.run(refresh_multi(workspace_list))
 
-        for account, success in zip(account_list, success_list):
-            console.print(f"{':x:' if not success else ':heavy_check_mark:'}  {account}")
+        for workspace, success in zip(workspace_list, success_list):
+            console.print(f"{':x:' if not success else ':heavy_check_mark:'}  {workspace}")
         console.print(f"\nSuccessfully refreshed tokens for {success_list.count(True)} of {len(success_list)} accounts.")
 
 @app.command(short_help="Refresh local cache")

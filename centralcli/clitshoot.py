@@ -20,18 +20,22 @@ except Exception:
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils, cleaner, render
+    from centralcli import cli, utils, cleaner
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner, render
+        from centralcli import cli, utils, cleaner
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import IdenMetaVars, lib_to_api
-from centralcli.cache import CentralObject
+from centralcli.cache import CacheDevice
+from .clicommon import APIClients
+
+api_clients = APIClients()
+api = api_clients.classic
 
 app = typer.Typer()
 
@@ -39,11 +43,11 @@ tty = utils.tty
 iden_meta = IdenMetaVars()
 
 
-def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
+def send_cmds_by_id(device: CacheDevice, commands: List[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
     _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
-    resp = cli.central.request(cli.central.start_ts_session, device.serial, device_type=_type, commands=commands)
+    resp = api.session.request(api.tshooting.start_ts_session, device.serial, device_type=_type, commands=commands)
     cli.display_results(resp, tablefmt="action")
 
     if not resp:
@@ -59,7 +63,7 @@ def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = Fa
             for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
 
-            ts_resp = cli.central.request(cli.central.get_ts_output, device.serial, resp.session_id)
+            ts_resp = api.session.request(api.tshooting.get_ts_output, device.serial, resp.session_id)
 
             if ts_resp.output.get("status", "") == "COMPLETED":
                 lines = "\n".join([line for line in ts_resp.output["output"].splitlines() if line != " "])
@@ -77,28 +81,30 @@ def send_cmds_by_id(device: CentralObject, commands: List[int], pager: bool = Fa
 
         if not complete:
             print(f'[dark_orange3]WARNING[/] Central is still waiting on response from [cyan]{device.name}[/]')
-            if not typer.confirm("Continue to wait/retry?"):
+            if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
     if exit:
         cli.exit(code=0 if complete else 1)
 
-def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,) -> None:
+def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: bool,) -> None:
     """Helper command to send troubleshooting output (user provides command) and print results
 
     Args:
-        device (CentralObject): Device Object
-        cmd (str): User provided command
+        device (CacheDevice): Device Object
+        cmd (list[str]): User provided command
         outfile (Path): Optional output to file
         pager (bool): Optional Use Pager
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device)
+    dev: CacheDevice = cli.cache.get_dev_identifier(device)
     dev_type = lib_to_api(dev.type, "tshoot")
+    if all(c.isdigit() for c in cmd):  # allows user to enter cmd id from show ts commands output.
+        send_cmds_by_id(dev, commands=[int(c) for c in cmd], pager=pager, outfile=outfile, exit=True)
     if len(cmd) == 1:
         cmd = cmd[0].split()
     cmd = " ".join(cmd)
     cmd = cmd.replace("  ", " ").strip().lower()
-    resp = cli.central.request(cli.central.get_ts_commands, dev_type)
+    resp = api.session.request(api.tshooting.get_ts_commands, dev_type)
     if not resp:
         print('[bright_red]Unable to get troubleshooting command list')
         cli.display_results(resp)
@@ -109,27 +115,23 @@ def ts_send_command(device: CentralObject, cmd: str, outfile: Path, pager: bool,
             if FUZZ:
                 fuzz_match, fuzz_confidence = process.extract(cmd, [c["command"].strip() for c in cmd_list], limit=1)[0]
                 print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
-                confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                if fuzz_confidence >= 70 and cli.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
                     cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == fuzz_match]
 
         if not cmd_id:
             caption = f'[bright_red]Error[/]: [cyan]{cmd}[/] not found in available troubleshooting commands for {dev.type}. See available commands above.'
-            cli.display_results(resp, tablefmt="rich", caption=caption, title=f"Available troubleshooting commands for {dev.type}", cleaner=cleaner.show_ts_commands)
+            cli.display_results(resp, caption=caption, title=f"Available troubleshooting commands for {dev.type}", cleaner=cleaner.show_ts_commands)
         else:
             send_cmds_by_id(dev, commands=cmd_id, pager=pager, outfile=outfile)
 
 @app.command()
 def overlay(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show GW or AP Overlay details (Tunneled SSIDs) or AOS-SW User Based Tunneling  (valid on AP, GW, and AOS-SW)
 
@@ -172,14 +174,11 @@ def overlay(
 def clients(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
     wired: bool = typer.Option(False, "-w", "--wired", help="Include [cyan]show clients wired[/] (applies to AP)",),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show output of client related commands  (valid on AP, GW, and AOS-SW)
 
@@ -207,7 +206,7 @@ def clients(
         "sw": [1028, 1089],
         "gw": [2163, 2095],
     }
-    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
+    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     commands = ids_by_dev_type[dev.type]
     if wired:
@@ -222,14 +221,11 @@ def clients(
 @app.command()
 def dpi(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show DPI output (valid on APs and GWs)
 
@@ -251,7 +247,7 @@ def dpi(
         "ap": [190, 210, 211, 317, 318],
         "gw": [2394, 2395, 2553]
     }
-    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=("ap", "gw"))
+    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=("ap", "gw"))
     commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
@@ -259,14 +255,11 @@ def dpi(
 @app.command()
 def ssid(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show output of commands to help troubleshoot SSIDs/broadcasting (APs Only)
 
@@ -277,7 +270,7 @@ def ssid(
     [cyan]-[/] show cluster bss-table
     [cyan]-[/] show ap-env
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=("ap"))
+    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=("ap"))
     commands = [4, 24, 177, 53]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
@@ -285,14 +278,11 @@ def ssid(
 @app.command()
 def show_tech(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show Tech Support
 
@@ -300,7 +290,7 @@ def show_tech(
 
     [cyan]-[/] APs include show tech-support supplemental and show tech-support memory.
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device)
+    dev: CacheDevice = cli.cache.get_dev_identifier(device)
     ids_by_dev_type = {
         "ap": [115, 369, 465],
         "sw": [1032],
@@ -314,14 +304,11 @@ def show_tech(
 @app.command()
 def images(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show image versions (Valid for AP, GW, and AOS-SW)
 
@@ -338,7 +325,7 @@ def images(
     [bright_green]AOS-SW[/]
     [cyan]-[/] show flash
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
+    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     ids_by_dev_type = {
         "ap": [119, 213],
@@ -352,14 +339,11 @@ def images(
 @app.command()
 def inventory(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Show Inventory (valid on Gateways)
     """
@@ -374,21 +358,11 @@ def ping(
     host: str = typer.Argument(..., help="host to ping (IP of FQDN)"),
     mgmt: bool = typer.Option(None, "-m", help="ping using VRF mgmt, (only applies to cx)"),
     repititions: int = typer.Option(None, "-r", help="repititions (only applies to AOS-SW)"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    verbose2: bool = typer.Option(
-        False,
-        "-vv",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        is_flag=True,
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     command_ids = {
         "ap": 165,
@@ -410,23 +384,21 @@ def ping(
     commands = {cmd_id: cmd_args}
     dev_type = lib_to_api(dev.type, "tshoot")
 
-    resp = cli.central.request(cli.central.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
+    resp = api.session.request(api.tshooting.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
     cli.display_results(resp, tablefmt="action", exit_on_fail=True)
 
     complete = False
     while not complete:
-        for x in range(3):
+        for _ in range(3):
             _delay = 15 if dev.type == "cx" else 10
             for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
-            ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
+            ts_resp = api.session.request(api.tshooting.get_ts_output, dev.serial, resp.session_id)
 
             if ts_resp.output.get("status", "") == "COMPLETED":
-                # if not verbose2:  # FIXME is verbose2 not working on any of these???
-                if not cli.raw_out:
-                    print(ts_resp.output["output"])
-                else:
-                    cli.display_results(resp)
+                if "output" in ts_resp.output:
+                    ts_resp.output = ts_resp.output["output"]
+                cli.display_results(ts_resp)
                 complete = True
                 break
             else:
@@ -436,7 +408,7 @@ def ping(
         if not complete:
             console.print(f'[dark_orange3]:warning: WARNING[/] Central is still waiting on response from [cyan]{dev.name}[/]')
             console.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
-            if not typer.confirm("Continue to wait/retry?"):
+            if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
 
@@ -445,72 +417,33 @@ def speed_test(
     device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to run speedtest from", autocompletion=cli.cache.dev_ap_gw_completion),
     host: str = typer.Argument("ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org", help="speedtest host (IP of FQDN)"),
     options: str = typer.Option(None, "-o", help="Formatted string of optional arguments"),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    raw: bool = typer.Option(
-        False,
-        "--raw",
-        help="Show raw response (no formatting but still honors --yaml, --csv ... if provided)",
-        show_default=False,
-        is_flag=True,
-    ),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
 ):
     """Initiate a speedtest from a device (Gateways and AOS8 IAP).
     """
     dev = cli.cache.get_dev_identifier(device)
     if dev.type == "ap" and dev.is_aos10:
         cli.exit("This command is not supported on AOS10 APs")
-    elif dev.type not in ["ap", "gw"]:
+    if dev.type not in ["ap", "gw"]:
         cli.exit(f"This command is supported on Gateways and AOS8 IAP not {dev.type}")
 
-    resp = cli.central.request(cli.central.run_speedtest, dev.serial, host=host, options=options)
+    resp = api.session.request(api.device_management.run_speedtest, dev.serial, host=host, options=options)
     cli.display_results(resp, tablefmt="action", exit_on_fail=True)
 
-    # complete = False
-    # while not complete:
-    #     for x in range(3):
-    #         _delay = 15 if dev.type == "cx" else 10
-    #         for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
-    #             sleep(1)
-    #         ts_resp = cli.central.request(cli.central.get_ts_output, dev.serial, resp.session_id)
-
-    #         if ts_resp.output.get("status", "") == "COMPLETED":
-    #             # if not verbose2:  # FIXME is verbose2 not working on any of these???
-    #             if not cli.raw_out:
-    #                 print(ts_resp.output["output"])
-    #             else:
-    #                 cli.display_results(resp)
-    #             complete = True
-    #             break
-    #         else:
-    #             print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
-
-
-    #     if not complete:
-    #         console.print(f'[dark_orange3]:warning: WARNING[/] Central is still waiting on response from [cyan]{dev.name}[/]')
-    #         console.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
-    #         if not typer.confirm("Continue to wait/retry?"):
-    #             cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
-    #             break
 
 @app.command(short_help="Send troubleshooting command to a device")
 def command(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = cli.arguments.device,
     cmd: List[str] = typer.Argument(..., help="command to send to switch, must be supported by API.", show_default=False,),
-    outfile: Path = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False,),
-    pager: bool = typer.Option(False, "--pager", help="Enable Paged Output"),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",
-                                autocompletion=cli.cache.account_completion),
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    workspace: str = cli.options.workspace,
 ):
     """
     [cyan]Send a user provided troubleshooting commands to a device and wait for results.[/]
