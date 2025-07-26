@@ -38,7 +38,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.central import CentralApi
+# from centralcli.central import CentralApi
 from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
 from centralcli.clioptions import CLIOptions, CLIArgs
@@ -46,6 +46,8 @@ from centralcli.constants import flex_dual_models, dynamic_antenna_models
 from .models.common import APUpdates, APUpdate
 from .ws_client import follow_audit_logs, follow_event_logs
 from .environment import env_var, env
+from .classic.api import ClassicAPI
+from .cnx.api import GlpApi
 
 
 if TYPE_CHECKING:
@@ -143,13 +145,17 @@ class APRequestInfo:
     def skipped_summary(self) -> str:
         return utils.summarize_list([str(s) for s in self.skipped.values()], max=12, color=None, italic=True)
 
+class APIClients:
+    def __init__(self):
+        self.classic = ClassicAPI(config.classic.base_url)
+        self.glp = None if not config.glp.ok else GlpApi(config.classic.base_url)
 
 
 class CLICommon:
-    def __init__(self, workspace: str = "default", cache: Cache = None, central: CentralApi = None, raw_out: bool = False):
+    def __init__(self, workspace: str = "default", cache: Cache = None, raw_out: bool = False):
         self.workspace = workspace
         self.cache = cache
-        self.central = central
+        # self.central = central
         self.raw_out = raw_out
         self.options = CLIOptions(cache)
         self.arguments = CLIArgs(cache)
@@ -553,8 +559,10 @@ class CLICommon:
     @staticmethod
     def _update_captions(caption: List[str] | str, resp: Response | List[Response] = None, suppress_rl: bool = False) -> Tuple[str, str | None]:
         resp = utils.listify(resp)
-        if isinstance(caption, list):
-            caption = "\n ".join(caption)
+        resp_captions = [] if resp is None else [str(cap) if not hasattr(cap, "__rich__") else getattr(cap, "__rich__")() for r in resp if r.caption for cap in utils.listify(r.caption)]
+        caption = utils.listify(caption) or []
+        caption = [*caption, *resp_captions]
+        caption = "\n ".join(caption)
 
         caption = "" if not caption else f"{caption}\n"
         if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji # TODO see if table has option to only do emoji in caption
@@ -569,8 +577,10 @@ class CLICommon:
             try:
                 last_rl = sorted(resp, key=lambda r: r.rl)
                 if last_rl:
-                    rl_str = f"[reset][italic dark_olive_green2]{last_rl[0].rl}[/]".lstrip()
-                    caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
+                    rl = last_rl[0].rl
+                    if rl.has_value:
+                        rl_str = f"[reset][italic dark_olive_green2]{rl}[/]".lstrip()
+                        caption = f"{caption}\n {rl_str}" if caption else f" {rl_str}"
             except Exception as e:
                 rl_str = ""
                 log.error(f"Exception when trying to determine last rate-limit str for caption {e.__class__.__name__}", show=True)
@@ -642,6 +652,12 @@ class CLICommon:
         #     print(caption)
         if caption and tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
             cap_console.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
+
+        if config.is_old_cfg and " ".join(sys.argv[1:]) != "convert config":
+            cap_console.print(
+                ":sparkles: [bright_green]There is a new format for the cencli config[/] [dim italic](config.yaml)[/] file with support for [green]GreenLake[/] and New Central!\n"
+                f"   Use [cyan]cencli convert config[/] to convert the existing config @ [turquoise2]{config.file}[/] to the new format."
+            )
 
         if outfile and outdata:
             print()
@@ -1475,7 +1491,7 @@ class CLICommon:
                     )
                 ]
             else:
-                cache_update_reqs += [br(self.cache.refresh_inv_db)]
+                cache_update_reqs += [br(self.cache.refresh_inv_db_classic)]
         # Update cache remove deleted items
         if cache_update_reqs:
             _ = self.central.batch_request(cache_update_reqs)
