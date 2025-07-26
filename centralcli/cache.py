@@ -21,11 +21,21 @@ from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
 
-from centralcli import CentralApi, Response, config, constants, log, render, utils, BatchRequest
+from centralcli import Response, config, constants, log, render, utils, BatchRequest
 from centralcli.response import CombinedResponse
 from .objects import DateTime
 from .models import cache as models
+from .cnx.models.cache import Subscriptions
 from functools import partial
+
+from .classic.api import ClassicAPI
+api = ClassicAPI(config.base_url)
+
+if config.glp.ok:
+    from .cnx.api import GlpApi
+    glp_api = GlpApi(config.glp.base_url)
+else:
+    glp_api = None
 
 if TYPE_CHECKING:
     from tinydb.table import Table, Document
@@ -62,16 +72,16 @@ LIB_DEV_TYPE = {
 }
 
 
-CacheTable = Literal["dev", "inv", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
+CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert"],
-        data: Document | Dict[str, Any] | List[Document | Dict[str, Any]],
-    ) -> list | Dict[str, Any]:
-        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert = False, False, False, False, False, False, False, False, False
-        data: Dict | List[dict] = None if not data else data
+        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
+        data: Document | dict[str, Any] | list[Document | dict[str, Any]],
+    ) -> list | list[str, Any]:
+        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False
+        data: dict | list[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
         self.doc_id = None if not hasattr(data, "doc_id") else data.doc_id
@@ -278,6 +288,9 @@ class CacheInvDevice(CentralObject):
         self.services: str | None = data["services"]
         self.subscription_key: str = data.get("subscription_key")
         self.subscription_expires: int | float = data.get("subscription_expires")
+        # glp cnx only fields
+        self.assigned: bool = data.get("assigned")
+        self.id: str = data.get("id")
 
     @classmethod
     def set_db(cls, db: Table):
@@ -765,6 +778,7 @@ class CacheResponses:
         self,
         dev: CombinedResponse = None,
         inv: Response = None,
+        sub: Response = None,
         site: Response = None,
         template: Response = None,
         group: Response = None,
@@ -780,6 +794,7 @@ class CacheResponses:
     ) -> None:
         self._dev = dev
         self._inv = inv
+        self._sub = sub
         self._site = site
         self._template = template
         self._group = group
@@ -819,6 +834,14 @@ class CacheResponses:
     @inv.setter
     def inv(self, resp: Response):
         self._inv = resp
+
+    @property
+    def sub(self) -> Response | None:
+        return self.update_rl(self._sub)
+
+    @sub.setter
+    def sub(self, resp: Response):
+        self._sub = resp
 
     @property
     def site(self) -> Response | None:
@@ -928,19 +951,20 @@ class Cache:
 
     def __init__(
         self,
-        central: CentralApi = None,
+        config: Config = None,
         data: Union[List[dict], dict] = None,
         refresh: bool = False,
     ) -> None:
         """Central-API-CLI Cache object
         """
         self.updated: list = []  # TODO change from list of methods to something easier
-        self.central = central
+        self.config = config
         self.responses = CacheResponses()
         self.get_label_identifier: CacheLabel | List[CacheLabel] = partial(self.get_name_id_identifier, "label")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
+            self.SubDB: Table = self.DevDB.table("subscriptions")
             self.SiteDB: Table = self.DevDB.table("sites")
             self.GroupDB: Table = self.DevDB.table("groups")
             self.TemplateDB: Table = self.DevDB.table("templates")
@@ -966,8 +990,8 @@ class Cache:
             if data:
                 raise ValueError("This should not have happened.  Passing data directly to cache object was deprecated.  Please open issue on GitHub. I apparently missed something.")
                 # TODO should be good, once soaked to be sure remove data from constructor and this conditional
-            if central:
-                self.check_fresh(refresh)
+            # if central:
+            #     self.check_fresh(refresh)
 
     def __call__(self, refresh=False) -> None:
         if refresh:
@@ -1048,6 +1072,18 @@ class Cache:
     @property
     def inventory_by_serial(self) -> Dict[str, Document]:
         return {d["serial"]: d for d in self.inventory}
+
+    @property
+    def inventory_by_id(self) -> Dict[str, CacheInvDevice]:
+        return {d["id"]: d for d in self.inventory}
+
+    @property
+    def subscriptions(self) -> Dict[str, Document]:
+        return self.SubDB.all()
+
+    @property
+    def subscriptions_by_id(self) -> Dict[str, Document]:
+        return {s["id"]: s for s in self.subscriptions}
 
     @property
     def sites(self) -> list:
@@ -1305,7 +1341,7 @@ class Cache:
 
     @staticmethod
     def account_completion(ctx: typer.Context, args: List[str], incomplete: str):
-        for a in config.defined_workspaces:
+        for a in config.defined_accounts:
             if a.lower().startswith(incomplete.lower()):
                 yield a
 
@@ -1315,11 +1351,9 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        if self.central is not None:
-            methods = [
-                d for d in self.central.__dir__()
-                if not d.startswith("__")
-            ]
+        methods = list(set(
+            [d for svc in api.__dir__() if not svc.startswith("_") for d in getattr(api, svc).__dir__() if not d.startswith("_")]
+        ))
 
         import importlib
         bpdir = Path(__file__).parent / "boilerplate"
@@ -1669,7 +1703,7 @@ class Cache:
                         econsole.print(f"[red]:warning:[/]  Unable to gather guest from provided identifier {query_str}.  Use [cyan]cencli show guest <PORTAL>[/] to update cache.")
                         raise typer.Exit(1)
                     econsole.print(":arrows_clockwise: Updating guest Cache")
-                    self.central.request(self.refresh_guest_db, portal_id=portal_id)
+                    api.session.request(self.refresh_guest_db, portal_id=portal_id)
             if match:
                 match = [CacheGuest(g) for g in match]
                 break
@@ -1787,7 +1821,7 @@ class Cache:
                         match = self.GuestDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating certificate Cache")
-                    self.central.request(self.refresh_cert_db)
+                    api.session.request(self.refresh_cert_db)
             if match:
                 match = [CacheCert(**c) for c in match]
                 break
@@ -3006,8 +3040,7 @@ class Cache:
             CombinedResponse: CombinedResponse object.
         """
         dev_type = None if not dev_type or dev_type == "all" else utils.listify(dev_type)
-        resp: List[Response] | CombinedResponse = await self.central.get_all_devices(
-            cache=True,
+        resp: List[Response] | CombinedResponse = await api.monitoring.get_all_devices(
             dev_types=dev_type,
             group=group,
             site=site,
@@ -3026,6 +3059,7 @@ class Cache:
             fields=fields,
             offset=offset,
             limit=limit,
+            cache=True,
         )
         if isinstance(resp, CombinedResponse) and resp.ok:  # Can be Response | List[Response] if get_all_devices aborted due to failures
             # Any filters not in list below do not result in a cache update
@@ -3047,14 +3081,33 @@ class Cache:
                 # we update the response cache even if by dev_type now.
                 if dev_type:
                     self.responses.device_type = dev_type
-                else:
-                    self.updated.append(self.central.get_all_devices)
 
                 _ = await self.update_db(self.DevDB, data=update_data, truncate=True)
             else:  # Response is filtered or incomplete due to partial failure merge with existing cache data (update)
                 _ = await self._add_update_devices(update_data)
 
         return resp
+
+    async def refresh_sub_db(self, license_type: str = None, dev_type: str = None) -> Response:
+        """Refresh Subscriptions Database (local cache).
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if not glp_api:
+            return await api.platform.get_subscriptions(license_type=license_type, device_type=dev_type)
+
+        resp = await glp_api.subscriptions.get_subscriptions()
+        if resp.ok:
+            self.responses.sub = resp
+            sub_data = Subscriptions(**resp.raw)
+            resp.output = sub_data.dump()
+            resp.caption = sub_data.counts
+            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.items, truncate=True))
+
+        return resp
+
+
 
     # TODO need add bool or something to prevent combining and added device with current when a device is added as insert is all that is needed
     async def update_inv_db(
@@ -3109,16 +3162,101 @@ class Cache:
             if len(db_res) != len(doc_ids):
                 log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
 
-    # TODO need to make device_type consistent refresh_dev_db uses dev_type.  All CentralAPI methods use device_type
     async def refresh_inv_db(
             self,
-            device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
+            dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,
+    ) -> Response:
+        """Get devices from device inventory, and Update device Cache with results.
+
+        Uses GLP API if configed, classic Central API if not.
+
+        Args:
+            dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
+                Defaults to None = 'all' device types.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        if glp_api:
+            return await self.refresh_inv_db_glp(dev_type=dev_type)
+        return await self.refresh_inv_db_classic(dev_type=dev_type)
+
+    async def refresh_inv_db_glp(
+            self,
+            dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,  # dev_type is effectively ignored for glp/cnx
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
 
         This combines the results from 2 API calls:
-            - central.get_device_inventory: /platform/device_inventory/v1/devices
-            - central.get_subscriptions: /platform/licensing/v1/subscriptions
+            - classic.api.monitoring.get_device_inventory: /devices/<api version>/devices
+            - classic.api.monitoring.get_subscriptions: /devices/<api version>/subscriptions
+
+        Args:
+            dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
+                Defaults to None = 'all' device types.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        br = BatchRequest
+        batch_resp = await glp_api.session._batch_request(
+            [
+                br(glp_api.devices.get_glp_devices),
+                br(glp_api.subscriptions.get_subscriptions)
+            ]
+        )
+        if not any([r.ok for r in batch_resp]):
+            log.error("Unable to perform Inv cache update due to API call failure", show=True)
+            return batch_resp
+
+        inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
+
+        inv_data, sub_data = None, None
+        if not sub_resp.ok:
+            log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
+            _inv_by_ser = {} if not inv_resp.ok else {dev["serialNumber"]: dev for dev in inv_resp.raw["items"]}
+            combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
+            inv_model = models.Inventory(list(combined.values()))
+        else:
+            from .cnx.models.cache import Subscriptions, Inventory as GlpInventory, get_inventory_with_sub_data
+            sub_data = Subscriptions(**sub_resp.raw)
+            inv_data = GlpInventory(**inv_resp.raw)
+            combined = await get_inventory_with_sub_data(inv_data, sub_data)
+            inv_model = models.Inventory(combined)
+            if dev_type and dev_type != "all":
+                inv_model = models.Inventory([i for i in inv_model.model_dump() if i["type"] == "cx"])
+
+        resp = [r for r in batch_resp if r.ok][-1]
+        resp.rl = sorted([r.rl for r in batch_resp])[0]
+        resp.raw = {r.url.path: r.raw for r in batch_resp}
+
+        resp.output = inv_model.model_dump()
+        if inv_data is not None:
+            resp.caption = inv_data.counts
+
+        self.responses.inv = resp
+        if dev_type is None or dev_type == "all":
+            _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
+        else:
+            self.responses.device_type = dev_type
+            _ = await self._add_update_devices(resp.output, "inv")
+
+        if sub_data:
+            self.responses.sub = sub_resp
+            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.items, truncate=True))
+
+        return resp
+
+    # TODO need to make device_type consistent refresh_dev_db uses dev_type.  All CentralAPI methods use device_type
+    async def refresh_inv_db_classic(
+            self,
+            dev_type: Literal['ap', 'gw', 'switch', 'all'] = None,
+    ) -> Response:
+        """Get devices from device inventory, and Update device Cache with results.
+
+        This combines the results from 2 API calls:
+            - classic.api.monitoring.get_device_inventory: /platform/device_inventory/v1/devices
+            - classic.api.monitoring.get_subscriptions: /platform/licensing/v1/subscriptions
 
         Args:
             device_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
@@ -3127,11 +3265,11 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
-        br = self.central.BatchRequest
-        batch_resp = await self.central._batch_request(
+        br = BatchRequest
+        batch_resp = await api.session._batch_request(
             [
-                br(self.central.get_device_inventory, device_type=device_type),
-                br(self.central.get_subscriptions, device_type=device_type)
+                br(api.platform.get_device_inventory, device_type=dev_type),
+                br(api.platform.get_subscriptions, device_type=dev_type)
             ]
         )
         if not any([r.ok for r in batch_resp]):
@@ -3141,8 +3279,8 @@ class Cache:
         inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
         _inv_by_ser = {} if not inv_resp.ok else {dev["serial"]: dev for dev in inv_resp.raw["devices"]}
 
-        if not batch_resp[1].ok:
-            log.error(f"Call to fetch subscription details failed.  {batch_resp[1].error}.  Subscription details provided from previously cached values.", caption=True)
+        if not sub_resp.ok:
+            log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
             combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
         else:
             raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
@@ -3159,14 +3297,14 @@ class Cache:
         resp.raw = {r.url.path: r.raw for r in batch_resp}
         inv_model = models.Inventory(list(combined.values()))
         resp.output = inv_model.model_dump()
+        resp.caption = inv_model.counts
 
         self.responses.inv = resp
-        if device_type is None or device_type == "all":
-            self.updated.append(self.central.get_device_inventory)
-            _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
+        if dev_type is None or dev_type == "all":
+            _ = await self.update_db(self.InvDB, data=inv_model.cache_dump(), truncate=True)
         else:
-            self.responses.device_type = device_type
-            _ = await self._add_update_devices(resp.output, "inv")
+            self.responses.device_type = dev_type
+            _ = await self._add_update_devices(inv_model.cache_dump(), "inv")
 
         return resp
 
@@ -3200,10 +3338,10 @@ class Cache:
             log.warning("cache.refresh_side_db called, but site cache has already been fetched this session.  Returning stored response.")
             return self.responses.site
 
-        resp = await self.central.get_all_sites()
+        resp = await api.central.get_all_sites()
         if resp.ok:
             self.responses.site = resp
-            self.updated.append(self.central.get_all_sites)  # TODO remove once all checks refactored to look for self.responses.site
+            self.updated.append(api.central.get_all_sites)  # TODO remove once all checks refactored to look for self.responses.site
 
             sites = models.Sites(resp.raw["sites"])
             resp.output = sites.model_dump()
@@ -3234,13 +3372,12 @@ class Cache:
             log.info("Update Group DB already refreshed in this session, returning previous group response")
             return self.responses.group
 
-        resp = await self.central.get_all_groups()
+        resp = await api.configuration.get_all_groups()
         if resp.ok:
             groups = models.Groups(resp.output)
             resp.output = groups.model_dump()
 
             self.responses.group = resp
-            self.updated.append(self.central.get_all_groups)
 
             _ = await self.update_db(self.GroupDB, data=resp.output, truncate=True)
         return resp
@@ -3253,10 +3390,10 @@ class Cache:
             return await self.update_db(self.LabelDB, doc_ids=data)
 
     async def refresh_label_db(self) -> bool:
-        resp = await self.central.get_labels()
+        resp = await api.central.get_labels()
         if resp.ok:
             self.responses.label = resp
-            self.updated.append(self.central.get_labels)
+            # self.updated.append(api.central.get_labels)
             label_models = models.Labels(resp.output)
             cache_data = label_models.model_dump()
             _ = await self.update_db(self.LabelDB, data=cache_data, truncate=True)
@@ -3270,10 +3407,9 @@ class Cache:
         Returns:
             Response: CentralAPI Response Object
         """
-        resp = await self.central.get_valid_subscription_names()
+        resp = await api.platform.get_valid_subscription_names()
         if resp.ok:
             resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
-            self.updated.append(self.central.get_valid_subscription_names)  # TODO finish removing this method of verifying an update has occured
             self.responses.license = resp
             _ = await self.update_db(self.LicenseDB, data=resp.output, truncate=True)
         return resp
@@ -3290,13 +3426,12 @@ class Cache:
 
         groups = self.groups
 
-        resp = await self.central.get_all_templates(groups=groups)
+        resp = await api.configuration.get_all_templates(groups=groups)
         if resp.ok:
             if len(resp) > 0: # handles initial cache population when none of the groups are template groups
                 resp.output = utils.listify(resp.output)
                 template_models = models.Templates(resp.output)
                 resp.output = template_models.model_dump()
-                self.updated.append(self.central.get_all_templates)
                 self.responses.template = resp
                 _ = await self.update_db(self.TemplateDB, data=resp.output, truncate=True)
         return resp
@@ -3376,7 +3511,7 @@ class Cache:
 
         Past users are always retained, unless truncate=True
         """
-        resp: Response = await self.central.get_clients(
+        resp: Response = await api.monitoring.get_clients(
             client_type=client_type,
             group=group,
             swarm_id=swarm_id,
@@ -3397,7 +3532,6 @@ class Cache:
         else:
             if len(resp) > 0:
                 resp.output = utils.listify(resp.output)
-                self.updated.append(self.central.get_clients)
                 with econsole.status(f"Preparing [cyan]{len(resp.output)}[/] clients for cache update"):
                     new_clients = models.Clients(resp.output)
                     if "wireless" in [new_clients[0].type, new_clients[-1].type]:
@@ -3456,9 +3590,9 @@ class Cache:
 
 
     async def refresh_mpsk_networks_db(self) -> Response:
-        resp = await self.central.cloudauth_get_mpsk_networks()
+        resp = await api.cloudauth.cloudauth_get_mpsk_networks()
         if resp.ok:
-            self.updated.append(self.central.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
+            self.updated.append(api.cloudauth.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
             self.responses.mpsk = resp
             if resp.output:
                 _update_data = models.MpskNetworks(resp.raw)
@@ -3476,10 +3610,10 @@ class Cache:
                 return net_resp
             mpsk_networks = {net["id"]: net["ssid"] for net in net_resp.output}
             named_reqs = [
-                BatchRequest(self.central.cloudauth_get_namedmpsk, mpsk_id, name=name, role=role, status=status)
+                BatchRequest(api.cloudauth.cloudauth_get_namedmpsk, mpsk_id, name=name, role=role, status=status)
                 for mpsk_id in mpsk_networks
             ]
-            batch_resp = await self.central._batch_request(named_reqs)
+            batch_resp = await api.session._batch_request(named_reqs)
 
             for resp, network in zip(batch_resp, mpsk_networks.values()):
                 if not resp.ok:
@@ -3494,7 +3628,7 @@ class Cache:
             if resp.ok:
                 resp.output = combined_output
         else:
-            resp = await self.central.cloudauth_get_namedmpsk(mpsk_id, name=name, role=role, status=status)
+            resp = await api.cloudauth.cloudauth_get_namedmpsk(mpsk_id, name=name, role=role, status=status)
             if resp.ok:
                 ssid: CacheMpskNetwork = self.get_mpsk_network_identifier(mpsk_id, silent=True)
                 if ssid:
@@ -3503,7 +3637,7 @@ class Cache:
         truncate = True if not mpsk_id and not any([name, role, status]) else False
 
         if resp.ok:
-            self.updated.append(self.central.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
+            # self.updated.append(api.cloudauth.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
             self.responses.mpsk = resp
             if resp.output:
                 _update_data = models.Mpsks(resp.output)
@@ -3523,11 +3657,10 @@ class Cache:
         return await self.update_db(self.PortalDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_portal_db(self) -> Response:
-            resp = await self.central.get_portals()
+            resp = await api.guest.get_portals()
             if not resp.ok:
                 return resp
 
-            self.updated.append(self.central.get_portals)
             self.responses.portal = resp
 
             portal_model = models.Portals(deepcopy(resp.output))
@@ -3545,8 +3678,8 @@ class Cache:
         update_data = {**self.certs_by_md5, **data_by_md5}
         return await self.update_db(self.CertDB, data=list(update_data.values()), truncate=True)
 
-    async def refresh_cert_db(self, query: str = None) -> Response:
-            resp = await self.central.get_certificates(query)
+    async def refresh_cert_db(self, func: Callable, *, query: str = None) -> Response:
+            resp: Response = await func(query)
             if not resp.ok:
                 return resp
 
@@ -3572,7 +3705,7 @@ class Cache:
         return await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_guest_db(self, portal_id: str) -> Response:
-            resp: Response = await self.central.get_guests(portal_id)
+            resp: Response = await api.guest.get_guests(portal_id)
             if not resp.ok:
                 return resp
 
@@ -3607,7 +3740,7 @@ class Cache:
         if dev_db:
             update_funcs += [self.refresh_dev_db]
         if inv_db:
-            update_funcs += [self.refresh_inv_db]
+            update_funcs += [self.refresh_inv_db_classic]
         if site_db:
             update_funcs += [self.refresh_site_db]
         if template_db:
@@ -3616,7 +3749,7 @@ class Cache:
             update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.refresh_license_db]
-        async with self.central.aio_session:
+        async with api.session.aio_session:
             if update_funcs:
                 kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
                 # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
@@ -3639,10 +3772,10 @@ class Cache:
             # If all *_db params are false refresh cache for all
             # TODO make more elegant
             else:  # TODO asyncio.sleep is a temp until build better session wide rate limit handling.
-                br = self.central.BatchRequest
-                db_res += await self.central._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
+                br = BatchRequest
+                db_res += await api.session._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
                 if db_res[-1]:
-                    dev_res = await self.central._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
+                    dev_res = await api.session._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
                     dev_res = utils.unlistify(dev_res)  # should only be an issue when debugging (re-writing responses) in refresh_dev_db
                     if isinstance(dev_res, list):
                         db_res = [*db_res, *dev_res]
@@ -3650,12 +3783,12 @@ class Cache:
                         db_res += [dev_res]
                     if db_res[-1]:
                         batch_reqs = [
-                            self.central.BatchRequest(req)
-                            for req in [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
+                            BatchRequest(req)
+                            for req in [self.refresh_inv_db_classic, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
                         ]
                         db_res = [
                             *db_res,
-                            *await self.central._batch_request(batch_reqs)
+                            *await api.session._batch_request(batch_reqs)
                         ]
         return db_res
 
@@ -3703,9 +3836,9 @@ class Cache:
                 except IndexError:
                     err_msg = f"Cache refresh returned an error. {len(failed)} requests failed."
                 log.error(err_msg)
-                self.central.spinner.fail(err_msg)
+                api.session.spinner.fail(err_msg)
             else:
-                self.central.spinner.succeed(f"Cache Refresh [bright_green]Completed[/] in [cyan]{elapsed}[/]s")
+                api.session.spinner.succeed(f"Cache Refresh [bright_green]Completed[/] in [cyan]{elapsed}[/]s")
 
         return db_res
 
@@ -4093,7 +4226,7 @@ class Cache:
                 )
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
-            if retry and not match and self.central.get_all_sites not in self.updated:
+            if retry and not match and api.central.get_all_sites not in self.updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
@@ -4184,7 +4317,7 @@ class Cache:
                 all_match: List[Document] = match.copy()
                 match = [d for d in all_match if bool([t for t in d.get("allowed_types", []) if t in dev_type])]
 
-            if not match and retry and self.central.get_all_groups not in self.updated:  # TODO self.responses.group is None
+            if not match and retry and api.configuration.get_all_groups not in self.updated:  # TODO self.responses.group is None
                 dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
                 if FUZZ and not silent:
@@ -4285,7 +4418,7 @@ class Cache:
 
             # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
             # fuzzy match
-            if not match and retry and self.central.get_labels not in self.updated:
+            if not match and retry and not self.responses.label:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
@@ -4476,7 +4609,7 @@ class Cache:
                         match = self.ClientDB.search(self.Q.name == fuzz_match)
                 if not match:  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
                     econsole.print(":arrows_clockwise: Updating [cyan]client[/] Cache")
-                    self.central.request(self.refresh_client_db, "wireless")
+                    api.session.request(self.refresh_client_db, "wireless")
 
             if match:
                 match = [CacheClient(c) for c in match]
@@ -4601,7 +4734,7 @@ class Cache:
                             match = self.MpskNetDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
-                    self.central.request(self.refresh_mpsk_networks_db)
+                    api.session.request(self.refresh_mpsk_networks_db)
                 _ += 1
             if match:
                 match = [CacheMpskNetwork(g) for g in match]
@@ -4712,7 +4845,7 @@ class Cache:
                             match = self.db.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
-                    self.central.request(this.cache_update_func)
+                    api.session.request(this.cache_update_func)
                     cache_updated = True
                 _ += 1
             if match:
@@ -4741,18 +4874,17 @@ class Cache:
                 )
 
 class CacheAttributes:
-    def __init__(self, name: Literal["dev", "site", "template", "group", "label", "mpsk", "portal"], db: Table, already_updated_func: Callable, cache_update_func: Callable) -> None:
+    def __init__(self, name: Literal["dev", "site", "template", "group", "label", "portal", "mpsk", "mpsk_network"], db: Table, cache_update_func: Callable) -> None:
         self.name = name
         self.db = db
-        self.already_updated_func = already_updated_func
         self.cache_update_func = cache_update_func
 
 class CacheDetails:
     def __init__(self, cache = Cache):
-        self.dev = CacheAttributes(name="dev", db=cache.DevDB, already_updated_func=cache.central.get_all_devices, cache_update_func=cache.refresh_dev_db)
-        self.site = CacheAttributes(name="site", db=cache.SiteDB, already_updated_func=cache.central.get_all_sites, cache_update_func=cache.refresh_site_db)
-        self.group = CacheAttributes(name="group", db=cache.GroupDB, already_updated_func=cache.central.get_all_groups, cache_update_func=cache.refresh_group_db)
-        self.portal = CacheAttributes(name="portal", db=cache.PortalDB, already_updated_func=cache.central.get_portals, cache_update_func=cache.refresh_portal_db)
-        self.mpsk_network = CacheAttributes(name="mpsk_network", db=cache.MpskNetDB, already_updated_func=cache.central.cloudauth_get_namedmpsk, cache_update_func=cache.refresh_mpsk_db)
-        self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, already_updated_func=cache.central.cloudauth_get_mpsk_networks, cache_update_func=cache.refresh_mpsk_db)
-        self.label = CacheAttributes(name="label", db=cache.LabelDB, already_updated_func=cache.central.get_labels, cache_update_func=cache.refresh_label_db)
+        self.dev = CacheAttributes(name="dev", db=cache.DevDB, cache_update_func=cache.refresh_dev_db)
+        self.site = CacheAttributes(name="site", db=cache.SiteDB, cache_update_func=cache.refresh_site_db)
+        self.group = CacheAttributes(name="group", db=cache.GroupDB, cache_update_func=cache.refresh_group_db)
+        self.label = CacheAttributes(name="label", db=cache.LabelDB, cache_update_func=cache.refresh_label_db)
+        self.portal = CacheAttributes(name="portal", db=cache.PortalDB, cache_update_func=cache.refresh_portal_db)
+        self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, cache_update_func=cache.refresh_mpsk_db)
+        self.mpsk_network = CacheAttributes(name="mpsk_network", db=cache.MpskNetDB, cache_update_func=cache.refresh_mpsk_db)
