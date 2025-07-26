@@ -141,7 +141,11 @@ clusters = CentralURLs()
 def _get_config_file(dirs: list[Path]) -> Path:
     dirs = [dirs] if not isinstance(dirs, list) else dirs
     for _dir in dirs:
-        for f in list(Path.glob(_dir, "config.*")):
+        if Path.joinpath(_dir, "config.yaml").is_file():
+            return _dir / "config.yaml"
+        if Path.joinpath(_dir, "config.yml").is_file():
+            return _dir / "config.yml"
+        for f in (Path.glob(_dir, "config.*")):
             if f.suffix in VALID_EXT and 'base_url' in f.read_text():
                 return f
 
@@ -257,7 +261,6 @@ class Config:
         self.log_dir = self.base_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.capture_file = self.log_dir / "raw-capture.json"
-
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
@@ -266,37 +269,25 @@ class Config:
         self.sanitize_file = self.dir / "redact.yaml"
 
         self.data = self.get_file_data(self.file) or {}
-        # self.data = self.get_file_data(self.file.parent / "config_bak.yaml") or {}
         self.forget: int | None = self.data.get("forget_ws_after", self.data.get("forget_account_after"))
-        # self.default_account = "default" if "default" in self.data or "default" in self.data.get("workspaces", {}) else "central_info"
-        self.default_workspace = "default"  # central_info is transformed to default in ConfigData model
+        self.default_workspace = "default"  # if they still use old `central_info` it is transformed to `default` in ConfigData model
         self.last_workspace, self.last_cmd_ts, self.last_workspace_msg_shown, self.last_workspace_expired = self.get_last_workspace()
-        self.workspace = self.get_workspace_from_args()
-        self._normalized_workspace = self.workspace.replace(" ", "_")
+        self._workspace = self.get_workspace_from_args()
+        self.set_attributes()
+        self.snow = None  # snow proxy is deprecated
+
+    def set_attributes(self):
+        self._normalized_workspace = self._workspace.replace(" ", "_")
         try:
             c = ConfigData(workspace=self.workspace, **self.data)
         except ValidationError as e:
             econsole.print("\n".join([line for line in str(e).splitlines() if "errors.pydantic.dev" not in line]))
             sys.exit(1)
-        # ws_data: WorkSpace | None = c.workspaces.get(self.account)
-        # self.base_url = None if not ws_data else ws_data.classic.base_url
-        # self.username = None if not ws_data else ws_data.classic.username
         self.base_url = c.current_workspace.classic.base_url
         self.username = c.current_workspace.classic.username
-
-        # self.wss_key = None
-        # if ws_data and ws_data.classic and ws_data.classic.tokens:
-        #     self.wss_key = ws_data.classic.tokens.wss_key
-        # self.cache_client_days = None if not ws_data else ws_data.cache_client_days
-        # self.cache_client_days = self.cache_client_days or c.cache_client_days
         self.cache_client_days = c.current_workspace.cache_client_days
         self.webhook = c.current_workspace.classic.webhook
         self.wss_key = c.current_workspace.classic.webhook.token
-        # self.webhook, self.wss_key = None, None
-        # if ws_data and ws_data.classic:
-        #     if ws_data.classic.tokens:
-        #         self.wss_key = ws_data.classic.tokens.wss_key
-        #     self.webhook = ws_data.classic.webhook
         self.defined_workspaces = list(c.workspaces.keys())
         self.is_old_cfg = True if "workspaces" not in self.data else False
         if self.is_old_cfg:
@@ -305,17 +296,18 @@ class Config:
             if workspaces and "default" in workspaces:
                 config_dict["workspaces"] = {"default": workspaces["default"], **{k: v for k, v in workspaces.items() if k != "default"}}
             self.data = config_dict
+        self.ssl_verify = c.current_workspace.ssl_verify if c.current_workspace.ssl_verify is not None else c.ssl_verify
         self.debug = False if c is None else c.debug
         self.debugv = False if c is None else c.debugv
         self.sanitize = False if not c.dev_options else c.dev_options.sanitize
         self.capture_raw = False if not c.dev_options else c.dev_options.capture_raw
         self.dev_options = c.dev_options
-        # self.limit = None if not c.dev_options else c.dev_options.limit
         self.central_info = {} if c is None else c.classic_info
         self.classic = c.current_workspace.classic
         self.glp = c.current_workspace.glp
         self.cnx = c.current_workspace.central
         self.workspace_config = c.current_workspace.model_dump()
+        self.workspace_object = c.current_workspace
         if "snow" in c.extra:
             self.deprecation_warnings = ["Snow Proxy functionality is deprecated, as it was never tested.  Please open an issue, if you need the functionality."]
         else:
@@ -324,18 +316,24 @@ class Config:
         if extras:
             self.deprecation_warnings = self.deprecation_warnings or []
             self.deprecation_warning += [f'The following configuration items [dim italic]({", ".join(extras)})[/] were found in the config, but are not recognized by [cyan]cencli[/]']
-        self.snow = None  # snow proxy is deprecated
-
 
     def __bool__(self):
         return len(self.data) > 0 and self.workspace in self.data
 
     def __len__(self):
         return len(self.data)
+    @property
+    def workspace(self) -> str:
+        return self._workspace
+
+    @workspace.setter
+    def workspace(self, workspace: str):
+        self._workspace = workspace
+        self.set_attributes()
 
     @property
-    def ssl_verify(self):
-        return self.get("ssl_verify", True)
+    def workspaces(self) -> dict[str, Any]:
+        return self.data.get("workspaces", {})
 
     @property
     def is_cop(self):
@@ -348,7 +346,7 @@ class Config:
 
     @property
     def valid(self):
-        return self.workspace in self.data or self.workspace in self.data.get("workspaces", {})
+        return self.workspace in self.data.get("workspaces", {}) or self.workspace in self.data
 
     @property
     def token_store(self):
@@ -359,14 +357,11 @@ class Config:
 
     @property
     def tok_file(self) -> Path:
-        cust_id = self.data.get(self.workspace, {}).get("customer_id")
-        client_id = self.data.get(self.workspace, {}).get("client_id")
-        return Path(self.cache_dir / f'tok_{cust_id}_{client_id}.json') if cust_id and client_id else None
+        return Path(self.cache_dir / f'tok_{self.classic.customer_id}_{self.classic.client_id}.json') if self.classic.ok else None
 
     @property
     def cnx_tok_file(self) -> Path:
-        client_id = self.data.get(self.workspace, {}).get("client_id")
-        return Path(self.cache_dir / f'cnx_tok_{self._normalized_workspace}_{client_id}.json') if client_id else None
+        return Path(self.cache_dir / f'cnx_tok_{self._normalized_workspace}_{self.classic.client_id}.json') if self.classic.client_id else None
 
     @property
     def cache_file(self):
