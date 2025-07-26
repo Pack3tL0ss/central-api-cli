@@ -3,33 +3,82 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
-from pathlib import Path
 import shutil
 import string
 import sys
 import urllib.parse
-from typing import Any, Dict, List, Optional, Tuple, Union, Literal, Iterable
-import typer
-import logging
-
-import yaml
-from random import choice
-from rich.color import ANSI_COLOR_NAMES
-from rich import print_json
-from rich.console import Console
-from rich.prompt import Prompt
-from rich.pretty import pprint
-from jinja2 import FileSystemLoader, Environment
 from datetime import datetime
+from pathlib import Path
+from random import choice
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Tuple, Union
+
 import pendulum
+import typer
+import yaml
+from jinja2 import Environment, FileSystemLoader
+from rich import print_json
+from rich.color import ANSI_COLOR_NAMES
+from rich.console import Console
+from rich.pretty import pprint
+from rich.prompt import Prompt
+from rich.status import Status
 
-
+if TYPE_CHECKING:
+    from rich.console import RenderableType
+    from rich.style import StyleType
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
 log = logging.getLogger()
 
+
+class Spinner(Status):
+    """A Spinner Object that adds methods to rich.status.Status object
+
+        Args:
+            status (RenderableType): A status renderable (str or Text typically).
+            console (Console, optional): Console instance to use, or None for global console. Defaults to None.
+            spinner (str, optional): Name of spinner animation (see python -m rich.spinner). Defaults to "dots".
+            spinner_style (StyleType, optional): Style of spinner. Defaults to "status.spinner".
+            speed (float, optional): Speed factor for spinner animation. Defaults to 1.0.
+            refresh_per_second (float, optional): Number of refreshes per second. Defaults to 12.5.
+    """
+    def __init__(
+        self,
+        status: RenderableType,
+        *,
+        console: Optional[Console] = None,
+        spinner: str = "dots",
+        spinner_style: StyleType = "status.spinner",
+        speed: float = 1.0,
+        refresh_per_second: float = 12.5,
+    ):
+        super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
+
+    def fail(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":x:  {self.status}") if not text else self.console.print(f":x:  {text}")
+
+    def succeed(self, text: RenderableType = None) -> None:
+        if self._live.is_started:
+            self._live.stop()
+        self.console.print(f":heavy_check_mark:  {self.status}") if not text else self.console.print(f":heavy_check_mark:  {text}")
+
+    def start(
+            self,
+            text: RenderableType = None,
+            *,
+            spinner: str = None,
+            spinner_style: StyleType = None,
+            speed: float = None,
+        ) -> None:
+        if any([text, spinner, spinner_style, speed]):
+            self.update(text, spinner=spinner, spinner_style=spinner_style, speed=speed)
+        if not self._live.is_started:
+            self._live.start()
 
 class ToBool:
     def __init__(self, value: Any,):
