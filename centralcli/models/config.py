@@ -104,7 +104,7 @@ class Classic(BaseModel):
 class WorkSpace(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     cluster: Optional[ClusterName] = ClusterName.us6
-    ssl_verify: Optional[bool] = Field(True, alias=AliasChoices("ssl_verify", "ssl-verify", "verify_ssl", "verify-ssl"))
+    ssl_verify: Optional[bool] = Field(None, alias=AliasChoices("ssl_verify", "ssl-verify", "verify_ssl", "verify-ssl"))
     glp: Optional[Glp] = Field(Glp(), alias=AliasChoices("glp", "GLP"))
     central: Optional[Central] = Field(Central(), alias=AliasChoices("central", "new_central", "cnx", "new-central"))
     classic: Optional[Classic] = Classic()
