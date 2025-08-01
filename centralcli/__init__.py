@@ -137,8 +137,8 @@ if os.name == "nt":  # pragma: no cover
 
 
 from pycentral.base import ArubaCentralBase
-from .response import Response, BatchRequest
-from .client import Session
+from .response import Response
+from .client import Session, BatchRequest
 from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
 from .clicommon import CLICommon
 from . import cleaner, render
