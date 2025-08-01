@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
-from pathlib import Path
+# import sys
+# from pathlib import Path
 from typing import List
 
 import typer
-from rich import print
 from datetime import datetime
 
 # Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, log
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, log
-    else:
-        print(pkg_dir.parts)
-        raise e
+# try:
+#     from centralcli import cli, utils, log
+# except (ImportError, ModuleNotFoundError) as e:
+#     pkg_dir = Path(__file__).absolute().parent
+#     if pkg_dir.name == "centralcli":
+#         sys.path.insert(0, str(pkg_dir.parent))
+#         from centralcli import cli, utils, log
+#     else:
+#         print(pkg_dir.parts)
+#         raise e
 
 from centralcli.cache import CacheLabel, CacheDevice, CacheSub
 from centralcli.constants import iden_meta
 
-from . import BatchRequest
-from .objects import DateTime
-from .clicommon import APIClients
+from .. import BatchRequest, cli, utils, log
+from ..objects import DateTime
+from ..clicommon import APIClients
 
 api_clients = APIClients()
 api = api_clients.classic
@@ -135,9 +134,9 @@ def label_(
 
 @app.command(hidden=not glp_api)
 def subscription(
-    sub_name_or_id: str = typer.Argument(..., help="subscription_id from [cyan]cencli show subscriptions[/] output", autocompletion=cli.cache.sub_completion, show_default=False),  # type: ignore
-    devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
-    end_date: datetime = cli.options.get("end", help=f"Select subscription with this expiration date [dim](24 hour format, time not required, closest sub to provided date is selected)[/] {cli.help_block('The subscription with the most time remaining will be selected')}",),
+    sub_name_or_id: str = typer.Argument(..., help="subscription_id from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=cli.cache.sub_completion, show_default=False),  # type: ignore
+    devices: List[str] = cli.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
+    end_date: datetime = cli.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {cli.help_block('The subscription with the most time remaining will be selected')}",),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -155,17 +154,17 @@ def subscription(
     if len(devices) > sub.available:
         log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for {sub.name} with id {sub.id}.  [dim italic]As of last Subscription cache update[/]", show=True)
 
-    _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date {DateTime(sub.end_date, format='date-string')}, and [cyan]{sub.available}[/] available subscriptions"
+    _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
     try:
-        _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in devices]
+        res_ids = [r if utils.is_resource_id(r) else cli.cache.get_dev_identifier(r).id for r in devices]
     except Exception:
-        _serial_nums = devices
+        res_ids = devices
 
-    _msg = f"{_msg} to device:" if len(_serial_nums) == 1 else f"{_msg} to the following {len(_serial_nums)} devices:"
-    _msg = f"{_msg} {utils.summarize_list(_serial_nums, max=12)}"
+    _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
+    _msg = f"{_msg} {utils.summarize_list(res_ids, max=12)}"
     cli.econsole.print(_msg)
     if cli.confirm(yes):
-        resp = glp_api.session.request(glp_api.devices.assign_subscription_to_devices, _serial_nums, subscription_ids=sub)
+        resp = glp_api.session.request(glp_api.devices.assign_subscription_to_devices, res_ids, subscription_ids=sub.id)
         cli.display_results(resp, tablefmt="action")
 
 

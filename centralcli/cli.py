@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError):
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import (
-        BatchRequest, cli, cliadd, cliassign, clibatch, clicaas, clicancel,
+        BatchRequest, cli, cliadd, clibatch, clicaas, clicancel,
         clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
         clirename, cliset, clishow, clitest, clitshoot, cliunassign,
         cliupdate, cliupgrade, cliconvert, config, log, utils,
@@ -34,7 +34,7 @@ except (ImportError, ModuleNotFoundError) as e:
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (
-            BatchRequest, cli, cliadd, cliassign, clibatch, clicaas, clicancel,
+            BatchRequest, cli, cliadd, clibatch, clicaas, clicancel,
             clicheck, cliclone, clidel, clidev, cliexport, clikick, clirefresh,
             clirename, cliset, clishow, clitest, clitshoot, cliunassign,
             cliupdate, cliupgrade, cliconvert, config, log, utils,
@@ -47,6 +47,7 @@ from centralcli.cache import CentralObject, CacheDevice, CacheSite
 from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
 from centralcli.environment import env  #noqa
 from centralcli.classic.api import ClassicAPI
+from centralcli.clitree import assign
 
 api = ClassicAPI(config.classic.base_url)
 err_console = Console(stderr=True)
@@ -64,7 +65,7 @@ app = typer.Typer(context_settings=CONTEXT_SETTINGS, rich_markup_mode="rich")
 app.add_typer(clishow.app, name="show",)
 app.add_typer(clidel.app, name="delete",)
 app.add_typer(cliadd.app, name="add",)
-app.add_typer(cliassign.app, name="assign",)
+app.add_typer(assign.app, name="assign",)
 app.add_typer(cliunassign.app, name="unassign",)
 app.add_typer(cliclone.app, name="clone",)
 app.add_typer(cliupdate.app, name="update",)
