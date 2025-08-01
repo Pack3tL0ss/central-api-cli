@@ -82,6 +82,10 @@ class DateTime():
         return timestamp if not str(timestamp).endswith(".0") else int(timestamp)
 
     @property
+    def is_expired(self) -> bool:
+        return self.ts >= pendulum.now(tz="UTC").timestamp()
+
+    @property
     def expiration(self) -> str:
         """Render date/time in format provided during instantiation colorized to indicate how near expiration the date is.
 
@@ -210,6 +214,8 @@ class Encoder(JSONEncoder):
             return str(obj)
         elif hasattr(obj, "as_dict"):
             return obj.as_dict
+        elif hasattr(obj, "model_dump"):
+            return obj.model_dump()
         else:
             return obj
 
