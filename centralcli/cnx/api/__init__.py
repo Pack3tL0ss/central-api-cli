@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from functools import cached_property
 from typing import TYPE_CHECKING
-from .glp.devices import GlpDevicesApi
-from .glp.subscriptions import GlpSubscriptionsApi
+from .glp.devices import GreenLakeDevicesAPI
+from .glp.subscriptions import GreenLakeSubscriptionsAPI
 from ...client import Session
 from ... import config
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from ...typedefs import StrOrURL
     from aiohttp.client import ClientSession
 
-class GlpApi:
+class GreenLakeAPI:
     def __init__(self, base_url: StrOrURL = None, aio_session: ClientSession = None, silent: bool = True):
         self._session = Session(base_url=base_url or config.glp.base_url, aio_session=aio_session, silent=silent, cnx=True)
 
@@ -25,12 +25,12 @@ class GlpApi:
         self._session = session
 
     @cached_property
-    def devices(self) -> GlpDevicesApi:
-        return GlpDevicesApi(self.session)
+    def devices(self) -> GreenLakeDevicesAPI:
+        return GreenLakeDevicesAPI(self.session)
 
     @cached_property
-    def subscriptions(self) -> GlpSubscriptionsApi:
-        return GlpSubscriptionsApi(self.session)
+    def subscriptions(self) -> GreenLakeSubscriptionsAPI:
+        return GreenLakeSubscriptionsAPI(self.session)
 
 
 
