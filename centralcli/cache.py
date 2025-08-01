@@ -1823,7 +1823,7 @@ class Cache:
 
             if retry and not match and self.responses.guest is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ:
+                if FUZZ and self.guests and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.guests if portal_id is None or g["portal_id"] == portal_id], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -1944,7 +1944,7 @@ class Cache:
 
             if retry and not match and self.responses.cert is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and self.certs:  # FIXME all of the get_..._identifier methods will return IndexError: list index out of range if the cache is empty
+                if FUZZ and self.certs and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]  # <-- IndexError occurs here if list is empty
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -4260,7 +4260,7 @@ class Cache:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
-                    if FUZZ and not silent:
+                    if FUZZ and self.devices and not silent:
                         if dev_type:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
                         else:
@@ -4399,7 +4399,7 @@ class Cache:
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and api.central.get_all_sites not in self.updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and not silent:
+                if FUZZ and self.sites and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -4491,7 +4491,7 @@ class Cache:
             if not match and retry and api.configuration.get_all_groups not in self.updated:  # TODO self.responses.group is None
                 dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
-                if FUZZ and not silent:
+                if FUZZ and self.groups and not silent:
                     if dev_type:
                         fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups if "name" in g and bool([t for t in g["allowed_types"] if t in dev_type])], limit=1)[0]
                     else:
@@ -4591,7 +4591,7 @@ class Cache:
             # fuzzy match
             if not match and retry and not self.responses.label:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] [cyan]{query_str}[/].")
-                if FUZZ and not silent:
+                if FUZZ and self.labels and not silent:
                     fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
@@ -4675,7 +4675,7 @@ class Cache:
 
             if retry and not match and self.responses.template is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ:
+                if FUZZ and self.templates and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates if group is None or t["group"] == group], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -4773,7 +4773,7 @@ class Cache:
             # no match found try fuzzy match (typos) and initiate cache update
             if retry and not match and self.responses.client is not None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and self.clients:
+                if FUZZ and self.clients and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -4895,7 +4895,7 @@ class Cache:
                 )
 
             if not match and retry and self.responses.mpsk_network is None:
-                if FUZZ:
+                if FUZZ and self.mpsk_networks and not silent:
                     econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                     fuzz_resp = process.extract(query_str, [net["name"] for net in self.mpsk_networks], limit=1)
                     if fuzz_resp:
@@ -5042,7 +5042,7 @@ class Cache:
 
             if not match and retry and not cache_updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ:
+                if FUZZ and db_all and not silent:
                     fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
                     if fuzz_resp:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
