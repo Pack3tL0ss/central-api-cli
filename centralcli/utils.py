@@ -437,7 +437,7 @@ class Utils:
             raise TypeError(f"{type(text)}: text attribute should be str, bool, or list of str.")
 
     @staticmethod
-    def chunker(seq, size):
+    def chunker(seq: Iterable, size: int):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
     @staticmethod
@@ -633,7 +633,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False):
+    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False) -> str:
         bot = int(max / 2)
         top = max - bot
         if any([bold, italic, color is not None]):
@@ -644,6 +644,11 @@ class Utils:
             item_sep = "...".rjust(pad + 3)
 
         items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
+        if len(items) == 1:  # If there is only 1 item we return it with just the formatting and strip the pad
+            return items[0].lstrip()
+
+        if sep == "\n":
+            items[0] = f"\n{items[0]}"
 
         if len(items) > max:
             confirm_str = sep.join([*items[0:top], item_sep, *items[-bot:]])
