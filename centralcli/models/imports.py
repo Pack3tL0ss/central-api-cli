@@ -153,12 +153,9 @@ class ImportDevice(BaseModel):
             if not cache.responses.inv:
                 asyncio.run(cache.refresh_inv_db())
 
-        # return cache.get_dev_identifier(self.serial, include_inventory=True, silent=True, exit_on_fail=False)
-        # cache.inventory_by_serial.get(dev.serial, {}).get("id")
-
     @property
     def sub_is_id(self) -> bool:
-        return True if self.subscription and len(self.subscription) == 36 and self.subscription.count("-") == 4 else False
+        return utils.is_resource_id(self.subscription)
 
 
 class BySubId:

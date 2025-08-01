@@ -225,6 +225,10 @@ class Utils:
 
         return ret
 
+    @staticmethod
+    def is_resource_id(res_id: str) -> bool:
+        return True if res_id and len(res_id) == 36 and res_id.count("-") == 4 else False
+
     def listify(self, var) -> Iterable:
         if isinstance(var, tuple):
             return list(var)
