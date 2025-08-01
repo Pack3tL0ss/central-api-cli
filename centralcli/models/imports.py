@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, AliasChoices, field_validator, RootModel
-from typing import TYPE_CHECKING, Optional, List, Dict, Any
+import asyncio
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
+
+from .. import Cache, config, utils
+from ..cache import CacheInvDevice
 from ..constants import SiteStates, state_abbrev_to_pretty
 from .common import MpskStatus
-from .. import config, Cache, utils
-from ..cache import CacheInvDevice
-import asyncio
 
 if TYPE_CHECKING:
     from ..cache import CacheSub
+
 
 cache = Cache(config=config)
 class ImportSite(BaseModel):
@@ -171,6 +174,8 @@ class BySubId:
 
     def __len__(self) -> int:
         return len(self.devices)
+
+
 class ImportDevices(RootModel):
     root: list[ImportDevice]
 
