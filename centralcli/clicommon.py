@@ -151,7 +151,7 @@ class APRequestInfo:
 class APIClients:
     def __init__(self):
         self.classic = ClassicAPI(config.classic.base_url)
-        self.glp = None if not config.glp.ok else GreenLakeAPI(config.classic.base_url)
+        self.glp = None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)
 
 
 class CLICommon:
