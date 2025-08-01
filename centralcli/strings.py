@@ -577,7 +577,7 @@ This is a placeholder
 TODO add deploy example
 """
 
-# -- // SUBSCRIBE DEVICES \\ --
+# -- // CLASSIC SUBSCRIBE DEVICES \\ --
 data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
@@ -591,6 +591,52 @@ Requires the following keys (include as header row for csv import):
 
 
 {example}
+{example.parent_key_text}
+{generic_end}
+"""
+
+
+# -- // GLP SUBSCRIBE DEVICES \\ --
+data="""serial,subscription
+CN12345678,foundation_switch_6300
+CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
+CN12345680,advanced_ap"""
+example = Example(data, type="devices", action="other")
+clibatch_assign_subscriptions = f"""[italic cyan]cencli batch assign subscription IMPORT_FILE[/]:
+
+Requires the following keys (include as header row for csv import):
+    [cyan]serial[/], [cyan]subscription[/] [italic](both are required)[/]
+    [italic]Other keys/columns are allowed, but will be ignored.
+
+
+{example}
+[italic]:information:  A simple list of [cyan]serial numbers[/] is acceptable when subscription is provided via [cyan]--sub[/] flag[/]
+i.e. [cyan]cencli batch assign subscriptions --sub advanced-switch-6200 import-file.txt[/]
+----------- [cyan]csv or txt[/] -----------------
+serial     [magenta]<-- this is the header column[/] [grey42](optional for txt)[/]
+CN12345678
+CN12345679
+CN12345680
+----------------------------------------
+
+[italic]:information:  A simplified yaml keyed by [cyan]subscription [dim](name or id)[/dim][/cyan] followed by a list of [cyan]serial numbers[/]
+to be assigned to the subscription. i.e.[/italic]
+----------- Simplified [bright_green].yaml example[/] ---------------
+foundation_switch_6300:  [dim italic]<-- Can be subscription Name or ID[/]
+  - CN12345678
+  - CN12345679
+  - CN12345680
+0f468bdf-e485-087f-abff-fc881f54373c:
+  - US12345678
+  - US87654321
+  - TW01234565
+--------------------------------------------------
+
+[italic]:information:  If Subscription name is used, and multiple subscriptions with that name are available the
+   subscription with with unused subscriptions available and the most remaining time is used.  Specify the
+   subscription by id to assign devices to a specific subscription.  Use [cyan]cencli show subscriptions[/] to see
+   subscription IDs.[/italic]
+
 {example.parent_key_text}
 {generic_end}
 """
@@ -680,6 +726,7 @@ class ImportExamples:
         self.move_devices = Example(device_move_data, type="devices", action="move").full_text
         self.rename_aps = clibatch_rename_aps
         self.update_aps = clibatch_update_aps
+        self.assign_subscriptions = clibatch_assign_subscriptions
 
     def __getattr__(self, key: str):
         if key not in self.__dict__.keys():
