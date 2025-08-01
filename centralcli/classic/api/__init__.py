@@ -17,7 +17,7 @@ from .topology import TopologyAPI
 from .troubleshooting import TroubleShootingAPI
 from .kms import KmsAPI
 from .aiops import AiOpsAPI
-from ... import Session
+from ... import Session, config
 
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 class ClassicAPI:
     def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):
-        self._session = Session(base_url=base_url, aio_session=aio_session, silent=silent)
+        self._session = Session(base_url=base_url or config.classic.base_url, aio_session=aio_session, silent=silent)
 
     @property
     def session(self) -> Session:
