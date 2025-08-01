@@ -1434,7 +1434,7 @@ def get_fw_version_list(data: List[dict], format: TableFormat = "rich", verbose:
 def get_subscriptions(data: List[dict], default_sort: bool = True) -> List[dict]:
     field_order = [
         "id",
-        "tier",
+        "name",
         "license_type",
         "type",
         "sku",
@@ -1448,6 +1448,7 @@ def get_subscriptions(data: List[dict], default_sort: bool = True) -> List[dict]
         "end_date",
     ]
     _short_value["status"] = lambda s: f"[red]{s}[/]" if s == "EXPIRED" else f"[bright_green]{s}[/]"
+    _short_value["available"] = lambda s: s if s > 0 else f"[red]{s}[/]"
     if default_sort:
         data = sorted(data, key=lambda s: s.get("name", s.get("tier", s.get("license_type", 0))))
         ok_subs = [sub for sub in data if sub["status"] == "OK"]
