@@ -22,8 +22,8 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .constants import iden_meta
 from .cache import CacheDevice
+from .classic.api import ClassicAPI
 
 if TYPE_CHECKING:
     from .cache import CacheGroup, CacheSite, CacheDevice
@@ -39,26 +39,14 @@ def _config_header(header_text: str, console: Console = None) -> None:
 
 @app.command()
 def configs(
-    group: str = typer.Option(
-        None,
-        metavar=f"{iden_meta.group}",
-        autocompletion=cli.cache.group_completion,
-        help = "Export device level configs for a specific Group",
-        show_default=False,
-    ),
-    site: str = typer.Option(
-        None,
-        metavar=f"{iden_meta.site}",
-        autocompletion=cli.cache.site_completion,
-        help = "Export device level configs for a specific Site",
-        show_default=False,
-    ),
+    group: str = cli.options.get("group", help="Export device level configs for a specific Group",),
+    site: str = cli.options.get("site", help="Export device level configs for a specific Site",),
     do_gw: bool = typer.Option(None, "--gw", help="Export gateway configs."),
     do_ap: bool = typer.Option(None, "--ap", help="Export AP configs."),
     do_cx: bool = typer.Option(None, "--cx", help="Export CX templates. [dim italic](export not available for CX UI group config)[/]"),
     do_sw: bool = typer.Option(None, "--sw", help="Export AOS-SW templates. [dim italic](export not available for AOS-SW UI group config)[/]"),
     do_variables: bool = typer.Option(None, "-V", "--variables", help="Export variables associated with devices in Template Groups.", show_default=False,),
-    do_switch: bool = typer.Option(None, "--switch", help="Export both CX and AOS-SW templates. [dim italic](export not available for AOS-SW UI group config)[/]"),
+    do_switch: bool = typer.Option(None, "--switch", help="Export both CX and AOS-SW templates. [dim italic](export not available for switch UI group config)[/]"),
     groups_only: bool = typer.Option(None,"-G",  "--groups-only", help="Export Group level configs only, not device level configs."),
     ap_env: bool = typer.Option(False, "-e", "--env", help="Export AP environment settings.  All ap-env settings are exported to a single file. [italic dim]Valid for APs only[/]", show_default=False,),
     show: bool = typer.Option(False, "-s", "--show", help=f"Display configs to terminal along with exporting to filesystem.  {cli.help_block('Display only export progress')}"),
@@ -72,7 +60,7 @@ def configs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Export configs in mass.
 
@@ -81,15 +69,17 @@ def configs(
     Can filter by group and/or site along with device type [cyan]--ap[/] [cyan]--gw[/]
     Use [cyan]-e[/]|[cyan]--env[/] to also export per-ap-settings/ap-env for all APs
 
-    [italic]With no filters all device and group level configs will be exported (supported on APs and Gateways)[/]
+    [italic]With no filters all device and group level configs will be exported (APs and Gateways).
+    [yellow3]:information:[/]  [yellow]Switches will export only defined templates.  UI/multi-edit is not supported.[/yellow][/italic]
 
     Configs will be exported to [cyan]cencli-config-export[/] with subfolders for each group, then device type.
 
-    [red]:warning:[/]  Can result in a lot of API calls.
+    [red]:warning:[/]  This command can result in a lot of API calls.
     """
     br = BatchRequest
     console = Console(emoji=False)
     caasapi = caas.CaasAPI()
+    api = ClassicAPI()
     gw_reqs, ap_reqs, ap_env_reqs, gw_grp_reqs, ap_grp_reqs, aps, gws, ap_groups, gw_groups, ap_template_reqs = [], [], [], [], [], [], [], [], [], []
 
     if do_switch:
@@ -122,7 +112,7 @@ def configs(
     if do_gw:
         gw_groups = [group["name"] for group in cli.cache.groups if "gw" in group["allowed_types"] and group.get("cnx") is not True and group["name"] != "default"]
 
-     # build device level ap/gw config requests
+    # build device level ap/gw config requests
     if not groups_only:
         if do_gw:
             gws: List[CacheDevice] = [CacheDevice(d) for d in cli.cache.devices if d["type"] == "gw" and (not group or d["group"] == group.name) and (not site or d["site"] == site.name)]
@@ -138,10 +128,10 @@ def configs(
             if aps:
                 if group_match:
                     aps = [ap for ap in aps if group_match in ap.group]
-                ap_reqs = [br(cli.central.get_ap_config, d.swack_id) for d in aps]
+                ap_reqs = [br(api.configuration.get_ap_config, d.swack_id) for d in aps]
 
                 if ap_env:
-                    ap_env_reqs = [br(cli.central.get_per_ap_config, d.serial) for d in aps]
+                    ap_env_reqs = [br(api.configuration.get_per_ap_config, d.serial) for d in aps]
 
     # build group level ap/gw config requests
     if gw_groups:
@@ -154,19 +144,19 @@ def configs(
         if group_match:
             ap_groups = [group for group in ap_groups if group_match in group]
 
-        ap_grp_reqs = [br(cli.central.get_ap_config, group) for group in ap_groups]
+        ap_grp_reqs = [br(api.configuration.get_ap_config, group) for group in ap_groups]
 
     # build template requests
     ap_template_reqs = {} if not do_ap else {
-        f'{t["group"]}~|~{t["name"]}': br(cli.central.get_template, group=t["group"], template=t["name"])
+        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
         for t in cli.cache.templates if t["device_type"] == "ap" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
         }
     cx_template_reqs = {} if not do_cx else {
-        f'{t["group"]}~|~{t["name"]}': br(cli.central.get_template, group=t["group"], template=t["name"])
+        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
         for t in cli.cache.templates if t["device_type"] == "cx" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
         }
     sw_template_reqs = {} if not do_sw else {
-        f'{t["group"]}~|~{t["name"]}': br(cli.central.get_template, group=t["group"], template=t["name"])
+        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
         for t in cli.cache.templates if t["device_type"] == "sw" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
         }
 
@@ -174,13 +164,15 @@ def configs(
     req_cnt = req_cnt if not do_variables else req_cnt + 1
     if req_cnt == 0:
         cli.exit("No exports based on provided filtering options.  Nothing to do")
+
     print(f"Minimum of {req_cnt} additional API calls will be performed to fetch requested configs.")
     print(f"Files will be exported to {outdir}")
-    print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
+    if outdir.exists():
+        print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
     cli.confirm(yes)
 
     if gw_grp_reqs:
-        gw_grp_res = cli.central.batch_request(gw_grp_reqs)
+        gw_grp_res = api.session.batch_request(gw_grp_reqs)
 
         for g, r in zip(gw_groups, gw_grp_res):
             if not r.ok:
@@ -202,7 +194,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if ap_grp_reqs:
-        ap_grp_res = cli.central.batch_request(ap_grp_reqs)
+        ap_grp_res = api.session.batch_request(ap_grp_reqs)
 
         for g, r in zip(ap_groups, ap_grp_res):
             if not r.ok:
@@ -221,7 +213,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if gw_reqs:
-        gw_res = cli.central.batch_request(gw_reqs)
+        gw_res = api.session.batch_request(gw_reqs)
 
         for d, r in zip(gws, gw_res):
             if not r.ok:
@@ -242,7 +234,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if ap_reqs:
-        ap_res = cli.central.batch_request(ap_reqs)
+        ap_res = api.session.batch_request(ap_reqs)
 
         for d, r in zip(aps, ap_res):
             if not r.ok:
@@ -261,7 +253,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
         if ap_env_reqs:
-            ap_env_res = cli.central.batch_request(ap_env_reqs)
+            ap_env_res = api.session.batch_request(ap_env_reqs)
 
             console = Console(force_terminal=False, emoji=False)
             with console.capture() as cap:
@@ -284,7 +276,7 @@ def configs(
                 cli.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
 
     if ap_template_reqs:
-        ap_template_resp = cli.central.batch_request(list(ap_template_reqs.values()))
+        ap_template_resp = api.session.batch_request(list(ap_template_reqs.values()))
 
         for (group, name), r in zip(map(lambda k: k.split("~|~"), ap_template_reqs.keys()), ap_template_resp):
             if not r.ok:
@@ -303,7 +295,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if cx_template_reqs:
-        cx_template_resp = cli.central.batch_request(list(cx_template_reqs.values()))
+        cx_template_resp = api.session.batch_request(list(cx_template_reqs.values()))
 
         for (group, name), r in zip(map(lambda k: k.split("~|~"), cx_template_reqs.keys()), cx_template_resp):
             if not r.ok:
@@ -322,7 +314,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if sw_template_reqs:
-        sw_template_resp = cli.central.batch_request(list(sw_template_reqs.values()))
+        sw_template_resp = api.session.batch_request(list(sw_template_reqs.values()))
 
         for (group, name), r in zip(map(lambda k: k.split("~|~"), sw_template_reqs.keys()), sw_template_resp):
             if not r.ok:
@@ -341,7 +333,7 @@ def configs(
                 cli.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
     if do_variables:  # This block will exit on failure, will need to be changed if more is added below
-        variable_resp = cli.central.request(cli.central.get_variables)
+        variable_resp = api.session.request(api.configuration.get_variables)
         if not variable_resp.ok:
             log.error(f"Failed to retrieve variables... {variable_resp.error}", show=True)
             cli.display_results(variable_resp, tablefmt="action", exit_on_fail=True)

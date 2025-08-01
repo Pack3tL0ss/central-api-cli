@@ -24,6 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, RadioBandOptions  # noqa
+from .cache import api
 
 if TYPE_CHECKING:
     from .cache import CacheClient, CacheLabel, CacheGroup, CacheDevice
@@ -75,7 +76,7 @@ def ap(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show AP(s) bandwidth usage graph.
 
@@ -135,7 +136,7 @@ def ap(
     title = " ".join(title_parts)
     title = title if title != "Bandwidth Usage" else "Bandwidth Usage All APs"
 
-    resp = cli.central.request(cli.central.get_aps_bandwidth_usage, **kwargs, interval=interval, from_time=start, to_time=end)
+    resp = api.session.request(api.monitoring.get_aps_bandwidth_usage, **kwargs, interval=interval, from_time=start, to_time=end)
 
     tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
     _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
@@ -158,7 +159,7 @@ def switch(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Bandwidth usage for a switch or a specific port on a switch.
 
@@ -179,7 +180,7 @@ def switch(
     elif port:
         title = f"{title} port [bright_green]{port}[/]"
 
-    resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
+    resp = api.session.request(api.monitoring.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
 
     _interval = resp.raw.get("interval")
     if _interval and not any([do_json, do_yaml, do_csv, do_table]):
@@ -208,7 +209,7 @@ def client(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show client bandwidth usage graph.
 
@@ -274,7 +275,7 @@ def client(
         title = f"{title} for Clients connected to {dev.summary_text}"
 
 
-    resp = cli.central.request(cli.central.get_clients_bandwidth_usage, **kwargs, from_time=start, to_time=end)
+    resp = api.session.request(api.monitoring.get_clients_bandwidth_usage, **kwargs, from_time=start, to_time=end)
 
     tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
     _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
@@ -297,7 +298,7 @@ def uplink(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show bandwidth usage graph for a switch or gateway uplink
 
@@ -314,9 +315,9 @@ def uplink(
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
 
     if dev.type == "gw":
-        resp = cli.central.request(cli.central.get_gw_uplinks_bandwidth_usage, dev.serial, uplink_name, interval=interval, from_time=start, to_time=end)
+        resp = api.session.request(api.monitoring.get_gw_uplinks_bandwidth_usage, dev.serial, uplink_name, interval=interval, from_time=start, to_time=end)
     else:
-        resp = cli.central.request(cli.central.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, show_uplink=True)
+        resp = api.session.request(api.monitoring.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, show_uplink=True)
 
     title = f'Bandwidth Usage for [cyan]{dev.name}[/] uplink [cyan]{uplink_name}[/]'
 
@@ -350,7 +351,7 @@ def wlan(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show bandwidth usage graph for a network/SSID
 
@@ -377,7 +378,7 @@ def wlan(
 
     start, end = cli.verify_time_range(start, end=end, past=past)
 
-    resp = cli.central.request(cli.central.get_networks_bandwidth_usage, network, **kwargs)
+    resp = api.session.request(api.monitoring.get_networks_bandwidth_usage, network, **kwargs)
 
     tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
     _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)

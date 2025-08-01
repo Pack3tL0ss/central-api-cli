@@ -24,6 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, SortRouteOptions, SortOverlayInterfaceOptions
 from centralcli.response import Response
+from .cache import api
 
 app = typer.Typer()
 
@@ -71,7 +72,7 @@ def routes(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show gateway routes advertised or learned from route/tunnel orchestrator
     """
@@ -80,10 +81,10 @@ def routes(
     what = "advertised" if advertised else "learned"
 
     if what == "learned":
-        resp = cli.central.request(cli.central.get_overlay_routes_learned, dev.serial, best=best)
+        resp = api.session.request(api.routing.get_overlay_routes_learned, dev.serial, best=best)
         title = f'{dev.name} {"Preferred " if best else ""}overlay routes [italic](site: {dev.site})[/]'
     elif what == "advertised":
-        resp = cli.central.request(cli.central.get_overlay_routes_advertised, dev.serial)
+        resp = api.session.request(api.routing.get_overlay_routes_advertised, dev.serial)
         title = f'{dev.name} Advertised routes [italic](site: {dev.site})[/]'
 
     if resp and "routes" in resp.output:
@@ -118,14 +119,14 @@ def interfaces(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show overlay interfaces
     """
     dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    resp = cli.central.request(cli.central.get_overlay_interfaces, dev.serial)
+    resp = api.session.request(api.routing.get_overlay_interfaces, dev.serial)
 
     cli.display_results(
         resp,
@@ -154,7 +155,7 @@ def connection(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show overlay connection (OTO/ORO) details (Valid on SD-Branch GWs/ VPNCs Only)
 
@@ -163,7 +164,7 @@ def connection(
     dev = cli.cache.get_dev_identifier(device, dev_type="gw")
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    resp = cli.central.request(cli.central.get_overlay_connection, dev.serial)
+    resp = api.session.request(api.routing.get_overlay_connection, dev.serial)
 
     set_width_cols = {}
     caption = None

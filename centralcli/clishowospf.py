@@ -19,6 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, SortOspfAreaOptions, SortOspfInterfaceOptions, SortOspfNeighborOptions, SortOspfDatabaseOptions  # noqa
+from .cache import api
 
 app = typer.Typer()
 
@@ -28,7 +29,7 @@ iden_meta = IdenMetaVars()
 
 @app.command()
 def neighbors(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = cli.arguments.device,
     verbose: int = cli.options.verbose,
     sort_by: SortOspfNeighborOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -41,22 +42,18 @@ def neighbors(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    """Show OSPF Neighbors for a device
-    """
-    central = cli.central
-
+    """Show OSPF Neighbors for a device."""
     dev = cli.cache.get_dev_identifier(device)
-    resp = central.request(central.get_ospf_neighbor, dev.serial)
+    resp = api.session.request(api.routing.get_ospf_neighbor, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
     caption = None
 
     if resp.raw.get("summary"):
         summary = resp.raw["summary"]
         if summary["admin_status"] is False:
-            print(f"OSPF is not enabled on {dev.name}")
-            raise typer.Exit(0)
+            cli.exit(f"OSPF is not enabled on {dev.name}", code=0)
         else:
             caption = [
                 f'[cyan]Router ID[/]: {summary["router_id"]} | [cyan]OSPF Neigbors[/]: {summary["neighbor_count"]} | [cyan]OSPF Interfaces[/]: {summary["interface_count"]}',
@@ -78,7 +75,7 @@ def neighbors(
 
 @app.command()
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = cli.arguments.device,
     verbose: int = cli.options.verbose,
     sort_by: SortOspfInterfaceOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -91,16 +88,13 @@ def interfaces(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    """Show OSPF Interfaces for a device
-    """
+    """Show OSPF Interfaces for a device."""
     sort_by = "ip/mask" if sort_by and sort_by == "ip" else sort_by
 
-    central = cli.central
-
     dev = cli.cache.get_dev_identifier(device)
-    resp = central.request(central.get_ospf_interface, dev.serial)
+    resp = api.session.request(api.routing.get_ospf_interface, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
     caption = None
 
@@ -143,14 +137,11 @@ def area(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    """Show OSPF area information for a device
-    """
-    central = cli.central
-
+    """Show OSPF area information for a device."""
     dev = cli.cache.get_dev_identifier(device)
-    resp = central.request(central.get_ospf_area, dev.serial)
+    resp = api.session.request(api.routing.get_ospf_area, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
     caption = None
 
@@ -180,7 +171,7 @@ def area(
 
 @app.command()
 def database(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = cli.arguments.device,
     verbose: int = cli.options.verbose,
     sort_by: SortOspfDatabaseOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
@@ -193,14 +184,12 @@ def database(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    """Show OSPF database for a device
-    """
-    central = cli.central
+    """Show OSPF database for a device."""
 
     dev = cli.cache.get_dev_identifier(device)
-    resp = central.request(central.get_ospf_database, dev.serial)
+    resp = api.session.request(api.routing.get_ospf_database, dev.serial)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     caption = None
     pad = "  " if tablefmt == "yaml" else ""

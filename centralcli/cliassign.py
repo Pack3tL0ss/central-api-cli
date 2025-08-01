@@ -7,39 +7,50 @@ from typing import List
 
 import typer
 from rich import print
+from datetime import datetime
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, utils
+    from centralcli import cli, utils, log
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
+        from centralcli import cli, utils, log
     else:
         print(pkg_dir.parts)
         raise e
 
+from centralcli.cache import CacheLabel, CacheDevice, CacheSub
 from centralcli.constants import iden_meta
-from centralcli.cache import CentralObject
-from .cnx.api.glp.devices import GlpDevicesApi
-from . import config
+
+from . import BatchRequest
+from .objects import DateTime
+from .clicommon import APIClients
+
+api_clients = APIClients()
+api = api_clients.classic
+glp_api = api_clients.glp
 
 app = typer.Typer()
 
 
 # TODO consider removing auto option as we've added enable/disable auto-sub ...
 # TODO update cache for device after successful assignment
-@app.command()
+# TOGLP
+@app.command(deprecated=True)
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
     devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+
+    :warning:  This command is deprecated, and will be replaced by `assign subscription` which is available now if Greenlake (glp)
+    details are provided in the config.
 
     If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
 
@@ -68,9 +79,9 @@ def license(
     cli.econsole.print(_msg)
     if cli.confirm(yes):
         if not do_auto:
-            resp = cli.central.request(cli.central.assign_licenses, _serial_nums, services=license.name)
+            resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
         else:
-            resp = cli.central.request(cli.central.enable_auto_subscribe, services=license.name)
+            resp = api.session.request(api.platform.enable_auto_subscribe, services=license.name)
 
         cli.display_results(resp, tablefmt="action")
         # TODO cache update similar to batch unsubscribe
@@ -79,15 +90,15 @@ def license(
 @app.command(name="label")
 def label_(
     label: str = typer.Argument(..., metavar=iden_meta.label, help="Label to assign to device(s)", autocompletion=cli.cache.label_completion, show_default=False,),
-    devices: List[str] = cli.arguments.devices,
+    devices: list[str] = cli.arguments.devices,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     "Assign label to device(s)"
-    label: CentralObject = cli.cache.get_label_identifier(label)
-    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    label: CacheLabel = cli.cache.get_label_identifier(label)
+    devices: list[CacheDevice] = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     _msg = f"Assign [bright_green]{label.name}[/bright_green] to"
     if len(devices) > 1:
@@ -102,50 +113,59 @@ def label_(
     switches = [dev for dev in devices if dev.generic_type == "switch"]
     gws = [dev for dev in devices if dev.generic_type == "gw"]
 
-    br = cli.central.BatchRequest
+    br = BatchRequest
     reqs = []
     for dev_type, devs in zip(["IAP", "SWITCH", "CONTROLLER"], [aps, switches, gws]):
         if devs:
-            reqs += [br(cli.central.assign_label_to_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
+            reqs += [br(api.central.assign_label_to_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
     if cli.confirm(yes):
-        resp = cli.central.batch_request(reqs)
+        resp = api.session.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         # We don't cache device label assignments
 
-@app.command()
+        # self.end: OptionInfo = typer.Option(
+        #     None,
+        #     "-e", "--end",
+        #     help=f"End of time-range (24hr notation) [dim]{escape('[default: Now]')}[/]",
+        #     formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
+        #     # rich_help_panel="Time Range Options",
+        #     show_default=False,
+        # )
+
+@app.command(hidden=not glp_api)
 def subscription(
-    subscription: str = typer.Argument(..., show_default=False),  # type: ignore
+    sub_name_or_id: str = typer.Argument(..., help="subscription_id from [cyan]cencli show subscriptions[/] output", autocompletion=cli.cache.sub_completion, show_default=False),  # type: ignore
     devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
+    end_date: datetime = cli.options.get("end", help=f"Select subscription with this expiration date [dim](24 hour format, time not required, closest sub to provided date is selected)[/] {cli.help_block('The subscription with the most time remaining will be selected')}",),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
-
-    If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
+    """Assign (or rassign) Subscription to devices by serial number(s).
 
     Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
-    Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
+    Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription in one command.
     """
-    api = GlpDevicesApi(config.workspace)
-    _msg = f"Assign [bright_green]{subscription}[/bright_green] to"
+    if not glp_api:
+        cli.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
+
+    sub: CacheSub = cli.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
+    if len(devices) > sub.available:
+        log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for {sub.name} with id {sub.id}.  [dim italic]As of last Subscription cache update[/]", show=True)
+
+    _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date {DateTime(sub.end_date, format='date-string')}, and [cyan]{sub.available}[/] available subscriptions"
     try:
         _serial_nums = [s if utils.is_serial(s) else cli.cache.get_dev_identifier(s).serial for s in devices]
     except Exception:
         _serial_nums = devices
-    if len(_serial_nums) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = _serial_nums[0]
-        _msg = f"{_msg} [cyan]{dev}[/]"
 
+    _msg = f"{_msg} to device:" if len(_serial_nums) == 1 else f"{_msg} to the following {len(_serial_nums)} devices:"
+    _msg = f"{_msg} {utils.summarize_list(_serial_nums, max=12)}"
     cli.econsole.print(_msg)
     if cli.confirm(yes):
-        resp = api.request(api.assign_subscription_to_device, _serial_nums, subscription_ids=subscription)
-
+        resp = glp_api.session.request(glp_api.devices.assign_subscription_to_devices, _serial_nums, subscription_ids=sub)
         cli.display_results(resp, tablefmt="action")
 
 

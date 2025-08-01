@@ -21,7 +21,8 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import DevTypes # noqa
-from centralcli.cache import CentralObject
+from centralcli.cache import CacheGroup
+from .classic.api import ClassicAPI
 
 app = typer.Typer()
 
@@ -33,20 +34,20 @@ def compliance(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Delete/Clear firmware compliance
     """
+    api = ClassicAPI()
     # TODO is global complaince really a thing?  API returns 404 with no group
     # Allows user to add unnecessary "group" keyword before the group
     if group and len(group) > 2:
-        typer.echo(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
-        raise typer.Exit(1)
+        cli.exit(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
 
     group = None if not group else group[-1]
     group = group or group_name
     if group:
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CacheGroup = cli.cache.get_group_identifier(group)
 
     kwargs = {
         'device_type': device_type,
@@ -61,18 +62,16 @@ def compliance(
     }
     _dev_msg = _type_to_msg.get(device_type, f"{device_type} devices")
 
-    print(f"Delete firmware complaince for [cyan]{_dev_msg}[/] {'Globally?' if not group else f'in group [cyan]{group.name}[/]'}")
+    cli.econsole.print(f"Delete firmware complaince for [cyan]{_dev_msg}[/] {'Globally?' if not group else f'in group [cyan]{group.name}[/]'}")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
-        resp = cli.central.request(cli.central.delete_firmware_compliance, **kwargs)
-        if resp.status == 404 and resp.output.lower() == "not found":
-            resp.output = (
-                f"Invalid URL or No compliance set for {device_type.lower()} "
-                f"{'Globally' if not group else f'in group {group.name}'}"
-            )
-            typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
-        else:
-            cli.display_results(resp, tablefmt="action")
+    cli.confirm(yes)
+    resp = api.session.request(api.firmware.delete_firmware_compliance, **kwargs)
+    if resp.status == 404 and resp.output.lower() == "not found":
+        resp.output = (
+            f"Invalid URL or No compliance set for {device_type.lower()} "
+            f"{'Globally' if not group else f'in group {group.name}'}"
+        )
+    cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()

@@ -4,7 +4,7 @@ from __future__ import annotations
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
 from rich.markup import escape
-from typing import Optional, Any, List, Type
+from typing import Optional, Any, List, Type, Sequence
 from collections.abc import Callable
 import click
 from .environment import env_var
@@ -20,9 +20,11 @@ class CLIArgs:
         self.name: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.device: ArgumentInfo = typer.Argument(..., metavar=iden_meta.dev, show_default=False, autocompletion=cache.dev_completion)
         self.devices: ArgumentInfo = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cache.dev_completion, show_default=False,)
+        self.device_type: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.what: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.group: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
+        self.site: ArgumentInfo = typer.Argument(..., metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
         self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.version: ArgumentInfo = typer.Argument(
@@ -36,6 +38,118 @@ class CLIArgs:
                 ]
             ],
         )
+
+    def get(
+        self,
+        argument: str,
+        *param_decls: Optional[Sequence[str]],
+        default: Optional[Any] = None,
+        callback: Optional[Callable[..., Any]] = None,
+        metavar: Optional[str] = None,
+        expose_value: bool = None,
+        is_eager: bool = None,
+        envvar: Optional[str | List[str]] = None,
+        shell_complete: Optional[
+            Callable[
+                [click.Context, click.Parameter, str],
+                List["click.shell_completion.CompletionItem"] | List[str],
+            ]
+        ] = None,
+        autocompletion: Optional[Callable[..., Any]] = None,
+        default_factory: Optional[Callable[[], Any]] = None,
+        # Custom type
+        parser: Optional[Callable[[str], Any]] = None,
+        click_type: Optional[click.ParamType] = None,
+        # TyperArgument
+        show_default: bool | str = None,
+        show_choices: bool = None,
+        show_envvar: bool = None,
+        help: Optional[str] = None,
+        hidden: bool = None,
+        # Choice
+        case_sensitive: bool = None,
+        # Numbers
+        min: Optional[int | float] = None,
+        max: Optional[int | float] = None,
+        clamp: bool = None,
+        # DateTime
+        formats: Optional[List[str]] = None,
+        # File
+        mode: Optional[str] = None,
+        encoding: Optional[str] = None,
+        errors: Optional[str] = None,
+        lazy: Optional[bool] = None,
+        atomic: bool = None,
+        # Path
+        exists: bool = None,
+        file_okay: bool = None,
+        dir_okay: bool = None,
+        writable: bool = None,
+        readable: bool = None,
+        resolve_path: bool = None,
+        allow_dash: bool = None,
+        path_type: None | Type[str] | Type[bytes] = None,
+        # Rich settings
+        rich_help_panel: str | None = None,
+    ) -> ArgumentInfo:
+        """Same fingerprint as typer.Argument
+
+        set rich_help_panel="Arguments" to force the default panel
+        """
+        attr = getattr(self, argument)
+        kwargs = {
+            "default": default,
+            "param_decls": param_decls,
+            "callback": callback,
+            "metavar": metavar,
+            "expose_value": expose_value,
+            "is_eager": is_eager,
+            "envvar": envvar,
+            "shell_complete": shell_complete,
+            "autocompletion": autocompletion,
+            "default_factory": default_factory,
+            # Custom type
+            "parser": parser,
+            "click_type": click_type,
+            # TyperArgument
+            "show_default": show_default,
+            "show_choices": show_choices,
+            "show_envvar": show_envvar,
+            "help": help,
+            "hidden": hidden,
+            # Choice
+            "case_sensitive": case_sensitive,
+            # Numbers
+            "min": min,
+            "max": max,
+            "clamp": clamp,
+            # DateTime
+            "formats": formats,
+            # File
+            "mode": mode,
+            "encoding": encoding,
+            "errors": errors,
+            "lazy": lazy,
+            "atomic": atomic,
+            # Path
+            "exists": exists,
+            "file_okay": file_okay,
+            "dir_okay": dir_okay,
+            "writable": writable,
+            "readable": readable,
+            "resolve_path": resolve_path,
+            "allow_dash": allow_dash,
+            "path_type": path_type,
+            # Rich settings
+            "rich_help_panel": rich_help_panel
+        }
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        combined = {**attr.__dict__, **kwargs}
+        param_decls = param_decls or combined["param_decls"]
+        args = (combined["default"], *param_decls)
+        kwargs_out = {k: v for k, v in combined.items() if k not in ["default", "param_decls"]}
+        return typer.Argument(*args, **kwargs_out)
+
 
 class CLIOptions:
     def __init__(self, cache: Cache, timerange: str = "3h", include_mins: bool = None):
@@ -166,7 +280,7 @@ class CLIOptions:
     def get(
         self,
         option: str,
-        *param_decls,
+        *param_decls: Optional[Sequence[str]],
         default: Optional[Any] = None,
         callback: Optional[Callable[..., Any]] = None,
         metavar: Optional[str] = None,

@@ -277,7 +277,7 @@ def rich_output(
     outdata: List[dict],
     title: str = None,
     caption: str = None,
-    account: str = None,
+    workspace: str = None,
     group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
@@ -353,9 +353,9 @@ def rich_output(
 
         if title:
             table.title = f'[italic cornflower_blue]{constants.what_to_pretty(title)}'
-        if account or caption:
+        if workspace or caption:
             table.caption_justify = 'left'
-            table.caption = '' if not account else f'[italic dark_olive_green2] Account: {account}[/]'
+            table.caption = '' if not workspace else f'[italic dark_olive_green2] Account: {workspace}[/]'
             table.caption = table.caption if not caption else f"{table.caption} {caption.lstrip()}"
 
         data_header = f"--\n{'Customer ID:':15}{customer_id}\n{'Customer Name:':15} {customer_name}\n--\n"
@@ -408,7 +408,7 @@ def output(
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in clicommon.display_output
     title: str = None,
     caption: str = None,
-    account: str = None,
+    workspace: str = None,
     config: Config = None,
     output_by_key: str | List[str] = "name",
     group_by: str = None,
@@ -466,14 +466,14 @@ def output(
             return key.replace(" ", "_").replace("\n", "_")
 
         csv_data = "\n".join(
-                        [
-                            ",".join(
-                                [
-                                    normalize_for_csv(v) for k, v in d.items() if k not in CUST_KEYS
-                                ]
-                            )
-                            for d in outdata
-                        ]
+            [
+                ",".join(
+                    [
+                        normalize_for_csv(v) for k, v in d.items() if k not in CUST_KEYS
+                    ]
+                )
+                for d in outdata
+            ]
         )
         raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
         out = Syntax(code=raw_data, lexer=CsvLexer(ensurenl=False), theme="native")
@@ -481,7 +481,7 @@ def output(
         table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
-        raw_data, table_data = rich_output(outdata, title=title, caption=caption, account=account, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by)
+        raw_data, table_data = rich_output(outdata, title=title, caption=caption, workspace=workspace, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by)
 
     elif tablefmt == "tabulate":
         raw_data, table_data = tabulate_output(outdata)

@@ -22,6 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
 from centralcli.constants import iden_meta
 from .cache import CacheClient
 from .models.cache import Clients
+from .classic.api import ClassicAPI
 
 app = typer.Typer()
 
@@ -38,18 +39,19 @@ def all(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Disconnect all WLAN clients from an AP optionally for a specific SSID
 
     This command currently only applies to APs
     """
+    api = ClassicAPI()
     dev = cli.cache.get_dev_identifier(device)
     _ssid_msg = "" if not ssid else f" on SSID [cyan]{ssid}[/]"
     print(f'Kick [bright_red]ALL[/] users connected to [cyan]{dev.name}[/]{_ssid_msg}')
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.kick_users,
+        resp = api.session.request(
+            api.device_management.kick_users,
             dev.serial,
             kick_all=True,
             ssid=ssid
@@ -64,7 +66,7 @@ def client(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Disconnect a WLAN client.
 
@@ -74,8 +76,9 @@ def client(
 
     The [cyan]-R[/] flag can be used to force a cache refresh prior to performing the disconnect.
     """
+    api = ClassicAPI()
     if refresh:
-        resp = cli.central.request(cli.cache.refresh_client_db, client_type="wireless")
+        resp = api.session.request(cli.cache.refresh_client_db, client_type="wireless")
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
@@ -84,7 +87,7 @@ def client(
         if refresh:
             cli.exit(f"Client {client} is not connected.")
         else:
-            client_resp = cli.central.request(cli.cache.refresh_client_db, mac=client.mac)
+            client_resp = api.session.request(cli.cache.refresh_client_db, mac=client.mac)
             if not client_resp:
                 cli.econsole.print(f"client {client} is not online according to cache, Failure occured attempting to fetch client details from API.")
                 cli.display_results(client_resp, exit_on_fail=True)
@@ -99,8 +102,8 @@ def client(
 
     print(f'Kick client [cyan]{client.name}[/], currently connected to [cyan]{client.connected_name}[/]')
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.kick_users,
+        resp = api.session.request(
+            api.device_management.kick_users,
             client.connected_serial,
             mac=client.mac
         )

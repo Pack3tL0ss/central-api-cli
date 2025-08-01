@@ -265,7 +265,7 @@ class Groups(RootModel):
         if not data or "properties" not in data[0]:
             return [{k.replace("-", "_"): v if k not in ["types", "allowed_types"] else str_to_list(v) for k, v in inner.items()} for inner in data]  # from batch import file
 
-        # from central.get_all_groups response
+        # from api.configuration.get_all_groups response
         aos_version_map = {"AOS_10X": "AOS10", "AOS_8X": "AOS8", "NA": "NA"}
         allowed_dev_types = {"Gateways": "gw", "AccessPoints": "ap", "AOS_CX": "cx", "AOS_S": "sw", "SD_WAN_Gateway": "sdwan"}
         # Architecture can be AOS10, Instant, or SD_WAN_Gateway.  Provides no value, as that can be derived from AOSVersion / AllowedDevTypes

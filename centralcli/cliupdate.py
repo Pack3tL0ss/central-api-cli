@@ -29,7 +29,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, IAPTimeZoneNames
 from . import render
-from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal, CacheCert
+from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal, CacheCert, api
 from .caas import CaasAPI
 
 
@@ -75,7 +75,7 @@ def template(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     if group:
         group = cli.cache.get_group_identifier(group).name
@@ -114,11 +114,11 @@ def template(
     print(f"    Model: [cyan]{kwargs['model']}[/]")
     print(f"    Version: [cyan]{kwargs['version']}[/]")
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.update_existing_template, **kwargs, template=template, payload=payload)
+        resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
         # will exit above if call failed.
-        cache_template.data["template_hash"] = cli.central.request(cli.get_file_hash, file=template, string=payload)
-        _ = cli.central.request(cli.cache.update_template_db, data=cache_template.data)
+        cache_template.data["template_hash"] = api.session.request(cli.get_file_hash, file=template, string=payload)
+        _ = api.session.request(cli.cache.update_template_db, data=cache_template.data)
 
 
 @app.command(help="Update existing or add new Variables for a device/template")
@@ -128,7 +128,7 @@ def variables(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     dev = cli.cache.get_dev_identifier(device)
     serial = dev.serial
@@ -161,8 +161,8 @@ def variables(
     con.print(f"{msg} {dev.rich_help_text}")
     _ = [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.update_device_template_variables,
+        resp = api.session.request(
+            api.configuration.update_device_template_variables,
             serial,
             dev.mac,
             var_dict=var_dict
@@ -192,28 +192,29 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    group = cli.cache.get_group_identifier(group)
+    group: CacheGroup = cli.cache.get_group_identifier(group)
 
     if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mo_sw, mo_cx]):
-        print(
+        cli.exit(
             "[bright_red]Missing required options.[/bright_red] "
             "Use [italic bright_green]cencli update group ?[/italic bright_green] to see available options"
         )  # TODO is there a way to trigger help text
-        raise typer.Exit(1)
     if not aos10 and mb:
         cli.exit("[bright_red]Error[/]: Microbranch is only valid if group is configured as [cyan]AOS10[/] group.")
     if (mo_sw or mo_cx) and wired_tg:
         cli.exit("[bright_red]Error[/]: Monitor only is not valid for template group.")
     if mo_sw is not None and not sw:
-        print("Invalid combination --mo-sw not valid without --sw")
-        print("[bright_red]Error: Monitor only can only be set when initially adding AOS-SW as allowed to group.")
-        raise typer.Exit(1)
+        cli.exit(
+            "Invalid combination --mo-sw not valid without --sw\n"
+            "[bright_red]Error: Monitor only can only be set when initially adding AOS-SW as allowed to group."
+        )
     if mo_cx is not None and not cx:
-        print("Invalid combination --mo-cx not valid without --cx")
-        print("[bright_red]Error: Monitor only can only be set when initially adding AOS-CX as allowed to group.")
-        raise typer.Exit(1)
+        cli.exit(
+            "Invalid combination --mo-cx not valid without --cx\n"
+            "[bright_red]Error: Monitor only can only be set when initially adding AOS-CX as allowed to group."
+        )
 
     allowed_types = []
     if ap:
@@ -256,8 +257,8 @@ def group(
     }
 
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.update_group_properties,
+        resp = api.session.request(
+            api.configuration.update_group_properties,
             **kwargs
         )
         cli.display_results(resp, tablefmt="action")
@@ -274,7 +275,7 @@ def generate_template(template_file: Union[Path, str], var_file: Union[Path, str
     template = env.get_template(template_file.name)
 
     # TODO output to temp or out dir cwd could be non-writable
-    group_dev = Path.cwd() / f"{group_dev}.cfg"
+    group_dev: Path = Path.cwd() / f"{group_dev}.cfg"
     group_dev.write_text(template.render(config_data))
 
     return group_dev
@@ -290,7 +291,7 @@ def config_(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update group or device level config (ap or gw).
     """
@@ -329,10 +330,10 @@ def config_(
         cli.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     if cli.confirm(yes):
         if use_caas:
-            resp = cli.central.request(caasapi.send_commands, node_iden, cli_cmds)
+            resp = api.session.request(caasapi.send_commands, node_iden, cli_cmds)
             cli.display_results(resp, cleaner=cleaner.parse_caas_response)
         else:
-            resp = cli.central.request(cli.central.replace_ap_config, node_iden, cli_cmds)
+            resp = api.session.request(api.configuration.replace_ap_config, node_iden, cli_cmds)
             cli.display_results(resp, tablefmt="action")
 
 
@@ -357,7 +358,7 @@ def cp_cert(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update the Captive Portal certificate for APs at the group level
 
@@ -391,7 +392,7 @@ def cp_cert(
 
     cli.confirm(yes)
     group_names = [g.name for g in groups]
-    resp = cli.central.request(cli.central.update_group_cp_cert, group_names, cp_cert_md5=cert.md5_checksum)
+    resp = api.session.request(api.configuration.update_group_cp_cert, group_names, cp_cert_md5=cert.md5_checksum)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -406,7 +407,7 @@ def swarm(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update AOS8 IAP swarm settings
 
@@ -444,7 +445,7 @@ def swarm(
     cli.confirm(yes)
 
     if need_current_settings:
-        cur_resp = cli.central.request(cli.central.get_swarm_config, dev.swack_id)
+        cur_resp = api.session.request(api.configuration.get_swarm_config, dev.swack_id)
         if not cur_resp.ok:
             log.error("Unable to perform update due to error fetching current settings for swarm", caption=True)
             cli.display_results(cur_resp, tablefmt="action", exit_on_fail=True)
@@ -454,7 +455,7 @@ def swarm(
         offset_hr = offset_hr or cur_resp.output["timezone_hr"]
         offset_min = offset_min or cur_resp.output["timezone_min"]
 
-    resp = cli.central.request(cli.central.replace_swarm_config, swarm_id=dev.swack_id, name=name, ip_address=ip, timezone=timezone, tz_offset_hr=offset_hr, tz_offset_min=offset_min)
+    resp = api.session.request(api.configuration.replace_swarm_config, swarm_id=dev.swack_id, name=name, ip_address=ip, timezone=timezone, tz_offset_hr=offset_hr, tz_offset_min=offset_min)
     cli.display_results(resp, tablefmt="action")
 
 
@@ -497,11 +498,11 @@ def ap(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update per-ap-settings (ap env) and/or add/update gps ap-altitude to ap level config
 
-     Multiple APs can be provided (same settings would apply)
+    Multiple APs can be provided (same settings would apply)
 
     :warning:  :warning:  If providing more than one value for the options that support it
     You currently have to separate with a comma and ensure there are no spaces
@@ -543,7 +544,7 @@ def ap(
     cli.batch_update_aps(data, yes=yes, reboot=reboot)
 
 
-# TODO cache for webhook the API for update reuires the name and urls in the body even if they are not changing.
+# CACHE cache for webhook the API for update reuires the name and urls in the body even if they are not changing.
 @app.command()
 def webhook(
     wid: str = cli.arguments.wid,
@@ -552,7 +553,7 @@ def webhook(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update webhook details
 
@@ -567,13 +568,13 @@ def webhook(
     conf_msg = f"{conf_msg}\n{updates}"
     cli.console.print(conf_msg, overflow="ellipsis")
     if cli.confirm():
-        resp = cli.central.request(cli.central.update_webhook, wid, name, urls)
+        resp = api.session.request(api.central.update_webhook, wid, name, urls)
         cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def site(
-    site_name: str = typer.Argument(..., show_default=False, autocompletion=cli.cache.site_completion, help="[green3]current[/] site name"),
+    site_name: str = cli.arguments.get("site", help="[green3]current[/] site name"),
     address: str = typer.Argument(None, help="street address, [italic green4](enclose in quotes)[/]", show_default=False),
     city: str = typer.Argument(None, show_default=False),
     state: str = typer.Argument(
@@ -595,7 +596,7 @@ def site(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """
     Update details for an existing site.
@@ -647,15 +648,15 @@ def site(
             if not address_fields:
                 address_fields = {k: v for k, v in site_now.data.items() if k in geo_keys and v}
 
-        print(f"  Change Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
+        print(f"  Chang{'e' if not yes else 'ing'} Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
     if rename_only:
         print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
+        resp = api.session.request(api.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
         if resp:
-            cli.central.request(cli.cache.update_site_db, data={"name": new_name or site_now.name, "id": site_now.id, **address_fields})
+            api.session.request(cli.cache.update_site_db, data={"name": new_name or site_now.name, "id": site_now.id, **address_fields})
 
 
 @app.command()
@@ -663,7 +664,7 @@ def wlan(
     wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
     groups: List[str] = typer.Argument(
         None,
-        help=f"Group(s) to update (SSID must be defined in each group) [grey42]{escape('[default: All Groups that contain specified SSIDs will be updated]')}[/]",
+        help=f"Group(s) to update (SSID must be defined in each group) {cli.help_block('All Groups that contain specified SSIDs will be updated')}",
         autocompletion=cli.cache.group_completion,
         show_default=False,
     ),
@@ -675,25 +676,25 @@ def wlan(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update configuration options of an existing WLAN/SSID
     """
     if groups:
         _groups = [cli.cache.get_group_identifier(group) for group in groups]
-        batch_req = [BatchRequest(cli.central.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
+        batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
     else:  # TODO coppied from show wlans -v make common func
-        group_res = cli.central.request(cli.central.get_groups_properties)
+        group_res = api.session.request(api.configuration.get_groups_properties)
         if not group_res:
             log.error(f"Unable to determine Groups that contain SSID {wlan}", caption=True,)
             cli.display_results(group_res, exit_on_fail=True)
 
         groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
-        batch_req = [BatchRequest(cli.central.get_wlan, group=group, wlan_name=wlan) for group in groups]
+        batch_req = [BatchRequest(api.configuration.get_wlan, group=group, wlan_name=wlan) for group in groups]
 
-    cli.central.silent = True
-    batch_resp = cli.central.batch_request(batch_req)
-    cli.central.silent = False
+    api.session.silent = True
+    batch_resp = api.session.batch_request(batch_req)
+    api.session.silent = False
 
     failed, passed = [], []
     config_b4_dict = {}
@@ -710,7 +711,7 @@ def wlan(
             if "cannot find" not in f.output.get("description").lower() and f.output.get("description") != "Invalid configuration ID"
         ]
         if unexpected_failures:
-            print(f":warning:  Unexpected error while querying groups for existense of {wlan}")
+            cli.econsole.print(f"[dark_orange3]:warning:[/]  Unexpected error while querying groups for existense of {wlan}")
             cli.display_results(unexpected_failures, exit_on_fail=False)
 
     if not config_b4_dict:
@@ -736,7 +737,7 @@ def wlan(
             "access_rules": config_b4_dict[group]["access_rules"],
         }
         update_req += [
-            BatchRequest(cli.central.update_wlan, **kwargs)
+            BatchRequest(api.configuration.update_wlan, **kwargs)
         ]
 
     options = {
@@ -751,11 +752,11 @@ def wlan(
         print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
 
     if yes or typer.confirm("\nProceed?", abort=True):
-        update_res = cli.central.batch_request(update_req)
+        update_res = api.session.batch_request(update_req)
         cli.display_results(update_res)
 
 def get_guest_id(portal_id: str, name: str) -> str:
-    guest_resp = cli.central.request(cli.central.get_guests, portal_id)
+    guest_resp = api.session.request(api.guest.get_guests, portal_id)
     if not guest_resp:
         log.error(f"Unable to Update details for {name}, request to fetch visitor_id failed.", caption=True, log=True)
         cli.display_results(guest_resp, tablefmt="action", exit_on_fail=True)
@@ -784,7 +785,7 @@ def guest(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Update a previously created guest account"""
     if disable and enable:
@@ -832,7 +833,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     print(_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.add_guest, **payload)
+        resp = api.session.request(api.guest.add_guest, **payload)
         password = None
         payload = None
         cli.display_results(resp, tablefmt="action")
@@ -841,7 +842,7 @@ def guest(
 @app.callback()
 def callback():
     """
-    Update existing Aruba Central objects
+    Update existing Aruba Central objects/configs
     """
     pass
 

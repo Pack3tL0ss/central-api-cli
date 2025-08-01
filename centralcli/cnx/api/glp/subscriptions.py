@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from centralcli import Response
 
 
-class GlpSubscriptionsApi:
+class GreenLakeSubscriptionsAPI:
     def __init__(self, session: Session):
         self.session = session
 

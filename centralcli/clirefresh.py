@@ -20,13 +20,10 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-# from centralcli.central import CentralApi  # noqa
 from rich.console import Console
 
 from . import Session
-from .classic.api import ClassicAPI
-
-api = ClassicAPI(config.classic.base_url)
+from .cache import api  # TODO figure out if there is cost to importing/instantiating this numerous times  This is different than most other files
 
 app = typer.Typer()
 
@@ -42,8 +39,8 @@ def token(
         show_default=False,
     ),
     all: bool = typer.Option(False, "-A", "--all", help="Refresh Tokens for all defined workspaces in config.",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use 'default' central workspace", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
     workspace: str = cli.options.workspace,
 ):
     """Refresh Classic Central API access/refresh tokens.
@@ -87,20 +84,16 @@ def token(
             console.print(f"{':x:' if not success else ':heavy_check_mark:'}  {workspace}")
         console.print(f"\nSuccessfully refreshed tokens for {success_list.count(True)} of {len(success_list)} accounts.")
 
-@app.command(short_help="Refresh local cache")
+@app.command()
 def cache(
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Debug Logging", callback=cli.debug_callback),
-    account: str = typer.Option(
-        "central_info",
-        envvar="ARUBACLI_ACCOUNT",
-        help="The Aruba Central Account to use (must be defined in the config)",
-        autocompletion=cli.cache.account_completion
-    ),
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    workspace: str = cli.options.workspace,
 ):
-    """Refresh friendly identifier cache.
+    """Refresh local cache.
 
     The cache is the data that is stored locally so you can reference a device by name, ip, or mac vs just serial number.
+    Has similar benefits for sites, groups, certificates, etc.
 
     This is not necessary under normal circumstances as the cli will automatically refresh the cache if you provide an identifier
     that doesn't have a match.
@@ -108,21 +101,19 @@ def cache(
     cli.cache(refresh=True)
 
 
-# TODO add cache for webhooks
-@app.command(short_help="Refresh (regenerate) webhook token")
+# CACHE add cache for webhooks
+@app.command()
 def webhook(
-    wid: str = typer.Option(..., help="WebHook ID",),
-    default: bool = typer.Option(False, "-d", is_flag=True, help="Use default central account", show_default=False,),
-    debug: bool = typer.Option(False, "--debug", envvar="ARUBACLI_DEBUG", help="Enable Additional Debug Logging",),
-    account: str = typer.Option("central_info",
-                                envvar="ARUBACLI_ACCOUNT",
-                                help="The Aruba Central Account to use (must be defined in the config)",),
+    wid: str = typer.Argument(..., help="WebHook ID. Use [cyan]cencli show webhooks[/] to get the required id.", show_default=False),
+    default: bool = cli.options.default,
+    debug: bool = cli.options.debug,
+    workspace: str = cli.options.workspace,
 ):
     """Refresh WebHook Token (generate a new token).
 
-    Use `cencli show webhooks` to get the required webhook id (wid).
+    Use [cyan]cencli show webhooks[/] to get the required webhook id (wid).
     """
-    resp = cli.central.request(cli.central.refresh_webhook_token, wid)
+    resp = api.session.request(api.central.refresh_webhook_token, wid)
     cli.display_results(resp, tablefmt="action")
 
 

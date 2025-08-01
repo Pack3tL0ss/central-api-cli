@@ -27,15 +27,18 @@ from starlette.responses import FileResponse
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import MyLogger, cache, central, config
+    from centralcli import MyLogger, cache, config, BatchRequest
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import MyLogger, cache, central, config  # type: ignore
+        from centralcli import MyLogger, cache, config, BatchRequest  # type: ignore
     else:
         print(pkg_dir.parts)
         raise e
+
+from .cache import api
+from . import Response as APIResponse
 
 log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
 log_file.parent.mkdir(exist_ok=True)
@@ -207,7 +210,7 @@ def _hook_response(data: dict) -> dict:
         }
 
 
-def _batch_resp_all_ok(responses: List[Response]) -> bool:
+def _batch_resp_all_ok(responses: List[APIResponse]) -> bool:
     if not all(r.ok for r in responses):
         _ = [log.error(str(r), show=True) for r in responses]
         log.critical("hook proxy exiting due to error.", show=True)
@@ -220,11 +223,11 @@ def get_current_branch_state():
     if config.workspace not in ["central_info", "default"]:
         log.info(f"hook_proxy is using alternate account '{config.workspace}'", show=True)
     _reqs = [
-        central.BatchRequest(central.get_branch_health),
-        central.BatchRequest(central.get_devices, "gateways"),
-        central.BatchRequest(central.get_groups_properties),
+        BatchRequest(api.other.get_branch_health),
+        BatchRequest(api.monitoring.get_devices, "gateways"),
+        BatchRequest(api.configuration.get_groups_properties),
     ]
-    health_resp, devs_resp, gr_resp = central.batch_request(_reqs)
+    health_resp, devs_resp, gr_resp = api.session.batch_request(_reqs)
 
     if not _batch_resp_all_ok([health_resp, devs_resp, gr_resp]):
         sys.exit(1)
@@ -252,10 +255,10 @@ def get_current_branch_state():
             for br in br_bad
     }
     _reqs = [
-        central.BatchRequest(central.get_gw_tunnels, s)
+        BatchRequest(api.monitoring.get_gw_tunnels, s)
         for s in [ser for _, serials in gw_maybe_bad.items() for ser in serials]
     ]
-    batch_resp = central.batch_request(_reqs)
+    batch_resp = api.session.batch_request(_reqs)
     if not _batch_resp_all_ok(batch_resp):
         sys.exit(1)
 
@@ -281,7 +284,7 @@ def get_current_branch_state():
 
     # TODO hook_data to it's own DB file
     cache.HookDataDB.truncate()
-    cache_upd_resp = central.request(cache.update_hook_data_db, alerts_now)
+    cache_upd_resp = api.session.request(cache.update_hook_data_db, alerts_now)
     log.debug(f"Hook cache update response: {cache_upd_resp}")
 
     log.info(f"Initial state of HookDataDB set.  {len(alerts_now)} gateways with WAN issues.", show=True)
@@ -370,7 +373,7 @@ async def check_cache_entry(data: dict) -> Union[list, None]:
             return
 
 
-        res = await central._request(central.get_gw_tunnels, data["device_id"])
+        res: APIResponse = await api.session._request(api.monitoring.get_gw_tunnels, data["device_id"])
         if not res:
             log.error(f"[WH IGNORE CLEAR] Error attempting to verify tunnels for {data['device_id']}")  # [{res.status}]{res.url}: {res.error}.")
             log.error("DB may drift from reality :(")

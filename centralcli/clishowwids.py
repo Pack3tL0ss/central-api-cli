@@ -26,6 +26,7 @@ from centralcli.constants import iden_meta  # noqa
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 from centralcli.models.wids import Wids
+from .cache import api
 
 app = typer.Typer()
 
@@ -89,11 +90,11 @@ def get_wids_response(
     }
 
     if wids_cat == "all":
-        func = cli.central.wids_get_all
+        func = api.rapids.wids_get_all
     else:
-        func = getattr(cli.central, f"wids_get_{wids_cat}_aps")
+        func = getattr(api.rapids, f"wids_get_{wids_cat}_aps")
 
-    return WidsResponse(wids_cat, response=cli.central.request(func, **kwargs), start=start, end=end)
+    return WidsResponse(wids_cat, response=api.session.request(func, **kwargs), start=start, end=end)
 
 
 # Default Time-Range for all wids Endpoints is past 3 hours.
@@ -118,7 +119,7 @@ def rogues(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show Detected Rogue APs"""
     resp = get_wids_response("rogue", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -158,7 +159,7 @@ def interfering(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show interfering APs"""
     resp = get_wids_response("interfering", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -198,7 +199,7 @@ def neighbors(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show Neighbor APs"""
     resp = get_wids_response("neighbor", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -238,7 +239,7 @@ def suspect(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show Suspected Rogue APs"""
     resp = get_wids_response("suspect", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -277,7 +278,7 @@ def all(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show All WIDS Classifications"""
     resp = get_wids_response("all", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
@@ -298,36 +299,35 @@ def all(
 
 
 @app.callback(invoke_without_command=True)
-def callback(ctx: typer.Context):
+def callback(ctx: typer.Context,
+    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = cli.options.group_many,
+    site: List[str] = cli.options.site_many,
+    label: List[str] = cli.options.label_many,
+    verbose: int = cli.options.verbose,
+    start: datetime = cli.options.start,
+    end: datetime = cli.options.end,
+    past: str = cli.options.past,
+    sort_by: str = cli.options.sort_by,
+    reverse: bool = cli.options.reverse,
+    do_json: bool = cli.options.do_json,
+    do_yaml: bool = cli.options.do_yaml,
+    do_csv: bool = cli.options.do_csv,
+    do_table: bool = cli.options.do_table,
+    raw: bool = cli.options.raw,
+    outfile: Path = cli.options.outfile,
+    pager: bool = cli.options.pager,
+    debug: bool = cli.options.debug,
+    default: bool = cli.options.default,
+    workspace: str = cli.options.workspace,
+):
     """
     Show Wireless Intrusion Detection data
     """
     # We run show wids all if they don't provide a subcommand.
     if not ctx.invoked_subcommand:
         ctx.invoked_subcommand = "all"
-        kwargs = {
-            "device": None,
-            "group": None,
-            "site": None,
-            "label": None,
-            "verbose": 0,
-            "start": None,
-            "end": None,
-            "past": None,
-            "sort_by": None,
-            "reverse": None,
-            "do_json": None,
-            "do_yaml": None,
-            "do_csv": None,
-            "do_table": None,
-            "raw": False,
-            "outfile": None,
-            "pager": False,
-            "debug": False,
-            "default": None,
-            "account": cli.workspace,
-        }
-        ctx.invoke(all, **kwargs)
+        ctx.invoke(all, **ctx.params)
 
 
 if __name__ == "__main__":

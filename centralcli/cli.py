@@ -718,7 +718,7 @@ def renew_license(
         dev_types += ["switch" if dev.type in ["cx", "sw"] else dev.type]
         for sub in dev.services:
             calls_by_sub = utils.update_dict(calls_by_sub, normalize_sub(sub), dev.serial)
-    # subs_resp = api.session.request(cli.central.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
+    # subs_resp = api.session.request(api.platform.get_subscriptions, device_type=None if len(dev_types) > 1 else dev_types[0])
     # subs_by_name = {f'{normalize_sub(sub["license_type"])}_{sub["subscription_key"]}': sub["end_date"] / 1000 for sub in subs_resp.output if sub["available"] and sub["status"] != "EXPIRED"}
     # Gave up on this for now, the names from the inventory don't map well with the names from get_subscriptions.  Would need to build a map
     # i.e. Foundation-90/70xx vs foundation_70xx

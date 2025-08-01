@@ -20,6 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, SortNamedMpskOptions
+from .cache import api
 
 if TYPE_CHECKING:
     from .cache import CacheMpsk
@@ -41,11 +42,11 @@ def networks(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show all MPSK networks (SSIDs)
     """
-    resp = cli.central.request(cli.cache.refresh_mpsk_networks_db)
+    resp = api.session.request(cli.cache.refresh_mpsk_networks_db)
     tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     cli.display_results(resp, tablefmt=tablefmt, title="MPSK Networks", pager=pager, outfile=outfile, full_cols=["id", "accessURL"])
 
@@ -70,7 +71,7 @@ def named(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show named MPSK definitions for a provided network (SSID)
     """
@@ -91,17 +92,17 @@ def named(
     group_by = None
 
     if not ssid:
-        resp = cli.central.request(cli.cache.refresh_mpsk_db)
+        resp = api.session.request(cli.cache.refresh_mpsk_db)
         if resp.ok and len(set([r["ssid"] for r in resp.output])) > 1:  # It looks odd to do group_by if there is only 1 SSID, it's not obvious that all in the grouping are the same SSID.
             group_by = "ssid"
 
         if csv_import:
             log.warning("[cyan]--import[/] option is only supported when MPSK ssid is provided", caption=True)
     elif csv_import:
-        resp = cli.central.request(cli.central.cloudauth_download_mpsk_csv, ssid.name, name=name, filename=outfile, role=role, status=status)
+        resp = api.session.request(api.cloudauth.cloudauth_download_mpsk_csv, ssid.name, name=name, filename=outfile, role=role, status=status)
         _cleaner = None
     else:
-        resp = cli.central.request(cli.cache.refresh_mpsk_db, ssid.id, name=name, role=role, status=status)
+        resp = api.session.request(cli.cache.refresh_mpsk_db, ssid.id, name=name, role=role, status=status)
 
 
     tablefmt = "csv" if csv_import and ssid else cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")

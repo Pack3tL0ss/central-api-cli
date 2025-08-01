@@ -19,6 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars  # noqa
+from .cache import api
 
 app = typer.Typer()
 
@@ -26,9 +27,9 @@ tty = utils.tty
 iden_meta = IdenMetaVars()
 
 
-@app.command(help="Show Branch Health statistics", short_help="Show Branch Health statistics")
+@app.command()
 def health(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False,),
+    site: str = cli.arguments.site,
     wan_down: bool = typer.Option(False, "--wan-down", help="Show branches with wan uplinks or tunnels Down."),
     down: bool = typer.Option(None, "--down", help="Show branches with down devices."),
     verbose: int = cli.options.verbose,
@@ -43,11 +44,10 @@ def health(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    central = cli.central
-
-    resp = central.request(central.get_branch_health, name=site)
+    """Show Branch Health statistics"""
+    resp = api.session.request(api.other.get_branch_health, name=site)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cf = "[italic dark_olive_green2]"

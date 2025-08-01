@@ -550,7 +550,6 @@ class EnableDisableArgs(str, Enum):
     auto_sub = "auto-sub"
 
 
-
 class DhcpArgs(str, Enum):
     clients = "clients"
     pools = "pools"
@@ -658,13 +657,13 @@ class ArgToWhat:
         self.token = self.tokens = "token"
         self.subscriptions = self.subscription = "subscriptions"
         self.portal = self.portals = "portals"
-        self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
         self.swarms = self.swarm = "swarms"
-        self.certs = self.cert = self.certificates = "certs"
+        self.certs = self.cert = self.certificates = self.certificate = "certs"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
+        self.webhook = self.webhooks = "webhook"
 
     def _init_assign(self):
         self.subscription = self.subscriptions = "subscription"
@@ -693,7 +692,7 @@ class ArgToWhat:
     def _init_delete(self):
         self.site = self.sites = "site"
         self.group = self.groups = "group"
-        self.certificate = self.certs = self.certificates = self.cert = "certificate"
+        self.cert = self.certificate = self.certs = self.certificates = "cert"
         self.wlan = self.wlans = "wlan"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
@@ -715,7 +714,7 @@ class ArgToWhat:
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
         self.guest = self.guests = "guest"
-        self.certificate = self.cert = "certificate"
+        self.cert = self.certs = self.certificate = self.certificates = "cert"
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"

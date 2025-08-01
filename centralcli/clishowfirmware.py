@@ -22,21 +22,19 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import IdenMetaVars, lib_to_api, DevTypes, FirmwareDeviceType  # noqa
-from centralcli.cache import CentralObject, CacheDevice
+from centralcli.constants import iden_meta, DevTypes, FirmwareDeviceType  # noqa
+from centralcli.cache import CentralObject, CacheDevice, CacheGroup
+from .cache import api
 
 app = typer.Typer()
-
 tty = utils.tty
-iden_meta = IdenMetaVars()
-
 
 
 class ShowFirmwareKwags(str, Enum):
     group = "group"
     type = "type"
 
-# TODO add support for APs use batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, dev.swack_id) for dev in devs]
+# TODO add support for APs use batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]
 # has to be done this way as typer does not show help if docstr is an f-string
 device_help = f"""Show firmware details for device(s)
 
@@ -62,11 +60,11 @@ def device(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     if device:
         devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
-        batch_reqs = [BatchRequest(cli.central.get_device_firmware_details if dev.type != "ap" else cli.central.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
+        batch_reqs = [BatchRequest(api.firmware.get_device_firmware_details if dev.type != "ap" else api.firmware.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
                 f'[cyan]--dev-type[/] [bright_green]{dev_type.value}[/] ignored as device{"s" if len(devs) > 1 else ""} [bright_green]{"[/], [bright_green]".join([dev.name for dev in devs])}[/] {"were" if len(devs) > 1 else "was"} specified.',
@@ -74,13 +72,13 @@ def device(
             )
     elif dev_type:
         if dev_type != "ap":
-            batch_reqs = [BatchRequest(cli.central.get_device_firmware_details_by_type, device_type=dev_type.value)]
+            batch_reqs = [BatchRequest(api.firmware.get_device_firmware_details_by_type, device_type=dev_type.value)]
         else:
-            batch_reqs = [BatchRequest(cli.central.get_all_swarms_firmware_details,)]
+            batch_reqs = [BatchRequest(api.firmware.get_all_swarms_firmware_details,)]
     else:
         cli.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
 
-    batch_resp = cli.central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    batch_resp = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
 
     resp = batch_resp
     if len(batch_resp) > 1:
@@ -123,27 +121,25 @@ def swarms(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show firmware details for swarm by specifying any AP in the swarm
 
     Multiple devices can be specified.  Output will include details for each unique swarm.
     """
-    central = cli.central
-
     if device:
         devs = [cli.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
-        batch_reqs = [BatchRequest(cli.central.get_swarm_firmware_details, dev.swack_id) for dev in devs]
+        batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]
     else:
         if group:
-            group: CentralObject = cli.cache.get_group_identifier(group)
+            group: CacheGroup = cli.cache.get_group_identifier(group)
             kwargs = {"group": group.name}
         else:
             kwargs = {}
 
-        batch_reqs = [BatchRequest(cli.central.get_all_swarms_firmware_details, **kwargs)]
+        batch_reqs = [BatchRequest(api.firmware.get_all_swarms_firmware_details, **kwargs)]
 
-    batch_resp = central.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    batch_resp = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
     failed = [r for r in batch_resp if not r.ok]
     passed = [r for r in batch_resp if r.ok]
 
@@ -174,11 +170,11 @@ def swarms(
     )
 
 
-@app.command(short_help="Show firmware compliance details")
+@app.command()
 def compliance(
-    device_type: DevTypes = typer.Argument(..., show_default=False,),
-    group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
-    group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion, show_default=False,),
+    device_type: DevTypes = cli.arguments.device_type,
+    group: List[str] = cli.arguments.get("group", default=None),
+    group_name: str = cli.options.group,
     do_json: bool = cli.options.do_json,
     do_yaml: bool = cli.options.do_yaml,
     do_csv: bool = cli.options.do_csv,
@@ -188,11 +184,9 @@ def compliance(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    """Show firmware compliance details for a group/device type
-    """
-    central = cli.central
+    """Show firmware compliance details for a group/device type."""
     group = group or utils.listify(group_name)
     group = None if not group else group
 
@@ -209,7 +203,7 @@ def compliance(
         'group': None if not group else group.name
     }
 
-    resp = central.request(central.get_firmware_compliance, **kwargs)
+    resp = api.session.request(api.firmware.get_firmware_compliance, **kwargs)
     if resp.status == 404 and resp.output.lower() == "not found":
         resp.output = (
             f"Invalid URL or No compliance set for {device_type.lower()} "
@@ -243,10 +237,9 @@ def _list(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    """Show available firmware list for a specific device or a type of device
-    """
+    """Show available firmware list for a specific device or a type of device."""
     caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
 
     dev: CacheDevice = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
@@ -284,7 +277,7 @@ def _list(
         title = f'{title.split("serial")[0]} device [cyan]{dev.name}[/]'
 
 
-    resp = cli.central.request(cli.central.get_firmware_version_list, **kwargs)
+    resp = api.session.request(api.firmware.get_firmware_version_list, **kwargs)
     cli.display_results(
         resp,
         tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, set_width_cols={"version": {"min": 25}}, cleaner=cleaner.get_fw_version_list, format=tablefmt, verbose=bool(verbose))

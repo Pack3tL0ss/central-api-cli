@@ -98,19 +98,19 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
 # TOGLP
 @app.command()
 def device(
-    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="serial", show_default=False,),
-    serial: str = typer.Argument(..., metavar="<SERIAL NUM>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw2: str = typer.Argument(..., hidden=True, metavar="mac", autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    mac: str = typer.Argument(..., metavar="<MAC ADDRESS>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw3: str = typer.Argument(None, metavar="group", hidden=True, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    group: str = typer.Argument(None, metavar="[GROUP]", help="pre-assign device to group",
+    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="", show_default=False,),
+    serial: str = typer.Argument(..., metavar="serial <SERIAL NUM>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    mac: str = typer.Argument(..., metavar="mac <MAC ADDRESS>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    group: str = typer.Argument(None, metavar="[group GROUP]", help="pre-assign device to group",
                                autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     # site: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    license: List[cli.cache.LicenseTypes] = typer.Option(None, "--license", help="Assign license subscription(s) to device", show_default=False),  # type: ignore
+    subscription: List[cli.cache.LicenseTypes] = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False),  # type: ignore
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -119,6 +119,11 @@ def device(
     """Add a Device to Aruba Central
 
     Serial Number and MAC are required, group is opional.
+
+    [italic cyan]serial[/], [italic cyan]mac[/], and [italic cyan]group[/] can be provided in any order.
+
+    [turquoise4]Example[/]:
+    [cyan]cencli add device serial USABC1234 mac aa:bb:cc:dd:ee:ff [dim]group WadeLab --sub advanced-switch-6300[/dim][/]
     """
     kwd_vars = [kw1, kw2, kw3]
     vals = [serial, mac, group]
@@ -127,7 +132,7 @@ def device(
         "serial": None,
         "group": None,
         # "site": None,
-        "license": license
+        "license": subscription
     }
 
     for name, value in zip(kwd_vars, vals):
@@ -166,7 +171,7 @@ def device(
     if cli.confirm(yes):
         resp = api.session.request(api.platform.add_devices, **kwargs)
         cli.display_results(resp, tablefmt="action")
-        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=license)
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=subscription)
 
 
 @app.command()
@@ -442,8 +447,8 @@ def label(
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
 # "Missing Required Query Parameter: Error while uploading certificate, invalid arguments"
 # This worked: cencli add certificate lejun23 securelogin.kabrew.com.all.pem -pem -svr  (no passphrase, entering passphrase caused error above)
-@app.command(hidden=False)
-def certificate(
+@app.command()
+def cert(
     cert_name: str = typer.Argument(..., show_default=False),
     cert_file: Path = typer.Argument(None, help="If not provided you'll be prompted to paste in cert text", exists=True, readable=True, show_default=False,),
     passphrase: str = typer.Option(None, help="optional passphrase", show_default=False,),

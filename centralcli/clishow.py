@@ -456,7 +456,7 @@ def all_(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     """Show details for All devices [dim italic](that have checked in with Central).[/]
@@ -506,7 +506,7 @@ def devices(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     """Show details for devices
@@ -556,7 +556,7 @@ def aps(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for APs
@@ -618,7 +618,7 @@ def switches_(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for switches
@@ -659,7 +659,7 @@ def gateways_(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     """Show details for gateways
@@ -700,7 +700,7 @@ def controllers_(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     """Show details for controllers
@@ -739,7 +739,7 @@ def stacks(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show details for switch stacks
@@ -798,7 +798,7 @@ def inventory(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     if hasattr(dev_type, "value"):
         dev_type = dev_type.value
@@ -944,7 +944,7 @@ def swarms(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm
     """
@@ -1093,7 +1093,7 @@ def interfaces(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     """Show interfaces/details
 
@@ -1239,7 +1239,7 @@ def poe(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     port = _port if _port else port
     dev = cli.cache.get_dev_identifier(device, dev_type="switch")
@@ -1299,7 +1299,7 @@ def vlans(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show VLANs for device or site
 
@@ -1441,7 +1441,7 @@ def dhcp(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
@@ -1489,7 +1489,7 @@ def upgrade(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     """Show firmware upgrade status (by device)
@@ -1546,7 +1546,7 @@ def cache_(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ):
     """Show contents/size/record-count in Local Cache.
@@ -1648,7 +1648,7 @@ def groups(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     resp = api.session.request(cli.cache.refresh_group_db)
     caption = _build_groups_caption(resp.output)
@@ -1670,7 +1670,7 @@ def labels(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show labels/details"""
     resp = api.session.request(cli.cache.refresh_label_db)
@@ -1716,7 +1716,7 @@ def sites(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
     sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
 
@@ -1784,7 +1784,7 @@ def templates(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show templates/details"""
     # Allows unnecessary keyword group "cencli show templates group WadeLab"
@@ -1849,7 +1849,7 @@ def variables(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ):
     if device and device != "all":
@@ -1892,7 +1892,7 @@ def lldp(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 
 ) -> None:
@@ -1968,13 +1968,12 @@ def certs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """"Show certificates/details"
     """
-    # resp = api.session.request(cli.cache.refresh_cert_db, query)
-    resp = api.session.request(cli.cache.refresh_cert_db, api.configuration.get_certificates, query=query)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = api.session.request(cli.cache.refresh_cert_db, query=query)
+    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     type_filter = {
         "SERVER_CERT": server_cert,
         "CA_CERT": ca_cert,
@@ -1998,7 +1997,7 @@ def task(
     outfile: Path = cli.options.outfile,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show status of previously issued task/command
 
@@ -2022,7 +2021,7 @@ def run(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show running config for a device
 
@@ -2040,7 +2039,6 @@ def run(
     # Above device types will exit
 
     # APs
-    # resp = api.session.request(central.get_device_configuration, dev.serial)
     resp = api.session.request(api.configuration.get_device_configuration, dev.serial)
     if isinstance(resp.output, str) and resp.output.startswith("{"):
         try:
@@ -2057,10 +2055,9 @@ def run(
 # https://web.yammer.com/main/org/hpe.com/threads/eyJfdHlwZSI6IlRocmVhZCIsImlkIjoiMTQyNzU1MDg5MTQ0MjE3NiJ9
 @app.command("config")
 def config_(
-    group_dev: str = typer.Argument(
-        ...,
-        metavar=f"{iden_meta.group_dev_cencli}",
-        autocompletion=cli.cache.group_dev_completion,
+    group_dev: str = cli.arguments.get(
+        "group_dev",
+        metavar=iden_meta.group_dev_cencli,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
         show_default=False,
     ),
@@ -2080,13 +2077,13 @@ def config_(
         hidden=True,
     ),
     file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
-    verbose: int = cli.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {cli.help_block('Show Config for current WorkSpace (account)')}"),
+    verbose: int = cli.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {cli.help_block('Show Config for current WorkSpace')}"),
     raw: bool = cli.options.raw,
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Effective Group/Device Config (UI Group), ap speciffic settings (env) or cencli config.
 
@@ -2097,16 +2094,12 @@ def config_(
     \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
 
     Examples:
-    \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for a GW
+    \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for gateways.
     \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, per AP settings if AP, template or
     \t\trunning config if switch.
     \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
     """
     if group_dev == "cencli":
-        if config.is_old_cfg:
-            log.info("\u2728 There is a new format for the cencli config [dim italic](config.yaml)[/] file with support for GreenLake and New Central!", caption=True)
-            log.info(f"  Use [cyan]cencli convert config[/] to convert the existing config @ {config.file} to the new format.", caption=True)
-
         if file:
             cli.display_results(data=config.file.read_text())
             cli.exit(code=0)
@@ -2191,7 +2184,7 @@ def token(
     no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show current access token from cache"""
     if not no_refresh:
@@ -2219,7 +2212,7 @@ def routes(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show gateway routing table
 
@@ -2292,7 +2285,7 @@ def wlans(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show WLAN(SSID)/details
@@ -2373,7 +2366,7 @@ def cluster(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ) -> None:
     """Show Cluster mapped to a given group/SSID
@@ -2416,7 +2409,7 @@ def vsx(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ) -> None:
     """Show VSX details for a CX switch
@@ -2473,7 +2466,7 @@ def clients(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Show clients/details
@@ -2570,7 +2563,7 @@ def clients(
     if not denylisted:
         resp = api.session.request(cli.cache.refresh_client_db, **kwargs)
     else:
-        resp = api.session.request(api.configuration.central.get_denylist_clients, **kwargs)
+        resp = api.session.request(api.configuration.get_denylist_clients, **kwargs)
 
     if not resp:
         cli.display_results(resp, exit_on_fail=True)
@@ -2619,7 +2612,7 @@ def tunnels(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ) -> None:
     """Show Branch Gateway/VPNC Tunnel details"""
@@ -2652,7 +2645,7 @@ def uplinks(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Branch Gateway/VPNC Uplink details"""
     dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
@@ -2683,7 +2676,7 @@ def roaming(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ) -> None:
     """Show wireless client roaming history.
@@ -2777,7 +2770,7 @@ def logs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
     verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
 ) -> None:
@@ -2903,7 +2896,7 @@ def alerts(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show Alerts/Notifications (for past 24 hours by default).
@@ -2995,7 +2988,7 @@ def notifications(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     update_cache = cli.options.update_cache,
 ) -> None:
     """Show alert/notification configuration.
@@ -3032,7 +3025,7 @@ def last(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     if not config.last_command_file.exists():
         cli.exit("Unable to find cache for last command.")
@@ -3066,7 +3059,7 @@ def webhooks(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     if sort_by is not None:
         sort_by = sort_by.name
@@ -3111,7 +3104,7 @@ def hook_proxy(
     brief: bool = typer.Option(False, "-b", help="Brief output for 'pid' and 'port'"),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     def _get_process_details() -> tuple:
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
@@ -3150,7 +3143,7 @@ def archived(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show archived devices"""
     # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
@@ -3192,7 +3185,7 @@ def portals(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
     path = Path.cwd()
@@ -3237,7 +3230,7 @@ def guests(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Guests configured for a Portal"""
     caption = None
@@ -3334,7 +3327,7 @@ def radios(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show details for Radios
     """
@@ -3419,7 +3412,7 @@ def insights(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show AI Insights or details for a specific insight
 
@@ -3510,15 +3503,7 @@ def cron(
 
 
 def _get_cencli_config(all_workspaces: bool = False) -> None:
-    try:
-        from centralcli import config
-    except (ImportError, ModuleNotFoundError):
-        pkg_dir = Path(__file__).absolute().parent
-        if pkg_dir.name == "centralcli":
-            sys.path.insert(0, str(pkg_dir.parent))
-            from centralcli import config
-
-    omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev_options", "base_dir", "sanitize"]
+    omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev_options", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
     if not config.is_old_cfg:
         omit += ["is_old_cfg"]
     if not config.dev_options.capture_raw:
@@ -3526,19 +3511,21 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     if not config.dev_options.sanitize:
         omit += ["sanitize_file"]
     out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
+    defined_workspaces = out.pop("defined_workspaces", [])
+    current_workspace = out.pop("_workspace", "[red]ERROR[/]")
+    out = {**out, "defined_workspaces": ", ".join(defined_workspaces), "current_workspace": f"[bright_green]{current_workspace}[/]"}
     workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
-    defined_accounts = {"defined_accounts": ", ".join(out.pop("defined_accounts", []))}
 
     dev_options = config.dev_options.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
     if dev_options:
         out = {**out, "dev_options": dev_options}
 
     if all_workspaces:
-        out = {"workspaces": workspaces,  **out, **defined_accounts}
+        out = {"workspaces": workspaces,  **out}
     else:
-        out = {**out, config.workspace: workspaces.get(config.workspace, {}), **defined_accounts}
+        out = {**out, config.workspace: workspaces.get(config.workspace, {})}
 
-    caption = f"[yellow]:information:[/]  Use [cyan]--file[/] flag to show raw contents of the config file @ {config.file}"
+    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     cli.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 

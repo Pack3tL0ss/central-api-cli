@@ -82,6 +82,11 @@ class Classic(BaseModel):
     def to_str(cls, v: int | str):
         return str(v)
 
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _handle_trailing_slash(cls, v: str):
+        return v.rstrip("/")
+
     @property
     def ok(self) -> bool:
         if all([self.client_id, self.client_secret, any([self.tokens is not None and self.tokens.ok, self.username and self.password])]):

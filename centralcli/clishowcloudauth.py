@@ -22,6 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType
+from .cache import api
 
 app = typer.Typer()
 
@@ -40,7 +41,7 @@ def registered_macs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Cloud-Auth MAC registrations.
     """
@@ -51,7 +52,7 @@ def registered_macs(
         }
         sort_by = sort_full_names.get(sort_by, sort_by)
 
-    resp = cli.central.request(cli.central.cloudauth_get_registered_macs, search=search)
+    resp = api.session.request(api.cloudauth.cloudauth_get_registered_macs, search=search)
     caption = None if not resp.ok else f"[cyan]{len(resp.output)}[/] Registered MAC Addresses"
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich")
     cli.display_results(
@@ -80,13 +81,13 @@ def upload(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show Cloud-Auth Upload Status.
 
     This command can be ran after [cyan]cencli batch add <macs|mpsk> to see the status of the upload.
     """
-    resp = cli.central.request(cli.central.cloudauth_upload_status, upload_type=what.value)
+    resp = api.session.request(api.cloudauth.cloudauth_upload_status, upload_type=what.value)
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="action")
     if resp.ok:
         try:

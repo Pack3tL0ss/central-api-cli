@@ -236,10 +236,10 @@ class Response:
         url: Union[URL, str] = "",
         ok: bool = None,
         error: str = None,
-        output: Any = {},
-        raw: Any = {},
+        output: list[dict[str, Any]] | dict[str, Any] | str = None,
+        raw: dict[str, Any] = None,
         status_code: int = None,
-        elapsed: Union[int, float] = 0,
+        elapsed: Union[int, float] = None,
         rl_str: str = None,
         data_key: str = None,
         caption: str | list[str] = None
@@ -268,11 +268,11 @@ class Response:
         """
         self.rl = rl_str or RateLimit(response)
         self._response = response
-        self.output = output
-        self.raw = raw
+        self.output = output or {}
+        self.raw = raw or {}
         self._ok = ok
         self.method = ""
-        self.elapsed = elapsed
+        self.elapsed = elapsed or 0
         self.data_key = data_key
         self.caption = caption
         if response is not None:

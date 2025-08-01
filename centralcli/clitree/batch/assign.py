@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
-from pathlib import Path
 import sys
-import typer
+from pathlib import Path
 
+import typer
+from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -18,32 +20,39 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import DevTypes
-from .classic.api import ClassicAPI
+from centralcli.strings import ImportExamples
 
+tty = utils.tty
 app = typer.Typer()
-color = utils.color
 
 
 @app.command()
-def firmware_available(
-    device_type: DevTypes = typer.Argument(..., show_default=False,),
-    version: str = typer.Argument(..., show_default=False,),
+def subscriptions(
+    import_file: Path = cli.arguments.import_file,
+    show_example: bool = cli.options.show_example,
+    yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     workspace: str = cli.options.workspace,
 ) -> None:
-    """Check if a firmware version is available for a given device type"""
-    api = ClassicAPI()
-    resp = api.session.request(api.firmware.check_firmware_available, device_type=device_type, firmware_version=version)
+    """Assign Subscriptions to devices
+    """
+    if show_example:
+        examples = ImportExamples()
+        print(examples.assign_subscriptions)
+        return
+
+    if not import_file:
+        cli.exit(cli._batch_invalid_msg("cencli batch assign subscriptions [OPTIONS] [IMPORT_FILE]"))
+
+    data = cli._get_import_file(import_file, import_type="devices")
+    resp = cli.batch_assign_subscriptions(data, yes=yes)
     cli.display_results(resp, tablefmt="action")
 
 
 @app.callback()
 def callback():
-    """
-    Check if firmware version is available
-    """
+    """Perform batch operations"""
     pass
 
 

@@ -4,65 +4,68 @@
 from __future__ import annotations
 
 import asyncio
-import typer
+import ipaddress
+import json
 import sys
-from typing import List, Literal, Union, Tuple, Dict, Any, TYPE_CHECKING
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from importlib.metadata import PackageNotFoundError, version
+from importlib.util import find_spec
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
+
+import pendulum
+import typer
+from pydantic import ValidationError
+from rich import print
 from rich.console import Console
+from rich.markup import escape
+from rich.progress import track
 from rich.prompt import Confirm, Prompt
 from rich.text import Text
-from rich.progress import track
-from rich.markup import escape
-from rich import print
-import json
-from importlib.metadata import version, PackageNotFoundError
-from importlib.util import find_spec
-# from os import environ as env
-import pendulum
-from datetime import datetime
-import time
-import ipaddress
-from pydantic import ValidationError
-from dataclasses import dataclass
-
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
+    from centralcli import BatchRequest, Response, config, log, render, utils
+    from centralcli import cleaner as clean
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import config, log, utils, Cache, Response, render, BatchRequest, cleaner as clean
+        from centralcli import BatchRequest, Response, config, log, render, utils
+        from centralcli import cleaner as clean
     else:
         print(pkg_dir.parts)
         raise e
 
-# from centralcli.central import CentralApi
+from centralcli.clioptions import CLIArgs, CLIOptions
+from centralcli.constants import dynamic_antenna_models, flex_dual_models
 from centralcli.objects import DateTime, Encoder
 from centralcli.utils import ToBool
-from centralcli.clioptions import CLIOptions, CLIArgs
-from centralcli.constants import flex_dual_models, dynamic_antenna_models
-from .models.common import APUpdates, APUpdate
-from .ws_client import follow_audit_logs, follow_event_logs
-from .environment import env_var, env
-from .classic.api import ClassicAPI
-from .cnx.api import GlpApi
 
+from . import Session
+from .classic.api import ClassicAPI
+from .cnx.api import GreenLakeAPI
+from .environment import env, env_var
+from .models.common import APUpdate, APUpdates
+from .models.imports import ImportDevices
+from .ws_client import follow_audit_logs, follow_event_logs
 
 if TYPE_CHECKING:
-    from centralcli.cache import CentralObject, CacheGroup, CacheLabel, CacheDevice, CacheInvDevice
-    from .typedefs import CacheTableName, StrEnum
+    from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
+
     from .constants import LogType
+    from .typedefs import CacheTableName, StrEnum
 
 
 tty = utils.tty
 CASE_SENSITIVE_TOKENS = ["R", "U"]
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
-clean_console = Console(emoji=False)
-clean_err_console = Console(emoji=False, stderr=True)
-err_console = Console(emoji=True, stderr=True)
+console = Console()
+econsole = Console(stderr=True)
+api = ClassicAPI()
 
 
 class MoveData:
@@ -148,14 +151,13 @@ class APRequestInfo:
 class APIClients:
     def __init__(self):
         self.classic = ClassicAPI(config.classic.base_url)
-        self.glp = None if not config.glp.ok else GlpApi(config.classic.base_url)
+        self.glp = None if not config.glp.ok else GreenLakeAPI(config.classic.base_url)
 
 
 class CLICommon:
     def __init__(self, workspace: str = "default", cache: Cache = None, raw_out: bool = False):
         self.workspace = workspace
         self.cache = cache
-        # self.central = central
         self.raw_out = raw_out
         self.options = CLIOptions(cache)
         self.arguments = CLIArgs(cache)
@@ -163,8 +165,8 @@ class CLICommon:
         self.console = Console()
 
     def confirm(self, yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True,) -> bool:
-        confirm = Confirm(prompt=prompt, console=self.econsole,)
-        result = yes or confirm()
+        _confirm = Confirm(prompt=prompt, console=self.econsole,)
+        result = yes or _confirm()
         if not result and abort:
             self.econsole.print("[red]Aborted[/]")
             self.exit(code=0)
@@ -334,9 +336,9 @@ class CLICommon:
 
             if workspace != "default":
                 if config.defined_workspaces:
-                    clean_console.print(f"[bright_green]The following workspaces are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_workspaces)}[reset]\n")
+                    console.print(f"[bright_green]The following workspaces are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_workspaces)}[reset]\n", emoji=False)
                     if not _def_msg:
-                        clean_console.print(
+                        console.print(
                             f"The default workspace [cyan]{config.default_workspace}[/] is used if no workspace is specified via [cyan]--ws[/]|[cyan]--workspace[/] flag.\n"
                             f"or the [cyan]{env_var.workspace}[/] environment variable.\n"
                         )
@@ -349,24 +351,43 @@ class CLICommon:
 
         try:
             current = version("centralcli")
-        except PackageNotFoundError as e:
-            self.exit(str(e))
+        except PackageNotFoundError:
+            # self.exit(str(e))
+            current = "0.0.0"
 
-        resp = self.central.request(self.central.get, "https://pypi.org/pypi/centralcli/json")
+        if current == "0.0.0":
+            try:
+                file = Path(__file__).parent / "pyproject.toml"
+                data = file.read_text()
+                current = [line for line in data.splitlines()[0:10] if line.startswith("version")][0].split()[2].replace('"', '')
+            except Exception:
+                ...
+
+        msg = "[bold bright_green]HPE Aruba Central API CLI (cencli)[/]\n"
+        msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
+        msg += 'Brought to you by [cyan]Wade Wells [dim italic](Pack3tL0ss)[/dim italic][/]\n\n'
+
+        session = Session()
+        resp = session.request(session.get, "https://pypi.org/pypi/centralcli/json")
         if not resp:
-            print(current)
+            msg += "\n".join(
+                [
+                    "  Documentation: https://central-api-cli.readthedocs.org",
+                    "  Homepage: https://github.com/Pack3tL0ss/central-api-cli",
+                    "  Repository: https://github.com/Pack3tL0ss/central-api-cli",
+                    "  issues: https://github.com/Pack3tL0ss/central-api-cli/issues"
+                ]
+            )
+            msg += f'\n\nVersion: {current}'
         else:
             major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2])
             minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major])
             patch = max([int(str(k).split(".")[2]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major and int(str(k).split(".")[1]) == minor])
             latest = f'{major}.{minor}.{patch}'
-            msg = "[bold bright_green]HPE Aruba Central API CLI (cencli)[/]\n"
-            msg += 'A CLI app for interacting with Aruba Central Cloud Management Platform.\n'
-            msg += f'Brought to you by [cyan]{resp.output["info"]["author"]}[/]\n\n'
             msg += "\n".join([f'  {k}: [cyan]{v}[/]' for k, v in resp.output["info"]["project_urls"].items()])
             msg += f'\n\nVersion: {current}'
             if current == latest:
-                msg += " [italic green3]You are on the latest version.[reset]"
+                msg += " :sparkles: [italic green3]You are on the latest version.[reset] :sparkles:"
             else:
                 msg += f'\nLatest Available Version: {latest}'
 
@@ -376,7 +397,7 @@ class CLICommon:
                 except Exception as e:
                     log.error(f"{e.__class__.__name__} clicommon.version_callback Failed to find centralcli package path")
 
-            print(msg)
+        print(msg)
 
     @staticmethod
     def default_callback(ctx: typer.Context, default: bool):
@@ -482,6 +503,19 @@ class CLICommon:
                     log.warning(out_msg, show=True)
 
     @staticmethod
+    def _batch_invalid_msg(usage: str, provide: str = None) -> str:
+            usage = escape(usage)
+            provide = provide or "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]"
+            _msg = [
+                "Invalid combination of arguments / options.",
+                provide,
+                "",
+                f"[yellow]Usage[/]: {usage}",
+                f"Use [cyan]{usage.split(' [')[0]} --help[/] for help.",
+            ]
+            return "\n".join(_msg)
+
+    @staticmethod
     def exit(msg: str = None, code: int = 1, emoji: bool = True) -> None:
         """Print msg text and exit.
 
@@ -571,6 +605,7 @@ class CLICommon:
                 caption = f'{caption}[bright_red]  !!! Partial command failure !!!\n{_log_caption}[/]'
             else:
                 caption = f'{caption}{_log_caption}'
+            log._caption = []  # Prevent it from displaying again if exit_on_fail=True
 
         rl_str = None
         if resp is not None and not suppress_rl:
@@ -613,7 +648,7 @@ class CLICommon:
         data = utils.listify(data)
 
         if cleaner and not self.raw_out:
-            with clean_console.status("Cleaning Output..."):
+            with console.status("Cleaning Output..."):
                 _start = time.perf_counter()
                 data = cleaner(data, **cleaner_kwargs)
                 data = utils.listify(data)
@@ -630,7 +665,7 @@ class CLICommon:
             "tablefmt": tablefmt,
             "title": title,
             "caption": caption,
-            "account": None if config.workspace in ["central_info", "default"] else config.workspace,
+            "workspace": None if config.workspace == "default" else config.workspace,
             "config": config,
             "output_by_key": output_by_key,
             "group_by": group_by,
@@ -638,7 +673,7 @@ class CLICommon:
             "full_cols": full_cols,
             "fold_cols": fold_cols,
         }
-        with clean_console.status("Rendering Output..."):
+        with console.status("Rendering Output..."):
             outdata = render.output(**kwargs)
 
         if stash:
@@ -735,7 +770,7 @@ class CLICommon:
             for idx, r in enumerate(resp):
                 try:
                     if config.capture_raw and r.method == "GET":
-                        with clean_console.status("Capturing raw response"):
+                        with console.status("Capturing raw response"):
                             raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
                             with config.capture_file.open("a") as f:
                                 f.write(json.dumps(raw))
@@ -997,7 +1032,7 @@ class CLICommon:
         if self.cache.responses.dev:  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
             log.warning(f"_check_update_dev_db called for {device} devices have already been fetched this session. Skipping.")
         else:
-            _ = self.central.request(self.cache.refresh_dev_db, dev_type=device.type)
+            _ = api.session.request(self.cache.refresh_dev_db, dev_type=device.type)
             device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
 
         return device
@@ -1099,7 +1134,7 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].")
+                            console.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
                             _skip = True
 
                     # Determine if device is in inventory only determines use of pre-provision group vs move to group
@@ -1107,9 +1142,9 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            err_console.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
-                            err_console.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                            err_console.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
+                            econsole.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.')  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                            econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
                     else:
                         req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
@@ -1121,11 +1156,11 @@ class CLICommon:
 
         mv_reqs, pre_reqs, mv_retain_reqs = [], [], []
         if pregroup_mv_reqs:
-            pre_reqs = [self.central.BatchRequest(self.central.preprovision_device_to_group, group=k, serials=v) for k, v in pregroup_mv_reqs.items()]
+            pre_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group=k, serials=v) for k, v in pregroup_mv_reqs.items()]
         if group_mv_reqs:
-            mv_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v) for k, v in group_mv_reqs.items()]
+            mv_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=v) for k, v in group_mv_reqs.items()]
         if group_mv_cx_retain_reqs:
-            mv_retain_reqs = [self.central.BatchRequest(self.central.move_devices_to_group, group=k, serials=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
+            mv_retain_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
 
         return self.GroupMoves(
             pregroup_mv_reqs=pre_reqs,
@@ -1154,12 +1189,12 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         elif now_site == to_site.name:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]")
+                            console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
                     elif not has_connected:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            clean_console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]")
+                            console.print(f"\u2139  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]", emoji=False)
                     elif idx != 0:
                         site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
@@ -1167,7 +1202,7 @@ class CLICommon:
                     if now_site:
                         now_site = self.cache.get_site_identifier(now_site)
                         if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
-                            clean_console.print(f'{cache_dev.summary_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]')
+                            console.print(f'{cache_dev.summary_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]', emoji=False)
                             site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                             site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
 
@@ -1175,13 +1210,13 @@ class CLICommon:
         if site_rm_reqs:
             for k, v in site_rm_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                rm_reqs += [BatchRequest(self.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                rm_reqs += [BatchRequest(api.central.remove_devices_from_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         mv_reqs = []
         if site_mv_reqs:
             for k, v in site_mv_reqs.items():
                 site_id, dev_type = k.split("~|~")
-                mv_reqs += [BatchRequest(self.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
+                mv_reqs += [BatchRequest(api.central.move_devices_to_site, site_id=int(site_id), serials=v, device_type=dev_type)]
 
         return self.SiteMoves(
             cache_devs=cache_devs,
@@ -1200,7 +1235,7 @@ class CLICommon:
                 for label in to_label:
                     clabel = self.cache.get_label_identifier(to_label)
                     if clabel.name in cache_dev.get("labels"):
-                        clean_console.print(f'{cache_dev.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.')
+                        console.print(f'{cache_dev.rich_help_text}, already assigned label [magenta]{label.name}[/]. Ingoring.', emoji=False)
                     else:
                         label_ass_reqs = utils.update_dict(label_ass_reqs, key=f'{clabel.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         label_ass_msgs = utils.update_dict(label_ass_msgs, key=clabel.name, value=cache_dev.rich_help_text)
@@ -1209,7 +1244,7 @@ class CLICommon:
         if label_ass_reqs:
             for k, v in label_ass_reqs.items():
                 label_id, dev_type = k.split("~|~")
-                batch_reqs += [self.central.BatchRequest(self.central.assign_label_to_devices, label_id=int(label_id), serials=v, device_type=dev_type)]
+                batch_reqs += [BatchRequest(api.central.assign_label_to_devices, label_id=int(label_id), serials=v, device_type=dev_type)]
 
         return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
 
@@ -1240,7 +1275,7 @@ class CLICommon:
                 if move_type == "group":  # All or none here as far as the rresponse.
                     cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
 
-        self.central.request(
+        api.session.request(
             self.cache.update_dev_db,
             data=list(cache_by_serial.values())
         )
@@ -1296,7 +1331,7 @@ class CLICommon:
         if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries  # TODO make seperate function and leverage in all batch_xxx_devices
             filtered_count = len(dev_idens) - len(set(dev_idens))
             dev_idens = set(dev_idens)
-            err_console.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
+            econsole.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
 
         # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
         cache_devs: List[CentralObject] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True, silent=True, exit_on_fail=False) for d in dev_idens]
@@ -1334,15 +1369,15 @@ class CLICommon:
         if _tot_req > 1:
             confirm_msgs += [f"\n[italic dark_olive_green2]Will result in {_tot_req} additional API Calls."]
 
-        clean_console.print("\n".join(confirm_msgs).strip())  # stripping as we have a \n before and after coming from somewhere.
+        console.print("\n".join(confirm_msgs).strip(), emoji=False)  # stripping as we have a \n before and after coming from somewhere.
         if self.confirm(yes):
             site_rm_res = []
             if site_rm_reqs:
-                site_rm_res = self.central.batch_request(site_rm_reqs)
+                site_rm_res = api.session.batch_request(site_rm_reqs)
                 if not all([r.ok for r in site_rm_res]):
-                    err_console.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                    econsole.print("[bright_red]\u26a0[/]  Some site remove requests failed, Aborting...")  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                     return site_rm_res
-            batch_res = self.central.batch_request(batch_reqs)
+            batch_res = api.session.batch_request(batch_reqs)
             self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
 
             return [*site_rm_res, *batch_res]
@@ -1362,7 +1397,7 @@ class CLICommon:
         not_in_cache = [name for name in names_from_import if name not in self.cache.groups_by_name]
         if not_in_cache:
             self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {len(not_in_cache)} group{'s' if len(not_in_cache) > 1 else ''} that do [red bold]not exist[/] according to local group cache.\n:arrows_clockwise: [bright_green]Updating[/] local [cyan]group[/] cache.")
-            _ = self.central.request(self.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
+            _ = api.session.request(self.cache.refresh_group_db)  # This updates cli.cache.groups_by_name
 
         # notify and remove any groups that don't exist after cache update
         cache_by_name: Dict[str, CacheGroup] = {name: self.cache.groups_by_name.get(name) for name in names_from_import}
@@ -1371,7 +1406,7 @@ class CLICommon:
             self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]group{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
         groups: List[CacheGroup] = [g for g in cache_by_name.values() if g is not None]
-        reqs = [self.central.BatchRequest(self.central.delete_group, g.name) for g in groups]
+        reqs = [BatchRequest(api.configuration.delete_group, g.name) for g in groups]
 
         if not reqs:
             self.exit("No groups remain to process after validation.")
@@ -1392,11 +1427,11 @@ class CLICommon:
             print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
         if self.confirm(yes):
-            resp = self.central.batch_request(reqs)
+            resp = api.session.batch_request(reqs)
             self.display_results(resp, tablefmt="action")
             doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
             if doc_ids:
-                self.central.request(self.cache.update_group_db, data=doc_ids, remove=True)
+                api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
 
     def batch_delete_labels(
             self,
@@ -1412,7 +1447,7 @@ class CLICommon:
         not_in_cache = [name for name in names_from_import if name not in self.cache.labels_by_name]
         if not_in_cache:
             self.econsole.print(f"[dark_orange3]:warning:[/]  Import includes {utils.color(not_in_cache, 'red')}... {'do' if len(not_in_cache) > 1 else 'does'} [red bold]not exist[/] according to local label cache.  :arrows_clockwise: [bright_green]Updating local label cache[/].")
-            _ = self.central.request(self.cache.refresh_label_db)  # This updates cli.cache.labels
+            _ = api.session.request(self.cache.refresh_label_db)  # This updates cli.cache.labels
 
         # notify and remove any labels that don't exist after cache update
         cache_by_name: Dict[str, CacheLabel] = {name: self.cache.labels_by_name.get(name) for name in names_from_import}
@@ -1421,7 +1456,7 @@ class CLICommon:
             self.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]label{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
         labels: List[CacheLabel] = [label for label in cache_by_name.values() if label is not None]
-        reqs = [self.central.BatchRequest(self.central.delete_label, g.id) for g in labels]
+        reqs = [BatchRequest(api.central.delete_label, g.id) for g in labels]
 
         if len(labels) == 1:
             pre = ''
@@ -1439,11 +1474,11 @@ class CLICommon:
             print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
         if self.confirm(yes):
-            resp = self.central.batch_request(reqs)
+            resp = api.session.batch_request(reqs)
             self.display_results(resp, tablefmt="action")
             doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
             if doc_ids:
-                self.central.request(self.cache.update_label_db, data=doc_ids, remove=True)
+                api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
 
     def show_archive_results(self, arch_resp: List[Response]) -> None:
         def summarize_arch_res(arch_resp: List[Response]) -> None:
@@ -1494,7 +1529,7 @@ class CLICommon:
                 cache_update_reqs += [br(self.cache.refresh_inv_db_classic)]
         # Update cache remove deleted items
         if cache_update_reqs:
-            _ = self.central.batch_request(cache_update_reqs)
+            _ = api.session.batch_request(cache_update_reqs)
 
     def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
@@ -1508,7 +1543,7 @@ class CLICommon:
             else:
                 dev_type = dev.generic_type if dev.generic_type != "gw" else "gateway"
 
-            func = getattr(self.central, f"delete_{dev_type}")
+            func = getattr(api.monitoring, f"delete_{dev_type}")
             update_list = mon_del_reqs if dev.status.lower() == "down" else delayed_mon_del_reqs
             update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id)]
 
@@ -1526,7 +1561,7 @@ class CLICommon:
             for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
                 time.sleep(1)
 
-            _del_resp: List[Response] = self.central.batch_request(del_reqs_try, continue_on_fail=True)
+            _del_resp: List[Response] = api.session.batch_request(del_reqs_try, continue_on_fail=True)
 
             if _try == 3:
                 if not all([r.ok for r in _del_resp]):
@@ -1568,6 +1603,7 @@ class CLICommon:
 
         return doc_ids
 
+    # TOGLP
     def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
@@ -1608,9 +1644,9 @@ class CLICommon:
         # It's OK to send both despite unarchive depending on archive completing first, as the first call is always done solo to check if tokens need refreshed.
         # We always use serials with import without validation for arch/unarchive as device will not show in inventory if it's already archved
         arch_reqs = [] if ui_only or not valid_serials else [
-            BR(self.central.archive_devices, valid_serials),
+            BR(api.platform.archive_devices, valid_serials),
             BR(asyncio.sleep, 3),  # Had to add delay between archive/unarchive as GWs would remain archived despite returning 200 to the unarchive call.
-            BR(self.central.unarchive_devices, valid_serials),
+            BR(api.platform.unarchive_devices, valid_serials),
         ]
 
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
@@ -1620,7 +1656,7 @@ class CLICommon:
 
         # cop only delete devices from GreenLake inventory
         cop_del_reqs = [] if not config.is_cop or not cache_inv_devs else [
-            BR(self.central.cop_delete_device_from_inventory, [dev.serial for dev in cache_inv_devs])
+            BR(api.platform.cop_delete_device_from_inventory, [dev.serial for dev in cache_inv_devs])
         ]
 
         # warn about devices that were not found
@@ -1667,12 +1703,11 @@ class CLICommon:
         batch_resp = []
         mon_doc_ids = []
         inv_doc_ids = []
-        if self.confirm(yes):
-            ...  # We abort if they don't confirm.
+        self.confirm(yes) # We abort if they don't confirm.
 
         # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
         # Also monitoring UI delete for any devices currently offline.
-        batch_resp = self.central.batch_request([*arch_reqs, *mon_del_reqs])  # mon_del_reqs will be empty list if cop_inv_only
+        batch_resp = api.session.batch_request([*arch_reqs, *mon_del_reqs])  # mon_del_reqs will be empty list if cop_inv_only
         if arch_reqs and len(batch_resp) >= 2:
             inv_doc_ids = self._get_inv_doc_ids(batch_resp)
             self.show_archive_results(batch_resp[:2])
@@ -1689,16 +1724,42 @@ class CLICommon:
             mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
 
         if cop_del_reqs:
-            batch_resp += self.central.batch_request(cop_del_reqs)
+            batch_resp += api.session.batch_request(cop_del_reqs)
 
         if batch_resp:
             self.display_results(batch_resp, tablefmt="action")
 
         # Cache Updates
         if mon_doc_ids:
-            self.central.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
+            api.session.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
         if inv_doc_ids:
-            self.central.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+            api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+
+    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, yes: bool = False,) -> List[Response]:
+        BR = BatchRequest
+        glp_api = GreenLakeAPI()
+        try:
+            _data = ImportDevices(data)
+        except ValidationError as e:
+            self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+
+        devs_by_sub_id = _data.serials_by_subscription_id()
+        confirm_msg, batch_reqs = [], []
+        for sub_id, res in devs_by_sub_id.items():
+            csub: CacheSub = res.cache_sub
+            confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(res.devices).lstrip()}\n"]
+            if len(res.devices) > csub.available:
+                confirm_msg[-1] = confirm_msg[-1].rstrip()
+                confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription.\n"]
+            batch_reqs += [BR(glp_api.devices.assign_subscription_to_devices, device_ids=res.devices, subscription_ids=sub_id)]
+
+        if not self.cache.responses.sub:
+            confirm_msg += ["\n[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+
+        econsole.print(f"[italic deep_sky_blue1]:information:[/]  [dark_olive_green2]Mak{'e' if not yes else 'ing'} the following assignments[/]:")
+        econsole.print("\n".join(confirm_msg), emoji=False)
+        self.confirm(yes) # aborts here if they don't confirm
+        return glp_api.session.batch_request(batch_reqs)
 
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
@@ -1716,7 +1777,6 @@ class CLICommon:
 
             # Allow import to contain other device types, we skip them.
             if cache_ap.type != "ap":
-                # self.econsole.print(f"[dark_orange3]:warning:[/] Skipping {ap_iden}.  This command is valid for device type: [green]AP[/] not [red]{cache_ap.type}[/].")
                 skipped[cache_ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  Device is [red]{cache_ap.type}[/], Command is only valid for [green]APs[/].")
                 continue
 
@@ -1739,28 +1799,27 @@ class CLICommon:
                 skipped[ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  [red]No updates found[/] in import file that apply to [cyan]AP{cache_ap.model}[/].")
 
         if ap_env_by_serial:
-            batch_reqs += [BatchRequest(self.central.update_per_ap_settings, as_dict=ap_env_by_serial)]
+            batch_reqs += [BatchRequest(api.configuration.update_per_ap_settings, as_dict=ap_env_by_serial)]
         if altitude_by_serial:
-            batch_reqs += [BatchRequest(self.central.update_ap_altitude, as_dict=altitude_by_serial)]
+            batch_reqs += [BatchRequest(api.configuration.update_ap_altitude, as_dict=altitude_by_serial)]
 
         return APRequestInfo(
             batch_reqs,
             ap_data=[ap for ap in data if ap.serial not in skipped],
             skipped=skipped,
             requires_reboot=requires_reboot,
-            # env_update_aps=(len(batch_reqs) - len(altitude_by_serial)),
             env_update_aps=len(ap_env_by_serial),
             gps_update_aps=len(altitude_by_serial),
         )
 
-    def _reboot_after_changes(self, req_info: APRequestInfo, batch_resp: List[Response]) -> List[Response] | None:
+    def _reboot_after_changes(self, req_info: APRequestInfo, batch_resp: list[Response]) -> list[Response] | None:
         reboot_reqs: List[BatchRequest] = []
         skipped_reboots: List[CacheDevice] = []
         for req, resp in zip(req_info.reqs, batch_resp):
             serial = req.kwargs["serial"]
-            if req.func == self.central.update_per_ap_settings and serial in req_info.requires_reboot:
+            if req.func == api.configuration.update_per_ap_settings and serial in req_info.requires_reboot:
                 if resp.ok:
-                    reboot_reqs += [BatchRequest(self.central.send_command_to_device, serial=serial, command="reboot")]
+                    reboot_reqs += [BatchRequest(api.device_management.send_command_to_device, serial=serial, command="reboot")]
                 else:
                     skipped_reboots += [req_info.requires_reboot[serial]]
 
@@ -1768,7 +1827,7 @@ class CLICommon:
             log.warning(f"Reboot was not performed on the following APs as the Update call returned an error\n{utils.summarize_list([ap.summary_text for ap in skipped_reboots])}", caption=True)
 
         if reboot_reqs:
-            return self.central.batch_request(reboot_reqs)
+            return api.session.batch_request(reboot_reqs)
 
     # Header rows used by CAS
     #DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
@@ -1827,7 +1886,7 @@ class CLICommon:
         self.econsole.print(f"\n[yellow]:information:[/]  [italic dark_olive_green2]This operation will result in {call_cnt} API calls[/]")
 
         self.confirm(yes)  # exits here if they abort
-        _batch_resp = self.central.batch_request(req_info.reqs)
+        _batch_resp = api.session.batch_request(req_info.reqs)
         # Nested BatchResponse here update_per_ap_settings and update_ap_altitude both return List[Response]
         batch_resp = []
         for resp in _batch_resp:
@@ -1860,7 +1919,7 @@ class CLICommon:
             ignored = [option for option in sys.argv[1:] if option not in honored]
             self.econsole.print(f"[dark_orange3]:warning:[/]  Provided options {','.join(ignored)} [bright_red]ignored[/].  Not valid with [cyan]-f[/]")
         try:
-            self.central.request(func)
+            api.session.request(func)
         except KeyboardInterrupt:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:

@@ -25,22 +25,24 @@ from centralcli import Response, config, constants, log, render, utils, BatchReq
 from centralcli.response import CombinedResponse
 from .objects import DateTime
 from .models import cache as models
-from .cnx.models.cache import Subscriptions
+from .cnx.models.cache import Subscriptions, Inventory as GlpInventory, get_inventory_with_sub_data
 from functools import partial
+import datetime as dt
+from functools import lru_cache
 
 from .classic.api import ClassicAPI
-api = ClassicAPI(config.base_url)
+api = ClassicAPI(config.classic.base_url)
 
 if config.glp.ok:
-    from .cnx.api import GlpApi
-    glp_api = GlpApi(config.glp.base_url)
+    from .cnx.api import GreenLakeAPI
+    glp_api = GreenLakeAPI(config.glp.base_url)
 else:
     glp_api = None
 
 if TYPE_CHECKING:
     from tinydb.table import Table, Document
     from .config import Config
-    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus, CertType
+    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus, CertType, StrEnum
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -243,6 +245,14 @@ class CacheDevice(CentralObject):
         self.swack_id: str | None = data["swack_id"]
         self.switch_role: str | None = data["switch_role"]
 
+    def __eq__(self, value):
+        if hasattr(value, "serial"):
+            return value.serial == self.serial
+        return value == self.serial
+
+    def __hash__(self):
+        return hash(self.serial)
+
     @property
     def is_aos10(self) -> bool:
         if self.type != "ap":
@@ -272,6 +282,16 @@ class CacheDevice(CentralObject):
 
     def __rich__(self) -> str:
         return f'[bright_green]Device[/]:[cyan]{self.name}[/]|({utils.color(self.status, "green_yellow")})'
+
+    @property
+    def summary_text(self) -> str:
+        _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
+        parts = [p for p in [self.name, _status, self.serial, self.mac, self.type, self.model] if p]
+        return "[reset]" + "|".join(
+            [
+                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
+            ]
+        )
 
 
 class CacheInvDevice(CentralObject):
@@ -313,8 +333,25 @@ class CacheInvDevice(CentralObject):
     def doc_id(self, doc_id: int | None) -> int | None:
         self._doc_id = doc_id
 
+    def __eq__(self, value):
+        if hasattr(value, "serial"):
+            return value.serial == self.serial
+        return value == self.serial
+
+    def __hash__(self):
+        return hash(self.serial)
+
     def __rich__(self) -> str:
         return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
+
+    @property
+    def summary_text(self) -> str:
+        parts = [p for p in [self.serial, self.mac, self.type, self.sku, f"[dim]glp id: {self.id}[/dim]"] if p]
+        return "[reset]" + "|".join(
+            [
+                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
+            ]
+        )
 
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
@@ -645,6 +682,7 @@ class CacheClient(CentralObject):
 
 class CacheMpskNetwork(CentralObject):
     db: Table | None = None
+    cache: Cache | None = None
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
@@ -703,9 +741,8 @@ class CacheMpsk(CentralObject):
         self.role: str = data["role"]
 
     @classmethod
-    def set_db(cls, db: Table, cache: Cache = None):
+    def set_db(cls, db: Table):
         cls.db: Table = db
-        cls.cache: Cache = cache
 
     @property
     def doc_id(self) -> int:
@@ -729,12 +766,18 @@ class CacheMpsk(CentralObject):
 
 
 class CacheCert(CentralObject, Text):
+    db: Table | None = None
+
     def __init__(self, name: str, type: CertType, expired: bool, expiration: int | float | DateTime | str, md5_checksum: str, **kwargs):
         self.name = name
         self.type = type.upper()
         self.expired = expired
         self._expiration = expiration
         self.md5_checksum = md5_checksum
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
 
     @property
     def text(self) -> Text:
@@ -772,6 +815,92 @@ class CacheCert(CentralObject, Text):
     @property
     def help_text(self):
         return render.rich_capture(self.text.markup)
+
+
+class CacheSub(CentralObject, Text):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        super().__init__("sub", data)
+        self.id = data["id"]
+        self.name = data["name"]
+        self.key = data["key"]
+        self.qty = data["qty"]
+        self.available = data["available"]
+        self.sku = data["sku"]
+        self.start_date = data["start_date"]
+        self.end_date = data["end_date"]
+        self.started = data["started"]
+        self.expired = data["expired"]
+        self.valid = data["valid"]
+        self.expire_string = DateTime(self.end_date, format="date-string")
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        Q = Query()
+        match: List[Document] = self.db.search(Q.id == self.id)
+        if match and len(match) == 1:
+            self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __eq__(self, value):
+        if hasattr(value, "id"):
+            return value.id == self.id
+        return value == self.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+    @property
+    def text(self) -> Text:
+        _expired_str = f"[red1]expired[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires [cyan]{self.expire_string}[/]"
+        return Text.from_markup(
+            f'[bright_green]{self.name}[/]|[dim]glp id: {self.id}[/]|{_expired_str}|[magenta]Qty Available[/][dim]:[/] [cyan]{self.available}[/]'
+        )
+
+    @property
+    def status(self) -> str:
+        if self.valid:
+            return "[bright_green]OK[/]"
+        if self.expired:
+            return "[red1]EXPIRED[/]"
+        if not self.available:
+            return f"[red1]Subscriptions exausted[/]: [bright_red]{self.available}[/] remaining of [cyan]{self.qty}[/] available subs."
+        if not self.started:
+            return f"[dark_orange3]Subscription term starts in the future[/] {DateTime(self.start_date, format='date-string')}[/]"
+        return f"ERROR CATCH ALL {self.valid = }"
+
+    @property
+    def ok(self) -> bool:
+        return self.valid
+
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich__(self) -> str:
+        return self.text.markup
+
+    @property
+    def summary_text(self) -> str:
+        return self.text.markup
+
+    @property
+    def help_text(self):
+        return render.rich_capture(self.text.markup)
+
+
 
 class CacheResponses:
     def __init__(
@@ -961,6 +1090,7 @@ class Cache:
         self.config = config
         self.responses = CacheResponses()
         self.get_label_identifier: CacheLabel | List[CacheLabel] = partial(self.get_name_id_identifier, "label")
+        self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
@@ -1020,7 +1150,7 @@ class Cache:
                 license.endswith("edgeline"),
                 license.endswith("hci_manager"),
                 license.endswith("_sfm"),
-                license.endswith("alletra"),
+                "alletra" in license,
                 "_sensor_" in license
             ]
         ):
@@ -1125,7 +1255,7 @@ class Cache:
             return [lic.value for lic in constants.LicenseTypes]
 
     @property
-    def LicenseTypes(self) -> constants.LicenseTypes:
+    def LicenseTypes(self) -> StrEnum:
         if len(self.licenses) > 0:
             return Enum("ValidLicenseTypes", {item: item.replace("_", "-") for item in self.licenses}, type=str)
         else:
@@ -1733,7 +1863,7 @@ class Cache:
             raise typer.Exit(1)
         else:
             if not completion and not silent:
-                log.warning(f"Unable to gather guest from provided identifier {query_str}", show=False)
+                log.warning(f"Unable to gather guest from provided identifier {query_str}", show=True)
 
     def guest_completion(
         self,
@@ -1814,8 +1944,8 @@ class Cache:
 
             if retry and not match and self.responses.cert is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]
+                if FUZZ and self.certs:  # FIXME all of the get_..._identifier methods will return IndexError: list index out of range if the cache is empty
+                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]  # <-- IndexError occurs here if list is empty
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
                         match = self.GuestDB.search(self.Q.name == fuzz_match)
@@ -1840,7 +1970,7 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Unable to gather certificate from provided identifier {query_str}", show=not silent, log=silent)
+            log.error(f"[red]Unable to gather certificate[/] from provided identifier [cyan]{query_str}[/]", show=not silent, log=silent)
             raise typer.Exit(1)
         else:
             if not completion and not silent:
@@ -1872,6 +2002,39 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
                 elif m.md5_checksum.startswith(incomplete) and m.md5_checksum not in args:
                     out += [tuple([m.md5_checksum, m.help_text])]
+                else:
+                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+
+        for m in out:
+            yield m
+
+    def sub_completion(
+        self,
+        ctx: typer.Context,
+        incomplete: str = None,
+        args: List[str] = None,
+    ):
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            econsole.print(":warning:  Invalid config")
+            return
+
+        incomplete = incomplete or ""
+        match: list[CacheSub] = self.get_sub_identifier(
+            incomplete,
+            completion=True,
+        )
+        out = []
+        args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
+
+        if match:
+            # remove items that are already on the command line
+            # match = [m for m in match if m.name not in args]
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name.startswith(incomplete) and m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+                elif m.id.startswith(incomplete) and m.id not in args:
+                    out += [tuple([m.id, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
@@ -2911,10 +3074,11 @@ class Cache:
             doc_ids (List[int] | int, optional): doc_ids to be deleted from the DB. Defaults to None.
             dev_types (Literal["ap", "gw", "cx", "sw", "switch"] | List["ap", "gw" ...], optional): List of dev_types the data represents as current for those types.
                 This will result in any devices of the specified types that do not exist in the provided data being removed from cache. Defaults to None.
+                Deprecated: dev_types is deprecated, ignored.
             truncate (bool, optional): Existing DB data will be discarded, and all data in DB will be replaced with provided. Defaults to True.
 
         Returns:
-            bool: _description_
+            bool: Bool indicating if cache update was successful.
         """
         _start_time = time.perf_counter()
         if data is not None:
@@ -2922,7 +3086,7 @@ class Cache:
             with econsole.status(f":arrows_clockwise:  Updating [dark_olive_green2]{db.name}[/] Cache: [cyan]{len(data)}[/] records."):
                 if truncate:
                     db.truncate()
-                db_res = db.insert_multiple([dict(d) for d in data])  # Converts any TinyDB.Documents to dict as that has unexpected results.
+                db_res = db.insert_multiple([dict(d) for d in data])  # Converts any TinyDB.Documents and pydantic models to dict as that has unexpected results.
                 return self.verify_db_action(db, expected=len(data), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
 
         doc_ids = utils.listify(doc_ids) or []
@@ -3101,9 +3265,9 @@ class Cache:
         if resp.ok:
             self.responses.sub = resp
             sub_data = Subscriptions(**resp.raw)
-            resp.output = sub_data.dump()
+            resp.output = sub_data.output()
             resp.caption = sub_data.counts
-            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.items, truncate=True))
+            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.cache_dump(), truncate=True))
 
         return resp
 
@@ -3202,23 +3366,23 @@ class Cache:
         batch_resp = await glp_api.session._batch_request(
             [
                 br(glp_api.devices.get_glp_devices),
-                br(glp_api.subscriptions.get_subscriptions)
+                br(glp_api.subscriptions.get_subscriptions),
+                # br(self.refresh_sub_db)  # sub_db is updated here
             ]
         )
         if not any([r.ok for r in batch_resp]):
             log.error("Unable to perform Inv cache update due to API call failure", show=True)
             return batch_resp
 
-        inv_resp, sub_resp = batch_resp  # if first call failed above if would result in return.
+        inv_resp, sub_resp = batch_resp  # if first call failed above it doesn't get this far.
 
         inv_data, sub_data = None, None
-        if not sub_resp.ok:
+        if not sub_resp.ok:  # TODO test this
             log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
             _inv_by_ser = {} if not inv_resp.ok else {dev["serialNumber"]: dev for dev in inv_resp.raw["items"]}
             combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
             inv_model = models.Inventory(list(combined.values()))
         else:
-            from .cnx.models.cache import Subscriptions, Inventory as GlpInventory, get_inventory_with_sub_data
             sub_data = Subscriptions(**sub_resp.raw)
             inv_data = GlpInventory(**inv_resp.raw)
             combined = await get_inventory_with_sub_data(inv_data, sub_data)
@@ -3234,6 +3398,7 @@ class Cache:
         if inv_data is not None:
             resp.caption = inv_data.counts
 
+        # -- CACHE UPDATES --
         self.responses.inv = resp
         if dev_type is None or dev_type == "all":
             _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
@@ -3243,7 +3408,7 @@ class Cache:
 
         if sub_data:
             self.responses.sub = sub_resp
-            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.items, truncate=True))
+            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.cache_dump(), truncate=True))
 
         return resp
 
@@ -3483,8 +3648,9 @@ class Cache:
     ) -> Response:
         """refresh client DB
 
-        all args are passed to central.get_clients, Local Cache is updated with any results.
-        Local Cache retains clients connected within last 90 days.
+        all args are passed to api.monitoring.get_clients, Local Cache is updated with any results.
+        Local Cache retains clients connected within last 90 days by default.  Configuratble via cache_client_days
+        in the config.
 
         It returns the raw data from the API with whatever filters were provided by the user
         then updates the db with the data returned
@@ -3678,8 +3844,8 @@ class Cache:
         update_data = {**self.certs_by_md5, **data_by_md5}
         return await self.update_db(self.CertDB, data=list(update_data.values()), truncate=True)
 
-    async def refresh_cert_db(self, func: Callable, *, query: str = None) -> Response:
-            resp: Response = await func(query)
+    async def refresh_cert_db(self, *, query: str = None) -> Response:
+            resp: Response = await api.configuration.get_certificates(query)
             if not resp.ok:
                 return resp
 
@@ -3749,52 +3915,52 @@ class Cache:
             update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.refresh_license_db]
-        async with api.session.aio_session:
-            if update_funcs:
-                kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
-                # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
-                db_res += [await update_funcs[0](**kwarg_list[0])]
-                if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
-                    db_res = utils.unlistify(db_res)
+        if update_funcs:
+            kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
+            # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
+            db_res += [await update_funcs[0](**kwarg_list[0])]
+            if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
+                db_res = utils.unlistify(db_res)
 
-                if not db_res[-1]:
-                    _remaining = 0 if len(update_funcs) == 1 else len(update_funcs[1:])
-                    if _remaining:
-                        log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
-                        db_res += [Response(error=f"{f.__name__} aborted due to failure in previous cache update call ({update_funcs[0].__name__})") for f in update_funcs[1:]]
-                    else:
-                        log.error(f"Cache Update failure in {update_funcs[0].__name__}: {db_res[0].error}", show=True, caption=True)
-
+            if not db_res[-1]:
+                _remaining = 0 if len(update_funcs) == 1 else len(update_funcs[1:])
+                if _remaining:
+                    log.error(f"Cache Update aborting remaining {len(update_funcs)} cache updates due to failure in {update_funcs[0].__name__}", show=True, caption=True)
+                    db_res += [Response(error=f"{f.__name__} aborted due to failure in previous cache update call ({update_funcs[0].__name__})") for f in update_funcs[1:]]
                 else:
-                    if len(update_funcs) > 1:
-                        db_res = [*db_res, *await asyncio.gather(*[f(**k) for f, k in zip(update_funcs[1:], kwarg_list[1:])])]
+                    log.error(f"Cache Update failure in {update_funcs[0].__name__}: {db_res[0].error}", show=True, caption=True)
 
-            # If all *_db params are false refresh cache for all
-            # TODO make more elegant
-            else:  # TODO asyncio.sleep is a temp until build better session wide rate limit handling.
-                br = BatchRequest
-                db_res += await api.session._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
+            else:
+                if len(update_funcs) > 1:
+                    db_res = [*db_res, *await asyncio.gather(*[f(**k) for f, k in zip(update_funcs[1:], kwarg_list[1:])])]
+
+        # If all *_db params are false refresh cache for all
+        # TODO make more elegant
+        else:  # TODO asyncio.sleep is a temp until build better session wide rate limit handling.
+            br = BatchRequest
+            db_res += await api.session._batch_request([br(self.refresh_group_db), br(asyncio.sleep, .5)])  # update groups first so template update can use the result group_update is 3 calls.
+            if db_res[-1]:
+                dev_res = await api.session._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
+                dev_res = utils.unlistify(dev_res)  # should only be an issue when debugging (re-writing responses) in refresh_dev_db
+                if isinstance(dev_res, list):
+                    db_res = [*db_res, *dev_res]
+                else:
+                    db_res += [dev_res]
                 if db_res[-1]:
-                    dev_res = await api.session._batch_request([br(self.refresh_dev_db), br(asyncio.sleep, .5)])   # dev_db separate as it is a multi-call 3 API calls.
-                    dev_res = utils.unlistify(dev_res)  # should only be an issue when debugging (re-writing responses) in refresh_dev_db
-                    if isinstance(dev_res, list):
-                        db_res = [*db_res, *dev_res]
-                    else:
-                        db_res += [dev_res]
-                    if db_res[-1]:
-                        batch_reqs = [
-                            BatchRequest(req)
-                            for req in [self.refresh_inv_db_classic, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
-                        ]
-                        db_res = [
-                            *db_res,
-                            *await api.session._batch_request(batch_reqs)
-                        ]
+                    batch_reqs = [
+                        BatchRequest(req)
+                        for req in [self.refresh_inv_db_classic, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
+                    ]
+                    db_res = [
+                        *db_res,
+                        *await api.session._batch_request(batch_reqs)
+                    ]
         return db_res
 
     def check_fresh(
         self,
         refresh: bool = False,
+        *,
         site_db: bool = False,
         dev_db: bool = False,
         inv_db: bool = False,
@@ -3866,11 +4032,16 @@ class Cache:
             fields = {"name", "mac", "ip", "connected_port", "connected_name", "site"}
         elif query_type == "certificate":
             fields = {"name", "type", "expired", "expiration", "md5_checksum",}
+        elif query_type == "sub":
+            fields = {"name", "end_date", "expired", "available", "id"}
         else:  # device
             fields = ("name", "serial", "mac", "type")
 
+
         if isinstance(match[0], models.Client):
             data = [{k: d[k] for k in d.keys() if k in fields} for d in match]
+        elif query_type == "sub":
+            data = list(sorted([{k: v if k != "end_date" else DateTime(v, 'date-string') for k, v in d.items() if k in fields} for d in match], key=lambda x: (x["end_date"], x["available"]), reverse=True))
         else:
             data = [{k: d[k] for k in d.data if k in fields} for d in match]
 
@@ -4346,7 +4517,7 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent)
+            log.error(f"Unable to gather group data from provided identifier {query_str}", show=not silent)
             if all_match:
                 all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
                 _dev_type_str = escape(str(utils.unlistify(dev_type)))
@@ -4365,7 +4536,7 @@ class Cache:
         else:
             if not completion:
                 log.error(
-                    f"Central API CLI Cache unable to gather group data from provided identifier {query_str}", show=not silent
+                    f"Unable to gather group data from provided identifier {query_str}", show=not silent
                 )
 
     # TODO No longer used see attribute in initializer using functools.partial... can do for all where name and id are only valid fields
@@ -4445,7 +4616,7 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=True)
+            log.error(f"Unable to gather label data from provided identifier {query_str}", show=True)
 
             if exit_on_fail:
                 valid_labels = "\n".join(self.label_names)
@@ -4458,7 +4629,7 @@ class Cache:
         else:
             if not completion:
                 log.error(
-                    f"Central API CLI Cache unable to gather label data from provided identifier {query_str}", show=not silent
+                    f"Unable to gather label data from provided identifier {query_str}", show=not silent
                 )
 
     def get_template_identifier(
@@ -4761,34 +4932,69 @@ class Cache:
                     f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=not silent
                 )
 
+    @staticmethod
+    def _handle_sub_multi_match(match: list[CacheSub], *, end_date: dt.datetime, best_match: bool = False, all_match: bool = False) -> list[CacheSub]:
+        if len(match) > 1 and end_date:
+            end_date_day = end_date.combine(end_date, dt.time.min)  # subscription expires on the day provided
+            match = [m for m in match if dt.datetime.combine(pendulum.from_timestamp(m.end_date), dt.time.min) == end_date_day]
+            if len(match) > 1 and end_date_day != end_date:  # if still too many matches check for exact match if they provided time info.
+                match = [m for m in match if pendulum.from_timestamp(m.end_date) == end_date]
+
+        if len(match) > 1:
+            valid_match = [m for m in match if m.valid]  # valid means it is not expired and has subscriptions available
+            match = valid_match or match
+
+        if best_match or all_match:
+            sorted_match = sorted(match, key=lambda m: (m.end_date, m.available), reverse=True)
+            match = sorted_match if all_match else [sorted_match[0]]
+
+        return match
 
     # TODO make this a wrapper for other specific get_portal_identifier.... calls
+    @lru_cache
     def get_name_id_identifier(
         self,
-        cache_name: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
+        cache_name: Literal["dev", "site", "sub", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
         query_str: str,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CachePortal | List[CachePortal] | CacheLabel | List[CacheLabel]:
+        end_date: dt.datetime = None,
+        best_match: bool = False,
+        all_match: bool = False,
+    ) -> CachePortal | List[CachePortal] | CacheLabel | List[CacheLabel] | CacheSub | List[CacheSub]:
+        """Fetch items from cache based on query
+
+        This is a common identifier lookup function for all stored types that use name and id as potential match fields.
+
+        DEV NOTE appears only to be used by portal and subscription currently
+
+        Args:
+            cache_name (Literal[&quot;dev&quot;, &quot;site&quot;, &quot;sub&quot;, &quot;template&quot;, &quot;group&quot;, &quot;label&quot;, &quot;mpsk_network&quot;, &quot;mpsk&quot;, &quot;portal&quot;]): The cache to search
+            query_str (str): The query string used to search the cache for a match
+            retry (bool, optional): Refresh the cache via API and retry if no match is found. Defaults to True.
+            completion (bool, optional): Indicates function is being called for CLI completion... effectively the equiv of retry=False, Silent=True. Defaults to False.
+            silent (bool, optional): Set to True to squelch out all messaging normmaly displayed when no match is found, and retry is initiated. Defaults to False.
+            end_date (dt.datetime, optional): Specific to 'sub' cache.  Provide End Date to further narrow search in the event of multiple subscription matches. Defaults to None.
+            best_match (bool, optional): Specific to 'sub' cache.  Set True to return the best match in the event of multiple matches.
+                Best match is the valid match with the most time remaining on the subscription. Defaults to False (user is prompted to select one of the matches).
+            all_match (bool, optional): Sepcific to 'sub' cache.  Return all matches in the event of multiple matches. Defaults to False.
+
+        Raises:
+            typer.Exit: Terminates program if no match is found.
+
+        Returns:
+            CachePortal | List[CachePortal] | CacheLabel | List[CacheLabel] | CacheSub | List[CacheSub]: The Cache object associated with the provided cache_name.
+        """
         cache_details = CacheDetails(self)
         this: CacheAttributes = getattr(cache_details, cache_name)
         db_all = this.db.all()
         db = this.db
-        """Fetch items from cache based on query
-
-        This is a common identifier lookup function for all stored types that primarily have
-        name and id as potential match fields.
-
-        DEV NOTE appears only to be used by portal currently
-
-        returns:
-            CentralObject | List[CentralObject]: returns any matches
-        """
         name_to_model = {
             "portal": CachePortal,
             "label": CacheLabel,
             "mpsk_network": CacheMpskNetwork,
+            "sub": CacheSub
         }
         cache_updated = False
         Model = name_to_model.get(cache_name, CentralObject)
@@ -4826,7 +5032,7 @@ class Cache:
                         )
                     )
 
-            # case insensitive startswith search for mspk id
+            # case insensitive startswith search for id
             if not match:
                 match = db.search(
                     self.Q.id.test(
@@ -4842,7 +5048,7 @@ class Cache:
                         fuzz_match, fuzz_confidence = fuzz_resp[0]
                         confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                         if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = self.db.search(self.Q.name == fuzz_match)
+                            match = db.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
                     api.session.request(this.cache_update_func)
@@ -4856,6 +5062,11 @@ class Cache:
             return match or []
 
         if match:
+            if cache_name == "sub" and len(match) > 1:
+                match = self._handle_sub_multi_match(match, end_date=end_date, best_match=best_match, all_match=all_match)
+                if all_match:
+                    return match
+
             if len(match) > 1:
                 match = self.handle_multi_match(match, query_str=query_str, query_type=this.name,)
 
@@ -4888,3 +5099,4 @@ class CacheDetails:
         self.portal = CacheAttributes(name="portal", db=cache.PortalDB, cache_update_func=cache.refresh_portal_db)
         self.mpsk = CacheAttributes(name="mpsk", db=cache.MpskDB, cache_update_func=cache.refresh_mpsk_db)
         self.mpsk_network = CacheAttributes(name="mpsk_network", db=cache.MpskNetDB, cache_update_func=cache.refresh_mpsk_db)
+        self.sub = CacheAttributes(name="sub", db=cache.SubDB, cache_update_func=cache.refresh_sub_db)

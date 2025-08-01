@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import sys
 from datetime import datetime
 from pathlib import Path
-import sys
+from typing import TYPE_CHECKING
+
 import typer
 from rich import print
 from rich.markup import escape
-from typing import TYPE_CHECKING
-
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -22,8 +22,9 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import AllDevTypes, lib_to_api, lib_to_gen_plural, iden_meta # noqa
+from centralcli.constants import AllDevTypes, lib_to_gen_plural, iden_meta # noqa
 from centralcli.objects import DateTime
+from .cache import api
 
 if TYPE_CHECKING:
     from .cache import CacheGroup
@@ -41,7 +42,7 @@ def device(
     yes: int = typer.Option(0, "-Y", "-y", "--yes", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on a device
     """
@@ -75,27 +76,21 @@ def device(
         if not dev.swack_id:
             print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
             if yes > 1 or cli.confirm(prompt="\nRefresh cache now to check if it's populated"):
-                cli.central.request(cli.cache.refresh_dev_db, dev_type="ap")
+                api.session.request(cli.cache.refresh_dev_db, dev_type="ap")
                 dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
 
         if dev.swack_id:
-            resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
+            resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
         else:
             cli.exit(f"Unable to perform Upgrade on {dev.summary_text}.  [cyan]swarm_id[/] is required for APs and the API is not returning a value for it yet.")
     else:
-        resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot, forced=forced)
+        resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot, forced=forced)
     cli.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def group(
-    group: str = typer.Argument(
-        ...,
-        metavar=iden_meta.group,
-        help="Upgrade devices by group",
-        autocompletion=cli.cache.group_completion,
-        show_default=False,
-    ),
+    group: str = cli.arguments.get("group", help="Upgrade devices by group",),
     version: str = cli.arguments.version,
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
     at: datetime = cli.options.at,
@@ -105,7 +100,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices by group
 
@@ -150,8 +145,8 @@ def group(
 
     print(ver_msg)
     if cli.confirm(yes):
-        resp = cli.central.request(
-            cli.central.upgrade_firmware,
+        resp = api.session.request(
+            api.firmware.upgrade_firmware,
             scheduled_at=at,
             group=group.name,
             device_type=dev_type,
@@ -178,7 +173,7 @@ def swarm(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices in an IAP cluster
     """
@@ -206,7 +201,7 @@ def swarm(
     print(conf_msg)
 
     cli.confirm(yes)
-    resp = cli.central.request(cli.central.upgrade_firmware, scheduled_at=at, swarm_id=swarm, firmware_version=version)
+    resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, swarm_id=swarm, firmware_version=version)
     cli.display_results(resp, tablefmt="action")
 
 

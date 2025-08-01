@@ -31,6 +31,11 @@ class Subscription(BaseModel):
     # quote: Optional[str]
     # po: Any
     # reseller_po: Any
+    # def __init__(self, **kwargs):
+    #     self.expired: bool = self._expired
+    #     self.expiring_soon: bool = self._expiring_soon
+    #     self.started: bool = self._started
+    #     self.valid: bool = self._valid
 
     @cached_property
     def expired(self) -> bool:
@@ -46,7 +51,7 @@ class Subscription(BaseModel):
 
     @cached_property
     def valid(self) -> bool:
-        return self.started and not self.expired
+        return self.started and not self.expired and self.available > 0
 
     @property
     def subscription_expires(self) -> int:
@@ -56,6 +61,11 @@ class Subscription(BaseModel):
     @classmethod
     def simplify_sub_type(cls, sub_type: str) -> str:
         return sub_type.removeprefix("CENTRAL_")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, sub_name: str) -> str:
+        return sub_name.lower().replace("_", "-")
 
     @model_validator(mode="before")
     def convert_none_strings(data: dict) -> Dict[str, Any]:
@@ -112,9 +122,15 @@ class Subscriptions(BaseModel):
     def counts(self) -> SubCounts:
         return SubCounts(self.items)
 
-    def dump(self):
+    def output(self):
         return [
-            {**sub.model_dump(), "status": "OK" if sub.valid else "EXPIRED" if sub.expired else ""}
+            {**sub.model_dump(), "status": "OK" if not sub.expired else "EXPIRED"}
+            for sub in self.items
+        ]
+
+    def cache_dump(self):
+        return [
+            {**sub.model_dump(), "started": sub.started, "expired": sub.expired, "valid": sub.valid}
             for sub in self.items
         ]
 

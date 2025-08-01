@@ -6,7 +6,8 @@ import sys
 import time
 from functools import cached_property, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Type, Optional
+from types import TracebackType
 
 from aiohttp.client import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
@@ -15,6 +16,7 @@ from pycentral.base import ArubaCentralBase
 from pycentral.base_utils import tokenLocalStoreUtil
 from rich.markup import escape
 from yarl import URL
+from rich.console import Console
 
 from . import cleaner, config, log, utils
 from .utils import Spinner
@@ -33,6 +35,7 @@ DEFAULT_HEADERS = {
 }
 DEFAULT_SPIN_TXT = "\U0001f4a9 DEFAULT_SPIN_TXT \U0001f4a9"  # should never see this, makes it more obvious we missed a spinner update
 MAX_CALLS_PER_CHUNK = 6
+econsole = Console(stderr=True)
 INIT_TS = time.monotonic()
 
 class LoggedRequests:
@@ -91,7 +94,7 @@ class Session():
         cnx: bool = None
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
-        self.base_url = "" if not base_url else f"{base_url.rstrip('/')}/"
+        self.base_url = None if not base_url else base_url.rstrip('/')
         self.workspace_name = workspace_name  # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
         self.ssl = config.ssl_verify
@@ -115,10 +118,6 @@ class Session():
 
         Refer to documentation for correct format of config file.
 
-        Args:
-            account_name (str): Account name defined in the config file.
-            logger (MyLogger, optional): log method. Defaults to log.
-
         Returns:
             [NewCentralBase]: An instance of class NewCentralBase
                 Used to manage Auth and Tokens.
@@ -135,6 +134,9 @@ class Session():
 
     def get_conn_from_file(self, workspace_name: str = None) -> ArubaCentralBase:
         """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
+
+        Args:
+            workspace_name (str): Account name defined in the config file.
 
         Returns:
             [pycentral.ArubaCentralBase]: An instance of class:`pycentral.ArubaCentralBase`,
@@ -178,6 +180,16 @@ class Session():
 
         return self._aio_session
 
+    async def __aenter__(self) -> ClientSession:
+        return self.aio_session
+
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
+        await self.close()
 
     @aio_session.setter
     def aio_session(self, session: ClientSession):
@@ -220,14 +232,14 @@ class Session():
             return
         call_data = {
             "method": method,
-            "url": url,
+            "url": url if self.base_url is None else f"{self.base_url}{url}",
             "url_params": params,
             "data": data,
             "json_data": json_data,
         }
         if kwargs:
             call_data["Additional kwargs"] = kwargs
-        print("[bold magenta]VERBOSE DEBUG[reset]")
+        econsole.print("[bold magenta]VERBOSE DEBUG[reset]")
         call_data = utils.strip_none(call_data, strip_empty_obj=True)
         utils.json_print(call_data)
 
@@ -261,7 +273,7 @@ class Session():
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
             log.debug(
-                f'Attempt API Call to:{_data_msg}Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
+                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
             )
             if config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
@@ -281,8 +293,8 @@ class Session():
                 self.spinner.start(self._get_spin_text(spin_txt_run), spinner="dots")
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
 
-                # async with self.aio_session as client:
-                async with ClientSession(base_url=self.base_url) as client:
+                # async with self as client:
+                async with ClientSession(base_url=self.base_url) as client:  # TODO find out what impact is of opening/closing sessions for every call.  Common aio_session property is being stepped on by multiple calls/async threads
                     resp = await client.request(
                         method=method,
                         url=url,
@@ -553,7 +565,7 @@ class Session():
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
 
-        await self.close()
+        # await self.close()
         return r
 
     def _refresh_token(self, token_data: dict | List[dict], silent: bool = False) -> bool:

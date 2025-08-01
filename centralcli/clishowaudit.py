@@ -26,6 +26,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, LogAppArgs, LogSortBy
 from .ws_client import follow_audit_logs
+from .cache import api
 
 if TYPE_CHECKING:
     from .cache import CacheGroup, CacheDevice
@@ -90,7 +91,7 @@ def acp_logs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Show ACP audit logs
 
@@ -143,8 +144,7 @@ def acp_logs(
         "count": count
     }
 
-    central = cli.central
-    resp = central.request(central.get_audit_logs, **kwargs)
+    resp = api.session.request(api.platform.get_audit_logs, **kwargs)
 
     if kwargs.get("log_id"):
         cli.display_results(resp, tablefmt="action")
@@ -195,13 +195,12 @@ def logs(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
     verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show Audit Event Logs.
 
     Other available log commands:
-      - [cyan]show audit acp-logs[/] to show audit logs related to Central itself.
       - [cyan]show logs[/] to show device event logs.
 
     :clock2:  Displays prior 2 days if no time options are provided.
@@ -210,7 +209,7 @@ def logs(
     if tail:
         print(f"Following tail on {title}.  Use CTRL-C to stop.")
         try:
-            cli.central.request(follow_audit_logs)
+            api.session.request(follow_audit_logs)
         except KeyboardInterrupt:
             cli.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
@@ -252,7 +251,7 @@ def logs(
         'count': count,
     }
 
-    resp = cli.central.request(cli.central.get_audit_event_logs, **kwargs)
+    resp = api.session.request(api.other.get_audit_event_logs, **kwargs)
 
     if log_id is not None:
         if resp and "body" in resp.output:

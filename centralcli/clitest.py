@@ -21,26 +21,27 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-# from centralcli.central import CentralApi, Response  # noqa
-from . import Response, config
-from .classic.api import ClassicAPI
+from . import Response
+from .cache import api
 
 app = typer.Typer()
 
 tty = utils.tty
 
 
-# TODO add cache for webhooks
-@app.command(help="Test WebHook Notifications")
+# CACHE add cache for webhooks
+@app.command()
 def webhook(
     wid: str = cli.arguments.wid,
     default: bool = cli.options.default,
     debug: bool = cli.options.debug,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ):
-    resp = cli.central.request(cli.central.test_webhook, wid)
+    """Test WebHook Notifications."""
+    resp = api.session.request(api.central.test_webhook, wid)
 
     cli.display_results(resp, tablefmt="rich", title="WebHook Test Results")
+
 
 @app.command(hidden=False, short_help="Test Central API methods directly", epilog="Output is displayed in yaml by default.")
 def method(
@@ -55,15 +56,9 @@ def method(
     outfile: Path = cli.options.outfile,
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
+    debugv: bool = cli.options.debugv,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        hidden=True,
-        callback=cli.verbose_debug_callback,
-    ),
+    workspace: str = cli.options.workspace,
     update_cache: bool = cli.options.update_cache,
 ) -> None:
     """Dev testing commands to run CentralApi methods from command line.
@@ -101,9 +96,6 @@ def method(
        It does not honor re-use of last-account even if [cyan]forget_account_after[/cyan] is set in config[/italic]
     """
     # Find function (method)
-    cli.cache(refresh=update_cache)
-    # central = CentralApi(account)
-    central = ClassicAPI(config.base_url)
     bpdir = Path(__file__).parent / "boilerplate"
     all_calls = [
         importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
@@ -112,7 +104,7 @@ def method(
     for m in all_calls:
         log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
         if hasattr(m.AllCalls(), method):
-            central = m.AllCalls(account)
+            central = m.AllCalls()
             break
 
     if not hasattr(central, method):
@@ -223,11 +215,11 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    from . import config, cleaner, Session
+    from . import cleaner, Session
     from .models import cache as models
     from .classic.api.configuration import ConfigAPI
     from .clishow import _build_groups_caption
-    session = Session(config.base_url)
+    session = Session()
 
     api = ConfigAPI(session=session)
     resp = session.request(api.get_all_groups)

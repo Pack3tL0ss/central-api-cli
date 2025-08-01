@@ -20,11 +20,13 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
+from .classic.api import ClassicAPI
+
 app = typer.Typer()
 color = utils.color
 
 
-@app.command(short_help="Clone a group")
+@app.command()
 def group(
     clone_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CLONE]", autocompletion=cli.cache.group_completion),
     new_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CREATE]"),
@@ -32,12 +34,17 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
+    """Clone a group
+
+    [dark_orange3]:warning:[/]  Tunneled SSIDs are not included in clone operation.
+    """
+    api = ClassicAPI()
+    cli.econsole.print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
     if aos10:
-        print(f"    Upgrade cloned group to AOS10: {color(True)}")
-        print(
+        cli.econsole.print(f"    Upgrade cloned group to AOS10: {color(True)}")
+        cli.econsole.print(
             "\n    [dark_orange]:warning:[/dark_orange]  [italic]Upgrade doesn't always work despite "
             f"returning {color('success')},\n    Group is cloned if {color('success')} is returned "
             "but upgrade to AOS10 may not occur.\n    API method appears to have some caveats."
@@ -45,9 +52,10 @@ def group(
         )
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.clone_group, clone_group, new_group)
+        resp = api.session.request(api.configuration.clone_group, clone_group, new_group)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
         groups = cli.cache.groups_by_name
+
         # API-FLAW clone and upgrade to aos10 does not work via the API
         new_data = {**groups[clone_group], "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
         if groups:

@@ -10,22 +10,24 @@ from rich import print
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log
+    from centralcli import cli, log, BatchRequest
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log
+        from centralcli import cli, log, BatchRequest
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.cache import CentralObject
+from centralcli.cache import CacheDevice, CacheLabel
 from centralcli.constants import iden_meta
+from .cache import api
 
 app = typer.Typer()
 
 
+# TOGLP
 @app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
@@ -33,10 +35,9 @@ def license(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
-    """
+    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type."""
     do_auto = True if "auto" in [s.lower() for s in devices] else False
     if do_auto:
         _msg = f"Disable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
@@ -44,11 +45,11 @@ def license(
             print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
         cli.econsole.print(_msg)
         if cli.confirm(yes):
-            resp = cli.central.request(cli.central.disable_auto_subscribe, services=license.name)
+            resp = api.session.request(api.platform.disable_auto_subscribe, services=license.name)
             cli.display_results(resp, tablefmt="action")
             return
 
-    devices: List[CentralObject] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
+    devices: List[CacheDevice] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
 
     _msg = f"Unassign [bright_green]{license.value}[/bright_green] from"
     if len(devices) > 1:
@@ -60,7 +61,7 @@ def license(
     cli.console.print(_msg, emoji=False)
 
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.unassign_licenses, [d.serial for d in devices], services=license.name)
+        resp = api.session.request(api.platform.unassign_licenses, [d.serial for d in devices], services=license.name)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits if call failed to avoid cache update
         inv_devs = [{**d, "services": None} for d in devices]
         cache_resp = cli.cache.InvDB.update_multiple([(dev, cli.cache.Q.serial == dev["serial"]) for dev in inv_devs])
@@ -77,11 +78,11 @@ def label(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
-    """Unassign label from device(s)"""
-    label = cli.cache.get_label_identifier(label)
-    devices = [cli.cache.get_dev_identifier(dev) for dev in devices]
+    """Unassign label from device(s)."""
+    label: CacheLabel = cli.cache.get_label_identifier(label)
+    devices: list[CacheDevice] = [cli.cache.get_dev_identifier(dev) for dev in devices]
 
     _msg = f"Unassign [bright_green]{label.name}[/bright_green] from"
     if len(devices) > 1:
@@ -96,14 +97,14 @@ def label(
     switches = [dev for dev in devices if dev.generic_type == "switch"]
     gws = [dev for dev in devices if dev.generic_type == "gw"]
 
-    br = cli.central.BatchRequest
+    br = BatchRequest
     reqs = []
     for dev_type, devs in zip(["IAP", "SWITCH", "CONTROLLER"], [aps, switches, gws]):
         if devs:
-            reqs += [br(cli.central.remove_label_from_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
+            reqs += [br(api.central.remove_label_from_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
     if cli.confirm(yes):
-        resp = cli.central.batch_request(reqs)
+        resp = api.session.batch_request(reqs)
         cli.display_results(resp, tablefmt="action")
         # we don't cache device/label associations (monitoring/.../aps doesn't provide it)
 

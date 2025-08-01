@@ -33,7 +33,7 @@ def template(
     pager: bool = cli.options.pager,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """Convert jinja2 (j2) template into final form based on variable file.
 

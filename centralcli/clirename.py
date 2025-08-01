@@ -21,6 +21,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import iden_meta
+from .cache import api
 
 if TYPE_CHECKING:
     from centralcli.cache import CacheSite, CacheDevice, CacheGroup
@@ -30,12 +31,12 @@ app = typer.Typer()
 
 @app.command()
 def site(
-    site: str = typer.Argument(..., metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False,),
+    site: str = cli.arguments.get("site", help="[green3]current[/] site name"),
     new_name: str = typer.Argument(..., show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """
     :office: [bright_green]Rename A Site.[/] :office:
@@ -44,7 +45,7 @@ def site(
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if cli.confirm(yes):
         print()
-        cliupdate.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, default=default, account=account)
+        cliupdate.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, debug=debug, default=default, workspace=workspace)
 
 
 @app.command()
@@ -54,7 +55,7 @@ def ap(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """
     [bright_green]Rename an Access Point[/]
@@ -63,7 +64,7 @@ def ap(
     print(f"Please Confirm: rename ap [bright_red]{ap.name}[/] -> [bright_green]{new_name}[/]")
     print("    [italic]Will result in 2 API calls[/italic]\n")
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.update_ap_settings, ap.serial, new_name)
+        resp = api.session.request(api.configuration.update_ap_settings, ap.serial, new_name)
         cli.display_results(resp, tablefmt="action")
         if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
             cli.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
@@ -76,7 +77,7 @@ def group(
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
-    account: str = cli.options.workspace,
+    workspace: str = cli.options.workspace,
 ) -> None:
     """
     [green3]Rename a group.[/] [red]AOS8 Only use clone for AOS10 groups[/]
@@ -88,7 +89,7 @@ def group(
 
     print(f"Please Confirm: rename group [red]{group.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if cli.confirm(yes):
-        resp = cli.central.request(cli.central.update_group_name, group.name, new_name)
+        resp = api.session.request(api.configuration.update_group_name, group.name, new_name)
 
         # API-FLAW Doesn't actually appear to be valid for any group type
         if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
