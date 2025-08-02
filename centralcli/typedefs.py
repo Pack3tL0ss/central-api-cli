@@ -1,6 +1,7 @@
-from yarl import URL
-from typing import Union, Literal, List, Dict  # future annotations does not work here, need to use Union to support py < 3.10
 import os
+from typing import Dict, List, Literal, Union  # future annotations does not work here, need to use Union to support py < 3.10
+
+from yarl import URL
 
 # We use Union as using | operator results in linter throwing "Variable not allowed in type annotation"
 
@@ -35,10 +36,16 @@ CertType = Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RES
 CertFormat = Literal["PEM", "DER", "PKCS12"]
 JSON_TYPE = Union[List, Dict, str]
 
-# StrEnum available python 3.11+
+
+# These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
+# fails to resolve or learn the attributes for the manual class when it's in the except block
+
+# typing.Self added in python 3.11+
+class Self:
+    def __init__(self):
+        self.serial: str
+
 try:
-    from enum import StrEnum
+    from typing import Self  # noqa
 except ImportError:
-    from enum import Enum
-    class StrEnum(str, Enum):
-        ...
+    ...
