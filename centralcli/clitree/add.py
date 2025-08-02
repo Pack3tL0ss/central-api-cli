@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-import sys
 from typing import TYPE_CHECKING, List, Tuple
 import typer
 import yaml
@@ -15,25 +14,14 @@ from rich.markup import escape
 import pendulum
 
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, log, config, Response
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, log, config, Response
-    else:
-        print(pkg_dir.parts)
-        raise e
-
+from centralcli import cli, utils, log, config, Response
 from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
 from centralcli.response import BatchRequest
 
 if TYPE_CHECKING:
-    from .cache import CachePortal, CacheGroup, CacheMpskNetwork
+    from ..cache import CachePortal, CacheGroup, CacheMpskNetwork
 
-from .clicommon import APIClients
+from ..clicommon import APIClients
 
 api_clients = APIClients()
 api = api_clients.classic
@@ -68,8 +56,8 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
         try:
             license = utils.unlistify(license)
             license: str = license.upper().replace("-", " "),
-        except Exception:
-            ...  # This isn't imperative given it's the inv cache.  It's not used for much.
+        except Exception as e:
+            log.exception(f"{e.__class__.__name__} Exception in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
 
     inv_data = {
         'type': "-",
@@ -87,7 +75,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
             try:
                 inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
             except Exception as e:
-                log.warning(f"Unable to extract sku after inventory update ({e}), value will be omitted from inv cache.")
+                log.warning(f"Unable to extract sku after inventory update ({e.__class__.__name__}), value will be omitted from inv cache.\n{e}")
 
     api.session.request(cli.cache.update_inv_db, data=inv_data)
 

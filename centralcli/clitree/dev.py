@@ -19,7 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .typedefs import StrPath
+from ..typedefs import StrPath
 
 app = typer.Typer()
 color = utils.color
@@ -170,6 +170,28 @@ def colors(
         )
 
     console.print(table)
+
+
+@app.command()
+def emoji(
+    debug: bool = cli.options.debug,
+    filter: str = typer.Option(None, "-e", "--emoji", help="Display only emoji with this value in the name", show_default=False,),
+) -> None:
+    """Show emojis available in the rich library."""
+    from rich.columns import Columns
+    from rich.console import Console
+    from rich.emoji import EMOJI
+
+    console = Console(record=True)
+
+    columns = Columns(
+        (f":{name}: {name}" for name in sorted(EMOJI.keys()) if "\u200D" not in name and (not filter or filter in name)),
+        column_first=True,
+    )
+
+    console.print(columns)
+
+
 
 @app.callback()
 def callback():
