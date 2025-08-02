@@ -215,9 +215,7 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    x = cli.cache.get_combined_inv_dev_identifier("grg.635.d72d")
-    print(x)
-
+    ...
 
 
 @app.callback()
