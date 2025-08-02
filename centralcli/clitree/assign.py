@@ -155,10 +155,8 @@ def subscription(
         log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for {sub.name} with id {sub.id}.  [dim italic]As of last Subscription cache update[/]", show=True)
 
     _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
-    try:
-        res_ids = [r if utils.is_resource_id(r) else cli.cache.get_dev_identifier(r).id for r in devices]
-    except Exception:
-        res_ids = devices
+
+    res_ids = [r if utils.is_resource_id(r) else cli.cache.get_combined_inv_dev_identifier(r).id for r in devices]
 
     _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
     _msg = f"{_msg} {utils.summarize_list(res_ids, max=12)}"

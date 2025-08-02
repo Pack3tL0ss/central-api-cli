@@ -26,6 +26,7 @@ from centralcli.response import CombinedResponse
 from .objects import DateTime
 from .models import cache as models
 from .cnx.models.cache import Subscriptions, Inventory as GlpInventory, get_inventory_with_sub_data
+from .exceptions import CentralCliException
 from functools import partial
 import datetime as dt
 from functools import lru_cache
@@ -90,7 +91,7 @@ class CentralObject:
 
         if isinstance(data, list):
             if len(data) > 1:
-                raise ValueError(f"CentralObject expects a single item. Got list of {len(data)}")
+                raise CentralCliException(f"CentralObject expects a single item. Got list of {len(data)}")
             elif data:
                 data = data[0]
 
@@ -226,6 +227,69 @@ class CentralObject:
         )
 
 
+class CacheInvDevice(CentralObject):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.data = data
+        super().__init__('dev', data)
+        self.id: str = data.get("id")  # glp only
+        self.serial: str = data["serial"]
+        self.mac: str = data["mac"]
+        self.type: str = data["type"]
+        self.model: str = data["model"]
+        self.sku: str = data["sku"]
+        self.services: str | None = data["services"]
+        self.subscription_key: str = data.get("subscription_key")
+        self.subscription_expires: int | float = data.get("subscription_expires")
+        self.assigned: bool = data.get("assigned")  # glp only
+        self.archived: bool = data.get("archived")  # glp only
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        if self.db is not None and self.serial is not None:
+            Q = Query()
+            match: List[Document] = self.db.search(Q.serial == self.serial)
+            if match and len(match) == 1:
+                self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None) -> int | None:
+        self._doc_id = doc_id
+
+    def __eq__(self, value: CacheInvDevice | str):
+        if hasattr(value, "serial"):
+            return value.serial == self.serial
+        if utils.is_resource_id(value):
+            return value == self.id
+        return value == self.serial
+
+    def __hash__(self):
+        return hash(self.serial)
+
+    def __rich__(self) -> str:
+        return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
+
+    @property
+    def summary_text(self) -> str:
+        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
+        parts = [p for p in [self.serial, self.mac, self.type, self.sku, id_str] if p]
+        return "[reset]" + "|".join(
+            [
+                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
+            ]
+        )
+
+
 class CacheDevice(CentralObject):
     db: Table | None = None
 
@@ -293,66 +357,72 @@ class CacheDevice(CentralObject):
             ]
         )
 
+class CacheInvMonDevice(CentralObject):
+    def __init__(self, inventory: CacheInvDevice, monitoring: CacheDevice = None):
+        if inventory and monitoring and inventory.serial != monitoring.serial:
+            raise ValueError(f"Device serial from inventory data ({inventory.serial}) does not match device serial ({monitoring.serial}) from monitoring data.  Data for 2 diffferent devices seems to have been provided")
 
-class CacheInvDevice(CentralObject):
-    db: Table | None = None
+        self.inv = inventory
+        self.mon = monitoring
+        mon_data = self.mon.data or {}  # device can be in inventory but not monitoring db
+        data = {**self.inv.data, **mon_data}
 
-    def __init__(self, data: Document | Dict[str, Any]) -> None:
-        self.data = data
-        super().__init__('dev', data)
-        self.serial: str = data["serial"]
-        self.mac: str = data["mac"]
-        self.type: str = data["type"]
-        self.model: str = data["model"]
-        self.sku: str = data["sku"]
-        self.services: str | None = data["services"]
-        self.subscription_key: str = data.get("subscription_key")
-        self.subscription_expires: int | float = data.get("subscription_expires")
-        # glp cnx only fields
-        self.assigned: bool = data.get("assigned")
-        self.id: str = data.get("id")
+        super().__init__('dev', data=data)
+        #inventory
+        self.id: str = inventory.data.get("id")  # glp only
+        self.serial: str = inventory.data["serial"]
+        self.mac: str = inventory.data["mac"]
+        self.type: str = inventory.data["type"]
+        self.model: str = inventory.data["model"]
+        self.sku: str = inventory.data["sku"]
+        self.services: str | None = inventory.data["services"]
+        self.subscription_key: str = inventory.data.get("subscription_key")
+        self.subscription_expires: int | float = inventory.data.get("subscription_expires")
+        self.assigned: bool = inventory.data.get("assigned")  # glp only
+        self.archived: bool = inventory.data.get("archived")  # glp only
+        # monitoring
+        self.name: str = None if monitoring is None else monitoring.data["name"]
+        self.status: Literal["Up", "Down"] | None = None if monitoring is None else monitoring.data["status"]
+        self.type: constants.DeviceTypes = None if monitoring is None else monitoring.data["type"]
+        if monitoring is not None:  # prefer the more simplified model provided by monitoring API so allow it to overwrite model provided by inventory API (679 vs AP-679-US)
+            self.model: str = monitoring.data["model"]
+        self.ip: str | None = None if monitoring is None else monitoring.data["ip"]
+        self.mac: str = self.mac or None if monitoring is None else monitoring.data["mac"]
+        self.serial: str = self.serial or None if monitoring is None else monitoring.data["serial"]
+        self.group: str = None if monitoring is None else monitoring.data["group"]
+        self.site: str = None if monitoring is None else monitoring.data["site"]
+        self.version: str = None if monitoring is None else monitoring.data["version"]
+        self.swack_id: str | None = None if monitoring is None else monitoring.data["swack_id"]
+        self.switch_role: str | None = None if monitoring is None else monitoring.data["switch_role"]
 
-    @classmethod
-    def set_db(cls, db: Table):
-        cls.db: Table = db
+    def __fields__(self) -> List[str]:
+        return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
 
-    @property
-    def doc_id(self) -> int:
-        if self._doc_id:
-            return self._doc_id
-
-        if self.db is not None and self.serial is not None:
-            Q = Query()
-            match: List[Document] = self.db.search(Q.serial == self.serial)
-            if match and len(match) == 1:
-                self._doc_id = match[0].doc_id
-
-        return self._doc_id
-
-    @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
-        self._doc_id = doc_id
-
-    def __eq__(self, value):
+    def __eq__(self, value: CacheInvMonDevice | str):
         if hasattr(value, "serial"):
             return value.serial == self.serial
+        if utils.is_resource_id(value):
+            return value == self.id
         return value == self.serial
 
     def __hash__(self):
         return hash(self.serial)
 
     def __rich__(self) -> str:
-        return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
+        return f'[bright_green]{self.type}[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
     @property
     def summary_text(self) -> str:
-        parts = [p for p in [self.serial, self.mac, self.type, self.sku, f"[dim]glp id: {self.id}[/dim]"] if p]
+        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
+        _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
+        mon_parts = [p for p in [self.name, _status, self.serial, self.mac, self.ip, self.type, self.model] if p]
+        inv_parts = [p for p in [self.serial, self.mac, self.type, self.model, self.sku, id_str] if p]
+        parts = [*inv_parts, *mon_parts]
         return "[reset]" + "|".join(
             [
                 f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
             ]
         )
-
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
@@ -3906,7 +3976,7 @@ class Cache:
         if dev_db:
             update_funcs += [self.refresh_dev_db]
         if inv_db:
-            update_funcs += [self.refresh_inv_db_classic]
+            update_funcs += [self.refresh_inv_db]
         if site_db:
             update_funcs += [self.refresh_site_db]
         if template_db:
@@ -3916,7 +3986,7 @@ class Cache:
         if license_db:
             update_funcs += [self.refresh_license_db]
         if update_funcs:
-            kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type" if f.__name__ == "refresh_dev_db" else "device_type": dev_type} for f in update_funcs]
+            kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type": dev_type} for f in update_funcs]
             # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
             db_res += [await update_funcs[0](**kwarg_list[0])]
             if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
@@ -3949,7 +4019,7 @@ class Cache:
                 if db_res[-1]:
                     batch_reqs = [
                         BatchRequest(req)
-                        for req in [self.refresh_inv_db_classic, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
+                        for req in [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
                     ]
                     db_res = [
                         *db_res,
@@ -3981,6 +4051,7 @@ class Cache:
             "license_db": license_db
         }
         update_count = list(db_map.values()).count(True)
+        update_count += 0 if not inv_db else 1  # inv_db includes update for sub_db
         refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
@@ -3993,7 +4064,7 @@ class Cache:
             db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
             elapsed = round(time.perf_counter() - start, 2)
             failed = [r for r in db_res if not r.ok]
-            log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} tables in {elapsed}s")
+            log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} table{'s' if update_count > 1 else ''} in {elapsed}s")
 
             if failed:
                 try:
@@ -4181,7 +4252,8 @@ class Cache:
             typer.Exit: Exit CLI / command, occurs if there is no match unless exit_on_fail is set to False.
 
         Returns:
-            CentralObject | List[CentralObject] | None: List of matching CentralObjects (devices, sites, groups ...) that match query_str
+            CacheDevice | List[CacheDevice] | None: if completion = True returns list[CacheDevice] containing all matches or None if there was no match.
+                Otherwise return will be the CacheDevice that matched.  (If completion=False and multiple matches are found, user is prompted to select)
         """
         retry = False if completion else retry
         all_match = None
@@ -4301,8 +4373,8 @@ class Cache:
         if completion:
             return match or []
 
+        # user selects which device if multiple matches returned
         if match:
-            # user selects which device if multiple matches returned
             if len(match) > 1:
                 match = self.handle_multi_match(sorted(match, key=lambda m: m.get("name", "")), query_str=query_str,)
 
@@ -4321,6 +4393,160 @@ class Cache:
                 raise typer.Exit(1)
             else:
                 return None
+
+    @lru_cache
+    def get_inv_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes] = None,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+        exit_on_fail: bool = True,
+    ) -> CacheInvDevice | list[CacheInvDevice]:
+        """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
+
+        This method will serach for a match in the Inventory DB (GreenLake Inventory), then if no match is found,
+        it will search DeviceDB (Central Monitoring/UI), which would provide the serial # to then search the Inventory DB
+
+
+
+        Args:
+            query_str (str | Iterable[str]): The query string or Iterable of strings to attempt to match.  Iterable will be joined with ' ' to form a single string with spaces.
+            dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Iterable["ap", "cx", "sw", "switch", "gw"]], optional): Limit matches to specific device type. Defaults to None (all device types).
+            retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
+            completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
+            silent (bool, optional): Do not display errors / output, simply returns match if match is found. Defaults to False.
+            include_inventory (bool, optional): Whether match attempt should also include Inventory DB (devices in GLCP that have yet to connect to Central). Defaults to False.
+            exit_on_fail (bool, optional): Whether a failure to match exits the program. Defaults to True.
+
+        Raises:
+            typer.Exit: Will display error message and exit if no match is found (unless completion=True or exit_on_fail=False)
+
+        Returns:
+            CacheInvDevice | List[CacheInvDevice] | None: if completion = True returns list[CacheInvDevice] containing all matches or None if there was no match.
+                Otherwise return will be the CacheInvDevice that matched.  (If completion=False and multiple matches are found, user is prompted to select)
+        """
+        retry = False if completion else retry
+        all_match = None
+        if dev_type:
+            dev_type = utils.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
+
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+
+        match = None
+        for _ in range(0, 2 if retry else 1):
+            # Try exact match
+            match = self.InvDB.search(
+                (self.Q.id == query_str)
+                | (self.Q.mac == utils.Mac(query_str))
+                | (self.Q.serial == query_str)
+            )
+
+            # retry with case insensitive name match if no match with original query
+            if not match:
+                match = self.InvDB.search(
+                    (self.Q.id.test(lambda v: v.lower() == query_str.lower()))
+                    | self.Q.serial.test(lambda v: v.lower() == query_str.lower())
+                )  # We don't need MAC as utils.Mac will match regardless of case or delimeter
+
+            # Last Chance try to match name if it startswith provided value
+            if not match:
+                match = self.InvDB.search(
+                    self.Q.id.test(lambda v: v.lower().startswith(query_str.lower()))
+                    | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+                if not match:
+                    qry_mac = utils.Mac(query_str)
+                    qry_mac_fuzzy = utils.Mac(query_str, fuzzy=True)
+                    if qry_mac or len(qry_mac) == len(qry_mac_fuzzy):
+                        match = self.InvDB.search(
+                            self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
+                        )
+
+            if match and dev_type:
+                all_match: list[Document] = match.copy()
+                match = [d for d in all_match if d.get("type", "") in dev_type]
+
+
+            # no match found initiate cache update
+            if retry and not match and not (self.responses.inv and set(self.responses.device_type or []) == set(dev_type or [])):
+                if not silent:
+                    _msg = "[bright_red]No Match found[/] in Inventory Cache"
+                    dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                    econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
+                if FUZZ and self.inventory and not silent:
+                    if dev_type:
+                        inv_generator = {"id": (d["id"] for d in self.inventory if "id" in d and d["type"] in dev_type), "serial": (d["serial"] for d in self.inventory if "serial" in d and d["type"] in dev_type)}
+                    else:
+                        inv_generator = {"id": (d["id"] for d in self.inventory if "id" in d), "serial": (d["serial"] for d in self.inventory if "serial" in d)}
+
+                    fuzz_match, fuzz_confidence = None, 0
+                    for _field, inv_devices in inv_generator.items():
+                        _match, _confidence = process.extractOne(query_str, inv_devices)
+                        if _confidence > fuzz_confidence:
+                            field, fuzz_match, fuzz_confidence = _field, _match, _confidence
+
+                    if fuzz_confidence >= 70:
+                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                        if typer.confirm(confirm_str):
+                            query = getattr(self.Q, field)
+                            _match = self.InvDB.search(query == fuzz_match)
+
+                econsole.print(":arrows_clockwise: Updating Inventory Cache.")
+                self.check_fresh(refresh=True, inv_db=True, dev_type=dev_type )
+
+            if match:
+                match = [CacheInvDevice(dev) for dev in match]
+                break
+
+        if completion:
+            return match or []
+
+        # user selects which device if multiple matches returned
+        if match:
+            if len(match) > 1:
+                match = self.handle_multi_match(sorted(match, key=lambda m: m.get("serial", "")), query_str=query_str,)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Unable to gather inventory info from provided identifier {query_str}", show=not silent)
+            if all_match:
+                all_match_msg = f"{', '.join(m.get('type', m.get('serial')) for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
+                _dev_type_str = escape(str(utils.unlistify(dev_type)))
+                log.error(
+                    f"The Following devices matched {all_match_msg} excluded as device type != {_dev_type_str}",
+                    show=True,
+                )
+            if exit_on_fail:
+                raise typer.Exit(1)
+            else:
+                return None
+
+    @lru_cache
+    def get_combined_inv_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes] = None,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+        exit_on_fail: bool = True,
+    ) -> CacheInvMonDevice | list[CacheInvMonDevice]:
+        """Searches both Inv Cache and Dev (Monitoring Cache) and returns a CacheInvMonDevice with attributes from both."""
+        for idx in range(0, 2):
+            inv_dev = self.get_inv_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_fail)
+            if not inv_dev:
+                mon_dev = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=silent, exit_on_fail=False)
+                query_str = mon_dev.serial  # If they provide an identifier only available in DevDB we use it to get the serial for the InvDB lookup
+            else:
+                mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry, completion=completion, silent=silent, exit_on_fail=False)
+                return CacheInvMonDevice(inv_dev, mon_dev)
+
 
     def get_site_identifier(
         self,
@@ -4397,7 +4623,7 @@ class Cache:
                 )
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
-            if retry and not match and api.central.get_all_sites not in self.updated:
+            if retry and not match and not self.responses.site:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.sites and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]

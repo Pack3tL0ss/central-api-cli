@@ -215,22 +215,8 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
-    from . import cleaner, Session
-    from .models import cache as models
-    from .classic.api.configuration import ConfigAPI
-    from .clishow import _build_groups_caption
-    session = Session()
-
-    api = ConfigAPI(session=session)
-    resp = session.request(api.get_all_groups)
-    if resp.ok:
-        groups = models.Groups(resp.output)
-        resp.output = groups.model_dump()
-
-    caption = _build_groups_caption(resp.output)
-
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
+    x = cli.cache.get_combined_inv_dev_identifier("grg.635.d72d")
+    print(x)
 
 
 
