@@ -22,7 +22,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType
-from .cache import api
+from ...cache import api
 
 app = typer.Typer()
 

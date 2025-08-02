@@ -26,7 +26,7 @@ from centralcli.constants import iden_meta  # noqa
 from centralcli.cache import CentralObject
 from centralcli.objects import DateTime
 from centralcli.models.wids import Wids
-from .cache import api
+from ...cache import api
 
 app = typer.Typer()
 

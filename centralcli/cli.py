@@ -26,7 +26,7 @@ try:
     from centralcli import (
         BatchRequest, cli, clibatch, clicaas, clicancel,
         clicheck, cliclone, clidel, cliexport, clikick, clirefresh,
-        clirename, cliset, clishow, clitest, clitshoot, cliunassign,
+        clirename, cliset, clitest, clitshoot, cliunassign,
         cliupdate, cliupgrade, cliconvert, config, log, utils,
     )
 except (ImportError, ModuleNotFoundError) as e:
@@ -36,7 +36,7 @@ except (ImportError, ModuleNotFoundError) as e:
         from centralcli import (
             BatchRequest, cli, clibatch, clicaas, clicancel,
             clicheck, cliclone, clidel, cliexport, clikick, clirefresh,
-            clirename, cliset, clishow, clitest, clitshoot, cliunassign,
+            clirename, cliset, clitest, clitshoot, cliunassign,
             cliupdate, cliupgrade, cliconvert, config, log, utils,
         )
     else:
@@ -48,6 +48,7 @@ from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs
 from centralcli.environment import env  #noqa
 from centralcli.classic.api import ClassicAPI
 from centralcli.clitree import assign, dev as clidev, add
+from centralcli.clitree.show import show
 
 api = ClassicAPI(config.classic.base_url)
 err_console = Console(stderr=True)
@@ -62,7 +63,7 @@ CONTEXT_SETTINGS = {
 }
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS, rich_markup_mode="rich")
-app.add_typer(clishow.app, name="show",)
+app.add_typer(show.app, name="show",)
 app.add_typer(clidel.app, name="delete",)
 app.add_typer(add.app, name="add",)
 app.add_typer(assign.app, name="assign",)

@@ -28,7 +28,7 @@ except (ImportError, ModuleNotFoundError):
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
     from centralcli import (
-        Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+        Response, cleaner, clitshoot,
         BatchRequest, caas, render, cli, utils, config, log, cache
     )
 except (ImportError, ModuleNotFoundError) as e:
@@ -36,7 +36,7 @@ except (ImportError, ModuleNotFoundError) as e:
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
         from centralcli import (
-            Response, cleaner, clishowfirmware, clishowwids, clishowbranch, clishowospf, clitshoot, clishowtshoot, clishowoverlay, clishowaudit, clishowcloudauth, clishowmpsk, clishowbandwidth,
+            Response, cleaner, clitshoot,
             BatchRequest, caas, render, cli, utils, config, log, cache
         )
     else:
@@ -50,31 +50,32 @@ from centralcli.constants import (
     SortInsightOptions, SortSwarmOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
 )
 from centralcli.cache import CentralObject
-from .objects import DateTime, ShowInterfaceFilters
-from .strings import cron_weekly
-from .cache import CacheDevice
-from .response import CombinedResponse
-from .models.cache import Device
-from .caas import CaasAPI
+from ...objects import DateTime, ShowInterfaceFilters
+from ...strings import cron_weekly
+from ...cache import CacheDevice
+from ...response import CombinedResponse
+from ...models.cache import Device
+from ...caas import CaasAPI
+from . import firmware, wids, branch, ospf, ts, overlay, audit, cloudauth, mpsk, bandwidth
 
-from .clicommon import APIClients
+from ...clicommon import APIClients
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
+    from ...cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
     from tinydb.table import Document
 
 
 app = typer.Typer()
-app.add_typer(clishowfirmware.app, name="firmware")
-app.add_typer(clishowwids.app, name="wids")
-app.add_typer(clishowbranch.app, name="branch")
-app.add_typer(clishowospf.app, name="ospf")
-app.add_typer(clishowtshoot.app, name="ts")
-app.add_typer(clishowoverlay.app, name="overlay")
-app.add_typer(clishowaudit.app, name="audit")
-app.add_typer(clishowcloudauth.app, name="cloud-auth")
-app.add_typer(clishowmpsk.app, name="mpsk")
-app.add_typer(clishowbandwidth.app, name="bandwidth")
+app.add_typer(firmware.app, name="firmware")
+app.add_typer(wids.app, name="wids")
+app.add_typer(branch.app, name="branch")
+app.add_typer(ospf.app, name="ospf")
+app.add_typer(ts.app, name="ts")
+app.add_typer(overlay.app, name="overlay")
+app.add_typer(audit.app, name="audit")
+app.add_typer(cloudauth.app, name="cloud-auth")
+app.add_typer(mpsk.app, name="mpsk")
+app.add_typer(bandwidth.app, name="bandwidth")
 
 tty = utils.tty
 iden_meta = IdenMetaVars()

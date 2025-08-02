@@ -24,10 +24,10 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, RadioBandOptions  # noqa
-from .cache import api
+from ...cache import api
 
 if TYPE_CHECKING:
-    from .cache import CacheClient, CacheLabel, CacheGroup, CacheDevice
+    from ...cache import CacheClient, CacheLabel, CacheGroup, CacheDevice
 
 iden_meta = IdenMetaVars()
 app = typer.Typer()

@@ -20,7 +20,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, SortTsCmdOptions, TSDevTypes, lib_to_api  # noqa
-from .clicommon import APIClients
+from ...clicommon import APIClients
 
 api_clients = APIClients()
 api = api_clients.classic

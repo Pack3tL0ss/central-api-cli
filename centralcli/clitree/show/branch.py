@@ -19,7 +19,7 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars  # noqa
-from .cache import api
+from ...cache import api
 
 app = typer.Typer()
 

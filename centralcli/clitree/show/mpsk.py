@@ -20,10 +20,10 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, SortNamedMpskOptions
-from .cache import api
+from ...cache import api
 
 if TYPE_CHECKING:
-    from .cache import CacheMpsk
+    from ...cache import CacheMpsk
 
 app = typer.Typer()
 

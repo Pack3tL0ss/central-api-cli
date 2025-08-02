@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import iden_meta, DevTypes, FirmwareDeviceType  # noqa
 from centralcli.cache import CentralObject, CacheDevice, CacheGroup
-from .cache import api
+from ...cache import api
 
 app = typer.Typer()
 tty = utils.tty

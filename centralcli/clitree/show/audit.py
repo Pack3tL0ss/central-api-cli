@@ -25,11 +25,11 @@ except (ImportError, ModuleNotFoundError) as e:
         raise e
 
 from centralcli.constants import IdenMetaVars, LogAppArgs, LogSortBy
-from .ws_client import follow_audit_logs
-from .cache import api
+from ...ws_client import follow_audit_logs
+from ...cache import api
 
 if TYPE_CHECKING:
-    from .cache import CacheGroup, CacheDevice
+    from ...cache import CacheGroup, CacheDevice
 
 app = typer.Typer()
 

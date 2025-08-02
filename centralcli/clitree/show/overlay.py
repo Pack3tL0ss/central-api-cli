@@ -24,7 +24,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 from centralcli.constants import IdenMetaVars, SortRouteOptions, SortOverlayInterfaceOptions
 from centralcli.response import Response
-from .cache import api
+from ...cache import api
 
 app = typer.Typer()
 
