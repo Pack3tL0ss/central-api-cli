@@ -165,6 +165,8 @@ class MyLogger:
 
         if caption:
             _warn = "\u26a0"
+            if level == "exception":
+                msgs = [str(m).splitlines()[0] for m in msgs]  # for exceptions we only show the first line of text, the traceback is expected beyond that.  Which we don't want in the caption
             self._caption = [*self._caption, *[f"{f'{_warn}  ' if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
 
     @property
