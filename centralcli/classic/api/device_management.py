@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from typing import TYPE_CHECKING, Literal
+
 from rich.progress import track
 
 from ... import Response
@@ -70,7 +71,7 @@ class DeviceManagementAPI:
 
         # TODO cacth invalid actions (not supported on dev)
         responses: list[Response] = []
-        responses += await [self.session.post(url)]
+        responses += [await self.session.post(url)]
         if responses[0].ok and duration and "blink_led" in command and "off" not in command:
             for _ in track(range(1, duration + 1), description="[turquoise2 blink]Blinking LED[/]..."):
                 time.sleep(1)
