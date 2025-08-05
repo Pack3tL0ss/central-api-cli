@@ -373,11 +373,6 @@ def show_devices(
     do_yaml: bool = False,
     do_table: bool = False
 ) -> None:
-
-    # if config.is_old_cfg:
-    #     log.info("\u2728 There is a new format for the cencli config [dim italic](config.yaml)[/] file with support for GreenLake and New Central!", caption=True)
-    #     log.info(f"  Use [cyan]cencli convert config[/] to convert the existing config @ {config.file} to the new format.", caption=True)
-
     # include subscription implies include_inventory
     if update_cache:
         api.session.request(cli.cache.refresh_dev_db)
