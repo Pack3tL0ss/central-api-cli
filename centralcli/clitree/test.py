@@ -78,9 +78,13 @@ def method(
     Command will output all attributes of the Response object, which includes the
     raw response from the Aruba Central API gateway.
 
-    :information:  [italic][cyan]--account[/cyan]flag must be used to test alternative accounts.
-       It does not honor re-use of last-account even if [cyan]forget_account_after[/cyan] is set in config[/italic]
+    :information:  [italic][cyan]--ws[/]|[cyan]--workspace[/cyan] flag must be used to test alternative workspaces.
+       It does not honor re-use of last-account even if [cyan]forget_workspace_after[/cyan] is set in config[/italic]
     """
+    # Do Not honor sticky workspace for test method
+    if config.sticky_workspace_file.is_file():
+        config.sticky_workspace_file.unlink()
+
     # Find function (method)
     bpdir = Path(__file__).parent.parent / "boilerplate"
     all_calls = [
@@ -155,7 +159,7 @@ def method(
         resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
 
     attrs = {
-        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw", "data_key"] and (log.DEBUG or not k.startswith("_"))
+        k: v for k, v in resp.__dict__.items() if k not in ["output", "raw", "data_key", "caption"] and (log.DEBUG or not k.startswith("_"))
     }
 
     req = (

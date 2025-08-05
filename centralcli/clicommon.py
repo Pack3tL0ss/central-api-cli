@@ -399,14 +399,12 @@ class CLICommon:
 
         print(msg)
 
-    @staticmethod
-    def default_callback(ctx: typer.Context, default: bool):
+    def default_callback(self, ctx: typer.Context, default: bool):
         if ctx.resilient_parsing:  # tab completion, return without validating
             return
 
         if default and config.sticky_workspace_file.is_file():
-            emoji_console = Console()
-            emoji_console.print(":information:  [bright_green]Using default central account[/]\n",)
+            self.econsole.print(":information:  [bright_green]Using default central account[/]\n",)
             config.sticky_workspace_file.unlink()
             return default
 
