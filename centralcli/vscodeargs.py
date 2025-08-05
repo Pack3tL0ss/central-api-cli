@@ -1,20 +1,21 @@
-from pathlib import Path
 import sys
-import logging
+from pathlib import Path
+
+# import logging
 
 
 debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
-fmt_str = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
-date_str = "%m/%d/%Y %I:%M:%S %p"
-logging.basicConfig(
-    level=logging.DEBUG if debug else logging.INFO,
-    format=fmt_str,
-    datefmt=date_str,
-    handlers=[
-        logging.StreamHandler(),
-    ],
-)
-log = logging.getLogger()
+# fmt_str = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
+# date_str = "%m/%d/%Y %I:%M:%S %p"
+# logging.basicConfig(
+#     level=logging.DEBUG if debug else logging.INFO,
+#     format=fmt_str,
+#     datefmt=date_str,
+#     handlers=[
+#         logging.StreamHandler(),
+#     ],
+# )
+# log = logging.getLogger()
 
 batch_dir = Path().home() / "git/myrepos/cencli-batch"
 
@@ -70,7 +71,8 @@ def vscode_arg_handler():
                         sys.argv += vsc_args.split()
 
     except Exception as e:
-        log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}")
+        # log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}")
+        print(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}", file=sys.stderr)
         return
 
     # update launch.json default if launched by vscode debugger
@@ -116,11 +118,18 @@ def vscode_arg_handler():
                         log_old_line = line.split('"')[-2]
                         log_new_line = new_line.split('"')[-2]
                         do_update = True
-                        log.debug(
-                            f"changing default arg for promptString:\n"
-                            f"    from: {log_old_line}\n"
-                            f"    to: {log_new_line}"
-                        )
+                        # log.debug(
+                        #     f"changing default arg for promptString:\n"
+                        #     f"    from: {log_old_line}\n"
+                        #     f"    to: {log_new_line}"
+                        # )
+                        if debug:
+                            print(
+                                f"changing default arg for promptString:\n"
+                                f"    from: {log_old_line}\n"
+                                f"    to: {log_new_line}",
+                                file=sys.stderr
+                            )
                         launch_data[idx] = new_line
 
                 elif history_lines and "options" in line and "// VSC_ARG_HISTORY" in line:
@@ -129,11 +138,18 @@ def vscode_arg_handler():
                     new_line = f'{" ":{_spaces}}"options": {json.dumps(history_lines)},  // VSC_ARG_HISTORY'
                     if line != new_line:
                         do_update = True
-                        log.debug(
-                            f"changing options arg for pickString:\n"
-                            f"    from: {line.strip()}\n"
-                            f"    to: {new_line.strip()}"
-                        )
+                        # log.debug(
+                        #     f"changing options arg for pickString:\n"
+                        #     f"    from: {line.strip()}\n"
+                        #     f"    to: {new_line.strip()}"
+                        # )
+                        if debug:
+                            print(
+                                f"changing options arg for pickString:\n"
+                                f"    from: {line.strip()}\n"
+                                f"    to: {new_line.strip()}",
+                                file=sys.stderr
+                            )
                         launch_data[idx] = new_line
 
         if do_update and launch_data:
@@ -146,4 +162,5 @@ def vscode_arg_handler():
             launch_file.write_text("\n".join(launch_data) + "\n")
 
     except Exception as e:
-        log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}")
+        print(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}", file=sys.stderr)
+        # log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}")

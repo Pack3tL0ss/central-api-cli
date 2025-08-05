@@ -1,33 +1,21 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
-import sys
 from datetime import datetime
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import typer
-from rich import print
 from rich.markup import escape
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
-    else:
-        print(pkg_dir.parts)
-        raise e
 
+from centralcli import cli
 from centralcli.constants import AllDevTypes, lib_to_gen_plural, iden_meta # noqa
 from centralcli.objects import DateTime
-from .cache import api
+from centralcli.cache import api
 
 if TYPE_CHECKING:
-    from .cache import CacheGroup
+    from centralcli.cache import CacheGroup
 
 app = typer.Typer()
 
@@ -69,12 +57,12 @@ def device(
 
     ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
-    print(ver_msg)
+    cli.econsole.print(ver_msg)
     cli.confirm(yes)  # aborts here if they don't confirm
 
     if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
         if not dev.swack_id:
-            print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
+            cli.econsole.print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
             if yes > 1 or cli.confirm(prompt="\nRefresh cache now to check if it's populated"):
                 api.session.request(cli.cache.refresh_dev_db, dev_type="ap")
                 dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
@@ -143,7 +131,7 @@ def group(
     else:
         ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
-    print(ver_msg)
+    cli.econsole.print(ver_msg)
     if cli.confirm(yes):
         resp = api.session.request(
             api.firmware.upgrade_firmware,
@@ -196,10 +184,9 @@ def swarm(
         conf_msg = f"{conf_msg} to [bright_green]{version}.[/]"
     else:
         conf_msg = f"{conf_msg} to [bright_green]Recommended version[/]"
-
     conf_msg = f"{conf_msg} :recycle:  [dim red italic]APs will automatically reboot after upgrade[/]."
-    print(conf_msg)
 
+    cli.econsole.print(conf_msg)
     cli.confirm(yes)
     resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, swarm_id=swarm, firmware_version=version)
     cli.display_results(resp, tablefmt="action")

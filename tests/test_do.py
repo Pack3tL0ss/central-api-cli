@@ -1,8 +1,9 @@
-from typer.testing import CliRunner
 import pytest
+from typer.testing import CliRunner
 
-from centralcli.cli import app  # type: ignore # NoQA
 from centralcli import cache
+from centralcli.cli import app  # type: ignore # NoQA
+
 from . import test_data
 
 runner = CliRunner()
@@ -40,8 +41,7 @@ def test_bounce_poe():
 
 
 def test_blink_switch():
-    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(),
-                           "on", "-Y"])
+    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -53,8 +53,7 @@ def test_blink_wrong_dev_type():
         [
             "blink",
             test_data["gateway"]["mac"],
-            "on",
-            "-Y"
+            "on"
         ]
     )
     assert result.exit_code == 1

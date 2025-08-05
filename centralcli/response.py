@@ -6,23 +6,24 @@ import asyncio
 import json
 import sys
 import time
-from typing import Any, Dict, List, Literal, Tuple, Union, Optional, TYPE_CHECKING
+from functools import wraps
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 from aiohttp import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
-from functools import wraps
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 from rich.status import Status
 from rich.text import Text
-from rich.markup import escape
 
 if TYPE_CHECKING:
-    from .cnx.base import NewCentralBase
-    from rich.style import StyleType
     from rich.console import RenderableType
+    from rich.style import StyleType
+
+    from .cnx.base import NewCentralBase
 
 from yarl import URL
 
@@ -30,10 +31,8 @@ from centralcli import config, log, utils
 from centralcli.constants import lib_to_api
 from centralcli.exceptions import CentralCliException
 
-
 from . import cleaner, constants, render
 from .typedefs import Method, StrOrURL
-
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
@@ -294,7 +293,7 @@ class Response:
                 else:  # marker is not an int
                     _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {elapsed:.2f}"
+            _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 if isinstance(self.output, dict) and "description" in self.output or "detail" in self.output:

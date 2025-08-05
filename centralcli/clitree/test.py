@@ -2,31 +2,17 @@
 # -*- coding: utf-8 -*-
 
 import importlib
-import sys
 from pathlib import Path
 from typing import List
-from .constants import SortGroupOptions
 
 import typer
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, log, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
+from centralcli import Response, Session, cli, config, log
 
-from . import Response
-from .cache import api
+from ..cache import api
+from ..constants import SortGroupOptions
 
 app = typer.Typer()
-
-tty = utils.tty
 
 
 # CACHE add cache for webhooks
@@ -96,22 +82,30 @@ def method(
        It does not honor re-use of last-account even if [cyan]forget_account_after[/cyan] is set in config[/italic]
     """
     # Find function (method)
-    bpdir = Path(__file__).parent / "boilerplate"
+    bpdir = Path(__file__).parent.parent / "boilerplate"
     all_calls = [
         importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
         if not f.name.startswith("_") and f.suffix == ".py"
     ]
+    client = Session(config.classic.base_url)
     for m in all_calls:
         log.debug(f"Looking for {method} in {m.__file__.split('/')[-1]}")
-        if hasattr(m.AllCalls(), method):
-            central = m.AllCalls()
+        if hasattr(m.AllCalls(client), method):
+            api.all_calls = m.AllCalls(client)
             break
 
-    if not hasattr(central, method):
+    classic_props = [item for item in dir(api) if not item.startswith("_")]
+    func = None
+    for prop in classic_props:
+        if hasattr(getattr(api, prop), method):
+            full_api = getattr(api, prop)
+            func = getattr(full_api, method)
+
+    if not func:
         cli.exit(f"[cyan]{method}[/] [bright_red]does not exist[/]")
 
     if _help:
-        doc_str: str = getattr(central, method).__doc__
+        doc_str: str = func.__doc__
         if doc_str:
             old_ret = "Response: CentralAPI Response object"
             new_ret = "Response from Aruba Central API gateway."
@@ -121,7 +115,7 @@ def method(
                 doc_str = f'{doc_str}{"".join(doc_str_list[1:])}'
             cli.exit(doc_str.replace(old_ret, new_ret), code=0, emoji=False)
         else:
-            cli.exit(f"Sorry, {getattr(central, method).__name__}, lacks a docstr.  No help.", code=0)
+            cli.exit(f"Sorry, {func.__name__}, lacks a docstr.  No help.", code=0)
 
     # pasrse args/kwargs from command line
     kwargs = kwargs or {}
@@ -151,11 +145,11 @@ def method(
             log.warning(f"{resp_str} Lame! Converting to str!", show=True, caption=True)
             args = tuple([str(a).lower() if isinstance(a, bool) else a for a in args])
             kwargs = {k: str(v).lower() if isinstance(v, bool) else v for k, v in kwargs.items()}
-            response = central.request(getattr(central, method), *args, **kwargs)
+            response = api.session.request(func, *args, **kwargs)
         return response if response is not None else Response(error=resp_str)
 
     try:
-        resp = central.request(getattr(central, method), *args, **kwargs)
+        resp = api.session.request(func, *args, **kwargs)
         resp = _check_bool_to_str(args, kwargs, response=resp)
     except TypeError as e:
         resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
@@ -165,7 +159,7 @@ def method(
     }
 
     req = (
-        f"central.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
+        f"{full_api.__class__.__name__}.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
         f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
     )
 
@@ -200,13 +194,7 @@ def command(
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     workspace: str = cli.options.workspace,
-    debugv: bool = typer.Option(
-        False, "--debugv",
-        envvar="ARUBACLI_VERBOSE_DEBUG",
-        help="Enable verbose Debug Logging",
-        hidden=True,
-        callback=cli.verbose_debug_callback,
-    ),
+    debugv: bool = cli.options.debugv,
     update_cache = cli.options.update_cache,
 ) -> None:
     """This is a hidden test command used for automated testing.

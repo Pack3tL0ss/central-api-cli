@@ -2,37 +2,19 @@
 # -*- coding: utf-8 -*-
 
 import asyncio
-import sys
-from pathlib import Path
-from typing import List
 
 import typer
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, config, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, config, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
-
 from rich.console import Console
 
-from . import Session
-from .cache import api  # TODO figure out if there is cost to importing/instantiating this numerous times  This is different than most other files
+from centralcli import Session, cli, config
+from centralcli.cache import api
 
 app = typer.Typer()
-
-tty = utils.tty
 
 
 @app.command()
 def token(
-    workspace_list: List[str] = typer.Argument(
+    workspace_list: list[str] = typer.Argument(
         None,
         help="A list of workspaces to refresh tokens for (must be defined in the config).  This is useful automated for cron/task-scheduler refresh.",
         autocompletion=cli.cache.account_completion,
@@ -68,7 +50,7 @@ def token(
         else:
             workspace_list = [config.default_workspace,  *config.defined_workspaces]
 
-        async def refresh_multi(workspaces: List[str]):
+        async def refresh_multi(workspaces: list[str]):
             success_list = await asyncio.gather(*[
                 asyncio.to_thread(Session(workspace_name=workspace).refresh_token, silent=True)
                 for workspace in workspaces

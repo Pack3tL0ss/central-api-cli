@@ -2,27 +2,28 @@ from __future__ import annotations
 
 from functools import cached_property
 from typing import TYPE_CHECKING
+
+from ... import Session, config
+from .aiops import AiOpsAPI
 from .central import CentralAPI
-from .firmware import FirmwareAPI
-from .configuration import ConfigAPI
-from .monitoring import MonitoringAPI
-from .platform import PlatformAPI
 from .cloudauth import CloudAuthAPI
+from .configuration import ConfigAPI
 from .device_management import DeviceManagementAPI
+from .firmware import FirmwareAPI
 from .guest import GuestAPI
+from .kms import KmsAPI
+from .monitoring import MonitoringAPI
 from .other import OtherAPI
+from .platform import PlatformAPI
 from .rapids import RapidsAPI
 from .routing import RoutingAPI
 from .topology import TopologyAPI
 from .troubleshooting import TroubleShootingAPI
-from .kms import KmsAPI
-from .aiops import AiOpsAPI
-from ... import Session, config
-
 
 if TYPE_CHECKING:
-    from ...typedefs import StrOrURL
     from aiohttp.client import ClientSession
+
+    from ...typedefs import StrOrURL
 
 class ClassicAPI:
     def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):

@@ -27,8 +27,6 @@ Then run via
   cencli batch add-vlan addvlan10  [--file <alternate import file>]
 
 """
-# from enum import auto
-import sys
 from pathlib import Path
 from typing import List
 
@@ -36,28 +34,14 @@ import typer
 from rich import print
 from rich.console import Console
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import caas, cleaner, cli, config, constants, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import caas, cleaner, cli, config, constants, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
 
-from centralcli.cache import CentralObject, CacheDevice
+from centralcli import caas, cleaner, cli, config, constants, utils, BatchRequest
+from centralcli.cache import api, CentralObject, CacheDevice
 
-from . import BatchRequest
-from .classic.api import ClassicAPI
 
-api = ClassicAPI(config.classic.base_url)
 cache = cli.cache
+iden_meta = constants.iden_meta
 
-tty = utils.tty
-iden = constants.IdenMetaVars()
 app = typer.Typer()
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 
@@ -123,7 +107,7 @@ def add_vlan(
     caas.eval_caas_response(resp)
 
 
-@app.command(short_help="import VLAN from Stored Tasks File")
+@app.command()
 def import_vlan(
     key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
     import_file: str = cli.arguments.import_file,
@@ -268,7 +252,7 @@ def send_cmds(
         None,
         autocompletion=cache.send_cmds_completion,
         help="The device/group/site identifier, [grey42]or 'all' for all gateways in the environment[/] :warning:  [bright_red]Use Caution[/]",
-        metavar=iden.group_or_dev_or_site,
+        metavar=iden_meta.group_or_dev_or_site,
         show_default=False,
         # callback=cli.send_cmds_node_callback,
         # is_eager=True,

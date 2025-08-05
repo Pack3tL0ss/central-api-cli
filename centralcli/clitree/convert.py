@@ -1,25 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-import sys
 from pathlib import Path
 
 import typer
 from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, config
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, config
-    else:
-        print(pkg_dir.parts)
-        raise e
+from centralcli import cli, config, utils
 
 app = typer.Typer()
+
 
 @app.command()
 def template(
@@ -98,6 +87,7 @@ def config_(
     ]
     config.file.write_text(config.new_config)
     cli.display_results(data=config.new_config, caption=caption, tablefmt="simple")
+
 
 callback_str = f"Convert j2 Templates{'' if not config.is_old_cfg else ' or convert the cencli config to CFG_VERSION: 2'}"
 @app.callback(help=callback_str)

@@ -1,35 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
-from pathlib import Path
-import sys
 import typer
-from rich import print
-from typing import List
 
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.constants import DevTypes # noqa
-from centralcli.cache import CacheGroup
-from .classic.api import ClassicAPI
+from centralcli import cli
+from centralcli.cache import CacheGroup, api
+from centralcli.constants import DevTypes
 
 app = typer.Typer()
 
 @app.command(short_help="Delete/Clear firmware compliance")
 def compliance(
     device_type: DevTypes = typer.Argument(..., show_default=False,),
-    group: List[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
+    group: list[str] = typer.Argument(None, metavar="[GROUP-NAME]", autocompletion=cli.cache.group_completion),
     group_name: str = typer.Option(None, "--group", help="Filter by group", autocompletion=cli.cache.group_completion),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -38,7 +22,6 @@ def compliance(
 ) -> None:
     """Delete/Clear firmware compliance
     """
-    api = ClassicAPI()
     # TODO is global complaince really a thing?  API returns 404 with no group
     # Allows user to add unnecessary "group" keyword before the group
     if group and len(group) > 2:

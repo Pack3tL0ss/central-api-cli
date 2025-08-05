@@ -4,7 +4,6 @@
 from os import environ as env
 import subprocess
 import sys
-from pathlib import Path
 from time import sleep
 from typing import List
 
@@ -20,37 +19,17 @@ except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
 
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import (
-        BatchRequest, cli, clibatch, clicaas, clicancel,
-        clicheck, cliclone, clidel, cliexport, clikick, clirefresh,
-        clirename, cliset, clitest, clitshoot, cliunassign,
-        cliupdate, cliupgrade, cliconvert, config, log, utils,
-    )
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (
-            BatchRequest, cli, clibatch, clicaas, clicancel,
-            clicheck, cliclone, clidel, cliexport, clikick, clirefresh,
-            clirename, cliset, clitest, clitshoot, cliunassign,
-            cliupdate, cliupgrade, cliconvert, config, log, utils,
-        )
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.cache import CentralObject, CacheDevice, CacheSite
+from centralcli import BatchRequest, cli, config, log, utils
+from centralcli.cache import api, CentralObject, CacheDevice, CacheSite
 from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
 from centralcli.environment import env  #noqa
-from centralcli.classic.api import ClassicAPI
-from centralcli.clitree import assign, dev as clidev, add
+from centralcli.clitree import assign, dev as clidev, add, unassign, export, kick, test, clone, update, upgrade, caas, refresh, tshoot, rename, check, cancel, convert
+from centralcli.clitree.batch import batch
 from centralcli.clitree.show import show
+from centralcli.clitree.set import set as cliset
+from centralcli.clitree.delete import delete
 
-api = ClassicAPI(config.classic.base_url)
+
 err_console = Console(stderr=True)
 clean_console = Console(emoji=False)
 clean_err_console = Console(emoji=False, stderr=True)
@@ -64,25 +43,25 @@ CONTEXT_SETTINGS = {
 
 app = typer.Typer(context_settings=CONTEXT_SETTINGS, rich_markup_mode="rich")
 app.add_typer(show.app, name="show",)
-app.add_typer(clidel.app, name="delete",)
+app.add_typer(delete.app, name="delete",)
 app.add_typer(add.app, name="add",)
 app.add_typer(assign.app, name="assign",)
-app.add_typer(cliunassign.app, name="unassign",)
-app.add_typer(cliclone.app, name="clone",)
-app.add_typer(cliupdate.app, name="update",)
-app.add_typer(cliupgrade.app, name="upgrade",)
-app.add_typer(clibatch.app, name="batch",)
-app.add_typer(clicaas.app, name="caas", hidden=True,)
-app.add_typer(clirefresh.app, name="refresh",)
-app.add_typer(clitest.app, name="test",)
-app.add_typer(clitshoot.app, name="ts",)
-app.add_typer(clirename.app, name="rename",)
-app.add_typer(clikick.app, name="kick",)
+app.add_typer(unassign.app, name="unassign",)
+app.add_typer(clone.app, name="clone",)
+app.add_typer(update.app, name="update",)
+app.add_typer(upgrade.app, name="upgrade",)
+app.add_typer(batch.app, name="batch",)
+app.add_typer(caas.app, name="caas", hidden=True,)
+app.add_typer(refresh.app, name="refresh",)
+app.add_typer(test.app, name="test",)
+app.add_typer(tshoot.app, name="ts",)
+app.add_typer(rename.app, name="rename",)
+app.add_typer(kick.app, name="kick",)
 app.add_typer(cliset.app, name="set",)
-app.add_typer(cliexport.app, name="export",)
-app.add_typer(clicheck.app, name="check",)
-app.add_typer(clicancel.app, name="cancel",)
-app.add_typer(cliconvert.app, name="convert",)
+app.add_typer(export.app, name="export",)
+app.add_typer(check.app, name="check",)
+app.add_typer(cancel.app, name="cancel",)
+app.add_typer(convert.app, name="convert",)
 app.add_typer(clidev.app, name="dev", hidden=True)
 
 
@@ -287,7 +266,7 @@ def reboot(
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
-    clean_console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}')  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
+    cli.console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
     if len(batch_reqs) > 1:
         print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
@@ -299,7 +278,7 @@ def reboot(
 @app.command()
 def reset(
     what: ResetArgs = typer.Argument("overlay", help="overlay is the only option currently"),
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False),
+    device: str = cli.arguments.get("device", autocompletion=cli.cache.dev_ap_gw_completion,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -468,7 +447,7 @@ def start(
         port = port or config.webhook.port
         cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
         if collect:
-             cmd += ["-c"]
+            cmd += ["-c"]
         with cli.console.status("Starting Webhook Proxy..."):
             p = subprocess.Popen(
                 cmd,

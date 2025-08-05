@@ -1,27 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
 from datetime import datetime
-from pathlib import Path
 
 import typer
 from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.constants import DevTypes # noqa
-from .cache import api
+from centralcli import cli
+from centralcli.cache import api, CacheGroup
+from centralcli.constants import DevTypes  # noqa
 
 app = typer.Typer()
 
@@ -55,7 +42,7 @@ def compliance(
 ) -> None:
     """Set firmware compiance
     """
-    group = cli.cache.get_group_identifier(group)
+    group: CacheGroup = cli.cache.get_group_identifier(group)
     at = None if not at else int(round(at.timestamp()))
 
     kwargs = {
@@ -76,7 +63,7 @@ def compliance(
 
     print(f'Set firmware complaince for [cyan]{_dev_msg}[/] in group [cyan]{group.name}[/] to [bright_green]{version}[/]')
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if cli.confirm(yes):
         resp = api.session.request(api.firmware.set_firmware_compliance, **kwargs)
         cli.display_results(resp, tablefmt="action")
 

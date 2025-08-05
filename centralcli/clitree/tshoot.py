@@ -1,45 +1,31 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import sys
 from pathlib import Path
 from time import sleep
 from typing import List
 
 import typer
-from rich import print
-from rich.console import Console
 from rich.progress import track
 
 try:
-    from fuzzywuzzy import process # type: ignore noqa
+    from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
 except Exception:
     FUZZ = False
     pass
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, cleaner
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner
-    else:
-        print(pkg_dir.parts)
-        raise e
 
-from centralcli.constants import IdenMetaVars, lib_to_api
+from centralcli import cleaner, cli, utils
 from centralcli.cache import CacheDevice
-from .clicommon import APIClients
+from centralcli.clicommon import APIClients
+from centralcli.constants import IdenMetaVars, lib_to_api
 
 api_clients = APIClients()
 api = api_clients.classic
 
 app = typer.Typer()
 
-tty = utils.tty
 iden_meta = IdenMetaVars()
 
 
@@ -76,11 +62,11 @@ def send_cmds_by_id(device: CacheDevice, commands: List[int], pager: bool = Fals
                 complete = True
                 break
             else:
-                print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+                cli.econsole.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
 
         if not complete:
-            print(f'[dark_orange3]WARNING[/] Central is still waiting on response from [cyan]{device.name}[/]')
+            cli.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{device.name}[/]')
             if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
@@ -106,7 +92,7 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
     cmd = cmd.replace("  ", " ").strip().lower()
     resp = api.session.request(api.tshooting.get_ts_commands, dev_type)
     if not resp:
-        print('[bright_red]Unable to get troubleshooting command list')
+        cli.econsole.print('[dark_orange3]:warning:[/]  [bright_red]Unable to get troubleshooting command list')
         cli.display_results(resp)
     else:
         cmd_list = resp.output
@@ -114,7 +100,7 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
         if not cmd_id:
             if FUZZ:
                 fuzz_match, fuzz_confidence = process.extract(cmd, [c["command"].strip() for c in cmd_list], limit=1)[0]
-                print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
+                cli.econsole.print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
                 if fuzz_confidence >= 70 and cli.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
                     cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == fuzz_match]
 
@@ -213,7 +199,7 @@ def clients(
         if dev.type == "ap":
             commands += [123]
         else:
-            print(f":warning:  [cyan]--wired[/] flag ignored, only applies to APs, not {dev.type}.")
+            cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]--wired[/] flag ignored, only applies to APs, not {dev.type}.")
 
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
@@ -370,7 +356,6 @@ def ping(
         "cx": 6006,
         "sw": 1036
     }
-    console = Console()
     dev = cli.cache.get_dev_identifier(device)
     cmd_id = command_ids[dev.type]
     cmd_args = {"Host": host}
@@ -402,12 +387,12 @@ def ping(
                 complete = True
                 break
             else:
-                print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+                cli.console.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
 
         if not complete:
-            console.print(f'[dark_orange3]:warning: WARNING[/] Central is still waiting on response from [cyan]{dev.name}[/]')
-            console.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
+            cli.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{dev.name}[/]')
+            cli.econsole.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
             if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
                 cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break

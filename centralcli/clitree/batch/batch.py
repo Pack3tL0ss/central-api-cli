@@ -2,60 +2,46 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from time import sleep
-from typing import TYPE_CHECKING, Dict, List, Tuple, Literal, Any
-
-import typer
-from pydantic import BaseModel, ValidationError, ConfigDict, RootModel
-from rich import print
-from rich.console import Console
-from rich.progress import track
-from rich.markup import escape
-import tablib
 import json
 import tempfile
+from pathlib import Path
+from time import sleep
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import BatchRequest, Response, caas, cleaner, cli, config, log, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import BatchRequest, Response, caas, cleaner, cli, config, log, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
+import tablib
+import typer
+from pydantic import BaseModel, ConfigDict, RootModel, ValidationError
+from rich import print
+from rich.console import Console
+from rich.markup import escape
+from rich.progress import track
 
+from centralcli import BatchRequest, Response, caas, cleaner, cli, config, log, utils
+from centralcli.cache import CentralObject, api
 from centralcli.constants import (
+    AllDevTypes,
     BatchAddArgs,
     BatchDelArgs,
     BatchRenameArgs,
-    IdenMetaVars,
     BatchUpdateArgs,
-    AllDevTypes,
-    SendConfigTypes,
     CloudAuthUploadTypes,
+    SendConfigTypes,
+    iden_meta,
 )
-
+from centralcli.models.cache import Groups, Inventory, Labels
+from centralcli.models.imports import ImportMACs, ImportMPSKs, ImportSites
 from centralcli.strings import ImportExamples
-from centralcli.cache import CentralObject
-from .models.cache import Groups, Labels, Inventory
-from .models.imports import ImportSites, ImportMACs, ImportMPSKs
-from .clitree.batch import assign
-from .classic.api import ClassicAPI
 
-examples = ImportExamples()
+from . import assign
 
 if TYPE_CHECKING:
-    from .cache import CacheSite, CacheMpskNetwork
+    from centralcli.cache import CacheMpskNetwork, CacheSite
 
-iden = IdenMetaVars()
-tty = utils.tty
+
 app = typer.Typer()
 app.add_typer(assign.app, name="assign",)
+
+examples = ImportExamples()
 
 
 class FstrInt:
@@ -142,7 +128,6 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
 def _get_lldp_dict(ap_dict: dict) -> dict:
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
     """
-    api = ClassicAPI()
     br = BatchRequest
     lldp_reqs = [br(api.topo.get_ap_lldp_neighbor, ap) for ap in ap_dict]
     lldp_resp = api.session.batch_request(lldp_reqs)
@@ -164,7 +149,6 @@ def _get_lldp_dict(ap_dict: dict) -> dict:
     return ap_dict
 
 def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> List[dict]:
-    api = ClassicAPI()
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
     space = "_" if space is None else space
     # TODO get all APs then filter down after, stash down aps for easy subsequent call
@@ -355,7 +339,6 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     if all([d is None for d in [import_file, data]]):
         raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
 
-    api = ClassicAPI()
     # We allow a list of flat dicts or a list of dicts where loc info is under
     # "site_address" or "geo_location"
     # can be keyed by name or flat.
@@ -457,7 +440,6 @@ def _build_pre_config(node: str, dev_type: SendConfigTypes, cfg_file: Path, var_
 
     br = BatchRequest
     caasapi = caas.CaasAPI()
-    api = ClassicAPI()
     config_out = utils.generate_template(cfg_file, var_file=var_file)
     commands = utils.validate_config(config_out)
 
@@ -482,7 +464,6 @@ def batch_add_groups(import_file: Path = None, data: dict = None, yes: bool = Fa
     # TODO if multiple groups are being added and the first one fails, the remaining groups do not get added (due to logic in _batch_request)
     # either need to set continue_on_fail or strip any group actions for groups that fail (i.e. upload group config.)
     # TODO convert yes to int with count, allow -yy to skip config confirmation and main confirmation
-    api = ClassicAPI()
     br = BatchRequest
     if import_file is not None:
         data = cli._get_import_file(import_file, import_type="groups")
@@ -647,7 +628,6 @@ def validate_license_type(data: List[Dict[str, Any]]):
         Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
             The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
     """
-    api = ClassicAPI()
     sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
     sub_key = None if not sub_key else sub_key[0]
     warn = False
@@ -702,7 +682,6 @@ def batch_add_devices(import_file: Path = None, data: dict = None, yes: bool = F
         msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
         cli.econsole.print(msg)
 
-    api = ClassicAPI()
     resp = None
     if cli.confirm(yes=not warn and yes):
         resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
@@ -739,7 +718,6 @@ def batch_add_labels(import_file: Path = None, *, data: bool = None, yes: bool =
     elif not data:
         cli.exit("No import file provided")
 
-    api = ClassicAPI()
     for idx in range(2):
         already_exists = [d["name"] for d in data if d["name"] in cli.cache.label_names]
         if already_exists:
@@ -819,7 +797,6 @@ def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: 
         cli.econsole.print(f"\nContents of file prepped for upload ({str(tmp_path)}):")
         cli.econsole.print(tmp_path.read_text())
 
-    api = ClassicAPI()
     if cli.confirm(yes):
         resp = api.session.request(api.cloudauth.cloudauth_upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
         tmp_path.unlink()
@@ -1088,11 +1065,10 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> List[Response
     if not del_list:
         cli.exit("[italic dark_olive_green2]No sites remain after validation.[/]")
 
-    api = ClassicAPI()
     site_names = utils.summarize_list([s.summary_text for s in sites], max=7)
     cli.econsole.print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:\n{site_names}", emoji=False)
     if cli.confirm(yes):
-        resp: List[Response] = api.central.request(api.central.delete_site, del_list)
+        resp: List[Response] = api.session.request(api.central.delete_site, del_list)
         if len(resp) == len(sites):
             doc_ids = [s.doc_id for s, r in zip(sites, resp) if r.ok]
             api.session.request(cli.cache.update_site_db, data=doc_ids, remove=True)
@@ -1169,8 +1145,7 @@ def delete(
 
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
-def _build_sub_requests(devices: List[dict], unsub: bool = False, api: ClassicAPI = None) -> Tuple[List[dict], List[dict], List[BatchRequest]]:
-    api = api or ClassicAPI()
+def _build_sub_requests(devices: List[dict], unsub: bool = False) -> Tuple[List[dict], List[dict], List[BatchRequest]]:
     if "'license': " in str(devices):
         devices = [{**d, "services": d["license"]} for d in devices]
     elif "'subscription': " in str(devices):
@@ -1224,9 +1199,8 @@ def subscribe(
     elif not import_file:
         cli.exit(_invalid_msg("cencli batch subscribe [OPTIONS] [IMPORT_FILE]"))
 
-    api = ClassicAPI()
     devices = cli._get_import_file(import_file, "devices")
-    devices, ignored, sub_reqs = _build_sub_requests(devices, api=api)
+    devices, ignored, sub_reqs = _build_sub_requests(devices)
 
     cli.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
     # print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
@@ -1255,7 +1229,6 @@ def unsubscribe(
 
     Use [cyan]-D[/]|[cyan]--dis-cen[/] flag to also disassociate the devices from the Aruba Central app in Green Lake.
     """
-    api = ClassicAPI()
     if show_example:
         print(getattr(examples, "unsubscribe"))
         return
@@ -1321,10 +1294,10 @@ def rename(
         show_default=False,
     ),
     default_only: bool = typer.Option(False, "-D", "--default-only", help="[AUTO RENAME] Perform only on APs that still have default name.",),
-    ap: str = typer.Option(None, metavar=iden.dev, help="[AUTO RENAME] Perform on specified AP", autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    ap: str = typer.Option(None, metavar=iden_meta.dev, help="[AUTO RENAME] Perform on specified AP", autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     label: str = typer.Option(None, help="[AUTO RENAME] Perform on APs with specified label", autocompletion=cli.cache.label_completion, show_default=False,),
     group: str = typer.Option(None, help="[AUTO RENAME] Perform on APs in specified group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, metavar=iden.site, help="[AUTO RENAME] Perform on APs in specified site", autocompletion=cli.cache.site_completion, show_default=False,),
+    site: str = typer.Option(None, metavar=iden_meta.site, help="[AUTO RENAME] Perform on APs in specified site", autocompletion=cli.cache.site_completion, show_default=False,),
     model: str = typer.Option(None, help="[AUTO RENAME] Perform on APs of specified model", show_default=False,),  # TODO model completion
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
@@ -1378,7 +1351,6 @@ def rename(
         } for i in data
     }
 
-    api = ClassicAPI()
     calls = []
     for ap in data:  # keyed by serial num
         conf_msg += [f"  {ap}: [cyan]{data[ap]['hostname']}[/]"]
@@ -1497,7 +1469,6 @@ def archive(
 
     This will archive the devices in GreenLake
     """
-    api = ClassicAPI()
     if show_example:
         print(examples.archive)
         return
@@ -1545,7 +1516,6 @@ def unarchive(
 
     This will unarchive the devices (previously archived) in GreenLake
     """
-    api = ClassicAPI()
     if show_example:
         print(examples.unarchive)
         return

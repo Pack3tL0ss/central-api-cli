@@ -2,21 +2,22 @@
 #!/usr/bin/env python3
 
 from __future__ import annotations
-import typer
-import pendulum
-import sys
+
+import getpass
+import ipaddress
 import json
 import os
 import re
-import ipaddress
+import sys
 from datetime import datetime
-from typing import List, Iterable, Literal, Dict, Any, Tuple, TYPE_CHECKING
 from pathlib import Path
-import getpass
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Tuple
+
+import pendulum
+import typer
 from jinja2 import Template
 from rich import print
 from rich.markup import escape
-
 
 try:
     import psutil
@@ -27,42 +28,78 @@ except (ImportError, ModuleNotFoundError):
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import (
-        Response, cleaner, clitshoot,
-        BatchRequest, caas, render, cli, utils, config, log, cache
-    )
+    from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import (
-            Response, cleaner, clitshoot,
-            BatchRequest, caas, render, cli, utils, config, log, cache
-        )
+        from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
     else:
         print(pkg_dir.parts)
         raise e
 
-from centralcli.constants import (
-    SortInventoryOptions, ShowInventoryArgs, StatusOptions, SortWlanOptions, IdenMetaVars, CacheArgs, SortSiteOptions, SortGroupOptions, SortStackOptions, DevTypes, SortDevOptions, SortLabelOptions,
-    SortTemplateOptions, SortClientOptions, SortCertOptions, SortVlanOptions, SortSubscriptionOptions, SortRouteOptions, DhcpArgs, EventDevTypeArgs, ShowHookProxyArgs, SubscriptionArgs, AlertTypes,
-    SortAlertOptions, AlertSeverity, SortWebHookOptions, GenericDevTypes, TimeRange, RadioBandOptions, SortDhcpOptions, SortArchivedOptions, LicenseTypes, LogLevel, SortPortalOptions, InsightSeverity,
-    SortInsightOptions, SortSwarmOptions, DeviceStatus, DeviceTypes, GenericDeviceTypes, lib_to_api, what_to_pretty, lib_to_gen_plural, LIB_DEV_TYPE  # noqa
-)
 from centralcli.cache import CentralObject
-from ...objects import DateTime, ShowInterfaceFilters
-from ...strings import cron_weekly
-from ...cache import CacheDevice
-from ...response import CombinedResponse
-from ...models.cache import Device
-from ...caas import CaasAPI
-from . import firmware, wids, branch, ospf, ts, overlay, audit, cloudauth, mpsk, bandwidth
+from centralcli.clitree import tshoot as clitshoot
+from centralcli.constants import (
+    LIB_DEV_TYPE,
+    AlertSeverity,
+    AlertTypes,
+    CacheArgs,
+    DeviceStatus,
+    DeviceTypes,
+    DevTypes,
+    DhcpArgs,
+    EventDevTypeArgs,
+    GenericDeviceTypes,
+    GenericDevTypes,
+    IdenMetaVars,
+    InsightSeverity,
+    LicenseTypes,
+    LogLevel,
+    RadioBandOptions,
+    ShowHookProxyArgs,
+    ShowInventoryArgs,
+    SortAlertOptions,
+    SortArchivedOptions,
+    SortCertOptions,
+    SortClientOptions,
+    SortDevOptions,
+    SortDhcpOptions,
+    SortGroupOptions,
+    SortInsightOptions,  # noqa
+    SortInventoryOptions,
+    SortLabelOptions,
+    SortPortalOptions,
+    SortRouteOptions,
+    SortSiteOptions,
+    SortStackOptions,
+    SortSubscriptionOptions,
+    SortSwarmOptions,
+    SortTemplateOptions,
+    SortVlanOptions,
+    SortWebHookOptions,
+    SortWlanOptions,
+    StatusOptions,
+    SubscriptionArgs,
+    TimeRange,
+    lib_to_api,
+    lib_to_gen_plural,
+    what_to_pretty,
+)
 
+from ...caas import CaasAPI
+from ...cache import CacheDevice
 from ...clicommon import APIClients
+from ...models.cache import Device
+from ...objects import DateTime, ShowInterfaceFilters
+from ...response import CombinedResponse
+from ...strings import cron_weekly
+from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
 
 if TYPE_CHECKING:
-    from ...cache import CacheSite, CacheGroup, CacheLabel, CachePortal, CacheClient
     from tinydb.table import Document
+
+    from ...cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite
 
 
 app = typer.Typer()
@@ -2143,7 +2180,7 @@ def config_(
             if device.generic_type != "gw":
                 cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
 
-        caasapi = caas.CaasAPI(api=api)
+        caasapi = caas.CaasAPI()
         if not status:
             func = caasapi.show_config
             args = [group.name,]

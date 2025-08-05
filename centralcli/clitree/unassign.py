@@ -1,28 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-import sys
-from pathlib import Path
-from typing import List
+from __future__ import annotations
 
 import typer
-from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, log, BatchRequest
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, BatchRequest
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.cache import CacheDevice, CacheLabel
+from centralcli import BatchRequest, cli, log
+from centralcli.cache import CacheDevice, CacheLabel, api
 from centralcli.constants import iden_meta
-from .cache import api
 
 app = typer.Typer()
 
@@ -31,7 +15,7 @@ app = typer.Typer()
 @app.command()
 def license(
     license: cli.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
-    devices: List[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=f"{iden_meta.dev_many} or 'auto'", autocompletion=cli.cache.dev_completion, show_default=False),
+    devices: list[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=f"{iden_meta.dev_many} or 'auto'", autocompletion=cli.cache.dev_completion, show_default=False),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -42,14 +26,14 @@ def license(
     if do_auto:
         _msg = f"Disable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
         if len(devices) > 1:
-            print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+            cli.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
         cli.econsole.print(_msg)
         if cli.confirm(yes):
             resp = api.session.request(api.platform.disable_auto_subscribe, services=license.name)
             cli.display_results(resp, tablefmt="action")
             return
 
-    devices: List[CacheDevice] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
+    devices: list[CacheDevice] = [cli.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
 
     _msg = f"Unassign [bright_green]{license.value}[/bright_green] from"
     if len(devices) > 1:
@@ -74,7 +58,7 @@ def license(
 @app.command()
 def label(
     label: str = typer.Argument(..., help="Label to remove from device(s)", autocompletion=cli.cache.label_completion, show_default=False,),
-    devices: List[str] = cli.arguments.devices,
+    devices: list[str] = cli.arguments.devices,
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,

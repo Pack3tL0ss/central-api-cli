@@ -22,11 +22,12 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .cache import CacheDevice
-from .classic.api import ClassicAPI
+from centralcli import cli, log, BatchRequest, caas, config, render
+from centralcli.cache import CacheDevice
+from centralcli.classic.api import ClassicAPI
 
 if TYPE_CHECKING:
-    from .cache import CacheGroup, CacheSite, CacheDevice
+    from ..cache import CacheGroup, CacheSite, CacheDevice
 
 app = typer.Typer()
 console = Console(emoji=False)

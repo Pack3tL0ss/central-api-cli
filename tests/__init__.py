@@ -39,10 +39,14 @@ Bottom Line.
 
 """
 # from cli import cli as common
-from centralcli.cli import log, cli as common, config
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
+
+from centralcli.cli import config, log
+from centralcli.clicommon import APIClients
+
+api_clients = APIClients()
 
 class InvalidAccountError(Exception):
     ...
@@ -73,8 +77,9 @@ def setup_batch_import_file(test_data: dict, import_type: str = "sites") -> Path
     return test_batch_file
 
 def ensure_default_account(test_data: dict):
-    if common.central.auth.central_info["customer_id"] != str(test_data["customer_id"]):
-        msg = f'customer_id {common.central.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
+    api = api_clients.classic
+    if api.session.auth.central_info["customer_id"] != str(test_data["customer_id"]):
+        msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
 
 if __name__ == "tests":

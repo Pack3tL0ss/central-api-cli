@@ -1,34 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from pathlib import Path
 from typing import List, TYPE_CHECKING
-import sys
 import typer
 from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, config, Response, BatchRequest, clidelfirmware
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, config, Response, BatchRequest, clidelfirmware
-    else:
-        print(pkg_dir.parts)
-        raise e
 
+from centralcli import cli, utils, config, Response, BatchRequest
 from centralcli.constants import iden_meta
-from .classic.api import ClassicAPI
-
-from centralcli.cache import CacheSite, CacheLabel
+from centralcli.cache import api, CacheSite, CacheLabel
+from . import firmware
 
 if TYPE_CHECKING:
-    from .cache import CachePortal, CacheGroup, CacheTemplate, CacheGuest
+    from centralcli.cache import CachePortal, CacheGroup, CacheTemplate, CacheGuest
+
 
 app = typer.Typer()
-app.add_typer(clidelfirmware.app, name="firmware")
+app.add_typer(firmware.app, name="firmware")
 
 
 @app.command()
@@ -40,7 +28,6 @@ def cert(
     workspace: str = cli.options.workspace,
 ) -> None:
     """Delete a certificate."""
-    api = ClassicAPI()
     cert = cli.cache.get_cert_identifier(name)
     cli.econsole.print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] certificate [cyan]{cert.name}[/]")
 
@@ -68,7 +55,6 @@ def site(
     _del_msg = utils.summarize_list([s.summary_text for s in sites], max=7, color=None)
     cli.econsole.print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")
 
-    api = ClassicAPI()
     if cli.confirm(yes):
         del_list = [s.id for s in sites]
         resp: List[Response] = api.session.request(api.central.delete_site, del_list)
@@ -106,7 +92,6 @@ def portal(
 
     Delete Guest Portal Profile(s)/Splash Page(s)
     """
-    api = ClassicAPI()
     cache_portals: List[CachePortal] = [cli.cache.get_name_id_identifier('portal', portal) for portal in portals]
     reqs = [BatchRequest(api.guest.delete_portal_profile, p.id) for p in cache_portals]
 
@@ -139,7 +124,6 @@ def group(
     workspace: str = cli.options.workspace,
 ) -> None:
     """Delete group(s)"""
-    api = ClassicAPI()
     groups: list[CacheGroup] = [cli.cache.get_group_identifier(g) for g in groups]
     reqs = [BatchRequest(api.configuration.delete_group, g.name) for g in groups]
 
@@ -168,7 +152,6 @@ def wlan(
     default: bool = cli.options.default,
     workspace: str = cli.options.workspace,
 ) -> None:
-    api = ClassicAPI()
     group: CacheGroup = cli.cache.get_group_identifier(group)
     print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]")
     if cli.confirm(yes):
@@ -190,7 +173,6 @@ def webhook(
     This command requires the webhook id, which is not cached.
     Use [cyan]cencli show webhooks[/] to get the webhook id ([bright_green]wid[/]).
     """
-    api = ClassicAPI()
     cli.econsole.print(f"\u26a0  Delet{'e' if not yes else 'ing'} Webhook {wid}", emoji=False)
     if cli.confirm(yes):
         resp = api.session.request(api.central.delete_webhook, wid)
@@ -208,7 +190,6 @@ def template(
     workspace: str = cli.options.workspace,
 ) -> None:
     """Delete a Template."""
-    api = ClassicAPI()
     # allow unnecessary keyword group "cencli delete template NAME group GROUP"
     if group:
         group = [g for g in group if g != "group"]
@@ -271,7 +252,6 @@ def guest(
     workspace: str = cli.options.workspace,
 ) -> None:
     """Add a guest user to a configured portal"""
-    api = ClassicAPI()
     portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
     guest: CacheGuest = cli.cache.get_guest_identifier(guest, portal_id=portal.id)
 

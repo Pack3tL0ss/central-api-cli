@@ -2,27 +2,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import typer
 from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
-
+from centralcli import cli
 from centralcli.strings import ImportExamples
 
-tty = utils.tty
 app = typer.Typer()
 
 
@@ -52,7 +39,7 @@ def subscriptions(
 
 @app.callback()
 def callback():
-    """Perform batch operations"""
+    """Batch assign subscriptions [dim italic](based on data from import file)[/]"""
     pass
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
 from rich.markup import escape
-from typing import Optional, Any, List, Type, Sequence
+from typing import Optional, Any, List, Type, Sequence, Literal
 from collections.abc import Callable
 import click
 from .environment import env_var
@@ -13,6 +13,13 @@ import typer
 
 from typer.models import ArgumentInfo, OptionInfo
 
+
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version"]
+OptionType = Literal[
+    "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
+    "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "sort_by", "default", "workspace", "verbose",
+    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past"
+]
 
 class CLIArgs:
     def __init__(self, cache: Cache):
@@ -41,7 +48,7 @@ class CLIArgs:
 
     def get(
         self,
-        argument: str,
+        argument: ArgumentType,
         *param_decls: Optional[Sequence[str]],
         default: Optional[Any] = None,
         callback: Optional[Callable[..., Any]] = None,
@@ -172,6 +179,7 @@ class CLIOptions:
         self.outfile: OptionInfo = typer.Option(None, "--out", help="Output to file (and terminal)", writable=True, show_default=False, rich_help_panel="Common Options",)
         self.reverse: OptionInfo = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
         self.pager: OptionInfo = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
+        self.ssid: OptionInfo = typer.Option(None, help="Filter/Apply command to a specific SSID", show_default=False)
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,
@@ -279,7 +287,7 @@ class CLIOptions:
 
     def get(
         self,
-        option: str,
+        option: OptionType,
         *param_decls: Optional[Sequence[str]],
         default: Optional[Any] = None,
         callback: Optional[Callable[..., Any]] = None,
@@ -343,6 +351,8 @@ class CLIOptions:
 
         set rich_help_panel="Options" to force the default panel
         """
+        if option == "in":
+            option = "in_"
         attr = getattr(self, option)
         kwargs = {
             "default": default,

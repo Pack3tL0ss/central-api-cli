@@ -1,41 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from pathlib import Path
-import sys
 import typer
 from rich import print
 
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli
-    else:
-        print(pkg_dir.parts)
-        raise e
-
+from centralcli import cli
 from centralcli.constants import iden_meta
-from .cache import CacheClient
-from .models.cache import Clients
-from .classic.api import ClassicAPI
+from centralcli.cache import CacheClient
+from centralcli.models.cache import Clients
+from centralcli.classic.api import ClassicAPI
 
 app = typer.Typer()
 
-@app.command(short_help="Disconnect all WLAN clients from an AP optionally for a specific SSID",)
+@app.command()
 def all(
-    device: str = typer.Argument(
-        ...,
-        metavar=iden_meta.dev,
+    device: str = cli.arguments.get(
+        "device",
         help="The AP to disconnect clients from",
         autocompletion=cli.cache.dev_ap_completion,
-        show_default=False,
     ),
-    ssid: str = typer.Option(None, help="Kick all users connected to a specific SSID", show_default=None),
+    ssid: str = cli.options.get("ssid", help="Kick all users connected to a specific SSID"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -114,9 +98,8 @@ def callback():
     """
     Kick (disconnect) WLAN clients
     """
-    pass
+    ...
 
 
 if __name__ == "__main__":
-    print("hit")
     app()

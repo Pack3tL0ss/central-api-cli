@@ -148,7 +148,7 @@ class APRequestInfo:
     def skipped_summary(self) -> str:
         return utils.summarize_list([str(s) for s in self.skipped.values()], max=12, color=None, italic=True)
 
-class APIClients:
+class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
     def __init__(self):
         self.classic = ClassicAPI(config.classic.base_url)
         self.glp = None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)

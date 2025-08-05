@@ -1,29 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
-from pathlib import Path
-import sys
-import typer
-from rich import print
 import asyncio
 
+import typer
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from .classic.api import ClassicAPI
+from centralcli import cli, utils
+from centralcli.cache import api
 
 app = typer.Typer()
-color = utils.color
 
 
 @app.command()
@@ -40,12 +26,12 @@ def group(
 
     [dark_orange3]:warning:[/]  Tunneled SSIDs are not included in clone operation.
     """
-    api = ClassicAPI()
+    color = utils.color
     cli.econsole.print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
     if aos10:
         cli.econsole.print(f"    Upgrade cloned group to AOS10: {color(True)}")
         cli.econsole.print(
-            "\n    [dark_orange]:warning:[/dark_orange]  [italic]Upgrade doesn't always work despite "
+            "\n    [dark_orange3]:warning:[/dark_orange]  [italic]Upgrade doesn't always work despite "
             f"returning {color('success')},\n    Group is cloned if {color('success')} is returned "
             "but upgrade to AOS10 may not occur.\n    API method appears to have some caveats."
             "\n    Use [cyan]cencli show groups[/] after clone to verify."
@@ -70,9 +56,8 @@ def callback():
     """
     Clone Aruba Central Groups
     """
-    pass
+    ...
 
 
 if __name__ == "__main__":
-    print("hit")
     app()

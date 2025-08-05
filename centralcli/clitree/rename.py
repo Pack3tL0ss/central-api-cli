@@ -1,30 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 
-from pathlib import Path
-import sys
-import typer
-from rich import print
 from typing import TYPE_CHECKING
 
+import typer
+from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, cliupdate
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, cliupdate
-    else:
-        print(pkg_dir.parts)
-        raise e
-
+from centralcli import cli
+from centralcli.cache import api
 from centralcli.constants import iden_meta
-from .cache import api
+
+from . import update
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheSite, CacheDevice, CacheGroup
+    from centralcli.cache import CacheDevice, CacheGroup, CacheSite
 
 app = typer.Typer()
 
@@ -45,7 +35,7 @@ def site(
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if cli.confirm(yes):
         print()
-        cliupdate.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, debug=debug, default=default, workspace=workspace)
+        update.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, debug=debug, default=default, workspace=workspace)
 
 
 @app.command()

@@ -4,14 +4,16 @@
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import time
-import pendulum
 from collections.abc import Iterator
 from copy import deepcopy
 from enum import Enum
+from functools import lru_cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Set, Tuple, Union
 
+import pendulum
 import typer
 from rich import print
 from rich.console import Console
@@ -21,17 +23,16 @@ from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
 
-from centralcli import Response, config, constants, log, render, utils, BatchRequest
+from centralcli import BatchRequest, Response, Session, config, constants, log, render, utils
 from centralcli.response import CombinedResponse
-from .objects import DateTime
-from .models import cache as models
-from .cnx.models.cache import Subscriptions, Inventory as GlpInventory, get_inventory_with_sub_data
-from .exceptions import CentralCliException
-from functools import partial
-import datetime as dt
-from functools import lru_cache
 
 from .classic.api import ClassicAPI
+from .cnx.models.cache import Inventory as GlpInventory
+from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
+from .exceptions import CentralCliException
+from .models import cache as models
+from .objects import DateTime
+
 api = ClassicAPI(config.classic.base_url)
 
 if config.glp.ok:
@@ -41,9 +42,10 @@ else:
     glp_api = None
 
 if TYPE_CHECKING:
-    from tinydb.table import Table, Document
+    from tinydb.table import Document, Table
+
     from .config import Config
-    from .typedefs import PortalAuthTypes, SiteData, MPSKStatus, CertType, StrEnum
+    from .typedefs import CertType, MPSKStatus, PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -1325,7 +1327,7 @@ class Cache:
             return [lic.value for lic in constants.LicenseTypes]
 
     @property
-    def LicenseTypes(self) -> StrEnum:
+    def LicenseTypes(self) -> constants.LicenseTypes:
         if len(self.licenses) > 0:
             return Enum("ValidLicenseTypes", {item: item.replace("_", "-") for item in self.licenses}, type=str)
         else:
@@ -1561,9 +1563,10 @@ class Cache:
             importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
             if not f.name.startswith("_") and f.suffix == ".py"
         ]
+        client = Session(config.classic.base_url)
         for m in all_calls:
             methods += [
-                d for d in m.AllCalls().__dir__()
+                d for d in m.AllCalls(client).__dir__()
                 if not d.startswith("__")
             ]
 

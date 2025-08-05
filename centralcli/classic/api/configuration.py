@@ -105,7 +105,7 @@ class ConfigAPI:
             # TODO refactor to send failed Response if this happens otherwise cache can be truncated if props_resp was OK but others failed.
             # log.error("Unexpected error in get_all_groups, length of responses differs.", show=True, caption=True, log=True)
 
-        combined_resp = Response(props_resp._response)
+        combined_resp = Response(props_resp._response, elapsed=max([r.elapsed for r in batch_resp]))
         combined_resp.output = [{"group": k, **v} for k, v in combined.items()]
         combined_resp.raw = {"properties": props_resp.raw, "template_info": template_resp.raw}
 

@@ -4,40 +4,22 @@
 from __future__ import annotations
 
 from pathlib import Path
-import sys
-from typing import List, Union
-# from typing import List
+
 import typer
-from rich import print
-from rich.console import Console
-from rich.text import Text
-from rich.markup import escape
-from jinja2 import FileSystemLoader, Environment
 import yaml
+from jinja2 import Environment, FileSystemLoader
+from rich.markup import escape
+from rich.text import Text
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import utils, cli, cleaner, BatchRequest, log
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import utils, cli, cleaner, BatchRequest, log
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from .constants import IdenMetaVars, DevTypes, GatewayRole, NotifyToArgs, state_abbrev_to_pretty, RadioBandOptions, DynamicAntMode, IAPTimeZoneNames
-from . import render
-from .cache import CacheTemplate, CacheDevice, CacheGroup, CachePortal, CacheCert, api
-from .caas import CaasAPI
-
+from centralcli import BatchRequest, cleaner, cli, log, render, utils
+from centralcli.caas import CaasAPI
+from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
+from centralcli.constants import DevTypes, DynamicAntMode, GatewayRole, IAPTimeZoneNames, NotifyToArgs, RadioBandOptions, iden_meta, state_abbrev_to_pretty
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
 SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
-tty = utils.tty
-iden_meta = IdenMetaVars()
+
 
 app = typer.Typer()
 
@@ -109,10 +91,10 @@ def template(
         payload = utils.get_multiline_input(prompt="Paste in new template contents.")
         payload = payload.encode("utf-8")
 
-    print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{cache_template.name}[/] in group [cyan]{kwargs['group']}[/]")
-    print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
-    print(f"    Model: [cyan]{kwargs['model']}[/]")
-    print(f"    Version: [cyan]{kwargs['version']}[/]")
+    cli.econsole.print(f"\n[bright_green]Updat{'ing' if yes else 'e'} Template[/] [cyan]{cache_template.name}[/] in group [cyan]{kwargs['group']}[/]")
+    cli.econsole.print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
+    cli.econsole.print(f"    Model: [cyan]{kwargs['model']}[/]")
+    cli.econsole.print(f"    Version: [cyan]{kwargs['version']}[/]")
     if cli.confirm(yes):
         resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
         cli.display_results(resp, tablefmt="action", exit_on_fail=True)
@@ -124,7 +106,7 @@ def template(
 @app.command(help="Update existing or add new Variables for a device/template")
 def variables(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    var_value: List[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'", show_default=False,),
+    var_value: list[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -156,10 +138,9 @@ def variables(
 
     var_dict = {k: v for k, v in zip(vars, vals)}
 
-    con = Console(emoji=False)
     msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
-    con.print(f"{msg} {dev.rich_help_text}")
-    _ = [con.print(f'    {k}: [bright_green]{v}[/]') for k, v in var_dict.items()]
+    cli.econsole.print(f"{msg} {dev.rich_help_text}", emoji=False)
+    _ = [cli.econsole.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
     if cli.confirm(yes):
         resp = api.session.request(
             api.configuration.update_device_template_variables,
@@ -170,10 +151,7 @@ def variables(
         cli.display_results(resp, tablefmt="action")
 
 
-@app.command(
-    short_help="Update group properties.",
-    help="Update group properties.",
-)
+@app.command()
 def group(
     group: str = cli.arguments.group,
     wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
@@ -194,13 +172,14 @@ def group(
     default: bool = cli.options.default,
     workspace: str = cli.options.workspace,
 ) -> None:
+    """Update group properties."""
     group: CacheGroup = cli.cache.get_group_identifier(group)
 
     if all(x is None for x in [wired_tg, wlan_tg, gw_role, aos10, mb, ap, sw, cx, gw, mo_sw, mo_cx]):
         cli.exit(
             "[bright_red]Missing required options.[/bright_red] "
             "Use [italic bright_green]cencli update group ?[/italic bright_green] to see available options"
-        )  # TODO is there a way to trigger help text
+        )
     if not aos10 and mb:
         cli.exit("[bright_red]Error[/]: Microbranch is only valid if group is configured as [cyan]AOS10[/] group.")
     if (mo_sw or mo_cx) and wired_tg:
@@ -243,7 +222,7 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]{mo_sw is True}[/bright_green]"
     if mo_cx is not None:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]{mo_cx is True}[/bright_green]"
-    print(f"{_msg}\n")
+    cli.econsole.print(f"{_msg}\n")
 
     kwargs = {
         "group": group.name,
@@ -263,7 +242,7 @@ def group(
         )
         cli.display_results(resp, tablefmt="action")
 
-def generate_template(template_file: Union[Path, str], var_file: Union[Path, str], group_dev: str):
+def generate_template(template_file: Path | str, var_file: Path | str, group_dev: str):
     '''Generate configuration files based on j2 templates and provided variables
     '''
     template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
@@ -337,7 +316,7 @@ def config_(
             cli.display_results(resp, tablefmt="action")
 
 
-# FIXME typer is not handling List[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
+# FIXME typer is not handling list[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
 # TODO check... Default for group ATM-LOCAL had "wlan cert-assignment-profile" no sub-commands below it...  it did not have "cp-cert-checksum ..."
 #   update cp-cert ... added cp-cert-checksum, which removed "wlan cert-assignment-profile".  Need to verify what that is, thought the default was cp-cert-checksum pointing to default aruba cert.
 @app.command()
@@ -348,7 +327,7 @@ def cp_cert(
         autocompletion=cli.cache.cert_completion,
         show_default=False,
     ),
-    groups: List[str] = cli.options.get(
+    groups: list[str] = cli.options.get(
         "group_many", "-G", "--group",
         default=...,
         metavar=iden_meta.group.replace("NAME]", "NAME|all]"),
@@ -374,9 +353,9 @@ def cp_cert(
     if cert.expired:
         cli.exit(f"Aborting as {cert.summary_text} - is [bright_red bold]Expired[/].")
     if groups != ["all"]:
-        groups: List[CacheGroup] = [cli.cache.get_group_identifier(g, dev_type="ap") for g in groups]
+        groups: list[CacheGroup] = [cli.cache.get_group_identifier(g, dev_type="ap") for g in groups]
     else:
-        groups: List[CacheGroup] = cli.cache.ap_groups
+        groups: list[CacheGroup] = cli.cache.ap_groups
 
     # filter out Template Groups and CNX managed groups.
     groups = [g for g in groups if g.cnx is not True and not g.wlan_tg]
@@ -461,29 +440,29 @@ def swarm(
 
 # FIXME entering more than one DNS results in the 2nd and beyond entry being evaluated as additional aps
 # update ap lwr --dns 10.0.30.51 10.0.30.52 ... results in aps = ['lwr', '10.0.30.52']
-# Any options below that are List[str] will have all items beyond the first evaluated as if it was aps
+# Any options below that are list[str] will have all items beyond the first evaluated as if it was aps
 @app.command()
 def ap(
-    aps: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False, lazy=True,),
+    aps: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False, lazy=True,),
     hostname: str = typer.Option(None, help="Rename/Set AP hostname", show_default=False),
-    ip: str = typer.Option(None, metavar=iden_meta.ip_dhcp, help="Configure Static IP or reset AP to [cyan]dhcp[/] [grey62 italic]--mask, --gateway, and --dns must be provided if configuring static IP[/]", show_default=False,),
-    mask: str = typer.Option(None, help="Subnet mask in format 255.255.255.0 [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False,),
-    gateway: str = typer.Option(None, help="Default Gateway [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False,),
-    dns: str = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
-    domain: str = typer.Option(None, help="DNS domain name.  [grey62 italic]Optional/Applies when --ip is provided[/]", show_default=False,),
+    ip: str = typer.Option(None, metavar=iden_meta.ip_dhcp, help="Configure Static IP or reset AP to [cyan]dhcp[/] [dim italic][cyan]--mask[/], [cyan]--gateway[/], and [cyan]--dns[/] must be provided if configuring static IP[/]", show_default=False,),
+    mask: str = typer.Option(None, help="Subnet mask in format 255.255.255.0 [dim italic]Required/Applies when --ip is provided[/]", show_default=False,),
+    gateway: str = typer.Option(None, help="Default Gateway [dim italic]Required/Applies when --ip is provided[/]", show_default=False,),
+    dns: str = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [dim italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
+    domain: str = typer.Option(None, help="DNS domain name.  [dim italic]Optional/Applies when --ip is provided[/]", show_default=False,),
     disable_radios: str = typer.Option(None, "-D", "--disable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to disable.", show_default=False, is_eager=True,),
     enable_radios: str = typer.Option(None, "-E", "--enable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to enable.", show_default=False, is_eager=True,),
     access_radios: str = typer.Option(None, "-A", "--access", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]access mode[/]", show_default=False, is_eager=True,),
     monitor_radios: str = typer.Option(None, "-M", "--monitor", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, is_eager=True,),
     spectrum_radios: str = typer.Option(None, "-S", "--spectrum", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, is_eager=True,),
     # TODO FIX This see FIXME above
-    # dns: List[str] = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [grey62 italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
-    # domain: str = typer.Option(None, help="DNS domain name.  [grey62 italic]Optional/Applies when --ip is provided[/]", show_default=False,),
-    # disable_radios: List[str] = typer.Option(None, "-D", "--disable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to disable.", show_default=False, is_eager=True,),
-    # enable_radios: List[str] = typer.Option(None, "-E", "--enable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to enable.", show_default=False, is_eager=True,),
-    # access_radios: List[str] = typer.Option(None, "-A", "--access", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]access mode[/]", show_default=False, is_eager=True,),
-    # monitor_radios: List[str] = typer.Option(None, "-M", "--monitor", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, is_eager=True,),
-    # spectrum_radios: List[str] = typer.Option(None, "-S", "--spectrum", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, is_eager=True,),
+    # dns: list[str] = typer.Option(None, help="Comma seperated list [bright_green](no spaces)[/] of dns servers. [dim italic]Required/Applies when --ip is provided[/]", show_default=False, is_eager=True,),
+    # domain: str = typer.Option(None, help="DNS domain name.  [dim italic]Optional/Applies when --ip is provided[/]", show_default=False,),
+    # disable_radios: list[str] = typer.Option(None, "-D", "--disable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to disable.", show_default=False, is_eager=True,),
+    # enable_radios: list[str] = typer.Option(None, "-E", "--enable-radios", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to enable.", show_default=False, is_eager=True,),
+    # access_radios: list[str] = typer.Option(None, "-A", "--access", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]access mode[/]", show_default=False, is_eager=True,),
+    # monitor_radios: list[str] = typer.Option(None, "-M", "--monitor", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]air monitor mode[/]", show_default=False, is_eager=True,),
+    # spectrum_radios: list[str] = typer.Option(None, "-S", "--spectrum", help="Comma seperated list [bright_green](no spaces)[/] of radio(s) to set to [cyan]spectrum mode[/]", show_default=False, is_eager=True,),
     flex_dual_exclude: RadioBandOptions = typer.Option(
         None,
         "-e",
@@ -491,10 +470,10 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
-    antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [grey62 italic]Only applies to AP 679[/]", show_default=False,),
+    antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [dim italic]Only applies to AP 679[/]", show_default=False,),
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
-    gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [grey62 italic]Must be set for 6Ghz SP[/]", show_default=False,),
-    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [grey62]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
+    gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [dim italic]Must be set for 6Ghz SP[/]", show_default=False,),
+    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [dim]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -539,7 +518,7 @@ def ap(
     if not kwargs:
         cli.exit("[bright_red]No Changes provided[/]... Nothing to do.  Use [cyan]cencli update ap --help[/] to see available options.")
 
-    aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+    aps: list[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
     data = [{"serial": ap.serial, **kwargs} for ap in aps]
     cli.batch_update_aps(data, yes=yes, reboot=reboot)
 
@@ -549,7 +528,7 @@ def ap(
 def webhook(
     wid: str = cli.arguments.wid,
     name: str = typer.Argument(..., help="Update webhook name", show_default=False,),
-    urls: List[str] = typer.Argument(..., help="Update webhook destination URLs", show_default=False,),
+    urls: list[str] = typer.Argument(..., help="Update webhook destination URLs", show_default=False,),
     yes: bool = cli.options.yes,
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
@@ -636,8 +615,8 @@ def site(
     if not address_fields and not new_name:
         cli.exit("[red]No Update data provided[/]\n[italic]Must provide address data and/or --new-name.")
 
-    print(f"Updating Site: {site_now.summary_text}")
-    print(f" [bright_green]Send{'ing' if yes else ''} the following updates:[reset]")
+    cli.econsole.print(f"Updating Site: {site_now.summary_text}", emoji=False)
+    cli.econsole.print(f" [bright_green]Send{'ing' if yes else ''} the following updates:[reset]")
     rename_only = False
     if new_name and site_now.name != new_name:
         # Only provided new name send current address info to endpoint along with new name (name alone not allowed)
@@ -648,10 +627,10 @@ def site(
             if not address_fields:
                 address_fields = {k: v for k, v in site_now.data.items() if k in geo_keys and v}
 
-        print(f"  Chang{'e' if not yes else 'ing'} Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
+        cli.econsole.print(f"  Chang{'e' if not yes else 'ing'} Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
     if rename_only:
-        print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
-    _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
+        cli.econsole.print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
+    _ = [cli.econsole.print(f"  {k}: {v}", emoji=False) for k, v in address_fields.items()]
     if cli.confirm(yes):
         resp = api.session.request(api.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
         cli.display_results(resp, exit_on_fail=True)
@@ -662,7 +641,7 @@ def site(
 @app.command()
 def wlan(
     wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
-    groups: List[str] = typer.Argument(
+    groups: list[str] = typer.Argument(
         None,
         help=f"Group(s) to update (SSID must be defined in each group) {cli.help_block('All Groups that contain specified SSIDs will be updated')}",
         autocompletion=cli.cache.group_completion,
@@ -746,10 +725,10 @@ def wlan(
         "zone": zone,
         "psk": psk,
     }
-    print(f"Update WLAN Profile {wlan} in groups [cyan]{'[/], [cyan]'.join(list(config_b4_dict.keys()))}[/]")
-    print('\n'.join([f"  [bright_green]-[/] Update [cyan]{k}[/] -> [bright_green]{v}[/]" for k, v in options.items() if v is not None]))
+    cli.econsole.print(f"Update WLAN Profile {wlan} in groups [cyan]{'[/], [cyan]'.join(list(config_b4_dict.keys()))}[/]")
+    cli.econsole.print('\n'.join([f"  [bright_green]-[/] Update [cyan]{k}[/] -> [bright_green]{v}[/]" for k, v in options.items() if v is not None]))
     if hide is not None:
-        print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
+        cli.econsole.print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
 
     if yes or typer.confirm("\nProceed?", abort=True):
         update_res = api.session.batch_request(update_req)
@@ -831,7 +810,7 @@ def guest(
     _msg = f"[bright_green]Update[/] Guest: [cyan]{name}[/] with the following options:\n  {options}\n"
     if password:
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
-    print(_msg)
+    cli.econsole.print(_msg)
     if cli.confirm(yes):
         resp = api.session.request(api.guest.add_guest, **payload)
         password = None

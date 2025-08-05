@@ -47,7 +47,7 @@ class CLIFormatter:
         return self.simple_kv_formatter(self.original_data)
 
     @staticmethod
-    def _extract_names_from_id_name_dict(id_name: dict) -> str:
+    def _extract_names_from_id_name_dict(id_name: dict[str, str]) -> str:
         if isinstance(id_name, dict) and "id" in id_name and "name" in id_name:
             names = [x.get("name", "Error") for x in id_name]
             return ", ".join(names)
@@ -159,7 +159,7 @@ class CLIFormatter:
         Returns:
             List[Dict[str, Any]]: Formatted data
         """
-        data = data or self.data
+        data = data or self.original_data
         if not isinstance(data, list):
             log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
             return data
