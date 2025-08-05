@@ -3,27 +3,27 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-import typer
 import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Literal, List
+from typing import List, Literal
 
+import typer
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, cleaner, Response
+    from centralcli import Response, cleaner, cli
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, cleaner, Response
+        from centralcli import Response, cleaner, cli
     else:
         print(pkg_dir.parts)
         raise e
 
 from centralcli.constants import iden_meta  # noqa
-from centralcli.cache import CentralObject
+from centralcli.cache import CacheDevice
 from centralcli.objects import DateTime
 from centralcli.models.wids import Wids
 from ...cache import api
@@ -70,7 +70,7 @@ def get_wids_response(
     past: str = None,
 ) -> WidsResponse:
     if device:
-        device: CentralObject = cli.cache.get_dev_identifier(dev_type="ap", swack=True)
+        device: CacheDevice = cli.cache.get_dev_identifier(dev_type="ap", swack=True)
     if group:
         group: List[str] = [cli.cache.get_group_identifier(g).name for g in group]
     if site:
