@@ -2,9 +2,10 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from centralcli import Response, config, utils, cli
+from centralcli import Response, cli, config, utils
 
 from .classic.api import ClassicAPI
+
 api = ClassicAPI(config.classic.base_url)
 
 
@@ -210,14 +211,14 @@ class BuildCLI:
             mac = utils.Mac(dev_mac)
             if mac:
                 url = f"{url}/{mac.url}"
-            else:
+            else:  # pragma: no cover
                 cli.exit(f"{dev_mac} does not appear to be a valid MAC address.")
 
         return await api.session.get(url)
 
 
     # FIXME
-    async def get_config_status(self, serial: str) -> Response:
+    async def get_config_status(self, serial: str) -> Response:  # pragma: no cover
         """Bad API endpoint.  ignore this.
 
         // -- used by show config <gw> --status -- //
