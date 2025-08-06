@@ -14,9 +14,8 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import Response, cli, config, log, utils
+from centralcli import BatchRequest, Response, cli, config, log, utils
 from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, lib_to_api, state_abbrev_to_pretty
-from centralcli.response import BatchRequest
 
 if TYPE_CHECKING:
     from ..cache import CacheGroup, CacheMpskNetwork, CachePortal
