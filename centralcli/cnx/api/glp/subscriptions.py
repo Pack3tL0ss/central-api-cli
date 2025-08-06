@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from centralcli.response import Session
-
 if TYPE_CHECKING:
     from centralcli import Response
+    from centralcli.client import Session
 
 
 class GreenLakeSubscriptionsAPI:
