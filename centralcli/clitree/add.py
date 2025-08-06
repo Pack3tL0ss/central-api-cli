@@ -6,20 +6,20 @@ from __future__ import annotations
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, List, Tuple
+
+import pendulum
 import typer
 import yaml
 from rich import print
 from rich.console import Console
 from rich.markup import escape
-import pendulum
 
-
-from centralcli import cli, utils, log, config, Response
-from centralcli.constants import DevTypes, GatewayRole, state_abbrev_to_pretty, iden_meta, NotifyToArgs, lib_to_api
+from centralcli import Response, cli, config, log, utils
+from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, lib_to_api, state_abbrev_to_pretty
 from centralcli.response import BatchRequest
 
 if TYPE_CHECKING:
-    from ..cache import CachePortal, CacheGroup, CacheMpskNetwork
+    from ..cache import CacheGroup, CacheMpskNetwork, CachePortal
 
 from ..clicommon import APIClients
 
@@ -419,10 +419,10 @@ def label(
         duplicate_names = [name for name in [*[s["name"] for s in cli.cache.sites], *cli.cache.label_names] if name in labels]
         if duplicate_names:
             if idx == 0:
-                err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, refreshing cache to ensure data is current.")
+                err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, refreshing cache to ensure data is current.")
                 cli.cache.check_fresh(site_db=True, label_db=True)
             else:
-                cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exist in site or label DB, label/site names must be unique (sites included)")
+                cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, label/site names must be unique (sites included)")
 
     batch_reqs = [BatchRequest(api.central.create_label, label) for label in labels]
     if cli.confirm(yes):

@@ -1,5 +1,7 @@
 from typer.testing import CliRunner
+
 from centralcli.cli import app
+
 from . import test_data
 
 runner = CliRunner()
@@ -28,6 +30,52 @@ def test_del_group_multiple():
     assert result.exit_code == 0
     assert "Success" in result.stdout
     assert result.stdout.count("Success") == 2
+
+
+def test_del_site_by_address():
+    result = runner.invoke(app, [
+        "delete",
+        "site",
+        "123 Main St.",
+        "-Y"
+        ])
+    assert result.exit_code == 0
+    assert "uccess" in result.stdout
+
+
+def test_del_site4():
+    result = runner.invoke(app, [
+        "delete",
+        "site",
+        "cencli_test_site4",
+        "-Y"
+        ])
+    assert result.exit_code == 0
+    assert "uccess" in result.stdout
+
+
+def test_del_label():
+    result = runner.invoke(app, [
+        "delete",
+        "label",
+        "cencli_test_label1",
+        "-Y"
+        ])
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_del_label_multi():
+    result = runner.invoke(app, [
+        "delete",
+        "label",
+        "cencli_test_label2",
+        "cencli_test_label3",
+        "-Y"
+        ])
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
 
 def test_del_guest():
     result = runner.invoke(app, ["-d", "delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
