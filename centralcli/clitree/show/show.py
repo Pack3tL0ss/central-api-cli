@@ -26,18 +26,7 @@ except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
-    else:
-        print(pkg_dir.parts)
-        raise e
-
+from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
 from centralcli.cache import CentralObject
 from centralcli.clitree import tshoot as clitshoot
 from centralcli.constants import (
@@ -2698,7 +2687,6 @@ def roaming(
     end: datetime = cli.options.end,
     past: str = cli.options.past,
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
-    drop: bool = typer.Option(False, "--drop", "-D", help="(implies -R): Drop all users from existing cache, then refresh.  By default any user that has ever connected is retained in the cache.",),
     sort_by: SortClientOptions = cli.options.sort_by,
     reverse: bool = cli.options.reverse,
     do_json: bool = cli.options.do_json,
@@ -2725,14 +2713,14 @@ def roaming(
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table)
     title = "Roaming history"
 
-    if refresh or drop:
-        resp = api.session.request(cli.cache.refresh_client_db, "wireless", truncate=drop)
+    if refresh:
+        resp = api.session.request(cli.cache.refresh_client_db, "wireless")
         if not resp:
             cli.display_results(resp, exit_on_fail=True)
 
     mac = utils.Mac(client)
     if not mac.ok:
-        client = cli.cache.get_client_identifier(client)
+        client: CacheClient = cli.cache.get_client_identifier(client)
         mac = utils.Mac(client.mac)
         title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
     else:
