@@ -3331,7 +3331,7 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
-        if not glp_api:
+        if not glp_api:  # We only started caching subscription data with glp addition, classic only does not cache subscriptions
             return await api.platform.get_subscriptions(license_type=license_type, device_type=dev_type)
 
         resp = await glp_api.subscriptions.get_subscriptions()
@@ -3627,7 +3627,7 @@ class Cache:
         else:
             return await self.update_db(self.LabelDB, doc_ids=data)
 
-    async def refresh_label_db(self) -> bool:
+    async def refresh_label_db(self) -> Response:
         resp = await api.central.get_labels()
         if resp.ok:
             self.responses.label = resp
