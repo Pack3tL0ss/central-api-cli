@@ -248,7 +248,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
     return caption
 
 
-def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = None, band: bool = None, device: CentralObject = None, verbose: bool = False,):
+def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = None, band: RadioBandOptions | None = None, device: CacheDevice = None, verbose: bool = False,):
     def _update_counts_by_band(caption: str, wlan_clients: List[Dict[str, Any]], end: str = "\n") -> str:
         two_four_clients = len([c for c in wlan_clients if c.get("band", 0) == 2.4])
         five_clients = len([c for c in wlan_clients if c.get("band", 0) == 5])
@@ -259,9 +259,10 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
     if wired:
         count_text = f"[cyan]{len(resp)}[/] Wired Clients."
     elif wireless or band:
-        count_text = f"[cyan]{len(resp)}[/] Wireless Clients."
+        count_text = f"[cyan]{len(resp)}[/] {'' if not band else f'[magenta]{band.value}Ghz[/] '}Wireless Clients."
         wlan_clients = resp.raw.get("clients", [])
-        count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients, end=",")
+        if not band:
+            count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients, end=",")
     else:
         _tot = len(resp)
         wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
@@ -2520,7 +2521,7 @@ def clients(
         title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
         verbose = verbose or 1
     elif device:
-        dev: CentralObject = cli.cache.get_dev_identifier(device)
+        dev: CacheDevice = cli.cache.get_dev_identifier(device)
         kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
@@ -2557,9 +2558,9 @@ def clients(
             title = f"{'All' if not dev else dev.name} Wireless Clients"
             kwargs["client_type"] = "wireless"
             if band:
-                title = f"{title} associated with {band}Ghz radios"
+                title = f"{title} associated with {band.value}Ghz radios"
         elif band:
-            title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band}Ghz radios"
+            title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band.value}Ghz radios"
             kwargs["client_type"] = "wireless"
 
     if not denylisted:
@@ -2574,7 +2575,7 @@ def clients(
             title = f"{title} in site {_site.name}"
 
         if label:
-            _label = cli.cache.get_label_identifier(label)
+            _label: CacheLabel = cli.cache.get_label_identifier(label)
             kwargs["label"] = _label.name
             title = f"{title} on devices with label {_label.name}"
 
