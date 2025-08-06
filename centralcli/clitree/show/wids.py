@@ -70,7 +70,7 @@ def get_wids_response(
     past: str = None,
 ) -> WidsResponse:
     if device:
-        device: CacheDevice = cli.cache.get_dev_identifier(dev_type="ap", swack=True)
+        device: CacheDevice = cli.cache.get_dev_identifier(device, dev_type="ap", swack=True)
     if group:
         group: List[str] = [cli.cache.get_group_identifier(g).name for g in group]
     if site:
