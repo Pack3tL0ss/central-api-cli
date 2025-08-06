@@ -100,7 +100,7 @@ def get_wids_response(
 # Default Time-Range for all wids Endpoints is past 3 hours.
 @app.command()
 def rogues(
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
@@ -140,7 +140,7 @@ def rogues(
 
 @app.command()
 def interfering(
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
@@ -180,7 +180,7 @@ def interfering(
 
 @app.command()
 def neighbors(
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
@@ -220,7 +220,7 @@ def neighbors(
 
 @app.command()
 def suspect(
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
@@ -259,7 +259,7 @@ def suspect(
 
 @app.command()
 def all(
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
@@ -300,7 +300,7 @@ def all(
 
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context,
-    device: str = typer.Option(None, "-S", "--swarm", help="Show firmware for the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
     group: List[str] = cli.options.group_many,
     site: List[str] = cli.options.site_many,
     label: List[str] = cli.options.label_many,
