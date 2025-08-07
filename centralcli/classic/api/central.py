@@ -180,13 +180,10 @@ class CentralAPI:
         zipcode: int | str = None,
         latitude: float = None,
         longitude: float = None,
-        site_list: List[Dict[str, str | dict]] = None,  # TODO TypedDict
     ) -> Response:
         """Create Site
 
-        Either address information or GeoLocation information is required.  For Geolocation attributes
-        all attributes are required.  Or a List[dict] with multiple sites to be added containing either
-        'site_address' or 'geolocation' attributes for each site.
+        Either address information or GeoLocation information (latitude, longitude) is required.
 
         Args:
             site_name (str, optional): Site Name. Defaults to None.
@@ -197,7 +194,6 @@ class CentralAPI:
             zipcode (int | str, optional): Zipcode. Defaults to None.
             latitude (float, optional): Latitude (in the range of -90 and 90). Defaults to None.
             longitude (float, optional): Longitude (in the range of -100 and 180). Defaults to None.
-            site_list (List[Dict[str, str | dict]], optional): A list of sites to be created. Defaults to None.
 
         Returns:
             Response: CentralAPI Response object
@@ -215,21 +211,7 @@ class CentralAPI:
         if geo_dict:
             json_data["geolocation"] = geo_dict
 
-        # TODO revert this to single site add and use batch_add_site method for multi-add
-        if site_list:
-            resp = await self.session.post(url, json_data=site_list[0])
-            if not resp:
-                return resp
-            if len(site_list) > 1:
-                ret = await self.session._batch_request(
-                    [
-                        BatchRequest(self.session.post, url, json_data=_json, callback=cleaner._unlist)
-                        for _json in site_list[1:]
-                    ]
-                )
-                return [resp, *ret]
-        else:
-            return await self.session.post(url, json_data=json_data, callback=cleaner._unlist)  # TODO remove callback
+        return await self.session.post(url, json_data=json_data)
 
     async def update_site(
         self,
