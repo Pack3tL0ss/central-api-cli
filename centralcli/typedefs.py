@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Literal, Union  # future annotations does not work here, need to use Union to support py < 3.10
+from typing import Dict, List, Literal, Optional, TypedDict, Union  # future annotations does not work here, need to use Union to support py < 3.10
 
 from yarl import URL
 
@@ -35,6 +35,18 @@ MPSKStatus = Literal["enabled", "disabled"]
 CertType = Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"]
 CertFormat = Literal["PEM", "DER", "PKCS12"]
 JSON_TYPE = Union[List, Dict, str]
+
+class CacheSiteDict(TypedDict):
+    name: str
+    id: int
+    address: Optional[str]
+    city: Optional[str]
+    state: Optional[str]
+    zip: Optional[str]
+    country: Optional[str]
+    lon: Optional[str]
+    lat: Optional[str]
+    devices: int
 
 
 # These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
