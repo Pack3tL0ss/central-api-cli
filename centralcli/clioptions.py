@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from centralcli.cache import Cache
-from centralcli.constants import iden_meta
-from rich.markup import escape
-from typing import Optional, Any, List, Type, Sequence, Literal
 from collections.abc import Callable
+from typing import Any, List, Literal, Optional, Sequence, Type
+
 import click
-from .environment import env_var
-
 import typer
-
+from rich.markup import escape
 from typer.models import ArgumentInfo, OptionInfo
 
+from centralcli.cache import Cache
+from centralcli.constants import iden_meta
+
+from .environment import env_var
 
 ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version"]
 OptionType = Literal[
@@ -270,7 +270,7 @@ class CLIOptions:
         )
 
     @property
-    def timerange_to_start(self,):
+    def timerange_to_start(self,) -> str:
         letter_to_word = {
             "M": "months",
             "w": "weeks",
