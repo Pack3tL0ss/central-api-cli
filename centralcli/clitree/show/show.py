@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 #!/usr/bin/env python3
-
 from __future__ import annotations
 
 import getpass
@@ -2945,7 +2944,7 @@ def alerts(
     if severity:
         severity = severity.title() if severity != "info" else severity.upper()
 
-    start, end = cli.verify_time_range(start=start, end=end, past=past)
+    start, end = cli.verify_time_range(start=start, end=end, past=past, end_offset=pendulum.duration(hours=24))
 
     kwargs = {
         "group": None if not group else group.name,
@@ -2962,12 +2961,10 @@ def alerts(
 
     resp = api.session.request(api.central.get_alerts, **kwargs)
 
-    caption = "in past 24 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+    caption = cli.get_time_range_caption(start, end, default="in past 24 hours.")
     caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
     cleaner_func = cleaner.get_alerts if not verbose else None
-    if resp.ok and len(resp) == 0:
-        resp.output = render.rich_capture(f":information:  {caption}", emoji=True)
-        cleaner_func = None
+
 
     tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
