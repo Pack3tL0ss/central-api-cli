@@ -117,16 +117,17 @@ class CloudAuthAPI:
 
         # HACK need to make the above async function work
         import requests
+        from requests import Response as RequestsResponse
 
         files = { "file": (file.name, file.open("rb"), "text/csv") }
-        full_url=f"{self.auth.central_info['base_url']}{url}"
+        full_url=f"{self.session.base_url or ''}{url}"
         headers = {
-            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
             'Accept': 'application/json'
         }
 
         for _ in range(2):
-            _resp = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
+            _resp: RequestsResponse = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
             _log = log.info if _resp.ok else log.error
             _log(f"[PATCH] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
             try:
@@ -138,8 +139,8 @@ class CloudAuthAPI:
             _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
             resp = Response(_resp, output=output, raw=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
-                self.refresh_token()
-                headers["Authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
+                self.session.refresh_token()
+                headers["Authorization"] = f"Bearer {self.session.auth.central_info['token']['access_token']}"
             else:
                 break
         return resp

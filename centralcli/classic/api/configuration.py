@@ -861,7 +861,7 @@ class ConfigAPI:
         name: str,
         group: str,
         template: Path | str | bytes,
-        device_type: constants.DeviceTypes ="ap",
+        device_type: constants.DeviceTypes = constants.DevTypes.ap,
         version: str = "ALL",
         model: str = "ALL",
     ) -> Response:
@@ -908,20 +908,21 @@ class ConfigAPI:
 
         # HACK This works but prefer to get aiohttp sorted for consistency
         import requests
+        from requests import Response as RequestsResponse
         headers = {
-            "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+            "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
             'Accept': 'application/json'
         }
-        url=f"{self.auth.central_info['base_url']}{url}"
+        url=f"{self.session.base_url or ''}{url}"
         for _ in range(2):
-            resp = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            if "[\n" in resp.text and "\n]" in resp.text:
-                output = "\n".join(json.loads(resp.text))
+            req_resp: RequestsResponse = requests.request("POST", url=url, params=params, files=files, headers=headers)
+            if "[\n" in req_resp.text and "\n]" in req_resp.text:
+                output = "\n".join(json.loads(req_resp.text))
             else:
-                output = resp.text.strip('"\n')
-            resp = Response(resp, output=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+                output = req_resp.text.strip('"\n')
+            resp = Response(req_resp, output=output, elapsed=round(req_resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
-                self.refresh_token()
+                self.session.refresh_token()
             else:
                 break
         return resp
@@ -986,27 +987,28 @@ class ConfigAPI:
         files = {'template': ('template.txt', template_data)}
 
         # HACK aiohttp has issue here similar to add_template
-        import requests  # TODO MOVE to Session until aiohttp has file types sorted.
-        full_url=f"{self.auth.central_info['base_url']}{url}"
+        import requests
+        from requests import Response as RequestsResponse
+        full_url=f"{self.session.base_url or ''}{url}"
         for _ in range(2):
             headers = {
-                "Authorization": f"Bearer {self.auth.central_info['token']['access_token']}",
+                "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
                 'Accept': 'application/json'
             }
-            resp = requests.request("PATCH", url=full_url, params=params, files=files, headers=headers)
-            _log = log.info if resp.ok else log.error
-            _log(f"[PATCH] {resp.url} | {resp.status_code} | {'OK' if resp.ok else 'FAILED'} | {resp.reason}")
+            req_resp: RequestsResponse = requests.request("PATCH", url=full_url, params=params, files=files, headers=headers)
+            _log = log.info if req_resp.ok else log.error
+            _log(f"[PATCH] {req_resp.url} | {req_resp.status_code} | {'OK' if req_resp.ok else 'FAILED'} | {req_resp.reason}")
             try:
-                output = resp.json()
+                output = req_resp.json()
             except json.JSONDecodeError:
-                if "[\n" in resp.text and "\n]" in resp.text:
-                    output = "\n".join(json.loads(resp.text))
+                if "[\n" in req_resp.text and "\n]" in req_resp.text:
+                    output = "\n".join(json.loads(req_resp.text))
                 else:
-                    output = resp.text.strip('"\n')
-            resp.status, resp.method, resp.url = resp.status_code, "PATCH", URL(resp.url)
-            resp = Response(resp, output=output, raw=output, elapsed=round(resp.elapsed.total_seconds(), 2))
+                    output = req_resp.text.strip('"\n')
+            req_resp.status, req_resp.method, req_resp.url = req_resp.status_code, "PATCH", URL(req_resp.url)
+            resp = Response(req_resp, output=output, raw=output, elapsed=round(req_resp.elapsed.total_seconds(), 2))
             if "invalid_token" in resp.output:
-                self.refresh_token()
+                self.session.refresh_token()
             else:
                 break
         return resp
