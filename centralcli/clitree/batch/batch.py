@@ -345,12 +345,12 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     if import_file is not None:
         data = cli._get_import_file(import_file, "sites")
     elif isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):  # Data keyed by site name
-        data = [{"site_name": k, **data[k]} for k in data]  # deploy is the only one that passed raw data in.
+        data = [{"site_name": k, **data[k]} for k in data]  # deploy is the only one that passes raw data in.
 
     try:
         verified_sites = ImportSites(data)
     except Exception as e:
-        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{repr(e)}")
+        cli.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{e}")
 
     for idx in range(2):
         already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in [s["name"] for s in cli.cache.sites]]
@@ -367,8 +367,7 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     if not verified_sites:
         cli.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
 
-    resp = None
-    address_fields = {"site_name": "bright_green", "name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green3", "country": "magenta", "zipcode": "blue", "zip": "blue"}
+    address_fields = {"site_name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green3", "country": "magenta", "zipcode": "blue", "latitude": "medium_spring_green", "longitude": "spring_green3"}
     confirm_msg = utils.summarize_list(
         [
             "|".join([f'[{address_fields[k]}]{v}[/]' for k, v in site.model_dump().items() if v and k in address_fields]) for site in list(verified_sites)
@@ -377,6 +376,8 @@ def batch_add_sites(import_file: Path = None, data: dict = None, yes: bool = Fal
     )
     cli.econsole.print(f"\n[bright_green]The Following [cyan]{len(verified_sites)}[/] Sites will be created:[/]")
     cli.econsole.print(confirm_msg, emoji=False)
+
+    resp = None
     if cli.confirm(yes):
         reqs = [
             BatchRequest(api.central.create_site, **site.model_dump())
