@@ -1,10 +1,13 @@
 from typer.testing import CliRunner
 
+import pendulum
+
 from centralcli.cli import app
 
 from . import test_data, update_log
 
 runner = CliRunner()
+now = pendulum.now()
 
 
 def test_show_wids_group():
@@ -51,7 +54,9 @@ def test_show_wids_interfering():
     result = runner.invoke(app, [
             "show",
             "wids",
-            "interfering"
+            "interfering",
+            "--end",
+            f"{now.month}/{now.day}/{now.year}-{now.hour}:{now.minute}"
         ]
     )
     assert result.exit_code == 0
