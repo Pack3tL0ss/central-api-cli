@@ -53,7 +53,7 @@ class BuildCLI:
         self.cmds = []
 
     @staticmethod
-    def get_bulkedit_data(filename: Path):
+    def get_bulkedit_data(filename: Path):  # pragma: no cover
         cli_data = {}
         _common = {}
         _vlans = []
@@ -111,7 +111,7 @@ class BuildCLI:
 
         return cli_data
 
-    def build_cmds(self, data: dict = None, file: Path = config.bulk_edit_file) -> list:
+    def build_cmds(self, data: dict = None, file: Path = config.bulk_edit_file) -> list:  # pragma: no cover
         if data:
             self.data = data
         else:
@@ -246,7 +246,7 @@ class CaasAPI(BuildCLI):
         url = "/caasapi/v1/exec/cmd"
 
         if not config.classic.customer_id:
-            cli.exit(f"customer_id attribute not found in {config.file}")
+            cli.exit(f"customer_id attribute not found in {config.file}")  # pragma: no cover
         else:
             params = {"cid": config.classic.customer_id, key: group_dev}
             json_data = {"cli_cmds": cli_cmds or []}
