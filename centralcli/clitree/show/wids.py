@@ -71,6 +71,8 @@ def get_wids_response(
 ) -> WidsResponse:
     if device:
         device: CacheDevice = cli.cache.get_dev_identifier(device, dev_type="ap", swack=True)
+        if device.is_aos10:
+            cli.exit(f"[cyan]-S[/]|[cyan]--swarm[/] option only applies to [bright_green]AOS8[/] IAP.\n{device.summary_text} is an [red1]AOS10[/] AP.")
     if group:
         group: List[str] = [cli.cache.get_group_identifier(g).name for g in group]
     if site:
