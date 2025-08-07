@@ -11,7 +11,7 @@ from copy import deepcopy
 from enum import Enum
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Set, Tuple, Union, overload
 
 import pendulum
 import typer
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from tinydb.table import Document, Table
 
     from .config import Config
-    from .typedefs import CertType, MPSKStatus, PortalAuthTypes, SiteData
+    from .typedefs import CacheSiteDict, CertType, MPSKStatus, PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -63,26 +63,13 @@ econsole = Console(stderr=True)
 console = Console()
 TinyDB.default_table_name = "devices"
 
-DEV_COMPLETION = ["move", "device", ""]
-SITE_COMPLETION = ["site"]
-GROUP_COMPLETION = ["group", "wlan"]
-TEMPLATE_COMPLETION = []
-EXTRA_COMPLETION = {
-    "move": ["site", "group"]
-}
-LIB_DEV_TYPE = {
-    "AOS-CX": "cx",
-    "AOS-S": "sw",
-    "gateway": "gw"
-}
-
 
 CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
 class CentralObject:
     def __init__(
         self,
-        db: Literal["dev", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
+        db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
         data: Document | dict[str, Any] | list[Document | dict[str, Any]],
     ) -> list | list[str, Any]:
         self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False
@@ -234,7 +221,7 @@ class CacheInvDevice(CentralObject):
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
-        super().__init__('dev', data)
+        super().__init__('inv', data)
         self.id: str = data.get("id")  # glp only
         self.serial: str = data["serial"]
         self.mac: str = data["mac"]
@@ -480,7 +467,7 @@ class CacheGroup(CentralObject):
 class CacheSite(CentralObject):
     db: Table | None = None
 
-    def __init__(self, data: Document | Dict[str, Any]) -> None:
+    def __init__(self, data: Document | CacheSiteDict) -> None:
         self.data = data
         super().__init__('site', data)
         self.name: str = data["name"]
@@ -1171,8 +1158,6 @@ class Cache:
     def __init__(
         self,
         config: Config = None,
-        data: Union[List[dict], dict] = None,
-        refresh: bool = False,
     ) -> None:
         """Central-API-CLI Cache object
         """
@@ -1181,6 +1166,7 @@ class Cache:
         self.responses = CacheResponses()
         self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
         self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
+        self.get_portal_identifier: CachePortal | list[CachePortal] = partial(self.get_name_id_identifier, "portal")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
@@ -1191,11 +1177,8 @@ class Cache:
             self.LabelDB: Table = self.DevDB.table("labels")
             self.LicenseDB: Table = self.DevDB.table("licenses")
             self.ClientDB: Table = self.DevDB.table("clients")  # Updated only when show clients is ran
-            # log db is used to provide simple index to get details for logs
-            # vs the actual log id in form 'audit_trail_2021_2,...'
-            # it is updated anytime show logs is ran.
-            self.LogDB: Table = self.DevDB.table("logs")
-            self.EventDB: Table = self.DevDB.table("events")
+            self.LogDB: Table = self.DevDB.table("logs")  # Only updated when show audit logs is ran.  provide simple index to get details for logs vs the actual log id in form 'audit_trail_2021_2,...'
+            self.EventDB: Table = self.DevDB.table("events") # Only updated when show logs is ran
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
             self.MpskNetDB: Table = self.DevDB.table("mpsk_networks")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
@@ -1207,11 +1190,7 @@ class Cache:
                 self.SubDB: Table = self.DevDB.table("subscriptions")
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
             self.Q: Query = Query()
-            if data:
-                raise ValueError("This should not have happened.  Passing data directly to cache object was deprecated.  Please open issue on GitHub. I apparently missed something.")
-                # TODO should be good, once soaked to be sure remove data from constructor and this conditional
-            # if central:
-            #     self.check_fresh(refresh)
+
 
     def __call__(self, refresh=False) -> None:
         if refresh:
@@ -1477,13 +1456,6 @@ class Cache:
         resp_cnt = len(response)
         db_str = db.name.title()
         elapsed_msg = "" if not elapsed else f" Elapsed: {elapsed}"
-        # if remove:
-        #     if len(remove) != expected:
-        #         log.warning(
-        #             f'{db_str}DB cache update_db provided {expected} records to remove but found only {len(remove)} matching records.  This can be normal if cache was outdated.{elapsed_msg}'
-        #         )
-
-        #     expected = len(remove)
 
         msg = f"remove {expected} records" if remove else f"add/update {expected} records"
         update_ok = True if expected == resp_cnt else False
@@ -1515,7 +1487,7 @@ class Cache:
 
         Returns:
             List[Response]: Response objects where output is list of dicts with
-                            data from Inventory and Monitoring.
+                            data from Inventory and Monitoring combined.
         """
         if not no_refresh:
             res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=device_type)
@@ -1538,7 +1510,6 @@ class Cache:
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["status"] == status.capitalize()}
 
         _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
-        # dev_common_keys = list(filter(lambda k: k != "macaddr", set.intersection(*map(set, _dev_by_ser.values()))))
         combined = [
             {
                 # **{k: None for k in dev_common_keys},
@@ -1546,6 +1517,7 @@ class Cache:
                 **_dev_by_ser.get(serial, {})
             } for serial in _all_serials
         ]
+
         # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
         resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
         resp.output = combined
@@ -1695,7 +1667,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_dev_identifier(incomplete, dev_type=["switch"], completion=True)
+        match = self.get_dev_identifier(incomplete, dev_type="switch", completion=True)
 
         out = []
         if match:
@@ -1707,7 +1679,7 @@ class Cache:
         for m in out:
             yield m
 
-    def dev_switch_by_type_completion(
+    def _dev_switch_by_type_completion(
         self,
         incomplete: str,
         args: List[str] = [],
@@ -1745,7 +1717,7 @@ class Cache:
             incomplete: str,
             args: List[str] = [],
     ) -> Iterator[Tuple[str, str]]:
-        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
+        for match in self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
             yield match
 
     def dev_sw_completion(
@@ -1753,7 +1725,7 @@ class Cache:
             incomplete: str,
             args: List[str] = [],
     ) -> Iterator[Tuple[str, str]]:
-        for match in self.dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
+        for match in self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
             yield match
 
     def dev_ap_gw_sw_completion(
@@ -1776,7 +1748,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match: List[CentralObject] = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
+        match = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
 
         out = []
         if match:
@@ -1813,7 +1785,7 @@ class Cache:
                     out += [tuple([m.name, m.id])]
                 elif m.name.lower().startswith(incomplete.lower()):
                     out += [tuple([m.name, m.id])]
-                elif m.id.startswith(incomplete):
+                elif str(m.id).startswith(incomplete):
                     out += [tuple([m.id, m.name])]
                 else:
                     out += [tuple([m.name, f"{m.help_text} FS match".lstrip()])]  # failsafe, shouldn't hit
@@ -1833,8 +1805,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match = self.get_name_id_identifier(
-            "portal",
+        match: list[CachePortal] = self.get_portal_identifier(
             incomplete,
             completion=True,
         )
@@ -1847,13 +1818,32 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete):
                     out += [tuple([m.name, m.help_text])]
-                elif m.id.startswith(incomplete):
+                elif str(m.id).startswith(incomplete):
                     out += [tuple([m.id, m.help_text])]
                 else:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m
+
+    @overload
+    def get_guest_identifier(
+        self,
+        query_str: str,
+        completion: bool = True,
+    ) -> list[CacheGuest]:
+        ...
+
+    @overload
+    def get_guest_identifier(
+        self,
+        query_str: str,
+        portal_id: str | List[str] = None,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CacheGuest:
+        ...
 
     def get_guest_identifier(
         self,
@@ -1992,13 +1982,21 @@ class Cache:
         for m in out:
             yield m
 
+    @overload
+    def get_cert_identifier(
+        self,
+        query_str: str,
+        completion: bool,
+    ) -> list[CacheCert]:
+        ...
+
     def get_cert_identifier(
         self,
         query_str: str,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheCert | List[CacheCert]:
+    ) -> CacheCert:
         """Get certificate info from Certificate Cache"""
         retry = False if completion else retry
         if not query_str and completion:
@@ -2530,7 +2528,7 @@ class Cache:
             return
 
         dev_types = ["ap", "gw"]
-        match = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
+        match: list[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
 
         out = []
         if match:
@@ -2573,7 +2571,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match: List[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
+        match: list[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
 
         out = []
         if match:
@@ -2622,7 +2620,7 @@ class Cache:
             else:
                 db = "dev"
 
-            match = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
+            match: list[CacheDevice] | list[CacheGroup] | list[CacheSite] = self.get_identifier(incomplete, [db], device_type="gw", completion=True)
 
             out = []
             if match:
@@ -2652,7 +2650,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match: List[CacheGroup] = self.get_group_identifier(
+        match = self.get_group_identifier(
             incomplete,
             completion=True,
         )
@@ -2682,7 +2680,7 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the group, or
                 Returns None if config is invalid
         """
-        match: List[CacheGroup] = self.get_group_identifier(
+        match = self.get_group_identifier(
             incomplete,
             completion=True,
             dev_type=["ap"],
@@ -2729,8 +2727,7 @@ class Cache:
             pfx = ""
         if pfx:
             incomplete = incomplete.lstrip(pfx)
-        match: List[CacheLabel] = self.get_name_id_identifier(
-            "label",
+        match: List[CacheLabel] = self.get_label_identifier(
             incomplete,
             completion=True,
         )
@@ -2786,7 +2783,7 @@ class Cache:
             pfx = ""
         if pfx:
             incomplete = incomplete.lstrip(pfx)
-        match: List[CacheClient] = self.get_client_identifier(
+        match = self.get_client_identifier(
             incomplete,
             completion=True,
         )
@@ -2900,7 +2897,7 @@ class Cache:
 
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
-        match: CacheSite = self.get_site_identifier(
+        match = self.get_site_identifier(
             incomplete.replace('"', "").replace("'", ""),
             completion=True,
         )
@@ -2991,12 +2988,12 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        match: List[CacheDevice] = self.get_dev_identifier(
+        match = self.get_dev_identifier(
             incomplete,
             completion=True,
         ) or []  # TODO update get_*_identifier methods to return empty list when no completion yields no matches
 
-        site_match: List[CacheSite] = self.get_site_identifier(
+        site_match = self.get_site_identifier(
             incomplete,
             completion=True,
         ) or []
@@ -3026,7 +3023,7 @@ class Cache:
         if not args:
             args = [arg for p in ctx.params.values() for arg in utils.listify(p)]
 
-        match: List[CacheDevice] = self.get_dev_identifier(
+        match = self.get_dev_identifier(
             incomplete,
             dev_type=["gw", "switch"],
             completion=True,
@@ -4240,6 +4237,45 @@ class Cache:
             econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
             raise typer.Exit(1)
 
+    @overload
+    def get_dev_identifier(self, query_str: str | Iterable[str], completion: bool, dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
+        swack: bool = False,
+        conductor_only: bool = False,
+        retry: bool = True,
+        silent: bool = False,
+    ) -> CacheDevice: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
+        swack: bool = False,
+        conductor_only: bool = False,
+        retry: bool = True,
+        silent: bool = False,
+        include_inventory: bool = True,
+    ) -> CacheDevice | CacheInvDevice: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
+        swack: bool = False,
+        conductor_only: bool = False,
+        retry: bool = True,
+        silent: bool = False,
+        include_inventory: bool = False,
+        exit_on_fail: bool = False,
+    ) -> CacheDevice | CacheInvDevice | None: ...
+
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
@@ -4568,6 +4604,13 @@ class Cache:
                 mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry, completion=completion, silent=silent, exit_on_fail=False)
                 return CacheInvMonDevice(inv_dev, mon_dev)
 
+    @overload
+    def get_site_identifier(
+        self,
+        query_str: Union[str, List[str], tuple],
+        completion: bool
+    ) -> list[CacheSite]:
+        ...
 
     def get_site_identifier(
         self,
@@ -4674,6 +4717,25 @@ class Cache:
             else:
                 return None
 
+    @overload
+    def get_group_identifier(
+        self,
+        query_str: str,
+        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
+        completion: bool = False,
+    ) -> list[CacheGroup]:
+        ...
+
+    @overload
+    def get_group_identifier(
+        self,
+        query_str: str,
+        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
+        retry: bool = True,
+        silent: bool = False,
+        exit_on_fail: bool = True,
+    ) -> CacheGroup:
+        ...
 
     def get_group_identifier(
         self,
@@ -4786,98 +4848,13 @@ class Cache:
                     f"Unable to gather group data from provided identifier {query_str}", show=not silent
                 )
 
-    # TODO No longer used see attribute in initializer using functools.partial... can do for all where name and id are only valid fields
-    def _get_label_identifier(
+    @overload
+    def get_template_identifier(
         self,
         query_str: str,
-        retry: bool = True,
-        completion: bool = False,
-        silent: bool = False,
-        exit_on_fail: bool = True,
-    ) -> CacheLabel | List[CacheLabel] | None:
-        """Allows Case insensitive label match"""
-        retry = False if completion else retry
-        for _ in range(0, 2):
-            match = []
-            # Exact match
-            if query_str == "":
-                match = self.labels
-            else:
-                match += self.LabelDB.search((self.Q.name == query_str))
-
-            # case insensitive
-            if not match or completion:
-                match += self.LabelDB.search(
-                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
-                )
-
-            # case insensitive startswith
-            if not match or completion:
-                match += self.LabelDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
-                )
-
-            # case insensitive ignore -_
-            if not match or completion:
-                if "_" in query_str or "-" in query_str:
-                    match += self.LabelDB.search(
-                        self.Q.name.test(
-                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
-                        )
-                    )
-
-            # case insensitive startswith ignore - _
-            if not match or completion:
-                match += self.LabelDB.search(
-                    self.Q.name.test(
-                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
-                    )
-                )
-
-            # TODO add fuzzy match other get_*_identifier functions and add fuzz as dep
-            # fuzzy match
-            if not match and retry and not self.responses.label:
-                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] [cyan]{query_str}[/].")
-                if FUZZ and self.labels and not silent:
-                    fuzz_resp = process.extract(query_str, [label["name"] for label in self.labels], limit=1)
-                    if fuzz_resp:
-                        fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = self.LabelDB.search(self.Q.name == fuzz_match)
-                if not match:
-                    econsole.print(":arrows_clockwise: Updating [cyan]label[/] Cache")
-                    self.check_fresh(refresh=True, label_db=True)
-                _ += 1
-            if match:
-                match = [CacheLabel(g) for g in match]
-                break
-
-        if completion:
-            return match or []
-
-        if match:
-            if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="label",)
-
-            return match[0]
-
-        elif retry:
-            log.error(f"Unable to gather label data from provided identifier {query_str}", show=True)
-
-            if exit_on_fail:
-                valid_labels = "\n".join(self.label_names)
-                # TODO convert all these to rich
-                typer.secho(f"{query_str} appears to be invalid", fg="red")
-                typer.secho(f"Valid Labels:\n--\n{valid_labels}\n--\n", fg="cyan")
-                raise typer.Exit(1)
-            else:
-                return
-        else:
-            if not completion:
-                log.error(
-                    f"Unable to gather label data from provided identifier {query_str}", show=not silent
-                )
+        completion: bool,
+    ) -> list[CacheTemplate]:
+        ...
 
     def get_template_identifier(
         self,
@@ -4960,6 +4937,14 @@ class Cache:
         else:
             if not completion and not silent:
                 log.warning(f"Unable to gather template from provided identifier {query_str}", show=False)
+
+    @overload
+    def get_client_identifier(
+        self,
+        query_str: str,
+        completion: bool = False,
+    ) -> list[CacheClient]:
+        ...
 
     def get_client_identifier(
         self,
@@ -5096,6 +5081,25 @@ class Cache:
             log.error(f"Exception in get_event_identifier {e.__class__.__name__}", show=True)
             raise typer.Exit(1)
 
+    @overload
+    def get_mpsk_network_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = True,
+        silent: bool = False,
+    ) -> list[CacheMpskNetwork]:
+        ...
+
+    @overload
+    def get_mpsk_network_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CacheMpskNetwork:
+        ...
 
     def get_mpsk_network_identifier(
         self,
