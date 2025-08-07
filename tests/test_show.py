@@ -503,3 +503,27 @@ def test_show_notifications():
     assert result.exit_code == 0
     assert "category" in result.stdout
 
+
+def test_show_wids_group():
+    result = runner.invoke(app, [
+            "show",
+            "wids",
+            "--group",
+            test_data["ap"]["group"]
+        ]
+    )
+    assert result.exit_code == 0
+    assert "Rogue" in result.stdout
+
+
+def test_show_wids_wrong_swarm_version():
+    result = runner.invoke(app, [
+            "show",
+            "wids",
+            "interfering",
+            "-S",
+            test_data["ap"]["mac"]
+        ]
+    )
+    assert result.exit_code != 0
+    assert "AOS8" in result.stdout
