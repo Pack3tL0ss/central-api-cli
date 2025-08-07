@@ -1,41 +1,25 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
-import typer
-import sys
-import pendulum
-from pathlib import Path
-from rich import print
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 
+import pendulum
+import typer
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cleaner, cli, utils, log
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cleaner, cli, utils, log
-    else:
-        print(pkg_dir.parts)
-        raise e
+from centralcli import cleaner, cli, log, utils
+from centralcli.constants import LogAppArgs, LogSortBy
 
-from centralcli.constants import IdenMetaVars, LogAppArgs, LogSortBy
-from ...ws_client import follow_audit_logs
 from ...cache import api
+from ...ws_client import follow_audit_logs
 
 if TYPE_CHECKING:
-    from ...cache import CacheGroup, CacheDevice
+    from ...cache import CacheDevice, CacheGroup
 
 app = typer.Typer()
 
-
-tty = utils.tty
-iden_meta = IdenMetaVars()
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
     if ctx.resilient_parsing:  # tab completion, return without validating
@@ -207,7 +191,7 @@ def logs(
     """
     title = "audit event logs"
     if tail:
-        print(f"Following tail on {title}.  Use CTRL-C to stop.")
+        cli.econsole.print(f"Following tail on {title}.  Use CTRL-C to stop.")
         try:
             api.session.request(follow_audit_logs)
         except KeyboardInterrupt:
