@@ -83,6 +83,25 @@ filterwarnings = [
     "ignore::DeprecationWarning"
 ]
 
+[tool.coverage.run]
+omit = [
+    "centralcli/noxfile.py",
+    "centralcli/wh_proxy.py",
+    "centralcli/wh_proxy_service.py",
+    "centralcli/ws_client.py",
+    "centralcli/setup.py",
+    "centralcli/webhook.py",
+    "centralcli/snow.py",
+    "boilerplate/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == \"__main__\":",
+    "# pragma: no cover",
+    "update_log(result.stdout)"
+]
+
 [tool.ruff]
 line-length = 181
 exclude = ["dashboard", "wh_proxy_service.py"]
