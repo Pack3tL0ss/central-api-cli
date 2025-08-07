@@ -6,24 +6,24 @@ import sys
 import time
 from functools import cached_property, wraps
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Type, Optional
 from types import TracebackType
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
 
 from aiohttp.client import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
 from pycentral.base_utils import tokenLocalStoreUtil
+from rich.console import Console
 from rich.markup import escape
 from yarl import URL
-from rich.console import Console
 
 from . import cleaner, config, log, utils
-from .utils import Spinner
 from .cnx.base import NewCentralBase
 from .constants import STRIP_KEYS, lib_to_api
 from .response import Response
 from .typedefs import Method, StrOrURL
+from .utils import Spinner
 
 if TYPE_CHECKING:
     from .exceptions import InvalidConfigException
@@ -180,6 +180,18 @@ class Session():
 
         return self._aio_session
 
+    @aio_session.setter
+    def aio_session(self, session: ClientSession):
+        self._aio_session = session
+
+    @property
+    def headers(self) -> Dict[str, str]:
+        headers = DEFAULT_HEADERS
+        if self.auth is not None:
+            headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
+
+        return headers
+
     async def __aenter__(self) -> ClientSession:
         return self.aio_session
 
@@ -191,22 +203,9 @@ class Session():
     ) -> None:
         await self.close()
 
-    @aio_session.setter
-    def aio_session(self, session: ClientSession):
-        self._aio_session = session
-
     async def close(self) -> None:
         if self._aio_session is not None and not self._aio_session.closed:
             await self._aio_session.close()
-
-    @property
-    def headers(self) -> Dict[str, str]:
-        headers = DEFAULT_HEADERS
-        if self.auth is not None:
-            headers["authorization"] = f"Bearer {self.auth.central_info['token']['access_token']}"
-
-        return headers
-
 
     def _get_spin_text(self, spin_txt: str = None):
         if spin_txt:
@@ -340,7 +339,7 @@ class Session():
                 if self.running_spinners:
                     self.spinner.start(self._get_spin_text(), spinner="dots")
 
-                # TODO need CNX retry here
+                # TODO need GLP retry here
                 # status code: 401
                 # Access Forbidden
                 # Unformatted response from Aruba Central API GW
