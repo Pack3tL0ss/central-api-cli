@@ -1,32 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 from __future__ import annotations
 
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import List, Literal
 
+import pendulum
 import typer
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import Response, cleaner, cli
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response, cleaner, cli
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.constants import iden_meta  # noqa
-from centralcli.cache import CacheDevice
-from centralcli.objects import DateTime
+from centralcli import Response, cleaner, cli
+from centralcli.cache import CacheDevice, api
+from centralcli.constants import iden_meta
 from centralcli.models.wids import Wids
-from ...cache import api
 
 app = typer.Typer()
 
@@ -40,13 +26,8 @@ class WidsResponse:
         if wids_cat == "all":
             self.caption = self.all_caption()
         else:
-            if not end:
-                caption = "in past 3 hours." if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
-            else:
-                caption = f"from {DateTime(start.timestamp(), 'mdyt')} to {DateTime(end.timestamp(), 'mdyt')}"
-                # TODO most other time-frame captions don't handle end (show alerts...)
-
-            self.caption = f"[cyan]{len(response)} {wids_cat} AP{'s' if len(response) > 1 else ''} {caption}[/]"
+            caption = cli.get_time_range_caption(start, end, default="in past 3 hours.")
+            self.caption = f"[cyan]{len(response)}[/] [medium_spring_green]{wids_cat.capitalize()}[/] AP{'s' if len(response) != 1 else ''} {caption}"
 
 
     def all_caption(self) -> str:
@@ -80,6 +61,8 @@ def get_wids_response(
     if label:
         label: List[str] = [cli.cache.get_label_identifier(_label).name for _label in label]
 
+    if end and not start:
+        start = end - pendulum.duration(hours=48)
     start, end = cli.verify_time_range(start=start, end=end, past=past)
 
     kwargs = {
@@ -333,4 +316,4 @@ def callback(ctx: typer.Context,
 
 
 if __name__ == "__main__":
-    app()
+    app()  # pragma: no cover

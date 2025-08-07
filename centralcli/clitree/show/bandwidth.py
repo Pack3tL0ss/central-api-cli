@@ -3,22 +3,23 @@
 
 from __future__ import annotations
 
-import typer
 import sys
-from pathlib import Path
-from rich import print
 from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
+
+import typer
+from rich import print
 from rich.markup import escape
-from typing import Literal, TYPE_CHECKING
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
-    from centralcli import cli, log, utils, cleaner, render, Response
+    from centralcli import Response, cleaner, cli, log, render, utils
 except (ImportError, ModuleNotFoundError) as e:
     pkg_dir = Path(__file__).absolute().parent
     if pkg_dir.name == "centralcli":
         sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, log, utils, cleaner, render, Response
+        from centralcli import Response, cleaner, cli, log, render, utils
     else:
         print(pkg_dir.parts)
         raise e
@@ -27,7 +28,7 @@ from centralcli.constants import IdenMetaVars, BandwidthInterval, UplinkNames, R
 from ...cache import api
 
 if TYPE_CHECKING:
-    from ...cache import CacheClient, CacheLabel, CacheGroup, CacheDevice
+    from ...cache import CacheClient, CacheDevice, CacheGroup, CacheLabel
 
 iden_meta = IdenMetaVars()
 app = typer.Typer()
@@ -90,7 +91,7 @@ def ap(
     group = None if not group else cli.cache.get_group_identifier(group)
     site = None if not site else cli.cache.get_site_identifier(site)
     label = None if not label else cli.cache.get_label_identifier(label)
-    start, end = cli.verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past)  # TODO handle end without start... see show audit logs
 
     interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
 

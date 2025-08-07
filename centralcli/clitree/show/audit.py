@@ -92,10 +92,11 @@ def acp_logs(
     :clock5:  Displays prior 5 days if no time options are provided.
     """
     title = "ACP Audit Logs"
+    caption = None
     if (_all or count) and [start, end, past].count(None) != 3:
         cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
 
-    start, end = cli.verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=5))
 
     dev_id = None
     if device:
@@ -133,13 +134,18 @@ def acp_logs(
     if kwargs.get("log_id"):
         cli.display_results(resp, tablefmt="action")
     else:
+        _time_words = cli.get_time_range_caption(start, end, default="for last 5 days.")
+        caption = [
+            f"[cyan]{len(resp)}[/] Alert{'s' if len(resp) != 1 else ''} {_time_words}",
+            "Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details."
+        ]
         tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if verbose <= 1 else "yaml")
 
         cli.display_results(
             resp,
             tablefmt=tablefmt,
             title=title,
-            caption="Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
+            caption=caption,
             pager=pager,
             outfile=outfile,
             sort_by=sort_by,
@@ -159,7 +165,7 @@ def logs(
         autocompletion=cli.cache.audit_log_completion,
         show_default=False,
     ),
-    group: str = cli.options(timerange="48h").group,
+    group: str = cli.options(timerange="48h", include_mins=True).group,
     start: datetime = cli.options.start,
     end: datetime = cli.options.end,
     past: str = cli.options.past,
@@ -180,7 +186,7 @@ def logs(
     debug: bool = cli.options.debug,
     default: bool = cli.options.default,
     workspace: str = cli.options.workspace,
-    verbose: bool = typer.Option(False, "-v", help="Show logs with original field names and minimal formatting (vertically)"),
+    verbose: int = cli.options.get("verbose", help="Show logs with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show Audit Event Logs.
 
@@ -190,6 +196,7 @@ def logs(
     :clock2:  Displays prior 2 days if no time options are provided.
     """
     title = "audit event logs"
+    caption = None
     if tail:
         cli.econsole.print(f"Following tail on {title}.  Use CTRL-C to stop.")
         try:
@@ -200,7 +207,7 @@ def logs(
             cli.exit(str(e))
         cli.exit()
 
-    start, end = cli.verify_time_range(start, end=end, past=past)
+    start, end = cli.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=2))
 
     if all(x is None for x in [start, end]):
         start = pendulum.now(tz="UTC").subtract(days=2)
@@ -248,6 +255,11 @@ def logs(
         cli.display_results(resp, tablefmt="action")
     else:
         tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        _time_words = cli.get_time_range_caption(start, end, default="for last 2 days.")
+        caption = [
+            f"[cyan]{len(resp)}[/] audit log{'s' if len(resp) != 1 else ''} {_time_words}",
+            "Use [cyan]show audit logs <id>[/] to see details for a log.  Logs lacking an id don't have details."
+        ]
 
         cli.display_results(
             resp,
@@ -259,7 +271,7 @@ def logs(
             reverse=not reverse,  # API returns newest on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs if not verbose else None,
             cache_update_func=cli.cache.update_log_db if not verbose else None,
-            caption="Use [cyan]show audit logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
+            caption=caption,
         )
 
 @app.callback()

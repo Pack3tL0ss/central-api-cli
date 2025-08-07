@@ -936,7 +936,7 @@ class CLICommon:
 
         return start
 
-    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90) -> Tuple[pendulum.DateTime | None, pendulum.DateTime | None]:
+    def verify_time_range(self, start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, past: str = None, max_days: int = 90, end_offset: pendulum.Duration = None) -> Tuple[pendulum.DateTime | None, pendulum.DateTime | None]:
         if end and past:
             log.warning("[cyan]--end[/] flag ignored, providing [cyan]--past[/] implies end is now.", caption=True,)
             end = None
@@ -946,6 +946,9 @@ class CLICommon:
 
         if past:
             start = self.delta_to_start(delta=past)
+
+        if end and end_offset and start is None:
+            start = end - end_offset
 
         if start is None:
             return start, end
@@ -967,6 +970,16 @@ class CLICommon:
                 return self.delta_to_start("2_159h"), _end  # 89 days and 23 hours to avoid timing issue with API endpoint
 
         return start, _end
+
+    @staticmethod
+    def get_time_range_caption(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, default = "in past 3 hours.") -> str:
+            if not end:
+                return default if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+            if start:
+                return f"from {DateTime(start.timestamp(), 'mdyt')} to {DateTime(end.timestamp(), 'mdyt')}"
+
+            raise ValueError("get_time_range_caption() requires start when end is provided.  Use verify_time_range with end_offset to set a default when not provided by user")
+
 
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
