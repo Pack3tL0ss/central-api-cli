@@ -517,7 +517,17 @@ class CacheSite(CentralObject):
 
 
     def __rich__(self) -> str:
-        return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
+        return self.summary_text
+
+    @property
+    def summary_text(self):
+        parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
+        parts = parts if len(parts) > 1 else [*parts, self.lat, self.lon]
+        return "[reset]" + "|".join(
+            [
+                f"{'[cyan]' if idx % 2 == 0 else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
+            ]
+        )
 
 
 class CacheLabel(CentralObject):
