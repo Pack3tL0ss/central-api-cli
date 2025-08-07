@@ -351,11 +351,19 @@ class CacheDevice(CentralObject):
 
     @property
     def summary_text(self) -> str:
-        _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
-        parts = [p for p in [self.name, _status, self.serial, self.mac, self.type, self.model] if p]
+        def _get_color(idx: int, item: str):
+            if item.lower() == "up":
+                return "bright_green"
+            if item.lower() == "down":
+                return "red1"
+            if idx % 2 == 0:
+                return "bright_cyan"
+            return "cyan"
+
+        parts = [p for p in [self.name, self.status, self.serial, self.mac, self.type, self.model] if p]
         return "[reset]" + "|".join(
             [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
+                f"[{_get_color(idx, p)}]{p}[/]" for idx, p in enumerate(parts)
             ]
         )
 
