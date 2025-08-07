@@ -53,18 +53,7 @@ def test_del_site4():
     assert result.exit_code == 0
     assert "uccess" in result.stdout
 
-
-def test_del_label():
-    result = runner.invoke(app, [
-        "delete",
-        "label",
-        "cencli_test_label1",
-        "-Y"
-        ])
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
+# cencli_test_label1 is deleted in test_zdel (last), it's used in other tests prior
 def test_del_label_multi():
     result = runner.invoke(app, [
         "delete",
