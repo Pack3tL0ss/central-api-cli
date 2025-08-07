@@ -364,11 +364,11 @@ def site(
 ) -> None:
     """Add a site to Aruba Central
 
-    Provide [cyan]geo-loc[/] or [cyan]address[/] details, not both.
+    Provide [cyan]geo-loc[/] or [cyan]address[/] details, [red1]not both[/].
     [italic]Google Maps "Plus Codes" are supported for address field.[/]
 
     If address is provided assoicated geo coordinates are automatically populated.
-    If geo coordinates are provided, address is not calculated.
+    If geo coordinates are provided, address is [red1]not[/] calculated.
 
     [italic green3]Wrap Arguments that contain spaces in quotes i.e. "5402 Champions Hill Dr"[/]
     """
@@ -387,7 +387,7 @@ def site(
         "latitude": lat,
         "longitude": lon
     }
-    address_fields = {k: v.rstrip(",") for k, v in kwargs.items() if v}
+    address_fields = {k: v.rstrip(",") for k, v in kwargs.items() if v}  # We allow them to put commas in during entry
 
     print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
