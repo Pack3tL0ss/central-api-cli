@@ -6,11 +6,10 @@ from pathlib import Path
 
 import typer
 
-from centralcli import common, config, render, utils
+from centralcli import common, config, render
 from centralcli.typedefs import StrPath
 
 app = typer.Typer()
-color = utils.color
 
 
 def toggle_bak_file(file: StrPath, *, conf_msg: str = None, yes: bool | None = None) -> Path:
