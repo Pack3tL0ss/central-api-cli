@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Literal
 from json import JSONEncoder
-import pendulum
 from pathlib import Path
+from typing import Literal
 
+import pendulum
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
 
@@ -90,8 +90,8 @@ class DateTime():
         """Render date/time in format provided during instantiation colorized to indicate how near expiration the date is.
 
         return is colorized:
-          - orange: if expiration within 6 months
-          - red: if expiration within 3 months
+            - orange: if expiration within 6 months
+            - red: if expiration within 3 months
 
         Returns:
             str: Potentially colorized date str.

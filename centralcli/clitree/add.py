@@ -10,12 +10,14 @@ from typing import TYPE_CHECKING, List, Tuple
 import pendulum
 import typer
 import yaml
-from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import BatchRequest, Response, cli, config, log, utils
+from centralcli import common, config, log, render, utils
+from centralcli.client import BatchRequest
 from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, lib_to_api, state_abbrev_to_pretty
+from centralcli.render import console, econsole
+from centralcli.response import Response
 
 if TYPE_CHECKING:
     from ..cache import CacheGroup, CacheMpskNetwork, CachePortal
@@ -76,7 +78,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
             except Exception as e:
                 log.warning(f"Unable to extract sku after inventory update ({e.__class__.__name__}), value will be omitted from inv cache.\n{e}")
 
-    api.session.request(cli.cache.update_inv_db, data=inv_data)
+    api.session.request(common.cache.update_inv_db, data=inv_data)
 
 
 # TODO update completion with mac serial partial completion
@@ -86,22 +88,22 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
 @app.command()
 def device(
     kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="", show_default=False,),
-    serial: str = typer.Argument(..., metavar="serial <SERIAL NUM>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    mac: str = typer.Argument(..., metavar="mac <MAC ADDRESS>", hidden=False, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+    serial: str = typer.Argument(..., metavar="serial <SERIAL NUM>", hidden=False, autocompletion=common.cache.smg_kw_completion, show_default=False,),
+    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=common.cache.smg_kw_completion, show_default=False,),
+    mac: str = typer.Argument(..., metavar="mac <MAC ADDRESS>", hidden=False, autocompletion=common.cache.smg_kw_completion, show_default=False,),
+    kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=common.cache.smg_kw_completion, show_default=False,),
     group: str = typer.Argument(None, metavar="[group GROUP]", help="pre-assign device to group",
-                               autocompletion=cli.cache.smg_kw_completion, show_default=False,),
+                               autocompletion=common.cache.smg_kw_completion, show_default=False,),
     # kw4: str = typer.Argument(None, metavar="", hidden=True, autocompletion=cli.cache.smg_kw_completion),
     # site: str = typer.Argument(None, metavar="site [SITE]", help="assign device to site",
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
-    _group: str = typer.Option(None, "--group", autocompletion=cli.cache.group_completion, hidden=True),
+    _group: str = typer.Option(None, "--group", autocompletion=common.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    subscription: List[cli.cache.LicenseTypes] = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False),  # type: ignore
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    subscription: List[common.cache.LicenseTypes] = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False),  # type: ignore
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add a Device to Aruba Central
 
@@ -124,12 +126,12 @@ def device(
 
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            dev = cli.cache.get_dev_identifier(name, silent=True, exit_on_fail=False)
+            dev = common.cache.get_dev_identifier(name, silent=True, exit_on_fail=False)
             if dev:  # allow user to put dev name for rare case where dev is in cache but not in inventory  # TESTME
                 kwargs["serial"] = dev.serial
                 kwargs["mac"] = dev.mac
             else:
-                cli.exit(f"[bright_red]Error[/]: {name} is invalid")
+                common.exit(f"[bright_red]Error[/]: {name} is invalid")
         elif name is not None:
             kwargs[name] = value
 
@@ -137,11 +139,11 @@ def device(
 
     # Error if both serial and mac are not provided
     if not kwargs["mac"] or not kwargs["serial"]:
-        cli.exit("[bright_red]Error[/]: both serial number and mac address are required.")
+        common.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
     _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if "group" in kwargs and kwargs["group"]:
-        _group = cli.cache.get_group_identifier(kwargs["group"])
+        _group = common.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
@@ -152,18 +154,17 @@ def device(
         ]
         kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
 
-    console = Console(emoji=False)
-    console.print("".join(_msg))
+    console.print("".join(_msg), emoji=False)
 
-    if cli.confirm(yes):
+    if render.confirm(yes):
         resp = api.session.request(api.platform.add_devices, **kwargs)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=subscription)
 
 
 @app.command()
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=common.cache.group_completion, show_default=False,),
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
     gw_role: GatewayRole = typer.Option(None, help=f"Configure Gateway Role [grey42]{escape('[default: vpnc if --sdwan branch if not]')}[/]", show_default=False,),
@@ -183,10 +184,10 @@ def group(
     mon_only_sw: bool = typer.Option(False, "--mon-only-sw", help="Monitor Only for ArubaOS-SW"),
     mon_only_cx: bool = typer.Option(False, "--mon-only-cx", help="Monitor Only for ArubaOS-CX"),
     cnx: bool = typer.Option(False, "--cnx", help="Make Group compatible with New Central (cnx). :warning:  All configurations will be pushed from New Central configuration model."),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add a group to Aruba Central"""
     allowed_types = []
@@ -206,23 +207,23 @@ def group(
         _arch = "SD_WAN_Gateway"
         allowed_types = ["sdwan"]
         if gw_role and gw_role != "vpnc":
-            cli.econsole.print(f":warning:  Ignoring Gateway Role: {gw_role}.  Gateway Role the group is configured for [cyan]--sdwan[/] must be [bright_green]vpnc[/]")
+            render.econsole.print(f":warning:  Ignoring Gateway Role: {gw_role}.  Gateway Role the group is configured for [cyan]--sdwan[/] must be [bright_green]vpnc[/]")
         gw_role = "vpnc"
 
     # -- // Error on combinations that are not allowed by API \\ --
     if any([ap, sw, cx, gw]) and sdwan:
-        cli.exit("When allowing [cyan]sdwan[/] in the group it must be the [red]only[/] type allowed in the group")
+        common.exit("When allowing [cyan]sdwan[/] in the group it must be the [red]only[/] type allowed in the group")
     if not aos10 and microbranch:
-        cli.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
+        common.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
     if (mon_only_sw or mon_only_cx) and wired_tg:
-        cli.exit("[cyanMonitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
+        common.exit("[cyanMonitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
     if mon_only_sw and "sw" not in allowed_types or mon_only_cx and "cx" not in allowed_types:
-        cli.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
+        common.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
-        cli.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
+        common.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
     if all([x is None for x in [ap, sw, cx, gw, sdwan]]):
-        print(f"[green]No Allowed devices provided. Allowing default device types [{utils.color(['ap', 'gw', 'cx', 'sw'], 'cyan')}]")
-        print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
+        econsole.print(f"[green]No Allowed devices provided. Allowing default device types [{utils.color(['ap', 'gw', 'cx', 'sw'], 'cyan')}]")
+        econsole.print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
 
     _arch_msg = f"[bright_green]{_arch} "
     _msg = f"[cyan]Create {'' if aos10 is None else _arch_msg}[cyan]group [bright_green]{group}[/bright_green]"
@@ -245,9 +246,9 @@ def group(
         _msg = f"{_msg}\n    [dark_orange3]:warning:[/]  [italic]CNX configuration is currently Select Availability, contant your HPE Aruba Networking Account Team for details.[/italic]"
 
 
-    print(f"{_msg}")
+    econsole.print(f"{_msg}")
 
-    if cli.confirm(yes):
+    if render.confirm(yes):
         resp = api.session.request(
             api.configuration.create_group,
             group,
@@ -263,7 +264,7 @@ def group(
         )
         if not resp.ok:
             log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
-        cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
         # prep data for cache
         data={
             'name': group,
@@ -278,7 +279,7 @@ def group(
             'cnx': cnx
         }
         api.session.request(
-            cli.cache.update_group_db,
+            common.cache.update_group_db,
             data=data
         )
 
@@ -286,7 +287,7 @@ def group(
 # TODO autocompletion
 @app.command(short_help="Add WLAN (SSID)")
 def wlan(
-    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=common.cache.group_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
     kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]", show_default=False,),
     kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']", show_default=False,),
@@ -307,12 +308,12 @@ def wlan(
         show_default=False,
     ),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    group = cli.cache.get_group_identifier(group)
+    group = common.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
     _to_name = {
         "psk": "wpa_passphrase",
@@ -328,12 +329,12 @@ def wlan(
         kwargs["hide_ssid"] = True
 
     if not kwargs["wpa_passphrase"]:
-        cli.exit("psk/passphrase is currently required for this command")
+        common.exit("psk/passphrase is currently required for this command")
 
-    print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
-    if cli.confirm(yes):
+    econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    if render.confirm(yes):
         resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 
@@ -357,10 +358,10 @@ def site(
     country: str = typer.Argument(None, show_default=False,),
     lat: str = typer.Option(None, metavar="LATITUDE", show_default=False,),
     lon: str = typer.Option(None, metavar="LONGITUDE", show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add a site to Aruba Central
 
@@ -389,12 +390,12 @@ def site(
     }
     address_fields = {k: v.rstrip(",") for k, v in kwargs.items() if v}  # We allow them to put commas in during entry
 
-    print(f"Add Site: [cyan]{site_name}[reset]:")
+    econsole.print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if cli.confirm(yes):
+    if render.confirm(yes):
         resp = api.session.request(api.central.create_site, site_name, **address_fields)
-        cli.display_results(resp, exit_on_fail=True)
-        api.session.request(cli.cache.update_site_db, data=resp.raw)
+        render.display_results(resp, exit_on_fail=True)
+        api.session.request(common.cache.update_site_db, data=resp.raw)
 
 
 
@@ -402,33 +403,33 @@ def site(
 @app.command()
 def label(
     labels: List[str] = typer.Argument(..., metavar=iden_meta.label_many, show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add label(s) to Aruba Central
 
     Label can't have any devices associated with it to delete.
     """
-    print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
-    print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
+    econsole.print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
+    econsole.print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
     ...
     for idx in range(0, 2):
-        duplicate_names = [name for name in [*[s["name"] for s in cli.cache.sites], *cli.cache.label_names] if name in labels]
+        duplicate_names = [name for name in [*[s["name"] for s in common.cache.sites], *common.cache.label_names] if name in labels]
         if duplicate_names:
             if idx == 0:
                 err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, refreshing cache to ensure data is current.")
-                cli.cache.check_fresh(site_db=True, label_db=True)
+                common.cache.check_fresh(site_db=True, label_db=True)
             else:
-                cli.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, label/site names must be unique (sites included)")
+                common.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, label/site names must be unique (sites included)")
 
     batch_reqs = [BatchRequest(api.central.create_label, label) for label in labels]
-    if cli.confirm(yes):
+    if render.confirm(yes):
         batch_resp = api.session.batch_request(batch_reqs)
-        cli.display_results(batch_resp, tablefmt="action")
-        update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"]} for resp in batch_resp if resp.ok]
-        api.session.request(cli.cache.update_label_db, data=update_data)
+        render.display_results(batch_resp, tablefmt="action")
+        update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"], "devices": 0} for resp in batch_resp if resp.ok]
+        api.session.request(common.cache.update_label_db, data=update_data)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
@@ -449,10 +450,10 @@ def cert(
     ocsp_resp_cert: bool = typer.Option(False, "--ocsp-resp", help="Type: OCSP responder", show_default=False,),
     ocsp_signer_cert: bool = typer.Option(False, "--ocsp-signer", help="Type: OCSP signer", show_default=False,),
     ssh_pub_key: bool = typer.Option(False, "--public", help="Type: SSH Public cert", show_default=False, hidden=True,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add/Upload a Certificate to Aruba Central
     """
@@ -462,12 +463,9 @@ def cert(
     cert_format = None
 
     if not any([server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]):
-        print("Error: Certificate Type must be provided using one of the options i.e. -svr")
-        raise typer.Exit(1)
-    elif not any(cert_format_params):
-        if cert_file is None:
-            print("Error: Cert format must be provided use one of '-pem'. '-der', or '-pkcs12'")
-            raise typer.Exit(1)
+        common.exit("[red1]Error[/]: Certificate Type must be provided using one of the options i.e. -svr")
+    elif not any(cert_format_params) and cert_file is None:
+        common.exit(f"[red1]Error[/]: Cert format must be provided use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
     else:
         cert_format = cert_formats[cert_format_params.index(True)]
 
@@ -487,41 +485,40 @@ def cert(
     kwargs = {k: v for k, v in kwargs.items() if v}
 
     if not cert_file:
-        print("[bright_green]No Cert file specified[/]")
+        econsole.print("[bright_green]No Cert file specified[/]")
         if not crl:
-            print("Provide certificate content encoded in base64 format.")
+            econsole.print("Provide certificate content encoded in base64 format.")
         cert_file = utils.get_multiline_input(prompt=f"[cyan]Enter/Paste in {'certificate' if not crl else 'crl'} text[/].")
         kwargs["cert_data"] = cert_file
     elif cert_file.exists():
         kwargs["cert_file"] = cert_file
     else:
-        print(f"ERROR: The specified certificate file [cyan]{cert_file.name}[/] not found.")
-        raise typer.Exit(1)
+        common.exit(f"[red1]Error[/]: The specified certificate file [cyan]{cert_file.name}[/] not found.")
 
-    print("[bright_green]Upload Certificate:")
+    econsole.print("[bright_green]Upload Certificate:")
     _ = [
-        print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
+        econsole.print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
         if k not in  ["passphrase", "cert_data"]
         ]
-    if cli.confirm(yes):
+    if render.confirm(yes):
         resp = api.session.request(api.configuration.upload_certificate, **kwargs)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command(help="Add a WebHook")
 def webhook(
     name: str = typer.Argument(..., show_default=False,),
     urls: List[str] = typer.Argument(..., help="webhook urls", show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
-    if cli.confirm(yes):
+    econsole.print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
+    if render.confirm(yes):
         resp = api.session.request(api.central.add_webhook, name, urls)
 
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
         if not resp:
             raise typer.Exit(1)
 
@@ -530,41 +527,41 @@ def webhook(
 @app.command(short_help="Add/Upload a new template", help="Add/Upload a new template to a template group")
 def template(
     name: str = typer.Argument(..., help="Template name", show_default=False,),
-    group: str = typer.Argument(..., help="Group to upload template to", autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = typer.Argument(..., help="Group to upload template to", autocompletion=common.cache.group_completion, show_default=False,),
     template: Path = typer.Argument(None, help="Path to file containing template", exists=True, show_default=False,),
     dev_type: DevTypes = typer.Option(DevTypes.cx, metavar="[ap|sw|cx]", help="Device Type Template applies to",),
     model: str = typer.Option("ALL", help="Constrain template to specific model",),
     version: str = typer.Option("ALL", "--ver", help="Constrain template to specific version"),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    group: CacheGroup = cli.cache.get_group_identifier(group)
+    group: CacheGroup = common.cache.get_group_identifier(group)
     if not template:
-        print("[bright_green]No Template file provided[/].  Template content is required.")
-        print("Provide Template Content:")
+        econsole.print("[bright_green]No Template file provided[/].  Template content is required.")
+        econsole.print("Provide Template Content:")
         template = utils.get_multiline_input()
         template = template.encode("utf-8")
 
-    print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
-    print("[bright_green]Template will apply to[/]:")
-    print(f"    Device Type: [cyan]{dev_type.value}[/]")
-    print(f"    Model: [cyan]{model}[/]")
-    print(f"    Version: [cyan]{version}[/]")
-    cli.confirm(yes)
+    econsole.print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    econsole.print("[bright_green]Template will apply to[/]:")
+    econsole.print(f"    Device Type: [cyan]{dev_type.value}[/]")
+    econsole.print(f"    Model: [cyan]{model}[/]")
+    econsole.print(f"    Version: [cyan]{version}[/]")
+    render.confirm(yes)
 
     template_hash, resp = api.session.batch_request(
         [
-            BatchRequest(cli.get_file_hash, template),
+            BatchRequest(common.get_file_hash, template),
             BatchRequest(api.configuration.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
         ]
     )
 
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
     if resp.ok:
         _ = api.session.request(
-            cli.cache.update_template_db, data={
+            common.cache.update_template_db, data={
                 "device_type": lib_to_api(dev_type, "template"),
                 "group": group.name,
                 "model": model,
@@ -579,10 +576,10 @@ def template(
 @app.command()
 def variables(
     variable_file: Path = typer.Argument(..., exists=True, show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Upload variables for a device from file
 
@@ -592,25 +589,25 @@ def variables(
     serial = var_dict.get("_sys_serial")
     mac = var_dict.get("_sys_lan_mac")
     if any([var is None for var in [serial, mac]]):
-        cli.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
+        common.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
 
-    print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] the following variables for device with serial [cyan]{serial}[/]")
-    _ = [cli.console.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
-    if cli.confirm(yes):
+    econsole.print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] the following variables for device with serial [cyan]{serial}[/]")
+    _ = [render.console.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
+    if render.confirm(yes):
         resp = api.session.request(
             api.configuration.create_device_template_variables,
             serial,
             mac,
             var_dict=var_dict
         )
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 # TODO config option for different random pass formats
 # TODO options for valid_till and valid_till_no_limit
 @app.command()
 def guest(
-    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cli.cache.portal_completion, show_default=False,),
+    portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=common.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
     password: str = typer.Option(None, help="Should generally be provided, wrap in single quotes", show_default=False,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
@@ -618,18 +615,18 @@ def guest(
     email: str = typer.Option(None, help="email of guest", show_default=False,),
     notify_to: NotifyToArgs = typer.Option(None, help="Send password via 'phone' or 'email'", show_default=False,),
     disable: bool = typer.Option(False, "--disable", is_flag=True, help="add account, but set to disabled", show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add a guest user to a configured portal"""
-    portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+    portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
     notify = True if notify_to is not None else None
     is_enabled = True if not disable else False
 
     if notify and not password:
-        cli.exit(f"[cyan]--notify-to[/] {notify_to} sends a notification to the user with thier password.  This option is only valid when [cyan]--password[/] is provided.")
+        common.exit(f"[cyan]--notify-to[/] {notify_to} sends a notification to the user with thier password.  This option is only valid when [cyan]--password[/] is provided.")
         # TODO API allows password not to be sent, but don't think there is any logical scenario where we wouldn't need it.  Don't think you can get any auto-generated password
         # and notify-to does not send pass to user if pass is not part of payload.
 
@@ -639,7 +636,7 @@ def guest(
         phone = "".join([p for p in list(phone) if p not in _phone_strip])
         if not phone.startswith("+"):
             if not len(phone) == 10:
-                cli.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
+                common.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
             phone = f"+1{phone}"
 
     # TODO Add options for expire after / valid forever
@@ -662,48 +659,48 @@ def guest(
     _msg += f"  {options}\n"
     if password:
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
-    print(_msg)
-    if cli.confirm(yes):
+    econsole.print(_msg)
+    if render.confirm(yes):
         resp = api.session.request(api.guest.add_guest, **kwargs)
         password = kwargs = None
-        cli.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
         # TODO calc expiration based on portal config Kabrew portal appears to be 3 days
         try:
             created = pendulum.now(tz="UTC")
             expires = created.add(days=3)
             cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
-            _ = api.session.request(cli.cache.update_db, cli.cache.GuestDB, cache_data, truncate=False)
+            _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
         except Exception as e:
             log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
-            cli.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
+            render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
 
 @app.command()
 def mpsk(
-    ssid: str = typer.Argument(..., help="The MPSK SSID to associate the MPSK with", autocompletion=cli.cache.mpsk_network_completion, show_default=False,),
+    ssid: str = typer.Argument(..., help="The MPSK SSID to associate the MPSK with", autocompletion=common.cache.mpsk_network_completion, show_default=False,),
     email: str = typer.Argument(..., help=":email:  email address which is used as the name for the MPSK", show_default=False,),
     role: str = typer.Option(..., help="The user role to associate with devices using this PSK", show_default=False,),
     psk: str = typer.Option(None, help=":warning:  This currently has no impact, PSK is always randomly generated.", show_default=False,  hidden=True,),
     #  The PSK/Passphrase, [dim italic]Best to wrap in single quotes.[/] {cli.help_block('Generate Random PSK')}", show_default=False,),
     disable: bool = typer.Option(False, "-D", "--disable", is_flag=True, help="Add MPSK Configuration, but set to [red]disabled[/]", show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add Named MPSK Configuration"""
-    ssid: CacheMpskNetwork = cli.cache.get_name_id_identifier("mpsk_network", ssid)
-    cli.econsole.print(f"[bright_green]Add{'ing' if yes else ''}[/] MPSK [cyan]{email}[/] with the following:")
-    cli.econsole.print(f"  Associate with MPSK SSID: [cyan]{ssid.name}[/]")
-    cli.econsole.print(f"  Assign Role: [cyan]{role}[/]")
+    ssid: CacheMpskNetwork = common.cache.get_name_id_identifier("mpsk_network", ssid)
+    render.econsole.print(f"[bright_green]Add{'ing' if yes else ''}[/] MPSK [cyan]{email}[/] with the following:")
+    render.econsole.print(f"  Associate with MPSK SSID: [cyan]{ssid.name}[/]")
+    render.econsole.print(f"  Assign Role: [cyan]{role}[/]")
     if psk:
-        cli.econsole.print("  [dim italic]Configure PSK as specified, not shown[/]")
+        render.econsole.print("  [dim italic]Configure PSK as specified, not shown[/]")
     if disable:
-        cli.econsole.print("  Create MPSK, but set as [red]disabled[/]")
+        render.econsole.print("  Create MPSK, but set as [red]disabled[/]")
 
-    cli.confirm(yes)  # exits here if they don't confirm
+    render.confirm(yes)  # exits here if they don't confirm
     resp = api.session.request(api.cloudauth.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
     # TODO cache update
 
 
@@ -716,5 +713,4 @@ def callback():
 
 
 if __name__ == "__main__":
-    print("hit")
     app()

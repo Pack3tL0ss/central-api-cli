@@ -2,16 +2,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import Literal, List, Dict, Any
-from rich.console import Console
-from rich.syntax import Syntax
-from rich.markup import escape
-from pygments.lexers.data import JsonLexer, YamlLexer
-from centralcli import log, utils
-from centralcli.vendored.csvlexer.csv import CsvLexer
+import json
+from typing import Any, Dict, List, Literal
+
 import tablib
 import yaml
-import json
+from pygments.lexers.data import JsonLexer, YamlLexer
+from rich.console import Console
+from rich.markup import escape
+from rich.syntax import Syntax
+
+from centralcli import log, utils
+from centralcli.vendored.csvlexer.csv import CsvLexer
+
 console = Console(emoji=False)
 
 # [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]  # TODO implement this device del
@@ -39,15 +42,15 @@ ADD_FIELDS = {
     "groups": {
         "required": ["name"],
         "optional": {
-            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [grey42]{escape("[default: All but sdwan allowed]")}[/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or {escape("[cx,ap,gw]")}',
-            "wired-tg": f"Set to true to make the group a template group for switches. [grey42]{escape('[default: False]')}[/]",
-            "wlan-tg": f"Set to true to make the group a template group for APs.  [grey42]{escape('[default: False]')}[/]",
-            "gw-role": f"[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [grey42]{escape('[default: branch]')}[/]",
-            "aos10": f"Set to true to enable group as aos10 group (APs).  [grey42]{escape('[default: AOS8 IAP]')}[/]",
-            "microbranch": f"Set to true to configure APs in the group as micro-branch APs (implies aos_10). [grey42]{escape('[default: False]')}[/]",
+            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [dim]{escape("[default: All but sdwan allowed]")}[/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or {escape("[cx,ap,gw]")}',
+            "wired-tg": f"Set to true to make the group a template group for switches. [dim]{escape('[default: False]')}[/]",
+            "wlan-tg": f"Set to true to make the group a template group for APs.  [dim]{escape('[default: False]')}[/]",
+            "gw-role": f"[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [dim]{escape('[default: branch]')}[/]",
+            "aos10": f"Set to true to enable group as aos10 group (APs).  [dim]{escape('[default: AOS8 IAP]')}[/]",
+            "microbranch": f"Set to true to configure APs in the group as micro-branch APs (implies aos_10). [dim]{escape('[default: False]')}[/]",
             "monitor-only-cx": "Set to true to enable CX switches as monitor only.",
             "monitor-only-sw": "Set to true to enable AOS-SW switches as monitor only.",
-            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [grey42]{escape('[default: False]')}[/]",
+            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [dim]{escape('[default: False]')}[/]",
             "gw-config": "Path to file containing gw group level config or jinja2 template.",
             "ap-config": "Path to file containing ap group level config or jinja2 template.",
             "gw-vars": "Path to variables used if gw-config is a j2 template.",
@@ -57,12 +60,13 @@ ADD_FIELDS = {
 }
 MOVE_FIELDS = {
      "devices": {
-          "required": ["serial", "mac"],
+          "required": ["serial"],
           "optional": {
+              "mac": "Device MAC address.",
               "group": "Move device to group",
               "site": "Move device to site",
               "label": "Assign label to device",
-              "retain_config": "Retain devices current configuration as device level override. [grey42](Applies to CX switches Only)[/]"
+              "retain_config": "Retain devices current configuration as device level override. [dim](Applies to CX switches Only)[/]"
           }
     }
 }

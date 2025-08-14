@@ -3,23 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
-import sys
+
 import typer
-from rich import print
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, config
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, config
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from ..typedefs import StrPath
+from centralcli import common, config, render, utils
+from centralcli.typedefs import StrPath
 
 app = typer.Typer()
 color = utils.color
@@ -47,31 +35,31 @@ def toggle_bak_file(file: StrPath, *, conf_msg: str = None, yes: bool | None = N
     new = Path(new_name)
 
     if new.exists():
-        cli.exit(f"[cyan]{new.name}[/] [red]already exists[/] in {new.parent}.\nAborting...")
+        common.exit(f"[cyan]{new.name}[/] [red]already exists[/] in {new.parent}.\nAborting...")
     if not file.exists():
         new_msg = "" if not new.exists() else f" and [dark_olive_green2]{new.name}[/] already exists."
-        cli.exit(f"[cyan]{file.name}[/] [red]not found[/]{new_msg} in {file.parent}. Nothing to do.\nAborting...")
+        common.exit(f"[cyan]{file.name}[/] [red]not found[/]{new_msg} in {file.parent}. Nothing to do.\nAborting...")
 
     if conf_msg:
-        cli.econsole.print(conf_msg)
+        render.econsole.print(conf_msg)
     if yes is not None:
-        cli.confirm(yes)
+        render.confirm(yes)
 
     new = file.rename(new)
     if new.exists():
-        cli.console.print("[bright_green]Success[/]")
+        render.console.print("[bright_green]Success[/]")
     else:
-        cli.exit(f"Something may have gone wrong.  {new} doesn't appear to exist.")
+        common.exit(f"Something may have gone wrong.  {new} doesn't appear to exist.")
 
     return new
 
 
 @app.command()
 def no_config(
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Configure [cyan]cencli[/] as if there is no config.
 
@@ -86,9 +74,9 @@ def no_config(
 
 @app.command()
 def restore_config(
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Restore previously stashed [cyan]cencli[/] configuration file.
 
@@ -103,10 +91,10 @@ def restore_config(
 
 @app.command()
 def no_cache(
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Configure [cyan]cencli[/] as if there is no cache.
 
@@ -120,9 +108,9 @@ def no_cache(
 
 @app.command()
 def restore_cache(
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Restore previously stashed [cyan]cencli[/] cache file.
 
@@ -135,15 +123,15 @@ def restore_cache(
 
 @app.command()
 def colors(
-    debug: bool = cli.options.debug,
+    debug: bool = common.options.debug,
     filter: str = typer.Option(None, "-c", "--color", help="Display only colors with this value in the name", show_default=False,),
 ) -> None:
     """Show text in each color available in the rich library.
     """
     from rich.color import ANSI_COLOR_NAMES
+    from rich.console import Console
     from rich.markup import escape
     from rich.table import Table
-    from rich.console import Console
     from rich.text import Text
 
     console = Console()
@@ -174,7 +162,7 @@ def colors(
 
 @app.command()
 def emoji(
-    debug: bool = cli.options.debug,
+    debug: bool = common.options.debug,
     filter: str = typer.Option(None, "-e", "--emoji", help="Display only emoji with this value in the name", show_default=False,),
 ) -> None:
     """Show emojis available in the rich library."""
@@ -191,6 +179,19 @@ def emoji(
 
     console.print(columns)
 
+
+@app.command()
+def close_raw(
+    debug: bool = common.options.debug,
+) -> None:
+    """Adds closing ] to raw capture file"""
+    if not config.capture_file.exists():
+        common.exit(f"{config.capture_file} does not exist.")
+
+    closed_file = config.capture_file.parent / f"{config.capture_file.stem}-closed{config.capture_file.suffix}"
+    closed_file.write_text(f"{config.capture_file.read_text().rstrip().rstrip(',')}\n]")
+
+    render.console.print(f"Raw Capture file {config.capture_file} coppied to {closed_file} with closing ] to ensure proper JSON.")
 
 
 @app.callback()

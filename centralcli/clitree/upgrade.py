@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING
 import typer
 from rich.markup import escape
 
-
-from centralcli import cli
-from centralcli.constants import AllDevTypes, lib_to_gen_plural, iden_meta # noqa
-from centralcli.objects import DateTime
+from centralcli import common, render
 from centralcli.cache import api
+from centralcli.constants import AllDevTypes, iden_meta, lib_to_gen_plural  # noqa
+from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
     from centralcli.cache import CacheGroup
@@ -22,20 +21,20 @@ app = typer.Typer()
 
 @app.command()
 def device(
-    device: str = cli.arguments.device,
-    version: str = cli.arguments.version,
-    at: datetime = cli.options.at,
-    in_: str = cli.options.in_,
-    reboot: bool = cli.options.reboot,
+    device: str = common.arguments.device,
+    version: str = common.arguments.version,
+    at: datetime = common.options.at,
+    in_: str = common.options.in_,
+    reboot: bool = common.options.reboot,
     yes: int = typer.Option(0, "-Y", "-y", "--yes", count=True, help="Bypass confirmation prompts [cyan]use '-yy'[/] to bypass all prompts (perform cache update if swarm_id is not populated yet for AP)", show_default=False),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on a device
     """
     forced = None
-    dev = cli.cache.get_dev_identifier(device, conductor_only=True)
+    dev = common.cache.get_dev_identifier(device, conductor_only=True)
     if dev.generic_type == "ap":
         reboot = True
         if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
@@ -46,7 +45,7 @@ def device(
         forced = True
     at = None if not at else round(at.timestamp())
     if in_:
-        at = cli.delta_to_start(in_, past=False).int_timestamp
+        at = common.delta_to_start(in_, past=False).int_timestamp
 
 
     ver_msg = "Recommended version" if not version else version
@@ -57,47 +56,47 @@ def device(
 
     ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
-    cli.econsole.print(ver_msg)
-    cli.confirm(yes)  # aborts here if they don't confirm
+    render.econsole.print(ver_msg)
+    render.confirm(yes)  # aborts here if they don't confirm
 
     if dev.type == "ap":  # TODO need to validate this is the same behavior for 8.x IAP.
         if not dev.swack_id:
-            cli.econsole.print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
-            if yes > 1 or cli.confirm(prompt="\nRefresh cache now to check if it's populated"):
-                api.session.request(cli.cache.refresh_dev_db, dev_type="ap")
-                dev = cli.cache.get_dev_identifier(dev.serial, dev_type="ap")
+            render.econsole.print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
+            if yes > 1 or render.confirm(prompt="\nRefresh cache now to check if it's populated"):
+                api.session.request(common.cache.refresh_dev_db, dev_type="ap")
+                dev = common.cache.get_dev_identifier(dev.serial, dev_type="ap")
 
         if dev.swack_id:
             resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, swarm_id=dev.swack_id, firmware_version=version, reboot=reboot)
         else:
-            cli.exit(f"Unable to perform Upgrade on {dev.summary_text}.  [cyan]swarm_id[/] is required for APs and the API is not returning a value for it yet.")
+            common.exit(f"Unable to perform Upgrade on {dev.summary_text}.  [cyan]swarm_id[/] is required for APs and the API is not returning a value for it yet.")
     else:
         resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, serial=dev.serial, firmware_version=version, reboot=reboot, forced=forced)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def group(
-    group: str = cli.arguments.get("group", help="Upgrade devices by group",),
-    version: str = cli.arguments.version,
+    group: str = common.arguments.get("group", help="Upgrade devices by group",),
+    version: str = common.arguments.version,
     dev_type: AllDevTypes = typer.Option(..., help="Upgrade a specific device type", show_default=False,),
-    at: datetime = cli.options.at,
-    in_: str = cli.options.in_,
+    at: datetime = common.options.at,
+    in_: str = common.options.in_,
     model: str = typer.Option(None, help=f"Upgrade a specific switch model [dim]{escape('[applies to AOS-SW switches only]')}[/]", show_default=False,),
-    reboot: bool = cli.options.reboot,
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    reboot: bool = common.options.reboot,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices by group
 
     Device type must be provided.  For AOS-SW switches you can filter to a specific model via the --model flag.
     """
-    group: CacheGroup = cli.cache.get_group_identifier(group)
+    group: CacheGroup = common.cache.get_group_identifier(group)
     at = None if not at else round(at.timestamp())
     if in_:
-        at = cli.delta_to_start(in_, past=False).int_timestamp
+        at = common.delta_to_start(in_, past=False).int_timestamp
 
     ver_msg = ["[cyan]Upgrade[/]"] if not at else [f'Schedule [cyan]Upgrade[/] @ [italic cornflower_blue]{DateTime(at, "mdyt")}[/] for']
 
@@ -112,9 +111,9 @@ def group(
 
     if model:
         if "sw" not in group.allowed_types:
-            cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] AOS-SW is not configured as an allowed device type for this group.")
-        elif "sw" not in [d["type"] for d in cli.cache.devices if d["group"] == group.name]:
-            cli.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\nIf local cache is stale, run command again with hidden [cyan]-U[/] option to update the cache.")
+            common.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] AOS-SW is not configured as an allowed device type for this group.")
+        elif "sw" not in [d["type"] for d in common.cache.devices if d["group"] == group.name]:
+            common.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\nIf local cache is stale, run command again with hidden [cyan]-U[/] option to update the cache.")
         ver_msg += [f"model [bright_green]{model}[/]"]
 
     ver_msg += [f"in group [bright_green]{group.name}[/]"]
@@ -131,8 +130,8 @@ def group(
     else:
         ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
-    cli.econsole.print(ver_msg)
-    if cli.confirm(yes):
+    render.econsole.print(ver_msg)
+    if render.confirm(yes):
         resp = api.session.request(
             api.firmware.upgrade_firmware,
             scheduled_at=at,
@@ -142,7 +141,7 @@ def group(
             model=model,
             reboot=reboot
         )
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -151,25 +150,25 @@ def swarm(
         ...,
         metavar=iden_meta.dev,
         help="Upgrade will be performed on the cluster the AP belongs to.",
-        autocompletion=cli.cache.dev_ap_completion,
+        autocompletion=common.cache.dev_ap_completion,
         show_default=False,
     ),
-    version: str = cli.arguments.version,
-    at: datetime = cli.options.at,
-    in_: str = cli.options.in_,
+    version: str = common.arguments.version,
+    at: datetime = common.options.at,
+    in_: str = common.options.in_,
     reboot: bool = typer.Option(True, "--reboot", "-R", help="Automatically reboot device after firmware download", hidden=True),  # allow for consistency, not required or honored as APs always reboot.
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on devices in an IAP cluster
     """
     at = None if not at else round(at.timestamp())
     if in_:
-        at = cli.delta_to_start(in_, past=False).int_timestamp
+        at = common.delta_to_start(in_, past=False).int_timestamp
 
-    dev = cli.cache.get_dev_identifier(device, dev_type="ap")
+    dev = common.cache.get_dev_identifier(device, dev_type="ap")
     swarm = dev.swack_id
 
     if not at:
@@ -186,10 +185,10 @@ def swarm(
         conf_msg = f"{conf_msg} to [bright_green]Recommended version[/]"
     conf_msg = f"{conf_msg} :recycle:  [dim red italic]APs will automatically reboot after upgrade[/]."
 
-    cli.econsole.print(conf_msg)
-    cli.confirm(yes)
+    render.econsole.print(conf_msg)
+    render.confirm(yes)
     resp = api.session.request(api.firmware.upgrade_firmware, scheduled_at=at, swarm_id=swarm, firmware_version=version)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.callback()

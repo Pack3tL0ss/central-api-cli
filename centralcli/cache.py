@@ -23,15 +23,17 @@ from tinydb import Query, TinyDB
 from tinydb.table import Document
 from yarl import URL
 
-from centralcli import BatchRequest, Response, Session, config, constants, log, render, utils
+from centralcli import config, constants, log, render, utils
 from centralcli.response import CombinedResponse
 
 from .classic.api import ClassicAPI
+from .client import BatchRequest, Session
 from .cnx.models.cache import Inventory as GlpInventory
 from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
 from .exceptions import CentralCliException
 from .models import cache as models
 from .objects import DateTime
+from .response import Response
 
 api = ClassicAPI(config.classic.base_url)
 
@@ -71,7 +73,7 @@ class CentralObject:
         self,
         db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
         data: Document | dict[str, Any] | list[Document | dict[str, Any]],
-    ) -> list | list[str, Any]:
+    ):
         self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False
         data: dict | list[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
@@ -105,8 +107,7 @@ class CentralObject:
         return bool(self.data)
 
     def __repr__(self):
-        _ = f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
-        return _
+        return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
 
     def __str__(self):
         if isinstance(self.data, dict):
@@ -118,12 +119,20 @@ class CentralObject:
         return self.data[key]
 
     def __getattr__(self, name: str) -> Any:
+        import sys
+        print("CentralObject __getattr__", name, file=sys.stderr)
         if hasattr(self, "data") and self.data:
             if name in self.data:
                 return self.data[name]
 
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
+
+    def get(self, item: str, default = None):
+        return self.data.get(item, default)
+
+    def __iter__(self):
+        return self.data.__iter__
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -1164,9 +1173,9 @@ class Cache:
         self.updated: list = []  # TODO change from list of methods to something easier
         self.config = config
         self.responses = CacheResponses()
-        self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
+        # self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
         self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
-        self.get_portal_identifier: CachePortal | list[CachePortal] = partial(self.get_name_id_identifier, "portal")
+        # self.get_portal_identifier: CachePortal | list[CachePortal] = partial(self.get_name_id_identifier, "portal")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
@@ -1240,13 +1249,15 @@ class Cache:
             db_stats = self.config.cache_file.stat()
             return human_size(db_stats.st_size)
 
+        return "0"
+
     @property
-    def all_tables(self) -> Iterator[Table, None, None]:
+    def all_tables(self) -> Iterator[Table]:
         for table in self.DevDB.tables():
             yield self.DevDB.table(table)
 
     @property
-    def key_tables(self) -> Iterator[Table, None, None]:
+    def key_tables(self) -> Iterator[Table]:
         for table in self._tables:
             yield table
 
@@ -3643,10 +3654,9 @@ class Cache:
             return await self.update_db(self.LabelDB, doc_ids=data)
 
     async def refresh_label_db(self) -> Response:
-        resp = await api.central.get_labels()
+        resp: Response = await api.central.get_labels()
         if resp.ok:
             self.responses.label = resp
-            # self.updated.append(api.central.get_labels)
             label_models = models.Labels(resp.output)
             cache_data = label_models.model_dump()
             _ = await self.update_db(self.LabelDB, data=cache_data, truncate=True)
@@ -4238,56 +4248,112 @@ class Cache:
             raise typer.Exit(1)
 
     @overload
-    def get_dev_identifier(self, query_str: str | Iterable[str], completion: bool, dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,) -> list[CacheDevice]: ...
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        completion: bool,
+        silent: Optional[bool],
+    ) -> list[CacheDevice]:
+        ...
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
-        swack: bool = False,
-        conductor_only: bool = False,
-        retry: bool = True,
-        silent: bool = False,
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        completion: bool,
+        silent: Optional[bool],
+        exit_on_fail: bool
+    ) -> list[CacheDevice | None]:
+        ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        completion: bool,
+        silent: Optional[bool],
+        include_inventory: bool,
+        exit_on_fail: bool
+    ) -> list[CacheDevice | CacheInvDevice | None]:
+        ...
+    # def get_dev_identifier(self, query_str: str | Iterable[str], completion: bool, dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str,
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
+        swack: bool,
     ) -> CacheDevice: ...
 
     @overload
     def get_dev_identifier(
         self,
+        query_str: str,
+    ) -> CacheDevice: ...
+
+
+    @overload
+    def get_dev_identifier(
+        self,
         query_str: str | Iterable[str],
-        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
-        swack: bool = False,
-        conductor_only: bool = False,
-        retry: bool = True,
-        silent: bool = False,
-        include_inventory: bool = True,
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        silent: Optional[bool],
+    ) -> CacheDevice: ...
+
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        silent: Optional[bool],
+        include_inventory: Literal[True],
     ) -> CacheDevice | CacheInvDevice: ...
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
-        swack: bool = False,
-        conductor_only: bool = False,
-        retry: bool = True,
-        silent: bool = False,
-        include_inventory: bool = False,
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        swack: Optional[bool],
+        conductor_only: Optional[bool],
+        retry: Optional[bool],
+        silent: Optional[bool],
+        include_inventory: Optional[bool] = False,
         exit_on_fail: bool = False,
     ) -> CacheDevice | CacheInvDevice | None: ...
 
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
-        swack: bool = False,
-        conductor_only: bool = False,
-        retry: bool = True,
-        completion: bool = False,
-        silent: bool = False,
-        include_inventory: bool = False,
-        exit_on_fail: bool = True,
-    ) -> CacheDevice | CacheInvDevice | List[CacheDevice | CacheInvDevice | None] | None:
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]] = None,
+        swack: Optional[bool] = False,
+        conductor_only: Optional[bool] = False,
+        retry: Optional[bool] = True,
+        completion: Optional[bool] = False,
+        silent: Optional[bool] = False,
+        include_inventory: Optional[bool] = False,
+        exit_on_fail: Optional[bool] = True,
+    ) -> CacheDevice | CacheInvDevice | list[CacheDevice] | list[CacheDevice | CacheInvDevice] | list[CacheDevice | CacheInvDevice |  None] | None:
         """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
 
         If multiple matches are found user is promted to select device.
@@ -4607,19 +4673,40 @@ class Cache:
     @overload
     def get_site_identifier(
         self,
-        query_str: Union[str, List[str], tuple],
-        completion: bool
+        query_str: str | Sequence[str],
+        retry: Optional[bool],
+        completion: bool,
+        silent: Optional[bool],
+        exit_on_fail: Optional[bool],
     ) -> list[CacheSite]:
+        ...
+
+    @overload
+    def get_site_identifier(
+        self,
+        query_str: str | Sequence[str],
+    ) -> CacheSite:
+        ...
+
+    @overload
+    def get_site_identifier(
+        self,
+        query_str: str | Sequence[str],
+        retry: Optional[bool],
+        completion: Optional[bool],
+        silent: Optional[bool],
+        exit_on_fail: bool,
+    ) -> CacheSite | None:
         ...
 
     def get_site_identifier(
         self,
-        query_str: Union[str, List[str], tuple],
-        retry: bool = True,
-        completion: bool = False,
-        silent: bool = False,
-        exit_on_fail: bool = True,
-    ) -> CacheSite | List[CacheSite]:
+        query_str: str | Sequence[str],
+        retry: Optional[bool] = True,
+        completion: Optional[bool] = False,
+        silent: Optional[bool] = False,
+        exit_on_fail: Optional[bool] = True,
+    ) -> CacheSite | List[CacheSite] | None:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
@@ -4628,7 +4715,7 @@ class Cache:
 
 
         if completion and query_str == "":
-            return [CentralObject("site", s) for s in self.sites]
+            return [CacheSite(s) for s in self.sites]
 
         match = None
         for _ in range(0, 2 if retry else 1):
@@ -4715,14 +4802,14 @@ class Cache:
             if exit_on_fail:
                 raise typer.Exit(1)
             else:
-                return None
+                return
 
     @overload
     def get_group_identifier(
         self,
         query_str: str,
-        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
-        completion: bool = False,
+        dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes],
+        completion: bool,
     ) -> list[CacheGroup]:
         ...
 
@@ -4730,26 +4817,36 @@ class Cache:
     def get_group_identifier(
         self,
         query_str: str,
-        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
-        retry: bool = True,
-        silent: bool = False,
-        exit_on_fail: bool = True,
+        dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes] = None,
+        retry: Optional[bool] = True,
+        silent: Optional[bool] = False,
     ) -> CacheGroup:
+        ...
+
+    @overload
+    def get_group_identifier(
+        self,
+        query_str: str,
+        dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes],
+        retry: Optional[bool],
+        silent: Optional[bool],
+        exit_on_fail: bool,
+    ) -> CacheGroup | None:
         ...
 
     def get_group_identifier(
         self,
         query_str: str,
-        dev_type: List[constants.DeviceTypes] | constants.DeviceTypes = None,
-        retry: bool = True,
-        completion: bool = False,
-        silent: bool = False,
-        exit_on_fail: bool = True,
-    ) -> CacheGroup | List[CacheGroup]:
+        dev_type: Optional[list[constants.DeviceTypes] | constants.DeviceTypes] = None,
+        retry: Optional[bool] = True,
+        completion: Optional[bool] = False,
+        silent: Optional[bool] = False,
+        exit_on_fail: Optional[bool] = True,
+    ) -> CacheGroup | list[CacheGroup] | None:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
 
-        if dev_type:
+        if dev_type is not None:
             dev_type = utils.listify(dev_type)
             if "switch" in dev_type:
                 dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
@@ -4758,7 +4855,7 @@ class Cache:
             # TODO change all get_*_identifier functions to continue to look for matches when match is found when
             #       completion is True
             # Exact match
-            match = []
+            match, all_match = [], []
             if query_str == "":
                 match = self.groups
             else:
@@ -4767,13 +4864,13 @@ class Cache:
             # case insensitive
             if not match or completion:
                 match += self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())  # type: ignore
                 )
 
             # case insensitive startswith
             if not match or completion:
                 match += self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))  # type: ignore
                 )
 
             # case insensitive ignore -_
@@ -4781,7 +4878,7 @@ class Cache:
                 if "_" in query_str or "-" in query_str:
                     match += self.GroupDB.search(
                         self.Q.name.test(
-                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")  # type: ignore
                         )
                     )
 
@@ -4789,7 +4886,7 @@ class Cache:
             if not match or completion:
                 match += self.GroupDB.search(
                     self.Q.name.test(
-                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
+                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))  # type: ignore
                     )
                 )
 
@@ -5334,6 +5431,48 @@ class Cache:
                 log.error(
                     f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
                 )
+
+    @overload
+    def get_label_identifier(
+        self,
+        query_str: str,
+    ) -> CacheLabel: ...
+
+    @overload
+    def get_label_identifier(
+        self,
+        query_str: str,
+        retry: Optional[bool],
+        completion: Optional[Literal[False]],
+        silent: Optional[bool],
+    ) -> CacheLabel: ...
+
+    @overload
+    def get_label_identifier(
+        self,
+        query_str: str,
+        retry: Optional[bool],
+        completion: Literal[True],
+        silent: Optional[bool],
+    ) -> list[CacheLabel]: ...
+
+    def get_label_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CacheLabel | list[CacheLabel]:
+        return self.get_name_id_identifier("label", query_str, retry=retry, completion=completion, silent=silent)
+
+    def get_portal_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+    ) -> CachePortal | list[CachePortal]:
+        return self.get_name_id_identifier("portal", query_str, retry=retry, completion=completion, silent=silent)
 
 class CacheAttributes:
     def __init__(self, name: Literal["dev", "site", "template", "group", "label", "portal", "mpsk", "mpsk_network"], db: Table, cache_update_func: Callable) -> None:

@@ -2,34 +2,19 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
-import sys
-import pendulum
+
 from pathlib import Path
 
+import pendulum
 import typer
-from rich import print
-from rich.markup import escape
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, cleaner
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, cleaner
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.constants import IdenMetaVars, SortRouteOptions, SortOverlayInterfaceOptions
+from centralcli import cleaner, common, render
+from centralcli.cache import api
+from centralcli.constants import SortOverlayInterfaceOptions, SortRouteOptions, iden_meta
 from centralcli.response import Response
-from ...cache import api
 
 app = typer.Typer()
 
-tty = utils.tty
-iden_meta = IdenMetaVars()
 
 # TODO need to build SortBy classes
 # TODO Verify aps are not valid for these and remove from completion dev_types.  Testing against MB AP returns 500 request to ce failed timeout after 10s
@@ -58,26 +43,26 @@ def _build_caption(resp: Response) -> str | None:
 
 @app.command()
 def routes(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    advertised: bool = typer.Option(False, "--advertised", "-a", help=f"Show advertised routes [grey42]{escape('[default: show learned routes]')}[/]"),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_completion, show_default=False,),
+    advertised: bool = typer.Option(False, "--advertised", "-a", help=f"Show advertised routes {common.help_block('show learned routes')}"),
     best: bool = typer.Option(False, "--best", "-b", help="Return only best/preferred route for each destination"),
-    sort_by: SortRouteOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortRouteOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show gateway routes advertised or learned from route/tunnel orchestrator
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    dev = common.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     what = "advertised" if advertised else "learned"
 
     if what == "learned":
@@ -90,7 +75,7 @@ def routes(
     if resp and "routes" in resp.output:
         resp.output = resp.output["routes"]
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -107,28 +92,28 @@ def routes(
 
 @app.command()
 def interfaces(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    sort_by: SortOverlayInterfaceOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_completion, show_default=False,),
+    sort_by: SortOverlayInterfaceOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show overlay interfaces
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    dev = common.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     resp = api.session.request(api.routing.get_overlay_interfaces, dev.serial)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f'{dev.name} Overlay Interfaces [italic](site: {dev.site})[/]',
@@ -145,24 +130,24 @@ def interfaces(
 # single entry output, no need to sort
 @app.command()
 def connection(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show overlay connection (OTO/ORO) details (Valid on SD-Branch GWs/ VPNCs Only)
 
     For additional details use [cyan]cencli tshoot overlay DEVICE[/] (which also works on APs).
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type="gw")
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    dev = common.cache.get_dev_identifier(device, dev_type="gw")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     resp = api.session.request(api.routing.get_overlay_connection, dev.serial)
 
@@ -181,7 +166,7 @@ def connection(
             set_width_cols = {"admin status": {"min": 72, "max": 100}}
 
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f'{dev.name} Overlay Connection Information [italic](site: {dev.site})[/]',

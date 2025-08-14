@@ -8,10 +8,11 @@ import tablib
 import yaml
 from yarl import URL
 
-from ... import Response, constants, log, utils
+from ... import constants, log, utils
+from ...client import Response
 
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
 
 class CloudAuthAPI:
     def __init__(self, session: Session):
@@ -55,7 +56,7 @@ class CloudAuthAPI:
 
         return resp
 
-    async def cloudauth_upload_fixme(
+    async def cloudauth_upload_fixme(  # pragma: no cover
         self,
         upload_type: constants.CloudAuthUploadTypes,
         file: Path | str,

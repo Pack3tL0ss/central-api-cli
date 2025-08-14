@@ -3,10 +3,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, List
 
-from ... import BatchRequest, Response, log, utils
+from ... import log, utils
+from ...client import BatchRequest
 
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
+    from ...response import Response
 
 class RapidsAPI:
     def __init__(self, session: Session):

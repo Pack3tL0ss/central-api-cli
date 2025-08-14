@@ -21,9 +21,9 @@ from yarl import URL
 from . import cleaner, config, log, utils
 from .cnx.base import NewCentralBase
 from .constants import STRIP_KEYS, lib_to_api
+from .render import Spinner
 from .response import Response
 from .typedefs import Method, StrOrURL
-from .utils import Spinner
 
 if TYPE_CHECKING:
     from .exceptions import InvalidConfigException

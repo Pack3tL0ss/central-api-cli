@@ -2,46 +2,12 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from centralcli import Response, cli, config, utils
+from centralcli import common, config, render, utils
 
 from .classic.api import ClassicAPI
+from .response import Response
 
 api = ClassicAPI(config.classic.base_url)
-
-
-def eval_caas_response(resp: Response) -> None:
-    if not resp.ok:
-        # typer.echo(f"[{resp.status_code}] {resp.error} \n{resp.output}")
-        cli.console.print(resp)
-        return
-    else:
-        resp = resp.output
-
-    lines = f'[turquoise4]{"-" * 22}[/]'
-
-    cli.console.print(f"\n{lines}")
-    if resp.get("_global_result", {}).get("status", '') == 0:
-        cli.console.print("Global Result: [bright_green]Success[/]")
-    else:
-        cli.console.print("Global Result: [red1]Failure[/]")
-    cli.console.print(lines)
-
-    if resp.get("cli_cmds_result"):
-        cli.console.print("\n -- [cyan]Command Results[/] --")
-        for cmd_resp in resp["cli_cmds_result"]:
-            for _c, _r in cmd_resp.items():
-                _r_code = _r.get("status")
-                if _r_code == 0:
-                    _r_pretty = "[bright_green]OK[/]"
-                elif _r_code == 2:
-                    _r_pretty = "[red1]WARNING[/]"
-                else:
-                    _r_pretty = f"[red1]ERROR[/] {_r_code}"
-                _r_txt = _r.get("status_str")
-                cli.console.print(f" [{_r_pretty}] {_c}")
-                if _r_txt:
-                    cli.console.print(f"{lines}\n{_r_txt}\n{lines}")
-        cli.console.print("")
 
 
 class BuildCLI:
@@ -118,9 +84,9 @@ class BuildCLI:
             self.data = self.get_bulkedit_data(file)
 
         for dev in self.data:
-            common: dict[str, Any] = self.data[dev]["_common"]
+            common_data: dict[str, Any] = self.data[dev]["_common"]
             vlans = self.data[dev]["vlans"]
-            _pretty_name = f"[bright_green]{common.get('hostname', dev)}[/]"
+            _pretty_name = f"[bright_green]{common_data.get('hostname', dev)}[/]"
             resp = api.session.request(api.monitoring.get_devices, "gateways")
             gateways = resp.output
             self.dev_info = [_dev for _dev in gateways if _dev.get('mac', '').lower() == dev.lower()]
@@ -128,21 +94,21 @@ class BuildCLI:
             # if dev already exists move to group defined in bulk-edit
             if self.dev_info:
                 self.dev_info = self.dev_info[0]
-                if common["group"] != self.dev_info["group"]:
-                    cli.console.print(f"Moving {_pretty_name} to Group [cyan]{common['group']}[/]")
-                    res = api.session.request(api.configuration.move_devices_to_group, common["group"], serials=self.dev_info["serial"])
+                if common_data["group"] != self.dev_info["group"]:
+                    render.console.print(f"Moving {_pretty_name} to Group [cyan]{common_data['group']}[/]")
+                    res = api.session.request(api.configuration.move_devices_to_group, common_data["group"], serials=self.dev_info["serial"])
                     if not res:
-                        cli.exit(f"[red1]Error[/] Returned Moving [cyan]{common['hostname']}[/] to Group [cyan]{common['group']}[/]")
+                        common.exit(f"[red1]Error[/] Returned Moving [cyan]{common_data['hostname']}[/] to Group [cyan]{common_data['group']}[/]")
 
-            cli.console.print(f"Building cmds for {_pretty_name}")
-            if common.get("hostname"):
-                self.cmds += [f"hostname {common['hostname']}", "!"]
+            render.console.print(f"Building cmds for {_pretty_name}")
+            if common_data.get("hostname"):
+                self.cmds += [f"hostname {common_data['hostname']}", "!"]
 
             for v in vlans:
                 self.cmds += [f"vlan {v['vlan_id']}", "!"]
                 if v.get("vlan_ip"):
                     if not v.get("vlan_subnet"):
-                        cli.econsole.print(f":warning:  [red1]Validation Error[/] No subnet mask for VLAN [cyan]{v['vlan_id']}[/]")
+                        render.econsole.print(f":warning:  [red1]Validation Error[/] No subnet mask for VLAN [cyan]{v['vlan_id']}[/]")
                         # TODO handle the error
                     self.cmds += [f"interface vlan {v['vlan_id']}", f"ip address {v['vlan_ip']} {v['vlan_subnet']}"]
                     # TODO should VLAN description also be vlan name - check what bulk edit does
@@ -197,10 +163,10 @@ class BuildCLI:
                 if v.get("bg_peer_ip"):
                     # _as = self.session.get_bgp_as()
                     # self.cmds.append(f"router bgp neighbor {v['bg_peer_ip']} as {_as}")
-                    cli.econsole.print(":warning:  bgp peer ip Not Supported by Script yet")
+                    render.econsole.print(":warning:  bgp peer ip Not Supported by Script yet")
 
                 if v.get("zs_site_to_site_map_name") or v.get("source_fqdn"):
-                    cli.econsole.print(":warning:  Zscaler Configuration Not Supported by Script Yet")
+                    render.econsole.print(":warning:  Zscaler Configuration Not Supported by Script Yet")
 
             return self.cmds
 
@@ -212,7 +178,7 @@ class BuildCLI:
             if mac:
                 url = f"{url}/{mac.url}"
             else:  # pragma: no cover
-                cli.exit(f"{dev_mac} does not appear to be a valid MAC address.")
+                common.exit(f"{dev_mac} does not appear to be a valid MAC address.")
 
         return await api.session.get(url)
 
@@ -246,7 +212,7 @@ class CaasAPI(BuildCLI):
         url = "/caasapi/v1/exec/cmd"
 
         if not config.classic.customer_id:
-            cli.exit(f"customer_id attribute not found in {config.file}")  # pragma: no cover
+            common.exit(f"customer_id attribute not found in {config.file}")  # pragma: no cover
         else:
             params = {"cid": config.classic.customer_id, key: group_dev}
             json_data = {"cli_cmds": cli_cmds or []}

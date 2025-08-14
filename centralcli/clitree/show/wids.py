@@ -9,10 +9,11 @@ from typing import List, Literal
 import pendulum
 import typer
 
-from centralcli import Response, cleaner, cli
+from centralcli import cleaner, common, render
 from centralcli.cache import CacheDevice, api
 from centralcli.constants import iden_meta
 from centralcli.models.wids import Wids
+from centralcli.response import Response
 
 app = typer.Typer()
 
@@ -26,7 +27,7 @@ class WidsResponse:
         if wids_cat == "all":
             self.caption = self.all_caption()
         else:
-            caption = cli.get_time_range_caption(start, end, default="in past 3 hours.")
+            caption = common.get_time_range_caption(start, end, default="in past 3 hours.")
             self.caption = f"[cyan]{len(response)}[/] [medium_spring_green]{wids_cat.capitalize()}[/] AP{'s' if len(response) != 1 else ''} {caption}"
 
 
@@ -51,19 +52,19 @@ def get_wids_response(
     past: str = None,
 ) -> WidsResponse:
     if device:
-        device: CacheDevice = cli.cache.get_dev_identifier(device, dev_type="ap", swack=True)
+        device: CacheDevice = common.cache.get_dev_identifier(device, dev_type="ap", swack=True)
         if device.is_aos10:
-            cli.exit(f"[cyan]-S[/]|[cyan]--swarm[/] option only applies to [bright_green]AOS8[/] IAP.\n{device.summary_text} is an [red1]AOS10[/] AP.")
+            common.exit(f"[cyan]-S[/]|[cyan]--swarm[/] option only applies to [bright_green]AOS8[/] IAP.\n{device.summary_text} is an [red1]AOS10[/] AP.")
     if group:
-        group: List[str] = [cli.cache.get_group_identifier(g).name for g in group]
+        group: List[str] = [common.cache.get_group_identifier(g).name for g in group]
     if site:
-        site: List[str] = [cli.cache.get_site_identifier(s).name for s in site]
+        site: List[str] = [common.cache.get_site_identifier(s).name for s in site]
     if label:
-        label: List[str] = [cli.cache.get_label_identifier(_label).name for _label in label]
+        label: List[str] = [common.cache.get_label_identifier(_label).name for _label in label]
 
     if end and not start:
         start = end - pendulum.duration(hours=48)
-    start, end = cli.verify_time_range(start=start, end=end, past=past)
+    start, end = common.verify_time_range(start=start, end=end, past=past)
 
     kwargs = {
         "from_time": start,
@@ -85,32 +86,32 @@ def get_wids_response(
 # Default Time-Range for all wids Endpoints is past 3 hours.
 @app.command()
 def rogues(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show Detected Rogue APs"""
     resp = get_wids_response("rogue", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    cli.display_results(
+    render.display_results(
         resp.response,
         tablefmt=tablefmt,
         title="Rogues",
@@ -125,32 +126,32 @@ def rogues(
 
 @app.command()
 def interfering(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show interfering APs"""
     resp = get_wids_response("interfering", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    cli.display_results(
+    render.display_results(
         resp.response,
         tablefmt=tablefmt,
         title="Interfering APs",
@@ -165,32 +166,32 @@ def interfering(
 
 @app.command()
 def neighbors(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show Neighbor APs"""
     resp = get_wids_response("neighbor", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    cli.display_results(
+    render.display_results(
         resp.response,
         tablefmt=tablefmt,
         title="Suspected Rogues",
@@ -205,32 +206,32 @@ def neighbors(
 
 @app.command()
 def suspect(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show Suspected Rogue APs"""
     resp = get_wids_response("suspect", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    cli.display_results(
+    render.display_results(
         resp.response,
         tablefmt=tablefmt,
         title="Suspected Rogues",
@@ -244,33 +245,33 @@ def suspect(
 
 @app.command()
 def all(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show All WIDS Classifications"""
     resp = get_wids_response("all", device=device, group=group, site=site, label=label, start=start, end=end, past=past)
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
-    cli.display_results(
+    render.display_results(
         resp.response,
         tablefmt=tablefmt,
         title="WIDS Report (All classification types)",
@@ -285,26 +286,26 @@ def all(
 
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context,
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: List[str] = cli.options.group_many,
-    site: List[str] = cli.options.site_many,
-    label: List[str] = cli.options.label_many,
-    verbose: int = cli.options.verbose,
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: List[str] = common.options.group_many,
+    site: List[str] = common.options.site_many,
+    label: List[str] = common.options.label_many,
+    verbose: int = common.options.verbose,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """
     Show Wireless Intrusion Detection data

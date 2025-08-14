@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sys
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal
 
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
@@ -21,11 +21,7 @@ EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
-SendConfigTypes = Literal["ap", "gw"]
-CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
-LogType = Literal["event", "audit"]
-InsightSeverityType = Literal["high", "med", "low"]
 
 
 CLUSTER_URLS = {
@@ -136,6 +132,14 @@ class GenericDevTypes(str, Enum):
 
 
 class DevTypes(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+    # sdwan = "sdwan"
+
+
+class GroupDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
     cx = "cx"
@@ -510,15 +514,6 @@ class BatchApArgs(str, Enum):
     rename = "rename"
 
 
-class BatchAddArgs(str, Enum):
-    sites = "sites"
-    groups = "groups"
-    devices = "devices"
-    labels = "labels"
-    macs = "macs"
-    mpsk = "mpsk"
-
-
 class BatchUpdateArgs(str, Enum):
     aps = "aps"
 
@@ -526,13 +521,6 @@ class BatchUpdateArgs(str, Enum):
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
-
-
-class BatchDelArgs(str, Enum):
-    sites = "sites"
-    groups = "groups"
-    devices = "devices"
-    labels = "labels"
 
 
 class WlanType(str, Enum):
@@ -739,7 +727,7 @@ class ArgToWhat:
     def _init_caas(self):
         self.send_cmd = self.send_cmds = "send_cmds"
 
-    def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
+    def __call__(self, key: ShowArgs | str, default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
             if hasattr(self, f"_init_{cmd}"):
                 getattr(self, f"_init_{cmd}")()
@@ -904,9 +892,9 @@ class WhatToPretty:
         self.all = "All Devices"
         self.device = self.devices = "Devices"
 
-    def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
+    def __call__(self, key: ShowArgs | str, default: str = None) -> str:
         if isinstance(key, Enum):
-            key = key._value_
+            key = key.value
         return getattr(self, key, default or key)
 
 
@@ -1277,18 +1265,6 @@ LIB_DEV_TYPE = {
     "AOS-S": "sw",
     "gateway": "gw"
 }
-
-
-def get_cencli_devtype(dev_type: str) -> str:
-    """Convert device type returned by API to consistent cencli types
-
-    Args:
-        dev_type(str): device type provided by API response
-
-    Returns:
-        str: One of ["ap", "sw", "cx", "gw"]
-    """
-    return LIB_DEV_TYPE.get(dev_type, dev_type)
 
 
 state_abbrev_to_pretty = {

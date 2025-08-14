@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ... import BatchRequest, Response, config, constants, log, utils
-from ...response import CombinedResponse
+from ... import config, constants, log, utils
+from ...client import BatchRequest
+from ...response import CombinedResponse, Response
 from ...utils import Mac
 
 if TYPE_CHECKING:

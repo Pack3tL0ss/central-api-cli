@@ -4,16 +4,18 @@ import base64
 import json
 from copy import deepcopy
 from pathlib import Path
-from typing import TYPE_CHECKING, Dict, List, Literal
+from typing import TYPE_CHECKING, Dict, List
 
 from yarl import URL
 
-from ... import BatchRequest, Response, config, constants, log, utils
+from ... import config, constants, log, utils
+from ...client import BatchRequest
 from ...exceptions import CentralCliException
-from ...typedefs import DynamicAntenna, RadioType
+from ...response import Response
 
 if TYPE_CHECKING:
-    from ... import Session
+    from centralcli.client import Session
+    from centralcli.typedefs import CertFormat, DynamicAntenna, RadioType
 
 
 DEFAULT_ACCESS_RULES = {
@@ -76,7 +78,7 @@ class ConfigAPI:
         Returns:
             Response: centralcli Response Object
         """
-        resp = await self.get_group_names()
+        resp = await self.session.get_group_names()
         if not resp.ok:
             return resp
 
@@ -88,8 +90,8 @@ class ConfigAPI:
 
         batch_resp = await self.session._batch_request(
             [
-                BatchRequest(self.get_groups_template_status, groups),
-                BatchRequest(self.get_groups_properties, groups)
+                BatchRequest(self.session.get_groups_template_status, groups),
+                BatchRequest(self.session.get_groups_properties, groups)
             ]
         )
         if all([not r.ok for r in batch_resp]):  # if first call fails possible to only have 1 call returned.
@@ -129,7 +131,7 @@ class ConfigAPI:
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
         if groups is None:
-            resp = await self.get_group_names()
+            resp = await self.session.get_group_names()
             if not resp.ok:
                 return resp
             else:
@@ -361,7 +363,7 @@ class ConfigAPI:
         """
         url = f"/configuration/v2/groups/{group}/properties"
 
-        resp = await self.get_groups_properties(group)
+        resp = await self.session.get_groups_properties(group)
         if resp:
             if not isinstance(resp.output, list):
                 raise ValueError(f"Expected list of dicts from get_groups_properties got {type(resp.output)}")
@@ -659,7 +661,7 @@ class ConfigAPI:
             groups = [groups]
 
         if not groups:
-            resp = await self.get_group_names()
+            resp = await self.session.get_group_names()
             if not resp.ok:
                 return resp
             groups: List[str] = resp.output
@@ -721,7 +723,7 @@ class ConfigAPI:
             Response: centralcli Response Object
         """
         if not groups:
-            resp = await self.get_groups_template_status()
+            resp = await self.session.get_groups_template_status()
             if not resp:
                 return resp
 
@@ -748,7 +750,7 @@ class ConfigAPI:
             'query': query,
         }
 
-        reqs = [BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
+        reqs = [BatchRequest(self.session.get_all_templates_in_group, group, **params) for group in template_groups]
         # TODO maybe call the aggregator from _bath_request
         responses = await self.session._batch_request(reqs)
         failed = [r for r in responses if not r]
@@ -1174,7 +1176,7 @@ class ConfigAPI:
         passphrase: str = "",
         cert_file: str | Path = None,
         cert_name: str = None,
-        cert_format: Literal["PEM", "DER", "PKCS12"] = None,
+        cert_format: CertFormat = None,
         cert_data: str = None,
         server_cert: bool = False,
         ca_cert: bool = False,
@@ -1540,12 +1542,12 @@ class ConfigAPI:
             'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
-            resp: Response = await self._request(self.get_ap_settings, serial)
+            resp: Response = await self.session._request(self.session.get_ap_settings, serial)
             if not resp:
                 log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
                 return resp
 
-            json_data = self.strip_none(_json_data)
+            json_data = utils.strip_none(_json_data)
             if {k: v for k, v in resp.output.items() if k in json_data.keys()} == json_data:
                 return Response(url=url, ok=True, output=f"{resp.output.get('hostname', '')}|{serial} Nothing to Update provided AP settings match current AP settings", error="OK",)
 
@@ -1573,8 +1575,8 @@ class ConfigAPI:
         radio_6_disable: bool = None,
         uplink_vlan: int = None,
         zone: str = None,
-        dynamic_ant_mode: Literal["narrow", "wide"] = None,
-        flex_dual_exclude: Literal["2.4", "5", "6"] = None,
+        dynamic_ant_mode: DynamicAntenna = None,
+        flex_dual_exclude: RadioType = None,
     ) -> List[BatchRequest]:
         url = f"/configuration/v1/ap_settings_cli/{serial}"
 
@@ -1649,7 +1651,7 @@ class ConfigAPI:
                 iden = serial
             return Response(error="NO CHANGES", output=f"{iden} skipped. The Provided per ap settings match the APs current AP settings.")
 
-        return BatchRequest(self.post, url, json_data={'clis': update_clis})
+        return BatchRequest(self.session.post, url, json_data={'clis': update_clis})
 
     # TODO types for below
     # effectively a dup of update_ap_settings, granted the other uses ap_settings vs this which uses ap_settings_cli (more complete coverage here)
@@ -1671,8 +1673,8 @@ class ConfigAPI:
         radio_6_disable: bool = None,
         uplink_vlan: int = None,
         zone: str = None,
-        dynamic_ant_mode: Literal["narrow", "wide"] = None,
-        flex_dual_exclude: Literal["2.4", "5", "6"] = None,
+        dynamic_ant_mode: DynamicAntenna = None,
+        flex_dual_exclude: RadioType = None,
         as_dict: Dict[str, Dict[str | int | List[str] | bool | DynamicAntenna | RadioType]] = None
     ) -> List[Response]:
         """Update per AP settings (AP ENV)
@@ -1765,7 +1767,7 @@ class ConfigAPI:
         """
         url = f"/configuration/v1/system_config/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     # TODO all params required by API GW, need call to get current properties
     # if not all are provided
@@ -2020,7 +2022,7 @@ class ConfigAPI:
         updated_clis_list = [await self._add_altitude_to_config(resp.output, altitude=as_dict[iden]) for iden, resp in passed.items()]
 
         skipped = [Response(error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
-        update_reqs = [BatchRequest(self.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
         update_resp = await self.session._batch_request(update_reqs)
 
@@ -2114,7 +2116,7 @@ class ConfigAPI:
         skipped = [group for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         if skipped:
             skipped_msg = f"Certificate Update skipped for groups: {', '.join(skipped)}. cp-cert-checksum already configured as desired."
-        update_reqs = [BatchRequest(self.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
         update_resp = await self.session._batch_request(update_reqs)
         if skipped:

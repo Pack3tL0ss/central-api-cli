@@ -3,8 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from centralcli import Response
     from centralcli.client import Session
+    from centralcli.response import Response
 
 
 class GreenLakeSubscriptionsAPI:

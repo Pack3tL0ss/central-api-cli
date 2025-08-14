@@ -3,10 +3,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from ... import Response, utils
+from ... import utils
 
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
+    from ...response import Response
 
 
 class OtherAPI:

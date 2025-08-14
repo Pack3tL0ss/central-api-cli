@@ -3,11 +3,13 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal
 
-from ... import BatchRequest, Response, config, constants, utils
+from ... import config, constants, utils
+from ...client import BatchRequest
 from .configuration import ConfigAPI
 
 if TYPE_CHECKING:
     from ...client import Session
+    from ...response import Response
 
 class PlatformAPI:
     def __init__(self, session: Session):

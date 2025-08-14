@@ -20,22 +20,24 @@ Documentation: https://central-api-cli.readthedocs.io/en/latest/readme.html
 HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
-
 import os
+import sys
+
+import click
 import typer
 
 from pathlib import Path
 from typing import Iterable, List
-import sys
 
-import click
 
 from rich.traceback import install
 install(show_locals=True, suppress=[click])
 
 from .utils import Utils
-utils = Utils()
 from .environment import env
+
+
+utils = Utils()
 
 
 _calling_script = Path(sys.argv[0])
@@ -135,14 +137,6 @@ if os.name == "nt":  # pragma: no cover
     if not hasattr(click.utils, "_expand_args"):
         click.utils._expand_args = _expand_args
 
-
-from pycentral.base import ArubaCentralBase
-from .response import Response
-from .client import Session, BatchRequest
-from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
-from .clicommon import CLICommon
-from . import cleaner, render
-
 # if no environ vars set for LESS command line options
 # set -X to retain scroll-back after quitting less
 #     -R for color output (default for the pager but defaults are not used if LESS is set)
@@ -193,6 +187,8 @@ if "--again" in sys.argv:
     sys.argv = [sys.argv[0], "show", "last", *args]
 
 
+from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
+from .clicommon import CLICommon
 cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
@@ -206,7 +202,9 @@ if config.valid:
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
-cli = CLICommon(config.workspace, cache, raw_out=raw_out)
+common = CLICommon(config.workspace, cache, raw_out=raw_out)
+
+from . import cleaner, render
 
 # allow singular form and common synonyms for the defined show commands
 # show switches / show switch, delete label / labels ...

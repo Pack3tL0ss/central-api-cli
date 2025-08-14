@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List
+from typing import TYPE_CHECKING, List
 
-from ... import BatchRequest, Response, cleaner, constants, utils
+from ... import constants, utils
+from ...client import BatchRequest
 
 if TYPE_CHECKING:
-    from ... import Session
+    from ... import Response, Session
 
 
 class CentralAPI:

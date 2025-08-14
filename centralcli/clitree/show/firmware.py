@@ -1,38 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-from enum import Enum
-import typer
-import sys
-from typing import List
 from pathlib import Path
-from rich import print
+from typing import List
+
+import typer
 from rich.markup import escape
 
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import cli, utils, log, cleaner, BatchRequest
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import cli, utils, log, cleaner, BatchRequest
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.constants import iden_meta, DevTypes, FirmwareDeviceType  # noqa
-from centralcli.cache import CentralObject, CacheDevice, CacheGroup
-from ...cache import api
+from centralcli import cleaner, common, log, render, utils
+from centralcli.cache import CacheDevice, CacheGroup, CentralObject, api
+from centralcli.client import BatchRequest
+from centralcli.constants import DevTypes, FirmwareDeviceType, iden_meta
 
 app = typer.Typer()
-tty = utils.tty
 
-
-class ShowFirmwareKwags(str, Enum):
-    group = "group"
-    type = "type"
 
 # TODO add support for APs use batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]
 # has to be done this way as typer does not show help if docstr is an f-string
@@ -49,21 +30,21 @@ device_help = f"""Show firmware details for device(s)
     """
 @app.command(help=device_help)
 def device(
-    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_gw_switch_completion, show_default=False,),
+    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_gw_switch_completion, show_default=False,),
     dev_type: FirmwareDeviceType = typer.Option(None, help="Show firmware by device type", show_default=False,),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     if device:
-        devs = [cli.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
+        devs = [common.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(api.firmware.get_device_firmware_details if dev.type != "ap" else api.firmware.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
@@ -76,7 +57,7 @@ def device(
         else:
             batch_reqs = [BatchRequest(api.firmware.get_all_swarms_firmware_details,)]
     else:
-        cli.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
+        common.exit("Provide one or more devices as arguments or [cyan]--dev-type[/]")
 
     batch_resp = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
 
@@ -93,9 +74,9 @@ def device(
             if failed:
                 _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title="Firmware Details",
@@ -109,30 +90,33 @@ swarms_help = f"""Show firmware details for swarms
     [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
     """
 @app.command()
-def swarms(
-    device: List[str] = typer.Argument(None, help="Show firmware for the swarm the provided device(s) belongs to", metavar=iden_meta.dev_many, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: str = cli.options.group,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+def swarm(
+    device: List[str] = typer.Argument(None, help="Show firmware for the swarm(s) the provided device(s) belongs to", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: str = common.options.group,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    """Show firmware details for swarm by specifying any AP in the swarm
+    """Show firmware details for swarm(s) by specifying any AP in the swarm
 
     Multiple devices can be specified.  Output will include details for each unique swarm.
     """
+    title = "Firmware Details"
     if device:
-        devs = [cli.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
+        devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
         batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]
+        if len(devs) == 1:
+            title = f"{title} for swarm with id {devs[0].swack_id}"
     else:
         if group:
-            group: CacheGroup = cli.cache.get_group_identifier(group)
+            group: CacheGroup = common.cache.get_group_identifier(group)
             kwargs = {"group": group.name}
         else:
             kwargs = {}
@@ -158,43 +142,44 @@ def swarms(
         resp = batch_resp
 
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Firmware Details",
+        title=title,
         pager=pager,
         outfile=outfile,
+        fold_cols="swarm id",
         cleaner=cleaner.get_swarm_firmware_details
     )
 
 
 @app.command()
 def compliance(
-    device_type: DevTypes = cli.arguments.device_type,
-    group: List[str] = cli.arguments.get("group", default=None),
-    group_name: str = cli.options.group,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device_type: DevTypes = common.arguments.device_type,
+    group: List[str] = common.arguments.get("group", default=None, help=f"Show compliance for group {common.help_block('Global Compliance')}"),
+    group_: str = common.options.get("group", "--group", "-G", help=f"Show compliance for group {common.help_block('Global Compliance')}"),
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show firmware compliance details for a group/device type."""
-    group = group or utils.listify(group_name)
+    group = group or utils.listify(group_)
     group = None if not group else group
 
     if group:
         if len(group) > 2:  # Allows user to add unnecessary "group" keyword before the group
-            cli.exit(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
+            common.exit(f"Unknown extra arguments: {[x for x in list(group)[0:-1] if x.lower() != 'group']}.  Only 1 group is allowed.")
         group = group[-1]
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CentralObject = common.cache.get_group_identifier(group)
 
     # TODO make device_type optional add 'all' keyword and implied 'all' if no device_type
     #      add macro method to get compliance for all device_types.
@@ -204,45 +189,45 @@ def compliance(
     }
 
     resp = api.session.request(api.firmware.get_firmware_compliance, **kwargs)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     if resp.status == 404 and resp.output.lower() == "not found":
         resp.output = (
             f"Invalid URL or No compliance set for {device_type.lower()} "
             f"{'Globally' if group is None else f'in group {group.name}'}"
         )
-        typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
-    else:
-        tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+        # typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
+    # else:
 
-        cli.display_results(
-            resp,
-            tablefmt=tablefmt,
-            title=f"{'Global ' if not group else f'{group.name} '}Firmware Compliance",
-            pager=pager,
-            outfile=outfile
-        )
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{'Global ' if not group else f'{group.name} '}Firmware Compliance",
+        pager=pager,
+        outfile=outfile
+    )
 
 @app.command("list")
 def _list(
-    device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
+    device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
     dev_type: DevTypes = typer.Option(None, help="Get firmware list for a device type", show_default=False,),
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Get available firmware for IAP cluster associated with provided device", show_default=False,),
     swarm_id: str = typer.Option(None, help="Get available firmware for specified IAP cluster", show_default=False,),
-    verbose: int = cli.options.verbose,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    verbose: int = common.options.verbose,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show available firmware list for a specific device or a type of device."""
     caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
 
-    dev: CacheDevice = device if not device else cli.cache.get_dev_identifier(device, conductor_only=True,)
+    dev: CacheDevice = device if not device else common.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
     if dev is not None and dev.type == "ap":
@@ -264,11 +249,11 @@ def _list(
     kwargs = utils.strip_none(kwargs)
 
     if not kwargs:
-        cli.exit("[bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required.")
+        common.exit("[bright_red]Missing Argument / Option[/].  One of [cyan]<device(name|serial|mac|ip)>[/] (argument), [cyan]--dev-type <ap|gw|switch>[/], or [cyan]--swarm_id <id>[/] is required.")
     elif len(kwargs) > 1:
-        cli.exit("[bright_red]Invalid combination[/] specify only [bold]one[/] of [bright_green]DEVICE[/] (argument), [cyan]--dev-type[/], [bold]OR[/] [cyan]--swarm-id[/].")
+        common.exit("[bright_red]Invalid combination[/] specify only [bold]one[/] of [bright_green]DEVICE[/] (argument), [cyan]--dev-type[/], [bold]OR[/] [cyan]--swarm-id[/].")
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     title = f"Available firmware versions for {list(kwargs.keys())[0].replace('_', ' ')}: {list(kwargs.values())[0]}"
     if "device_type" in kwargs:
@@ -278,9 +263,9 @@ def _list(
 
 
     resp = api.session.request(api.firmware.get_firmware_version_list, **kwargs)
-    cli.display_results(
+    render.display_results(
         resp,
-        tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, set_width_cols={"version": {"min": 25}}, cleaner=cleaner.get_fw_version_list, format=tablefmt, verbose=bool(verbose))
+        tablefmt=tablefmt, title=title, caption=caption if resp.ok else None, pager=pager, outfile=outfile, set_width_cols={"version": {"min": 25}}, cleaner=cleaner.get_fw_version_list, format=tablefmt, verbose=bool(verbose))
 
 
 @app.callback()

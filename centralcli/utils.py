@@ -5,14 +5,13 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 import string
 import sys
 import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from random import choice
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
 import pendulum
 import typer
@@ -22,63 +21,14 @@ from rich import print_json
 from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
-from rich.prompt import Prompt
-from rich.status import Status
 
 if TYPE_CHECKING:
-    from rich.console import RenderableType
-    from rich.style import StyleType
+    from .typedefs import PrimaryDeviceTypes
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
 log = logging.getLogger()
 
-
-class Spinner(Status):
-    """A Spinner Object that adds methods to rich.status.Status object
-
-        Args:
-            status (RenderableType): A status renderable (str or Text typically).
-            console (Console, optional): Console instance to use, or None for global console. Defaults to None.
-            spinner (str, optional): Name of spinner animation (see python -m rich.spinner). Defaults to "dots".
-            spinner_style (StyleType, optional): Style of spinner. Defaults to "status.spinner".
-            speed (float, optional): Speed factor for spinner animation. Defaults to 1.0.
-            refresh_per_second (float, optional): Number of refreshes per second. Defaults to 12.5.
-    """
-    def __init__(
-        self,
-        status: RenderableType,
-        *,
-        console: Optional[Console] = None,
-        spinner: str = "dots",
-        spinner_style: StyleType = "status.spinner",
-        speed: float = 1.0,
-        refresh_per_second: float = 12.5,
-    ):
-        super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
-
-    def fail(self, text: RenderableType = None) -> None:
-        if self._live.is_started:
-            self._live.stop()
-        self.console.print(f":x:  {self.status}") if not text else self.console.print(f":x:  {text}")
-
-    def succeed(self, text: RenderableType = None) -> None:
-        if self._live.is_started:
-            self._live.stop()
-        self.console.print(f":heavy_check_mark:  {self.status}") if not text else self.console.print(f":heavy_check_mark:  {text}")
-
-    def start(
-            self,
-            text: RenderableType = None,
-            *,
-            spinner: str = None,
-            spinner_style: StyleType = None,
-            speed: float = None,
-        ) -> None:
-        if any([text, spinner, spinner_style, speed]):
-            self.update(text, spinner=spinner, spinner_style=spinner_style, speed=speed)
-        if not self._live.is_started:
-            self._live.start()
 
 class ToBool:
     def __init__(self, value: Any,):
@@ -116,7 +66,7 @@ class Convert:
             self.clean = ''.join([c for c in list(mac) if c in string.hexdigits])
             self.ok = True if len(self.clean) == 12 else False
         else:
-            for delim in ['.', '-', ':']:
+            for delim in list('.-:'):
                 mac = mac.replace(delim, '')
 
             self.clean = mac
@@ -125,17 +75,31 @@ class Convert:
             else:
                 self.ok = False
 
+    @property
+    def cols(self) -> str:
         cols = ':'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
         if cols.strip().endswith(':'):  # handle macs starting with 00 for oobm
             cols = f"00:{cols.strip().rstrip(':')}"
-        self.cols = cols
-        self.dashes = '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
-        self.dots = '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+        return cols
+
+    @property
+    def dashes(self) -> str:
+        return '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+
+    @property
+    def dost(self) -> str:
+        return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+
+    @property
+    def dec(self) -> int:
         try:
-            self.dec = 0 if not self.ok else int(self.clean, 16)
+            return 0 if not self.ok else int(self.clean, 16)
         except ValueError:
-            self.dec = 0
-        self.url = urllib.parse.quote_plus(cols)
+            return 0
+
+    @property
+    def url(self) -> str:
+        return urllib.parse.quote_plus(self.cols)
 
     def __len__(self):
         return len(self.clean)
@@ -171,32 +135,6 @@ class Utils:
         except Exception:
             pprint(obj)
 
-    class TTY:
-        def __init__(self):
-            self._rows, self._cols = self.get_tty_size()
-
-        def get_tty_size(self):
-            s = shutil.get_terminal_size()
-            return s.lines, s.columns
-
-        def __bool__(self):
-            return sys.stdin.isatty()
-
-        def __call__(self):
-            self._rows, self._cols = self.get_tty_size()
-
-        @property
-        def rows(self):
-            self._rows, self._cols = self.get_tty_size()
-            return self._rows
-
-        @property
-        def cols(self):
-            self._rows, self._cols = self.get_tty_size()
-            return self._cols
-
-    tty = TTY()
-
     @staticmethod
     def unique(_list: list, sort: bool = False) -> list:
         out = [item for item in set(_list) if item is not None]
@@ -229,7 +167,28 @@ class Utils:
     def is_resource_id(res_id: str) -> bool:
         return True if res_id and len(res_id) == 36 and res_id.count("-") == 4 else False
 
-    def listify(self, var) -> Iterable:
+    @overload
+    def listify(self, var: str | Sequence[str]) -> Sequence[str]: ...
+
+    @overload
+    def listify(self, var: PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes]) -> Sequence[str]: ...
+
+    @overload
+    def listify(self, var: int | Sequence[int]) -> Sequence[int]: ...
+
+    @overload
+    def listify(self, var: dict | Sequence[dict]) -> Sequence[dict]: ...
+
+    @overload
+    def listify(self, var: tuple) -> Sequence: ...
+
+    @overload
+    def listify(self, var: list) -> Sequence: ...
+
+    @overload
+    def listify(self, var: None) -> None: ...
+
+    def listify(self, var: str | Sequence[str] | int | Sequence[int] | tuple | list | dict | Sequence[dict] | PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes] | None) -> Sequence | None:
         if isinstance(var, tuple):
             return list(var)
         return var if isinstance(var, list) or var is None else [var]
@@ -298,8 +257,17 @@ class Utils:
 
         return contents
 
+    @overload
+    def strip_none(data: dict, strip_empty_obj: Optional[bool]) -> dict: ...
+
+    @overload
+    def strip_none(data: list, strip_empty_obj: Optional[bool]) -> list: ...
+
+    @overload
+    def strip_none(data: None, strip_empty_obj: Optional[bool]) -> None: ...
+
     @staticmethod
-    def strip_none(data: Union[dict, list, None], strip_empty_obj: bool = False) -> Any:
+    def strip_none(data: Union[dict, list, None], strip_empty_obj: bool = False) -> dict | list | None:
         """strip all keys from a list or dict where value is NoneType
 
         args:
@@ -417,7 +385,7 @@ class Utils:
 
         def get_color_str(color: str):
             if color == "random":
-                color = choice(list(ANSI_COLOR_NAMES.keys()))
+                color = choice(list([c for c in ANSI_COLOR_NAMES.keys() if "black" not in c]))
 
             if not any([italic, bold, blink]):
                 return color
@@ -444,46 +412,6 @@ class Utils:
     def chunker(seq: Iterable, size: int):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
-    @staticmethod
-    def ask(
-        prompt: str = "",
-        *,
-        console: Optional[Console] = None,
-        password: bool = False,
-        choices: Optional[List[str]] = None,
-        show_default: bool = True,
-        show_choices: bool = True,
-        default: Any = ...,
-    ) -> str:
-        """wrapper function for rich.Prompt().ask()
-
-        Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
-        """
-        console = console or Console()
-        econsole = Console(stderr=True)
-        def abort():
-            econsole.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
-            sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
-
-        choices = choices if choices is None or "abort" in choices else ["abort", *choices]
-
-        try:
-            choice = Prompt.ask(
-                prompt,
-                console=console,
-                password=password,
-                choices=choices,
-                show_default=show_default,
-                show_choices=show_choices,
-                default=default,
-            )
-        except (KeyboardInterrupt, EOFError):
-            abort()
-
-        if choice == "abort":
-            abort()
-
-        return choice
 
     @staticmethod
     def generate_template(template_file: Path | str, var_file: Path | str | None,) -> str:

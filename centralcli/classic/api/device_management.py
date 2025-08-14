@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Literal
 
 from rich.progress import track
 
-from ... import Response
+from ...response import Response
 
 if TYPE_CHECKING:
     from ... import Session

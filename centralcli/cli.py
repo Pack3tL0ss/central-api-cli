@@ -1,40 +1,37 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
-from os import environ as env
 import subprocess
 import sys
+from os import environ as env
 from time import sleep
-from typing import List
 
 import typer
-from rich import print
-from rich.console import Console
 from rich.markup import escape
+
+from centralcli import common, config, log, render, utils
+from centralcli.cache import CacheDevice, CacheSite, CentralObject, api
+from centralcli.client import BatchRequest
+from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, tshoot, unassign, update, upgrade
+from centralcli.clitree import dev as clidev
+from centralcli.clitree.batch import batch
+from centralcli.clitree.delete import delete
+from centralcli.clitree.set import set as cliset
+from centralcli.clitree.show import show
+from centralcli.constants import (  #noqa
+    BlinkArgs,
+    BounceArgs,
+    EnableDisableArgs,
+    ResetArgs,
+    StartArgs,
+    iden_meta,
+)
+from centralcli.environment import env  #noqa
 
 try:
     import psutil
     hook_enabled = True
 except (ImportError, ModuleNotFoundError):
     hook_enabled = False
-
-
-from centralcli import BatchRequest, cli, config, log, utils
-from centralcli.cache import api, CentralObject, CacheDevice, CacheSite
-from centralcli.constants import (BlinkArgs, BounceArgs, IdenMetaVars, StartArgs, ResetArgs, EnableDisableArgs,)  #noqa
-from centralcli.environment import env  #noqa
-from centralcli.clitree import assign, dev as clidev, add, unassign, export, kick, test, clone, update, upgrade, caas, refresh, tshoot, rename, check, cancel, convert
-from centralcli.clitree.batch import batch
-from centralcli.clitree.show import show
-from centralcli.clitree.set import set as cliset
-from centralcli.clitree.delete import delete
-
-
-err_console = Console(stderr=True)
-clean_console = Console(emoji=False)
-clean_err_console = Console(emoji=False, stderr=True)
-
-iden = IdenMetaVars()
 
 CONTEXT_SETTINGS = {
     # "token_normalize_func": lambda x: cli.normalize_tokens(x),
@@ -68,7 +65,7 @@ app.add_typer(clidev.app, name="dev", hidden=True)
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
 @app.command()
 def move(
-    device: List[str, ] = typer.Argument(None, metavar=iden.dev_many, autocompletion=cli.cache.dev_kwarg_completion, show_default=False,),
+    device: list[str, ] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_kwarg_completion, show_default=False,),
     kw1: str = typer.Argument(
         None,
         metavar="",
@@ -79,7 +76,7 @@ def move(
         None,
         metavar="[site <SITE>]",
         show_default=False,
-        help="[cyan]site[/] keyword followed by the site name.",
+        help="[cyan]site[/] keyword followed by the site name.  [dim medium_spring_green italic]site and/or group required[/]",
         hidden=False,
     ),
     kw2: str = typer.Argument(
@@ -92,7 +89,7 @@ def move(
         None,
         metavar="[group <GROUP>]",
         show_default=False,
-        help=f"[cyan]group[/] keyword followed by the group name.  [grey42 italic]{escape('[site and/or group required]')}[/]",
+        help="[cyan]group[/] keyword followed by the group name.  [dim medium_spring_green italic]site and/or group required[/]",
         hidden=False,
     ),
     _group: str = typer.Option(
@@ -100,13 +97,13 @@ def move(
         "--group",
         help="Group to Move device(s) to",
         hidden=True,
-        autocompletion=cli.cache.group_completion,
+        autocompletion=common.cache.group_completion,
     ),
     _site: str = typer.Option(
         None, "--site",
         help="Site to move device(s) to",
         hidden=True,
-        autocompletion=cli.cache.site_completion,
+        autocompletion=common.cache.site_completion,
     ),
     reset_group: bool = typer.Option(
         False,
@@ -115,15 +112,15 @@ def move(
         help="Reset group membership.  (move to the defined default group)",
     ),
     cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Move device(s) to a defined group and/or site.
     """
     group, site, = None, None
-    device = device or ()
+    device = device or []
     for a, b in zip([kw1, kw2], [kw1_val, kw2_val]):
         if a == "group":
             group = b
@@ -134,32 +131,38 @@ def move(
 
     group = group or _group
 
-    if reset_group and not group:
-        default_group_resp = api.session.request(api.configuration.get_default_group)
-        default_group = default_group_resp.output
-        group = default_group
-    elif reset_group and group:
-        cli.econsole.print(f":warning: [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
+    if reset_group:
+        if group:
+            render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan italic]--reset-group[/] flag ignored as destination group {group} was provided")
+        else:
+            default_group_resp = api.session.request(api.configuration.get_default_group)
+            default_group = default_group_resp.output
+            group = default_group
 
     site = site or _site
 
     if not group and not site:
-        cli.exit("Missing Required Argument, group and/or site is required.")
+        common.exit("Missing Required Argument, group and/or site is required.")
 
     data = [{"serial": d, "group": group, "site": site, "retain_config": cx_retain_config} for d in device]
-    move_resp = cli.batch_move_devices(data=data, yes=yes)
-    cli.display_results(move_resp, tablefmt="action")
+    move_resp = common.batch_move_devices(data=data, yes=yes)
+    render.display_results(move_resp, tablefmt="action")
 
 
 @app.command()
 def bounce(
-    what: BounceArgs = typer.Argument(..., show_default=False),
-    device: str = typer.Argument(..., metavar=iden.dev, show_default=False, autocompletion=cli.cache.dev_switch_completion),
-    ports: List[str] = typer.Argument(..., autocompletion=lambda incomplete: [], show_default=False),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    what: BounceArgs = common.arguments.get("what", help="What to bounce: The [cyan]interface[/] or [cyan]poe[/] on the interface.",),
+    device: str = common.arguments.get("device", help="The switch to bounce [cyan]interface(s)[/]/[cyan]poe[/] on.  [dim italic dark_orange3]Command only valid on switches[/]", autocompletion=common.cache.dev_switch_completion,),
+    ports: list[str] = typer.Argument(
+        ...,
+        help="Multiple ports & port-ranges allowed.  Same syntax as Switch CLI or ports separated by space.  [dim italic]i.e.: [cyan]1/1/1-1/1/4,2/1/1,2/1/12-2/1/24[/cyan] or [cyan]1/1/1 1/1/9[/cyan][/]",
+        autocompletion=lambda incomplete: [],
+        show_default=False
+    ),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Bounce interface(s) or PoE on interface(s) (Valid on switches)
 
@@ -169,43 +172,42 @@ def bounce(
 
     [italic dark_olive_green2]Results in 1 API call per interface[/]
     """
-    dev = cli.cache.get_dev_identifier(device, conductor_only=True)
+    dev = common.cache.get_dev_identifier(device, conductor_only=True)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     ports = utils.get_interfaces_from_range(ports)
 
-    print(f"Bounce [cyan]{what.value}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
+    render.econsole.print(f"Bounce [cyan]{what.value}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
     if len(ports) > 1:
-        print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
-    if cli.confirm(yes):
+        render.econsole.print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
+    if render.confirm(yes):
         resp = api.session.batch_request([BatchRequest(api.device_management.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
-        cli.display_results(resp, tablefmt="action")
-        # We don't check the task status because central seems to show the state as QUEUED even after execution appears complete
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def remove(
-    devices: List[str] = cli.arguments.devices,
+    devices: list[str] = common.arguments.devices,
     site: str = typer.Argument(
         ...,
         metavar="[site <SITE>]",
         show_default=False,
-        autocompletion=cli.cache.remove_completion
+        autocompletion=common.cache.remove_completion
     ),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Remove a device from a site
     """
-    devices = (d for d in devices if d != "site")
-    devices: list[CacheDevice] = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
-    site: CacheSite = cli.cache.get_site_identifier(site)
+    devs = (d for d in devices if d != "site")
+    devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devs]
+    site: CacheSite = common.cache.get_site_identifier(site)
 
-    print(
+    render.econsole.print(
         f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
     )
-    if cli.confirm(yes):
+    if render.confirm(yes):
         devs_by_type = {}
         for d in devices:
             if d.generic_type not in devs_by_type:
@@ -221,29 +223,29 @@ def remove(
             ) for dev_type, serials in devs_by_type.items()
         ]
         resp = api.session.batch_request(reqs)
-        cli.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
         # central will show the stack_id and all member serials in the success output.  So we strip the stack id
         swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
-        update_data = [{**dict(cli.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
-        api.session.request(cli.cache.update_dev_db, data=update_data)
+        update_data = [{**dict(common.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
+        api.session.request(common.cache.update_dev_db, data=update_data)
 
 
 
 
 @app.command()
 def reboot(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion, show_default=False,),
+    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
     swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Reboot devices or swarms
 
     Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
-    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
+    devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
 
     batch_reqs, confirm_msgs = [], []
     _confirm_pfx = "Reboot:" if not yes else "Rebooting:"
@@ -254,9 +256,9 @@ def reboot(
 
         if swarm:  # TODO reboot swarm has not been tested
             if dev.type != "ap":
-                print(f":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
+                render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
             elif dev.version.startswith("10."):
-                print(":warning:  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
+                render.econsole.print("[dark_orange3]:warning:[/]  Ignoring [green]-s[/]|[cyan]--swarm[/] option, as it only applies to [cyan]AOS8[/] IAP\n")
             else:
                 func = api.device_management.send_command_to_swarm
                 arg = dev.swack_id
@@ -266,120 +268,120 @@ def reboot(
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
-    cli.console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
+    render.console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
     if len(batch_reqs) > 1:
-        print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
+        render.econsole.print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
-    if cli.confirm(yes):
+    if render.confirm(yes):
         batch_resp = api.session.batch_request(batch_reqs)
-        cli.display_results(batch_resp, tablefmt="action")
+        render.display_results(batch_resp, tablefmt="action")
 
 
 @app.command()
 def reset(
     what: ResetArgs = typer.Argument("overlay", help="overlay is the only option currently"),
-    device: str = cli.arguments.get("device", autocompletion=cli.cache.dev_ap_gw_completion,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = common.arguments.get("device", autocompletion=common.cache.dev_ap_gw_completion,),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Reset overlay control connection (OTO/ORO)
     """
     # Not sure this works on APs/MB AP
-    dev = cli.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
+    dev = common.cache.get_dev_identifier(device, dev_type=("gw", "ap",))
 
     _msg = "Reset" if not yes else "Resetting"
     _msg = f"{_msg} ORO connection for [cyan]{dev.rich_help_text}[/]"
-    cli.console.print(_msg, emoji=False)
+    render.console.print(_msg, emoji=False)
 
-    if cli.confirm(yes):
+    if render.confirm(yes):
         resp = api.session.request(api.routing.reset_overlay_connection, dev.serial)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command(help="Blink LED")
 def blink(
-    device: str = typer.Argument(..., show_default=False, metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
+    device: str = typer.Argument(..., show_default=False, metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
     secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for {secs} seconds.", show_default=False,),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     command = f'blink_led_{action.value}'
-    dev = cli.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
+    dev = common.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = api.session.request(api.device_management.send_command_to_device, dev.serial, command, duration=secs)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
 def nuke(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_switch_ap_completion),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_ap_completion),
     swarm: bool = typer.Option(False, "-s", "--swarm", help="Factory Default the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Reset a device to factory default, erase all configuration (Valid on ArubaOS-SW or IAP Clusters)
 
     :warning:  For AOS8 IAP this command is only valid for entire cluster, not individual APs [cyan]-s[/]|[cyan]--swarm[/] option is required.
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=["ap", "switch"])
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=["ap", "switch"])
     if dev.type == "cx":
-        cli.exit("This command only applies to [cyan]AOS-SW[/] switches, not [cyan]CX[/]")
+        common.exit("This command only applies to [cyan]AOS-SW[/] switches, not [cyan]CX[/]")
 
     conf_msg = dev.rich_help_text
-    if dev.type == "cx":
+    if dev.type == "sw":
         func = api.device_management.send_command_to_device
         arg = dev.serial
         if swarm:
-            print(f"[dark_orange3]:warning:[/]  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring [cyan]-s[/]|[cyan]--swarm[/] option, as it only applies to APs not {dev.type}\n")
     else:  # AP all others will error in get_dev_identifier
         func = api.device_management.send_command_to_swarm
         arg = dev.swack_id
         if dev.is_aos10:
-            cli.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
+            common.exit("This command is only valid for [cyan]AOS8[/] IAP clusters not [cyan]AOS10[/] APs")
         elif not swarm:
-            cli.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [cyan]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster associated with the provided AP")
+            common.exit("This command is only valid for the entire swarm in AOS8, not individual APs.  Use [cyan]-s[/]|[cyan]--swarm[/] to default the entire IAP cluster associated with the provided AP")
         else:
             conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
     _msg = "Factory Default" if not yes else "Factory Defaulting"
     _msg = f"[bright_red blink]{_msg}[/] {conf_msg}"
-    cli.console.print(_msg, emoji=False)
-    if cli.confirm(yes):
+    render.console.print(_msg, emoji=False)
+    if render.confirm(yes):
         resp = api.session.request(func, arg, 'erase_configuration')
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Save Device Running Config to Startup")
 def save(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_completion),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_completion),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    dev = cli.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device)
     resp = api.session.request(api.device_management.send_command_to_device, dev.serial, 'save_configuration')
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Sync/Refresh device config with Aruba Central")
 def sync(
-    device: str = typer.Argument(..., metavar=iden.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Sync/Refresh device config with Aruba Central
 
     Only valid for gateways (aka controllers)
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type="gw")
+    dev = common.cache.get_dev_identifier(device, dev_type="gw")
     resp = api.session.request(api.device_management.send_command_to_device, dev.serial, 'config_sync')
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 # TODO get the account, port and process details (start_time, pid) cache
@@ -409,10 +411,10 @@ def start(
     ),
     port: int = typer.Option(config.webhook.port, help="Port to listen on (overrides config value if provided)", show_default=True),
     collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", hidden=True),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
@@ -434,21 +436,21 @@ def start(
     pid = get_pid()
     if pid:
         _abort = True if not port or port == int(config.webhook.port) else False
-        print(f"Webhook proxy is currently running (process id {pid}).")
-        print(f"Terminat{'e' if not yes_both else 'ing'} existing process{'?' if not yes_both else '.'}")
-        if cli.confirm(yes_both, abort=_abort):
+        render.console.print(f"Webhook proxy is currently running (process id {pid}).")
+        render.console.print(f"Terminat{'e' if not yes_both else 'ing'} existing process{'?' if not yes_both else '.'}")
+        if render.confirm(yes_both, abort=_abort):
             terminate_process(pid)
-            print("[cyan]Process Terminated")
+            render.console.print("[cyan]Process Terminated")
 
     # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
     config_port = 9143 if not config.webhook else config.webhook.port
-    print(f"Webhook Proxy will listen on port {port or config_port}")
-    if cli.confirm(yes):
+    render.console.print(f"Webhook Proxy will listen on port {port or config_port}")
+    if render.confirm(yes):
         port = port or config.webhook.port
         cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
         if collect:
             cmd += ["-c"]
-        with cli.console.status("Starting Webhook Proxy..."):
+        with render.Spinner("Starting Webhook Proxy..."):
             p = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -456,16 +458,16 @@ def start(
             )
             sleep(2)
 
-        with cli.console.status("Ensuring startup success...", spinner="dots2"):
+        with render.Spinner("Ensuring startup success...", spinner="dots2"):
             sleep(8)
 
         proc = psutil.Process(p.pid)
         if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
             output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
-            print("\n".join(output))
-            print("\nWebHook Proxy Startup [red]Failed[/].")
+            render.econsole.print("\n".join(output))
+            render.econsole.print("\nWebHook Proxy Startup [red]Failed[/].")
         else:
-            print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
+            render.console.print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
 
 @app.command(short_help="Stop WebHook Proxy", hidden=not hook_enabled)
@@ -474,18 +476,18 @@ def stop(
         ...,
         # metavar=f"hook-proxy",
     ),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Stop WebHook Proxy (background process).
     """
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
-        console = Console(emoji=False)
-        with console.status("Terminating Webhook Proxy..."):
+        # console = Console(emoji=False)
+        with render.Spinner("Terminating Webhook Proxy..."):
             p = psutil.Process(pid)
             for _ in range(2):
                 p.terminate()
@@ -496,7 +498,8 @@ def stop(
                 else:
                     return True
 
-        with console.status("Waiting for WebHook Proxy to die..."):
+        # with console.status("Waiting for WebHook Proxy to die..."):
+        with render.Spinner("Waiting for WebHook Proxy to die..."):
             _pass = 0
             while p.is_running() or _pass < 8:
                 sleep(1)
@@ -519,21 +522,21 @@ def stop(
 
     proc = _get_process_info()
     if proc:
-        print(f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}")
-        print(f"Terminat{'e' if not yes else 'ing'} existing process{'?' if not yes else '.'}")
-        if cli.confirm(yes):
+        render.console.print(f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}")
+        render.console.print(f"Terminat{'e' if not yes else 'ing'} existing process{'?' if not yes else '.'}")
+        if render.confirm(yes):
             dead = terminate_process(proc[0])
-            cli.exit("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.", code=0 if dead else 1)
+            common.exit("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.", code=0 if dead else 1)
     else:
-        cli.exit("WebHook Proxy is not running.", code=0)
+        common.exit("WebHook Proxy is not running.", code=0)
 
 @app.command(short_help="Archive devices", hidden=False)
 def archive(
-    devices: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
 
@@ -548,7 +551,7 @@ def archive(
     _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
     serials = []
-    cache_devs: List[CacheDevice] = [cli.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    cache_devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
     for dev_in, cache_dev in zip(devices, cache_devs):
         if cache_dev:
             _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
@@ -560,19 +563,19 @@ def archive(
             serials += [dev_in]
 
 
-    cli.console.print(_msg, _emsg, sep="\n", emoji=False)
-    if cli.confirm(yes):
+    render.console.print(_msg, _emsg, sep="\n", emoji=False)
+    if render.confirm(yes):
         resp = api.session.request(api.platform.archive_devices, serials)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 
 @app.command()
 def unarchive(
-    serials: List[str] = typer.Argument(..., metavar=iden.dev_many, autocompletion=cli.cache.dev_completion),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    serials: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Unacrchive devices
 
@@ -580,7 +583,7 @@ def unarchive(
 
     Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
     """
-    serials: List[CentralObject] = [cli.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
+    serials: list[CentralObject] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
     _msg = "[bright_green]Unarchive devices[/]:"
     if serials and any([isinstance(d, CentralObject) for d in serials]):
@@ -590,24 +593,24 @@ def unarchive(
         else:
             dev = serials[0]
             _msg = f"{_msg} {dev if not isinstance(dev, CentralObject) else dev.rich_help_text}"
-        serials: List[str] = [d if not isinstance(d, CentralObject) else d.serial for d in serials]
+        serials: list[str] = [d if not isinstance(d, CentralObject) else d.serial for d in serials]
     else:
         _dev_msg = '\n    '.join(serials)
         _msg = f"{_msg}\n    {_dev_msg}\n"
-    cli.console.print(_msg, emoji=False)
+    render.console.print(_msg, emoji=False)
 
     resp = api.session.request(api.platform.unarchive_devices, serials)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)
 def enable(
     what: EnableDisableArgs = typer.Argument("auto-sub"),
-    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    services: list[common.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Enable auto subscribe for service.
 
@@ -622,25 +625,25 @@ def enable(
     else:
         svc = services[0]
         _msg = f'{_msg} {svc.name}'
-    print(_msg)
-    print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
-    print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
-    print('Not just the 6300 models.')
-    if cli.confirm(yes):
+    render.econsole.print(_msg)
+    render.econsole.print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
+    render.econsole.print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
+    render.econsole.print('Not just the 6300 models.')
+    if render.confirm(yes):
         services = [s.name for s in services]
 
         resp = api.session.request(api.platform.enable_auto_subscribe, services=services)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)
 def disable(
     what: EnableDisableArgs = typer.Argument("auto-sub"),
-    services: List[cli.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    services: list[common.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Disable auto subscribe for service.
 
@@ -655,23 +658,23 @@ def disable(
     else:
         svc = services[0]
         _msg = f'{_msg} {svc.name}'
-    print(_msg)
-    print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
-    print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
-    print('Not just the 6300.')
-    if cli.confirm(yes):
+    render.econsole.print(_msg)
+    render.econsole.print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
+    render.econsole.print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
+    render.econsole.print('Not just the 6300.')
+    if render.confirm(yes):
         services = [s.name for s in services]
 
         resp = api.session.request(api.platform.disable_auto_subscribe, services=services)
-        cli.display_results(resp, tablefmt="action")
+        render.display_results(resp, tablefmt="action")
 
 @app.command(hidden=True)
 def renew_license(
-    device: List[str] = cli.arguments.devices,
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: list[str] = common.arguments.devices,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Renew-Licenses on devices.
 
@@ -687,14 +690,14 @@ def renew_license(
 
     raise NotImplementedError()
     from centralcli.cache import CacheInvDevice
-    devices = [cli.cache.get_dev_identifier(d) for d in device]
-    inv_data = [CacheInvDevice(cli.cache.inventory_by_serial[s]) for s in [s.serial for s in devices]]
+    devices = [common.cache.get_dev_identifier(d) for d in device]
+    inv_data = [CacheInvDevice(common.cache.inventory_by_serial[s]) for s in [s.serial for s in devices]]
     calls_by_sub = {}
     dev_types = []
     for idx, dev in enumerate(set(inv_data)):
         if not dev.services:
             skipped = inv_data.pop(idx)
-            cli.econsole.print(f":warning: Skipping {skipped} as it does not have any subscriptions assigned.  Use [cyan]cencli assign license <device(s)>[/] to assign licenses.")
+            render.econsole.print(f":warning: Skipping {skipped} as it does not have any subscriptions assigned.  Use [cyan]cencli assign license <device(s)>[/] to assign licenses.")
             continue
         dev_types += ["switch" if dev.type in ["cx", "sw"] else dev.type]
         for sub in dev.services:
@@ -736,24 +739,24 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
     debug = debug or env.debug
 
     if version:
-        cli.version_callback(ctx)
-        cli.exit(code=0)
+        common.version_callback(ctx)
+        common.exit(code=0)
     if default:
         if ("--ws" in sys.argv or "--workspace" in sys.argv) and workspace != config.default_workspace:
             ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
-            cli.econsole.print(f":warning:  Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
+            render.econsole.print(f":warning:  Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
             workspace = config.default_workspace
-        cli.workspace_name_callback(ctx, workspace=config.default_workspace, default=True)
+        common.workspace_name_callback(ctx, workspace=config.default_workspace, default=True)
     else:
-        cli.workspace_name_callback(ctx, workspace=workspace)
+        common.workspace_name_callback(ctx, workspace=workspace)
 
     if debug:
-        cli.debug_callback(ctx, debug=debug)
+        common.debug_callback(ctx, debug=debug)
     if debugv:
         log.DEBUG = config.debug = log.verbose = config.debugv = debugv
         _ = sys.argv.pop(sys.argv.index("--debugv"))
     if update_cache:
-        cli.econsole.print("Pretend I'm updating the cache...")
+        render.econsole.print("Pretend I'm updating the cache...")
         # cli.cache(refresh=True)
         # _ = sys.argv.pop(sys.argv.index("-U"))
         # TODO ensure cache update is removed from all commands as we are doing it here now
@@ -764,12 +767,12 @@ def callback(
     # ctx: typer.Context,
     version: bool = typer.Option(False, "--version", "-V", "-v", case_sensitive=False, is_flag=True, help="Show current cencli version, and latest available version.",),
 
-    debug: bool = cli.options.get("debug", rich_help_panel="Options"),
-    debugv: bool = cli.options.get("debugv", hidden=True),
-    default: bool = cli.options.get("default", rich_help_panel="Options"),
+    debug: bool = common.options.get("debug", rich_help_panel="Options"),
+    debugv: bool = common.options.get("debugv", hidden=True),
+    default: bool = common.options.get("default", rich_help_panel="Options"),
 
-    workspace: str = cli.options.get("workspace", rich_help_panel="Options"),
-    update_cache: bool = cli.options.get("update_cache", lazy=True, callback=all_commands_callback)
+    workspace: str = common.options.get("workspace", rich_help_panel="Options"),
+    update_cache: bool = common.options.get("update_cache", lazy=True, callback=all_commands_callback)
 ) -> None:
     """
     Aruba Central API CLI.  A CLI for interacting with Aruba Central APIs.

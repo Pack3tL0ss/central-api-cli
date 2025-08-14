@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
 import base64
 import hashlib
@@ -7,7 +8,7 @@ import json
 import sys
 from datetime import datetime as dt
 from pathlib import Path
-from typing import List, Literal, Optional, Union
+from typing import Literal, Optional
 
 import uvicorn
 from fastapi import FastAPI, Header, Request, Response, status
@@ -15,36 +16,25 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from rich import print_json  # NoQA
 from starlette.requests import Request  # NoQA
 from starlette.responses import FileResponse
 
-# TODO should have a periodic call to branch_health (every 6 hours etc) to verify cache
-# TODO ensure script handles network down / unreachable state (for the script to communicate externally)
-# TODO keep track of request count.
-# TODO log to wh_proxy speciffic log file, keep seperate from normal cencli log file
-# FIXME make sure refresh_token logic will skip token paste. given it runs in background / check for tty
-
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import MyLogger, cache, config, BatchRequest
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import MyLogger, cache, config, BatchRequest  # type: ignore
-    else:
-        print(pkg_dir.parts)
-        raise e
+from centralcli import MyLogger, cache, config
+from centralcli.client import BatchRequest
+from centralcli.response import Response as APIResponse
 
 from .cache import api
-from . import Response as APIResponse
 
 log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
 log_file.parent.mkdir(exist_ok=True)
 log = MyLogger(log_file, debug=config.debug, show=True, verbose=config.debugv)
 print(f"Web Hook Proxy logging to {log_file}")
 
+# TODO should have a periodic call to branch_health (every 6 hours etc) to verify cache
+# TODO ensure script handles network down / unreachable state (for the script to communicate externally)
+# TODO keep track of request count.
+# TODO log to wh_proxy speciffic log file, keep seperate from normal cencli log file
+# FIXME make sure refresh_token logic will skip token paste. given it runs in background / check for tty
 
 # LOGGING_CONFIG: dict[str, Any] = {
 #     "version": 1,
@@ -210,7 +200,7 @@ def _hook_response(data: dict) -> dict:
         }
 
 
-def _batch_resp_all_ok(responses: List[APIResponse]) -> bool:
+def _batch_resp_all_ok(responses: list[APIResponse]) -> bool:
     if not all(r.ok for r in responses):
         _ = [log.error(str(r), show=True) for r in responses]
         log.critical("hook proxy exiting due to error.", show=True)
@@ -322,9 +312,10 @@ def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
 
 
 def log_request(request: Request, route: str):
-    log.info('[NEW API RQST IN] {} {} via API'.format(request.client.host, route))
+    log.info(f'[NEW API RQST IN] {request.client.host} {route} via API')
 
-async def check_cache_entry(data: dict) -> Union[list, None]:
+
+async def check_cache_entry(data: dict) -> list | None:
     """Querries hook db when webhook arrives, determine if entry exists
 
     If the entry exists, but is based on startup poll the device is querried to verify
@@ -335,7 +326,7 @@ async def check_cache_entry(data: dict) -> Union[list, None]:
         data (dict): The webhook post content.
 
     Returns:
-        Union[list, None]: returns list of cache doc_ids returned from cache update method
+        list | None: returns list of cache doc_ids returned from cache update method
             if an update was necessary, None if no update performed (i.e. new hook for branch)
             already in cache.
     """
@@ -392,12 +383,13 @@ async def check_cache_entry(data: dict) -> Union[list, None]:
             log.info(f"[WH CLEAR] {data['text']} - Removed from cache, all tunnels restored.")
             return await cache.update_hook_data_db(_hook_response(data))
 
+
 @app.get('/favicon.ico', include_in_schema=False)
 async def _favicon():
     return FileResponse(Path(__file__).parent / "static/favicon.ico")
 
 
-@app.get('/api/v1.0/alerts', response_model=List[BranchResponse], )
+@app.get('/api/v1.0/alerts', response_model=list[BranchResponse], )
 async def alerts(request: Request,):
     log_request(request, 'fetching All Active Alerts')
     try:

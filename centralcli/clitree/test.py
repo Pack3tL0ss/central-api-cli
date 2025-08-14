@@ -7,7 +7,9 @@ from typing import List
 
 import typer
 
-from centralcli import Response, Session, cli, config, log
+from centralcli import common, config, log, render
+from centralcli.client import Session
+from centralcli.response import Response
 
 from ..cache import api
 from ..constants import SortGroupOptions
@@ -18,34 +20,34 @@ app = typer.Typer()
 # CACHE add cache for webhooks
 @app.command()
 def webhook(
-    wid: str = cli.arguments.wid,
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    wid: str = common.arguments.wid,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ):
     """Test WebHook Notifications."""
     resp = api.session.request(api.central.test_webhook, wid)
 
-    cli.display_results(resp, tablefmt="rich", title="WebHook Test Results")
+    render.display_results(resp, tablefmt="rich", title="WebHook Test Results")
 
 
 @app.command(hidden=False, short_help="Test Central API methods directly", epilog="Output is displayed in yaml by default.")
 def method(
-    method: str = typer.Argument(..., autocompletion=cli.cache.method_test_completion, show_default=False,),
+    method: str = typer.Argument(..., autocompletion=common.cache.method_test_completion, show_default=False,),
     kwargs: List[str] = typer.Argument(None, metavar="args/kwargs", help="Provide args/kwargs in format: [cyan]arg1 arg2 keyword=value keyword2=value2[/]", show_default=False,),
     _help: bool = typer.Option(False, "--doc", help="Get details on required args/keyword args for provided method."),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    debugv: bool = cli.options.debugv,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    debugv: bool = common.options.debugv,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Dev testing commands to run CentralApi methods from command line.
 
@@ -106,7 +108,7 @@ def method(
             func = getattr(full_api, method)
 
     if not func:
-        cli.exit(f"[cyan]{method}[/] [bright_red]does not exist[/]")
+        common.exit(f"[cyan]{method}[/] [bright_red]does not exist[/]")
 
     if _help:
         doc_str: str = func.__doc__
@@ -117,9 +119,9 @@ def method(
             doc_str = f'[bright_green]{doc_str_list[0]}[/]'
             if len(doc_str_list) > 1:
                 doc_str = f'{doc_str}{"".join(doc_str_list[1:])}'
-            cli.exit(doc_str.replace(old_ret, new_ret), code=0, emoji=False)
+            common.exit(doc_str.replace(old_ret, new_ret), code=0, emoji=False)
         else:
-            cli.exit(f"Sorry, {func.__name__}, lacks a docstr.  No help.", code=0)
+            common.exit(f"Sorry, {func.__name__}, lacks a docstr.  No help.", code=0)
 
     # pasrse args/kwargs from command line
     kwargs = kwargs or {}
@@ -170,36 +172,36 @@ def method(
     c.print(req)
     c.print("\n".join([f"  {k}: {v}" for k, v in attrs.items()]))
 
-    tablefmt = cli.get_format(
+    tablefmt = common.get_format(
         do_json, do_yaml, do_csv, do_table, default="yaml"
     )
 
     if resp.raw and resp.output != resp.raw:
         typer.echo(f"\n{typer.style('CentralCLI Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.output, tablefmt=tablefmt, pager=pager, outfile=outfile)
+        render.display_results(data=resp.output, tablefmt=tablefmt, pager=pager, outfile=outfile)
     if resp.raw:
         typer.echo(f"\n{typer.style('Raw Response Output', fg='bright_green')}:")
-        cli.display_results(data=resp.raw, tablefmt="json", pager=pager, outfile=outfile)
+        render.display_results(data=resp.raw, tablefmt="json", pager=pager, outfile=outfile)
 
 
 @app.command(hidden=True,)
 def command(
-    import_file: Path = cli.arguments.import_file,
-    sort_by: SortGroupOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    yes: bool = cli.options.yes,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    debugv: bool = cli.options.debugv,
-    update_cache = cli.options.update_cache,
+    import_file: Path = common.arguments.import_file,
+    sort_by: SortGroupOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    yes: bool = common.options.yes,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    debugv: bool = common.options.debugv,
+    update_cache = common.options.update_cache,
 ) -> None:
     """This is a hidden test command used for automated testing.
 

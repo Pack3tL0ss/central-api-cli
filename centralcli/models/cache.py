@@ -1,17 +1,18 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, RootModel, Field, AliasChoices, ConfigDict, field_validator, field_serializer
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional, List, Dict, Any, Literal, Iterable
-from enum import Enum
-from random import randint
-from datetime import datetime
 import json
-import pendulum
+from datetime import datetime
+from enum import Enum
 from functools import cached_property
+from pathlib import Path
+from random import randint
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional
 
-from .. import utils, log
-from ..constants import DevTypes, CertTypes
+import pendulum
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_serializer, field_validator
+
+from .. import log, utils
+from ..constants import CertTypes, DevTypes, GroupDevTypes
 from ..objects import DateTime
 from .common import MpskStatus
 
@@ -216,7 +217,7 @@ class GatewayRole(str, Enum):
 class Group(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     name: str = Field(alias=AliasChoices("name", "group"))
-    allowed_types: List[DevTypes] = Field(["ap", "gw", "cx", "sw"], alias=AliasChoices("allowed_types", "types", "AllowedDevTypes"))
+    allowed_types: List[GroupDevTypes] = Field(["ap", "gw", "cx", "sw"], alias=AliasChoices("allowed_types", "types", "AllowedDevTypes"))
     gw_role: Optional[GatewayRole] = Field(None, alias=AliasChoices("gw_role", "GwNetworkRole"))
     aos10: Optional[bool | Literal["NA"]] = None
     microbranch: Optional[bool | Literal["NA"]] = None

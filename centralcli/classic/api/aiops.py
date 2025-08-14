@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from ... import Response, utils, constants
 from datetime import datetime, timezone
-
 from typing import TYPE_CHECKING, Literal
+
+from ... import constants, utils
+from ...response import Response
+
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
 
 class AiOpsAPI:
     def __init__(self, session: Session):

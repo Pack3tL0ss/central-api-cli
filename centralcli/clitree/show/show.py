@@ -24,9 +24,9 @@ try:
 except (ImportError, ModuleNotFoundError):
     hook_enabled = False
 
-
-from centralcli import BatchRequest, Response, caas, cache, cleaner, cli, config, log, render, utils
+from centralcli import caas, cache, cleaner, common, config, log, render, utils
 from centralcli.cache import CentralObject
+from centralcli.client import BatchRequest
 from centralcli.clitree import tshoot as clitshoot
 from centralcli.constants import (
     LIB_DEV_TYPE,
@@ -40,7 +40,6 @@ from centralcli.constants import (
     EventDevTypeArgs,
     GenericDeviceTypes,
     GenericDevTypes,
-    IdenMetaVars,
     InsightSeverity,
     LicenseTypes,
     LogLevel,
@@ -70,10 +69,12 @@ from centralcli.constants import (
     StatusOptions,
     SubscriptionArgs,
     TimeRange,
+    iden_meta,
     lib_to_api,
     lib_to_gen_plural,
     what_to_pretty,
 )
+from centralcli.response import Response
 
 from ...caas import CaasAPI
 from ...cache import CacheDevice
@@ -101,9 +102,6 @@ app.add_typer(audit.app, name="audit")
 app.add_typer(cloudauth.app, name="cloud-auth")
 app.add_typer(mpsk.app, name="mpsk")
 app.add_typer(bandwidth.app, name="bandwidth")
-
-tty = utils.tty
-iden_meta = IdenMetaVars()
 
 api_clients = APIClients()
 api = api_clients.classic
@@ -278,15 +276,15 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 # TODO expand params into available kwargs
 def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
     if include_inventory:
-        resp = cli.cache.get_devices_with_inventory(status=status)
+        resp = common.cache.get_devices_with_inventory(status=status)
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
-    elif not cli.cache.responses.dev:
-        resp = api.session.request(cli.cache.refresh_dev_db, **params)
+    elif not common.cache.responses.dev:
+        resp = api.session.request(common.cache.refresh_dev_db, **params)
         # resp = api.session.request(cli.cache.refresh_dev_db, **params)
         caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
     else:
         # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-        resp, caption = cli.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+        resp, caption = common.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
 
     return resp, caption
 
@@ -294,7 +292,7 @@ def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[Cac
     try:
         data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
         model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
-        api.session.request(cli.cache.update_dev_db, model_data)
+        api.session.request(common.cache.update_dev_db, model_data)
     except Exception as e:
         log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
         log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
@@ -310,16 +308,16 @@ def _get_details_for_specific_devices(
 
         # Build requests
         br = BatchRequest
-        devs = [cli.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        devs = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
         reqs = [br(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
         batch_res = api.session.batch_request(reqs)
         if include_inventory:  # Combine results with inventory results
-            _ = api.session.request(cli.cache.refresh_inv_db_classic, device_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db_classic, device_type=dev_type)
             for r, dev in zip(batch_res, devs):
-                r.output = {**r.output, **cli.cache.inventory_by_serial.get(dev.serial, {})}
+                r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
 
         _update_cache_for_specific_devices(batch_res, devs)
 
@@ -364,14 +362,14 @@ def show_devices(
 ) -> None:
     # include subscription implies include_inventory
     if update_cache:
-        api.session.request(cli.cache.refresh_dev_db)
+        api.session.request(common.cache.refresh_dev_db)
 
     if group:
-        group: CacheGroup = cli.cache.get_group_identifier(group)
+        group: CacheGroup = common.cache.get_group_identifier(group)
     if site:
-        site: CacheSite = cli.cache.get_site_identifier(site)
+        site: CacheSite = common.cache.get_site_identifier(site)
     if label:
-        label: CacheLabel = cli.cache.get_label_identifier(label)
+        label: CacheLabel = common.cache.get_label_identifier(label)
 
     resp = None
     status = status or state
@@ -402,14 +400,14 @@ def show_devices(
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
-        resp = api.session.request(cli.cache.refresh_dev_db, dev_type=dev_type, **params)
+        resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = api.session.request(cli.cache.refresh_inv_db_classic, device_type=dev_type)
-            resp = cli.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
+            _ = api.session.request(common.cache.refresh_inv_db_classic, device_type=dev_type)
+            resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
     title_sfx = [
         f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
     ] if not include_inventory else ["including Devices from Inventory"]
@@ -423,7 +421,7 @@ def show_devices(
     else:
         output_key = "name"
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -440,46 +438,46 @@ def show_devices(
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     if not resp.output.get("logo"):
-        cli.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
+        common.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
 
     import base64
     file = path / resp.output["logo_name"] if path.is_dir() else path
     if not os.access(file.parent, os.W_OK):
-        cli.exit(f"{file.parent} is not writable")
+        common.exit(f"{file.parent} is not writable")
 
     img_data = base64.b64decode(resp.output["logo"].split(",")[1])
     if file.write_bytes(img_data):
-        cli.exit(f"Logo saved to {file}", code=0)
+        common.exit(f"Logo saved to {file}", code=0)
     else:
-        cli.exit(
+        common.exit(
             f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
         )
 
 @app.command("all")
 def all_(
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     """Show details for All devices [dim italic](that have checked in with Central).[/]
     """
@@ -501,35 +499,35 @@ def devices(
         metavar=iden_meta.dev_many.replace("]", "|'all']"),
         hidden=False,
         autocompletion=lambda incomplete: [
-            m for m in [("all", "Show all devices"), *[m for m in cli.cache.dev_completion(incomplete=incomplete)]]
+            m for m in [("all", "Show all devices"), *[m for m in common.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ],
-        help=f"Show details for a specific device {cli.help_block('show details for all devices')}",
+        help=f"Show details for a specific device {common.help_block('show details for all devices')}",
         show_default=False,
     ),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     """Show details for devices
     """
@@ -554,32 +552,32 @@ def devices(
 
 @app.command()
 def aps(
-    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {cli.help_block('--group', help_type='requires')}[/]"),
-    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {cli.help_block('--site', help_type='requires')}", show_default=False,),
+    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {common.help_block('--group', help_type='requires')}[/]"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {common.help_block('--site', help_type='requires')}", show_default=False,),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for APs
 
@@ -593,22 +591,22 @@ def aps(
 
     if dirty:
         if not group:
-            cli.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
+            common.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
 
-        group: CacheGroup = cli.cache.get_group_identifier(group)
+        group: CacheGroup = common.cache.get_group_identifier(group)
         resp = api.session.request(api.configuration.get_dirty_diff, group.name)
-        tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-        cli.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
+        tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        render.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
     elif neighbors:
         if site is None:
-            cli.exit("[cyan]--site <site name>[/] is required for neighbors output.")
+            common.exit("[cyan]--site <site name>[/] is required for neighbors output.")
 
-        site: CacheSite = cli.cache.get_site_identifier(site)
+        site: CacheSite = common.cache.get_site_identifier(site)
         resp: Response = api.session.request(api.topo.get_topo_for_site, site.id, )
-        tablefmt: str = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
         cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
-        cli.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
+        render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
     else:
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
@@ -618,30 +616,30 @@ def aps(
 
 @app.command("switches")
 def switches_(
-    switches: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    switches: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include switches in Inventory that have yet to connect", show_default=False,),
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for switches
     """
@@ -659,30 +657,30 @@ def switches_(
 
 @app.command(name="gateways")
 def gateways_(
-    gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     """Show details for gateways
     """
@@ -700,30 +698,30 @@ def gateways_(
 
 @app.command("controllers", hidden=True)
 def controllers_(
-    controllers: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    controllers: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # hidden as not tested with this type
-    verbose: int = cli.options.verbose,
-    sort_by: SortDevOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     """Show details for controllers
 
@@ -743,26 +741,26 @@ def controllers_(
 
 @app.command()
 def stacks(
-    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    group: str = cli.options.group,
+    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    group: str = common.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    verbose: int = cli.options.verbose,
-    sort_by: SortStackOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    verbose: int = common.options.verbose,
+    sort_by: SortStackOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for switch stacks
     """
@@ -772,14 +770,14 @@ def stacks(
         status = StatusOptions("Up")
 
     if group:
-        group: CacheGroup = cli.cache.get_group_identifier(group)
+        group: CacheGroup = common.cache.get_group_identifier(group)
 
     cleaner_kwargs = {"status": status}
     args = ()
     kwargs = {}
     func = api.monitoring.get_switch_stacks
     if switches:
-        devs: List[CentralObject] = [cli.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
+        devs: List[CentralObject] = [common.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
         if len(devs) == 1:  # if the specify a we use the details call
             func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
@@ -788,7 +786,7 @@ def stacks(
             if group:
                 kwargs = {"group": group.name}
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = api.session.request(func, *args, **kwargs)
 
     title = "Switch stack details"
@@ -797,7 +795,7 @@ def stacks(
         if "count" in resp.raw:
             caption = f"Total # of Stacks Returned: [cyan]{resp.raw['count']}[/]"
 
-    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
 
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
@@ -805,22 +803,22 @@ def inventory(
     dev_type: ShowInventoryArgs = typer.Argument("all",),
     sub: bool = typer.Option(
         None,
-        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {cli.help_block('show all')}",
+        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {common.help_block('show all')}",
         show_default=False,
     ),
-    verbose: int = cli.options.verbose,
-    sort_by: SortInventoryOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    verbose: int = common.options.verbose,
+    sort_by: SortInventoryOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     if hasattr(dev_type, "value"):
         dev_type = dev_type.value
@@ -848,15 +846,15 @@ def inventory(
             dev_type=dev_type, outfile=outfile, include_inventory=include_inventory, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
-        cli.exit(code=0)
+        common.exit(code=0)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     _api = glp_api or api
-    resp = _api.session.request(cli.cache.refresh_inv_db, dev_type=dev_type)
+    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
     # caption = None if glp_api else _build_device_caption(resp, inventory=True)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -877,22 +875,22 @@ def subscriptions(
     what: SubscriptionArgs = typer.Argument("details"),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
     service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
-    sort_by: SortSubscriptionOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortSubscriptionOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show subscription/license details or stats
     """
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
 
     _cleaner = None
     set_width_cols = None
@@ -925,13 +923,13 @@ def subscriptions(
         resp = api.session.request(api.platform.get_subscription_stats)
         title = "Subscription Stats"
     elif what == "names":
-        resp = api.session.request(cli.cache.refresh_license_db)
+        resp = api.session.request(common.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         set_width_cols = {"name": {"min": 39}}
     else:
         raise ValueError("Error in logic evaluating what")
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -946,27 +944,27 @@ def subscriptions(
 
 @app.command()
 def swarms(
-    ap: str = typer.Argument(None, metavar=iden_meta.dev, help=f"Show settings for the Virtual Controller/Swarm associated with this AP.  {cli.help_block('Show All Swarms')}", show_default=False, autocompletion=cli.cache.dev_ap_completion),
+    ap: str = typer.Argument(None, metavar=iden_meta.dev, help=f"Show settings for the Virtual Controller/Swarm associated with this AP.  {common.help_block('Show All Swarms')}", show_default=False, autocompletion=common.cache.dev_ap_completion),
     config: bool = typer.Option(False, "-c", "--config", help="Get Swarm/Virtual Controller configuration for a specific swarm.  [dim italic]Valid/Applies if AP is provided[/]", show_default=False),
-    group: str = cli.options.group,
+    group: str = common.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False, hidden=True,),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
     up: bool = typer.Option(False, "--up", help="Filter by swarms that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
     name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
-    sort_by: SortSwarmOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortSwarmOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm
     """
@@ -977,14 +975,14 @@ def swarms(
     else:
         status = status or state
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     if ap:
-        device = cli.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
+        device = common.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
         if not device:
-            cli.exit("Device is required with [cyan]-s[/]|[cyan]--swarm[/] option.")
+            common.exit("Device is required with [cyan]-s[/]|[cyan]--swarm[/] option.")
         if device.is_aos10:
-            cli.exit("This command is only valid for AOS8 APs")
+            common.exit("This command is only valid for AOS8 APs")
         if status is not None:
             log.warning("--[bright_green]up[/]|--[red]down[/] option ignored.  Only applies when showing all swarms (no AP is provided)", caption=True)
         if sort_by:
@@ -1000,7 +998,7 @@ def swarms(
         title = "All Swarms"
         resp = api.session.request(api.monitoring.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
 
-    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
+    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 class ParsedCombinedResp:
     def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
@@ -1085,13 +1083,13 @@ def interfaces(
     device: str = typer.Argument(
         "all",
         metavar=f"{iden_meta.dev.replace(']', '|all]')}",
-        autocompletion=lambda incomplete: [item for item in [*cli.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
-        help=f"Device to fetch interfaces from {cli.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
+        autocompletion=lambda incomplete: [item for item in [*common.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
+        help=f"Device to fetch interfaces from {common.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
     ),
     slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
+    group: str = common.options.group,
+    site: str = common.options.site,
     do_gw: bool = typer.Option(False, "--gw", help="Show interfaces for all gateways, [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
     do_ap: bool = typer.Option(False, "--ap", help="Show interfaces for all APs [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
     do_switch: bool = typer.Option(False, "--switch", help="Show interfaces for all switches [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
@@ -1102,20 +1100,20 @@ def interfaces(
     down: bool = typer.Option(False, "--down", help="Filter by interfaces that are Down", show_default=False),
     slow: bool = typer.Option(False, "-s", "--slow", help="Filter by Up interfaces that have negotiated a speed below 1Gbps", show_default=False),
     fast: bool = typer.Option(False, "-f", "--fast", help="Filter by Up interfaces that have negotiated a speed at or above 2.5Gbps (Smart Rate)", show_default=False),
-    verbose: int = cli.options.verbose,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    yes: bool = cli.options.yes,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    verbose: int = common.options.verbose,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    yes: bool = common.options.yes,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show interfaces/details
 
@@ -1137,12 +1135,12 @@ def interfaces(
         if any([site, group]):
             warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in context_filters.items() if v])
             log.warning(f"{warn_msg} ignored as the option does not apply when a specific device is provided.", caption=True)
-        dev: CacheDevice = cli.cache.get_dev_identifier(device, conductor_only=True,)
+        dev: CacheDevice = common.cache.get_dev_identifier(device, conductor_only=True,)
         dev_type = dev.generic_type
         devs = [dev]
     else:
         if [do_ap, do_gw, do_switch].count(True) > 1:
-            cli.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
+            common.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
 
         if do_ap:
             dev_type = "ap"
@@ -1151,18 +1149,18 @@ def interfaces(
         elif do_switch:
             dev_type = "switch"
         else:
-            cli.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
+            common.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
 
         # Update cache basesd on provided filters
         kwargs = {"site": site} if site else {"group": group}  # monitoring API only allows 1 filter
-        dev_resp = api.session.request(cli.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
+        dev_resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
         if not dev_resp:
-            cli.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
+            render.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
 
-        site: CacheSite = site if not site else cli.cache.get_site_identifier(site)
-        group: CacheGroup = group if not group else cli.cache.get_group_identifier(group)
+        site: CacheSite = site if not site else common.cache.get_site_identifier(site)
+        group: CacheGroup = group if not group else common.cache.get_group_identifier(group)
 
-        devs: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in cli.cache.devices] if cd.generic_type == dev_type]
+        devs: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in common.cache.devices] if cd.generic_type == dev_type]
         if site:
             devs = [d for d in devs if d.site == site.name]
             title_sfx = f" in site {site.name}"
@@ -1171,7 +1169,7 @@ def interfaces(
             title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
 
         if not devs:
-            cli.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
+            common.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
 
     if dev_type == "gw":
         batch_reqs = [BatchRequest(api.monitoring.get_gateway_ports, d.serial) for d in devs]
@@ -1189,8 +1187,8 @@ def interfaces(
             ]
 
     if len(batch_reqs) > 15:
-        cli.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
-        cli.confirm(yes)
+        render.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
+        render.confirm(yes)
 
     batch_resp = api.session.batch_request(batch_reqs)
 
@@ -1202,7 +1200,7 @@ def interfaces(
 
     resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose,))
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
 
     caption = []
@@ -1226,7 +1224,7 @@ def interfaces(
             resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -1245,26 +1243,26 @@ def interfaces(
 
 @app.command(help="Show (switch) poe details for an interface")
 def poe(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=common.cache.dev_switch_completion, show_default=False,),
     port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
     _port: str = typer.Option(None, "--port", show_default=False, hidden=True,),
     powered: bool = typer.Option(False, "-p", "--powered", help="Show only interfaces currently delivering power", show_default=False,),
-    verbose: int = cli.options.verbose,
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    verbose: int = common.options.verbose,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     port = _port if _port else port
-    dev = cli.cache.get_dev_identifier(device, dev_type="switch")
+    dev = common.cache.get_dev_identifier(device, dev_type="switch")
     resp = api.session.request(api.monitoring.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
     resp.output = utils.unlistify(resp.output)
     caption = "  Power values are in watts."
@@ -1278,8 +1276,8 @@ def poe(
             caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
             caption = f"{caption}, In use: [cyan]{resp.output[0]['poe_slots'].get('power_in_use_in_watts', '?')}[/]"
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
-    cli.display_results(
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"Poe details for {dev.name}",
@@ -1302,7 +1300,7 @@ def vlans(
     dev_site: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.dev} (vlans for a device) OR {iden_meta.site} (vlans for a site)",
-        autocompletion=cli.cache.dev_gw_switch_site_completion,
+        autocompletion=common.cache.dev_gw_switch_site_completion,
         show_default=False,
     ),
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
@@ -1310,25 +1308,25 @@ def vlans(
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by VLANs that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by VLANs that are Down", show_default=False),
-    sort_by: SortVlanOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortVlanOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show VLANs for device or site
 
     Command applies to sites, gateways, or switches
     """
     # TODO cli command lacks the filtering options available from method currently.
-    obj: CentralObject = cli.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
+    obj: CentralObject = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
 
     if up:
         status = "Up"
@@ -1356,9 +1354,9 @@ def vlans(
             print("Command is only valid on gateways and switches")
             raise typer.Exit(1)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"{obj.name} Vlans",
@@ -1447,30 +1445,30 @@ def dhcp(
     dev: str = typer.Argument(
         ...,
         metavar=f"{iden_meta.dev} (Valid for Gateways Only) ",
-        autocompletion=cli.cache.dev_completion,
+        autocompletion=common.cache.dev_completion,
         show_default=False,
     ),
     no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
-    sort_by: SortDhcpOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    verbosity: int = cli.options.verbose,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    sort_by: SortDhcpOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    verbosity: int = common.options.verbose,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
 
     -v (verbose) will extract hostnames for defined reservations from GW config
     """
-    dev: CentralObject = cli.cache.get_dev_identifier(dev, dev_type="gw")
+    dev: CentralObject = common.cache.get_dev_identifier(dev, dev_type="gw")
 
     if what == "pools":
         resp = api.session.request(api.monitoring.get_dhcp_pools, dev.serial)
@@ -1479,9 +1477,9 @@ def dhcp(
         if resp.ok and not no_res and verbosity:
             resp = _get_reservation_info_from_config(resp, dev=dev)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"{dev.name} DHCP {what.rstrip('s')} details",
@@ -1499,20 +1497,20 @@ def upgrade(
         ...,
         metavar=iden_meta.dev_many,
         hidden=False,
-        autocompletion=cli.cache.dev_completion,
+        autocompletion=common.cache.dev_completion,
         show_default=False,
     ),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     """Show firmware upgrade status (by device)
     """
@@ -1521,9 +1519,9 @@ def upgrade(
     devices = [d for d in devices if d not in ignored_subcommands]
 
     if not devices:
-        cli.exit("Missing required parameter [cyan]<device>[/]")
+        common.exit("Missing required parameter [cyan]<device>[/]")
 
-    devs: List[CentralObject] = [cli.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
+    devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
     batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
     batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
@@ -1541,9 +1539,9 @@ def upgrade(
     else:
         resp = batch_resp
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title="Upgrade Status",
@@ -1558,18 +1556,18 @@ def cache_(
     args: List[CacheArgs] = typer.Argument(None, help="[cyan]all[/] Shows data in [italic bright_green]the most pertinent[/] tables", show_default=False),
     all: bool = typer.Option(False, "--all", help="This is the Super [cyan]all[/] option, shows data in [bright_green italic]every[/] table.", show_choices=False),
     no_page: bool = typer.Option(False, "--no-page", help="For [cyan]all[/] | [cyan]--all[/] options, you hit Enter to see the next table.  This option disables that behavior.", show_default=False,),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ):
     """Show contents/size/record-count in Local Cache.
 
@@ -1589,34 +1587,34 @@ def cache_(
         return sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
     args = ('all',) if not args else args
-    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
 
     if all or "all" in args:
-        tables = cli.cache.all_tables if all else cli.cache.key_tables
-        length = len(cli.cache) if all else len(cli.cache._tables)
+        tables = common.cache.all_tables if all else common.cache.key_tables
+        length = len(common.cache) if all else len(common.cache._tables)
         for idx, t in enumerate(tables, start=1):
             data = t.all()
             if t.name == "devices":
                 data = sort_devices(data)
 
-            cli.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
-            if not no_page and cli.econsole.is_terminal and not idx == length:
-                cli.pause()
+            render.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            if not no_page and render.econsole.is_terminal and not idx == length:
+                render.pause()
 
     elif "tables" in args:
-        tables = cli.cache.all_tables
+        tables = common.cache.all_tables
         data = [f"[dark_olive_green2]{t.name}[/]: records: [cyan]{len(t)}[/]\n    {' '.join(get_fields(t.all()))}" for t in tables]
-        cli.display_results(data=data, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+        render.display_results(data=data, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
 
     else:
         for idx, arg in enumerate(args, start=1):
-            cache_out: List[Document] = getattr(cli.cache, arg)
+            cache_out: List[Document] = getattr(common.cache, arg)
             arg = arg if not hasattr(arg, "value") else arg.value
             if arg == "devices":
                 cache_out = sort_devices(cache_out)
 
             caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
-            cli.display_results(
+            render.display_results(
                 data=cache_out,
                 tablefmt=tablefmt,
                 title=f'Cache {arg.title().replace("_", " ")}',
@@ -1629,11 +1627,11 @@ def cache_(
                 caption=caption,
                 full_cols=[] if "subscriptions" not in args else "tier",
             )
-            if not no_page and cli.econsole.is_terminal and not idx == len(args):
-                cli.pause()
+            if not no_page and render.econsole.is_terminal and not idx == len(args):
+                render.pause()
 
     account_msg = "" if config.workspace in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.workspace}[/] "
-    cli.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(cli.cache)}[/], Cache File Size: [cyan]{cli.cache.size}[reset]')
+    render.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(common.cache)}[/], Cache File Size: [cyan]{common.cache.size}[reset]')
 
 def _build_groups_caption(data: List[dict]) -> List[str]:
     if not data:
@@ -1659,45 +1657,45 @@ def _build_groups_caption(data: List[dict]) -> List[str]:
 
 @app.command(help="Show groups/details")
 def groups(
-    sort_by: SortGroupOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortGroupOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
-    resp = api.session.request(cli.cache.refresh_group_db)
+    resp = api.session.request(common.cache.refresh_group_db)
     caption = _build_groups_caption(resp.output)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
 
 
 @app.command()
 def labels(
-    sort_by: SortLabelOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortLabelOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show labels/details"""
-    resp = api.session.request(cli.cache.refresh_label_db)
-    tablefmt = cli.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
+    resp = api.session.request(common.cache.refresh_label_db)
+    tablefmt = common.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
 
 
 def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
@@ -1724,39 +1722,39 @@ def _build_site_caption(resp: Response, count_state: bool = False, count_country
 
 @app.command(short_help="Show sites/details")
 def sites(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=cli.cache.site_completion, show_default=False),
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=common.cache.site_completion, show_default=False),
     count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
     count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
-    sort_by: SortSiteOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortSiteOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
 
     site = None if site and site.lower() == "all" else site
     if not site:
-        resp = api.session.request(cli.cache.refresh_site_db)
+        resp = api.session.request(common.cache.refresh_site_db)
         cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
-        site: CacheSite = cli.cache.get_site_identifier(site)
+        site: CacheSite = common.cache.get_site_identifier(site)
         resp = api.session.request(api.central.get_site_details, site.id)
         cleaner_func = cleaner.sites
 
     # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
     # Country is blank when added via API and not provided.  Find public API to lookup country during add
     caption = _build_site_caption(resp, count_state=count_state, count_country=count_country)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title="Sites" if not site else f"{site.name} site details",
@@ -1774,15 +1772,15 @@ def templates(
     name: str = typer.Argument(
         None,
         help=f"Template: {escape('[name]')} or Device: {escape(iden_meta.dev)}",
-        autocompletion=cli.cache.dev_template_completion,
+        autocompletion=common.cache.dev_template_completion,
         show_default=False,
     ),
-    group: str = typer.Argument(None, help="Get Templates for Group", autocompletion=cli.cache.group_completion, show_default=False),
+    group: str = typer.Argument(None, help="Get Templates for Group", autocompletion=common.cache.group_completion, show_default=False),
     _group: str = typer.Option(
         None, "--group",
         help="Get Templates for Group",
         hidden=False,
-        autocompletion=cli.cache.group_completion,  # TODO add group completion specific to template_groups only
+        autocompletion=common.cache.group_completion,  # TODO add group completion specific to template_groups only
         show_default=False,
     ),
     device_type: DevTypes = typer.Option(
@@ -1795,18 +1793,18 @@ def templates(
     #  variablised: str = typer.Option(False, "--with-vars",
     #                                  help="[Templates] Show Template with variable place-holders and vars."),
 
-    sort_by: SortTemplateOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortTemplateOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show templates/details"""
     # Allows unnecessary keyword group "cencli show templates group WadeLab"
@@ -1815,9 +1813,9 @@ def templates(
 
     group = group or _group
     if group:
-        group: CentralObject = cli.cache.get_group_identifier(group)
+        group: CentralObject = common.cache.get_group_identifier(group)
 
-    obj = None if not name else cli.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=None if not group else group.name)
+    obj = None if not name else common.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=None if not group else group.name)
 
     params = {
         # "name": name,
@@ -1841,13 +1839,13 @@ def templates(
         resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
         title = "All Templates"
-        if not cli.cache.responses.template:
-            resp = api.session.request(cli.cache.refresh_template_db)
+        if not common.cache.responses.template:
+            resp = api.session.request(common.cache.refresh_template_db)
         else:
-            resp = cli.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
+            resp = common.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
 @app.command(short_help="Show Variables for all or specific device")
@@ -1855,40 +1853,40 @@ def variables(
     device: str = typer.Argument(
         None,
         metavar=f"{iden_meta.dev.rstrip(']')}|all]",
-        help=cli.help_block('all'),
+        help=common.help_block('all'),
         autocompletion=lambda incomplete: [
-            m for m in [d for d in [("all", "Show Variables for all templates"), *cli.cache.dev_completion(incomplete=incomplete)]]
+            m for m in [d for d in [("all", "Show Variables for all templates"), *common.cache.dev_completion(incomplete=incomplete)]]
             if m[0].lower().startswith(incomplete.lower())
         ] or [],
         show_default=False,
     ),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ):
     if device and device != "all":
-        device = cli.cache.get_dev_identifier(device, conductor_only=True)
+        device = common.cache.get_dev_identifier(device, conductor_only=True)
 
     resp = api.session.request(api.configuration.get_variables, serial=None if not device else device.serial,)
     if resp.ok and device:
         resp.output = resp.output.get("variables", resp.output)
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
     if not device and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
         all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
         if not all([all_keys[0] == key_list for key_list in all_keys[1:]]):
             tablefmt = "json"
             log.warning("Format changed to [cyan]JSON[/].  All variable names need to be identical for all devices for csv and table output.", caption=True)
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title="Variables" if not device else f"{device.name} Variables",
@@ -1902,20 +1900,20 @@ def lldp(
     device: List[str] = typer.Argument(
         ...,
         metavar=iden_meta.dev_many,
-        autocompletion=cli.cache.dev_switch_ap_completion,
+        autocompletion=common.cache.dev_switch_ap_completion,
         show_default=False,
     ),
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 
 ) -> None:
     """Show lldp neighbor information
@@ -1924,7 +1922,7 @@ def lldp(
 
     NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
-    _devs: list[CacheDevice] = [cli.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+    _devs: list[CacheDevice] = [common.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
 
     # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
     stack_ids = []
@@ -1944,19 +1942,19 @@ def lldp(
 
 
     batch_resp = api.session.batch_request(list(reqs.values()))
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
 
     last_resp = sorted(batch_resp, key=lambda r: r.rl)
     rl = last_resp[0].rl
     for idx, (dev, r) in enumerate(zip(list(reqs.keys()), batch_resp), start=1):
         title = f"{dev.summary_text} [cyan bold]LLDP Neighbor information[/]"
         if tablefmt not in ["table", "rich"]:
-            cli.console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
+            render.console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
 
         if idx == len(reqs):  # ensure rate limit caption reflects last call made.
             r.rl = rl
 
-        cli.display_results(
+        render.display_results(
             r,
             tablefmt=tablefmt,
             title=title,
@@ -1970,7 +1968,7 @@ def lldp(
 
 @app.command()
 def certs(
-    query: str = typer.Argument(None, metavar='[name|hash]', autocompletion=cli.cache.cert_completion, help="Show details for certificates matching query [dim italic]name or hash[/]", show_default=False,),
+    query: str = typer.Argument(None, metavar='[name|hash]', autocompletion=common.cache.cert_completion, help="Show details for certificates matching query [dim italic]name or hash[/]", show_default=False,),
     valid: bool = typer.Option(None, help="Filter by certificate validity [dim italic]expiration status[/]", show_default=False,),
     server_cert: bool = typer.Option(None, "--svr", help="Filter by certificate type: Server Certificate", show_default=False,),
     ca_cert: bool = typer.Option(None, "--ca", help="Filter by certificate type: CA", show_default=False,),
@@ -1979,23 +1977,23 @@ def certs(
     ocsp_resp_cert: bool = typer.Option(None, "--ocsp-resp", help="Filter by certificate type: OCSP responder", show_default=False,),
     ocsp_signer_cert: bool = typer.Option(None, "--ocsp-signer", help="Filter by certificate type: OCSP signer", show_default=False,),
     ssh_pub_key: bool = typer.Option(None, "--public", help="Filter by certificate type: SSH Public cert", show_default=False, hidden=True,),
-    sort_by: SortCertOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortCertOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """"Show certificates/details"
     """
-    resp = api.session.request(cli.cache.refresh_cert_db, query=query)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    resp = api.session.request(common.cache.refresh_cert_db, query=query)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     type_filter = {
         "SERVER_CERT": server_cert,
         "CA_CERT": ca_cert,
@@ -2007,7 +2005,7 @@ def certs(
     }
     cert_types = [k for k, v in type_filter.items() if v is True]
 
-    cli.display_results(
+    render.display_results(
         resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_certificates, valid=valid, cert_types=cert_types
     )
 
@@ -2015,11 +2013,11 @@ def certs(
 @app.command()
 def task(
     task_id: str = typer.Argument(..., show_default=False),
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show status of previously issued task/command
 
@@ -2031,26 +2029,26 @@ def task(
     if "reason" in resp.output and "expired" in resp.output:
         resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
-    cli.display_results(
+    render.display_results(
         resp, tablefmt="action", title=f"Task {task_id} status", outfile=outfile)
 
 
 @app.command()
 def run(
-    device: str = cli.arguments.device,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = common.arguments.device,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show running config for a device
 
     APs get the last known running config from Central
     Switches and GWs request the running config from the device
     """
-    dev = cli.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device)
 
     if dev.type == "cx":
         clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile, exit=True)
@@ -2070,14 +2068,14 @@ def run(
         except Exception as e:
             log.exception(e)
 
-    cli.display_results(resp, pager=pager, outfile=outfile)
+    render.display_results(resp, pager=pager, outfile=outfile)
 
 
 # TODO --status does not work
 # https://web.yammer.com/main/org/hpe.com/threads/eyJfdHlwZSI6IlRocmVhZCIsImlkIjoiMTQyNzU1MDg5MTQ0MjE3NiJ9
 @app.command("config")
 def config_(
-    group_dev: str = cli.arguments.get(
+    group_dev: str = common.arguments.get(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
@@ -2085,7 +2083,7 @@ def config_(
     ),
     device: str = typer.Argument(
         None,
-        autocompletion=cli.cache.dev_ap_gw_completion,
+        autocompletion=common.cache.dev_ap_gw_completion,
         hidden=True,
         show_default=False,
     ),
@@ -2099,13 +2097,13 @@ def config_(
         hidden=True,
     ),
     file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
-    verbose: int = cli.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {cli.help_block('Show Config for current WorkSpace')}"),
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    verbose: int = common.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {common.help_block('Show Config for current WorkSpace')}"),
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show Effective Group/Device Config (UI Group), ap speciffic settings (env) or cencli config.
 
@@ -2123,13 +2121,13 @@ def config_(
     """
     if group_dev == "cencli":
         if file:
-            cli.display_results(data=config.file.read_text())
-            cli.exit(code=0)
+            render.display_results(data=config.file.read_text())
+            common.exit(code=0)
         return _get_cencli_config(all_workspaces=bool(verbose))
 
-    group_dev: CacheGroup | CacheDevice = cli.cache.get_identifier(group_dev, ["group", "dev"],)
+    group_dev: CacheGroup | CacheDevice = common.cache.get_identifier(group_dev, ["group", "dev"],)
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
-        _group: CacheGroup = cli.cache.get_group_identifier(group_dev.group)
+        _group: CacheGroup = common.cache.get_group_identifier(group_dev.group)
         if device:
             log.warning(f"ignoring extra argument {device}.  As {group_dev.name} is a device.", caption=True)
         if _group.wired_tg:
@@ -2140,21 +2138,21 @@ def config_(
     if group_dev.is_group:
         group = group_dev
         if device:
-            device: CacheDevice = cli.cache.get_dev_identifier(device)
+            device: CacheDevice = common.cache.get_dev_identifier(device)
         elif not do_ap and not do_gw:
             if "ap" in group_dev.allowed_types and "gw" in group_dev.allowed_types:
-                cli.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+                common.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
             elif "ap" in group_dev.allowed_types:
-                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--ap[/] as [magenta]dev type[/]: [cyan]gw[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                render.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--ap[/] as [magenta]dev type[/]: [cyan]gw[/] is not configured for group [cyan]{group_dev.name}[/].\n")
                 do_ap = True
             elif "gw" in group_dev.allowed_types:
-                cli.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--gw[/] as [magenta]dev type[/]: [cyan]ap[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                render.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--gw[/] as [magenta]dev type[/]: [cyan]ap[/] is not configured for group [cyan]{group_dev.name}[/].\n")
                 do_gw = True
     else:  # group_dev is a device iden
-        group = cli.cache.get_group_identifier(group_dev.group)
+        group = common.cache.get_group_identifier(group_dev.group)
         if device is not None:
             lbrkt, rbrkt = escape("["), escape("]")
-            cli.exit(f"Invalid input provide {lbrkt}[cyan]GROUP NAME[/]{rbrkt} {lbrkt}[cyan]device iden[/]{rbrkt} or {lbrkt}[cyan]device iden[/]{rbrkt} [red]NOT[/] 2 devices.")
+            common.exit(f"Invalid input provide {lbrkt}[cyan]GROUP NAME[/]{rbrkt} {lbrkt}[cyan]device iden[/]{rbrkt} or {lbrkt}[cyan]device iden[/]{rbrkt} [red]NOT[/] 2 devices.")
         else:
             device = group_dev
 
@@ -2162,7 +2160,7 @@ def config_(
     if do_gw or (device and device.generic_type == "gw"):
         if device:
             if device.generic_type != "gw":
-                cli.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+                common.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
 
         caasapi = caas.CaasAPI()
         if not status:
@@ -2183,11 +2181,11 @@ def config_(
                     func = api.configuration.get_per_ap_config
                     args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
                 elif not device.is_aos10:
-                    cli.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
+                    render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
             else:
-                cli.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+                common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
     else:
-        cli.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
+        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
 
     if not device:
         args = [group.name]
@@ -2198,15 +2196,15 @@ def config_(
     if resp and _data_key:
         resp.output = resp.output[_data_key]
 
-    cli.display_results(resp, title=title, pager=pager, outfile=outfile, cleaner=cleaner_func)
+    render.display_results(resp, title=title, pager=pager, outfile=outfile, cleaner=cleaner_func)
 
 
 @app.command()
 def token(
     no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show current access token from cache"""
     if not no_refresh:
@@ -2214,36 +2212,36 @@ def token(
 
     tokens = api.session.auth.getToken()
     if tokens:
-        if cli.workspace != "default":
-            print(f"Account: [cyan]{cli.workspace}")
+        if common.workspace != "default":
+            print(f"Account: [cyan]{common.workspace}")
         print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
 
 
 # TODO clean up output ... single line output
 @app.command()
 def routes(
-    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    sort_by: SortRouteOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    sort_by: SortRouteOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show gateway routing table
 
     :information:  This command is only valid on Gateways
     """
     device = device[-1]  # allow unnecessary keyword "device"
-    device: CacheDevice = cli.cache.get_dev_identifier(device, dev_type="gw")
+    device: CacheDevice = common.cache.get_dev_identifier(device, dev_type="gw")
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     resp = api.session.request(api.routing.get_device_ip_routes, device.serial)
     caption = ""
     if "summary" in resp.raw:
@@ -2254,7 +2252,7 @@ def routes(
         )
 
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"{device.name} IP Routes",
@@ -2291,24 +2289,24 @@ def _combine_wlan_properties_responses(groups: List[str], responses: List[Respon
 @app.command()
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
-    swarm: str = cli.options.swarm_device,
-    verbose: int = cli.options.get("verbose", help="get more details for SSIDs across all AP groups"),
-    sort_by: SortWlanOptions = cli.options.get("sort_by", help=f"Field to sort by {cli.help_block('SSID')}",),
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    swarm: str = common.options.swarm_device,
+    verbose: int = common.options.get("verbose", help="get more details for SSIDs across all AP groups"),
+    sort_by: SortWlanOptions = common.options.get("sort_by", help=f"Field to sort by {common.help_block('SSID')}",),
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show WLAN(SSID)/details
 
@@ -2317,19 +2315,19 @@ def wlans(
     """
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if group:
-        _group: CentralObject = cli.cache.get_group_identifier(group)
+        _group: CentralObject = common.cache.get_group_identifier(group)
         title = f"{title} in group {_group.name}"
         group = _group.name
     if label:
-        _label: CentralObject = cli.cache.get_label_identifier(label)
+        _label: CentralObject = common.cache.get_label_identifier(label)
         title = f"{title} with label {_label.name}"
         label = _label.name
     if site:
-        _site: CentralObject = cli.cache.get_site_identifier(site)
+        _site: CentralObject = common.cache.get_site_identifier(site)
         title = f"{title} in site {_site.name}"
         site = _site.name
     if swarm:
-        _dev: CentralObject = cli.cache.get_dev_identifier(swarm, dev_type="ap")
+        _dev: CentralObject = common.cache.get_dev_identifier(swarm, dev_type="ap")
         title = f"{title} in swarm associated with {_dev.name}"
         swarm = _dev.swack_id
 
@@ -2344,15 +2342,15 @@ def wlans(
     }
 
     # TODO specifying WLAN name ... is ignored if verbose
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
         caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
-        cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif swarm:
         resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
         caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
-        cli.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
         group_res = api.session.request(api.configuration.get_groups_properties)
         if group_res:
@@ -2364,39 +2362,39 @@ def wlans(
             resp = group_res
 
         group_by = "group" if not sort_by else None
-        cli.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     else:
         resp = api.session.request(api.monitoring.get_wlans, **params)
         caption = None
         if resp and not name:
             caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
             caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
-        cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
+        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
 
 
 @app.command()
 def cluster(
-    group: str = typer.Argument(..., autocompletion=cli.cache.group_completion, show_default=False,),
+    group: str = typer.Argument(..., autocompletion=common.cache.group_completion, show_default=False,),
     ssid: str = typer.Argument(..., help="SSIDs are not cached.  Ensure text/case is accurate.", show_default=False,),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ) -> None:
     """Show Cluster mapped to a given group/SSID
     """
     caption = None
-    group: CacheGroup = cli.cache.get_group_identifier(group)
+    group: CacheGroup = common.cache.get_group_identifier(group)
     resp = api.session.request(api.other.get_wlan_cluster_by_group, group.name, ssid)
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if resp and not resp.output:
         caption = [
             ":information:  This API will return 200 if the SSID does not exist in the group / or the SSID is bridge mode.",
@@ -2405,7 +2403,7 @@ def cluster(
         ]
     elif tablefmt == "rich":
         resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]",
@@ -2420,29 +2418,29 @@ def cluster(
 
 @app.command()
 def vsx(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_switch_completion, show_default=False,),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ) -> None:
     """Show VSX details for a CX switch
     """
-    device: CentralObject = cli.cache.get_dev_identifier(device, dev_type="switch")  # update to cx once get_dev_iden... refactored to support type vs generic_type
+    device: CentralObject = common.cache.get_dev_identifier(device, dev_type="switch")  # update to cx once get_dev_iden... refactored to support type vs generic_type
     if device.type == "sw":
-        cli.exit("This command is only valid for [cyan]CX[/] switches, not [cyan]AOS-SW[/]")
+        common.exit("This command is only valid for [cyan]CX[/] switches, not [cyan]AOS-SW[/]")
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
     resp = api.session.request(api.monitoring.get_switch_vsx_detail, device.serial)
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=f"VSX details for {device.name}",
@@ -2462,41 +2460,41 @@ def clients(
         None,
         metavar=iden_meta.client,
         help="Show details for a specific client. [dim italic]verbose assumed.[/]",
-        autocompletion=cli.cache.client_completion,
+        autocompletion=common.cache.client_completion,
         show_default=False,
     ),
-    past: TimeRange = cli.options("3h", include_mins=False).past,
-    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
+    past: TimeRange = common.options("3h", include_mins=False).past,
+    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
     label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
     wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [dim italic](Applies only to wireless clients)[/]", show_default=False,),
     band: RadioBandOptions = typer.Option(None, help="Filter by Band [dim italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {cli.help_block('--dev (AP only)', help_type='requires')}",),
+    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {common.help_block('--dev (AP only)', help_type='requires')}",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
-    device: str = cli.options.device,
-    verbose: int = cli.options.verbose,
-    sort_by: SortClientOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache: bool = cli.options.update_cache,
+    device: str = common.options.device,
+    verbose: int = common.options.verbose,
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show clients/details
 
     Shows clients that have connected within the last 3 hours by default.
     """
     if [site, group, label].count(None) < 2:
-        cli.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
+        common.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
 
     kwargs = {}
     dev = None
@@ -2504,12 +2502,12 @@ def clients(
     if band:
         kwargs["band"] = band.value
     if client:
-        _client = cli.cache.get_client_identifier(client, exit_on_fail=True)
+        _client = common.cache.get_client_identifier(client, exit_on_fail=True)
         kwargs["mac"] = _client.mac
         title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
         verbose = verbose or 1
     elif device:
-        dev: CacheDevice = cli.cache.get_dev_identifier(device)
+        dev: CacheDevice = common.cache.get_dev_identifier(device)
         kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
@@ -2529,9 +2527,9 @@ def clients(
 
     if denylisted:
         if not dev:
-            cli.exit("[cyan]--dev[/] :triangular_flag: is required when [cyan]-D|--denylisted[/] :triangular_flag: is set.", emoji=True)
+            common.exit("[cyan]--dev[/] :triangular_flag: is required when [cyan]-D|--denylisted[/] :triangular_flag: is set.", emoji=True)
         elif dev.type != "ap":
-            cli.exit(f"[cyan]-D|--denylisted[/]  :triangular_flag: is only valid for APs not {lib_to_gen_plural(dev.type)}.", emoji=True)
+            common.exit(f"[cyan]-D|--denylisted[/]  :triangular_flag: is only valid for APs not {lib_to_gen_plural(dev.type)}.", emoji=True)
         else:
             if len(kwargs) > 2:  # client_type and serial
                 log.warning(f"Only [cyan]--dev[/] is appropriate with [cyan]-D|--denylisted[/] flag is used.  {len(kwargs) - 1} invalid flags were ignored.", caption=True)
@@ -2553,17 +2551,17 @@ def clients(
 
     if not denylisted:
         if group:
-            _group = cli.cache.get_group_identifier(group)
+            _group = common.cache.get_group_identifier(group)
             kwargs["group"] = _group.name
             title = f"{title} in group {_group.name}"
 
         if site:
-            _site = cli.cache.get_site_identifier(site)
+            _site = common.cache.get_site_identifier(site)
             kwargs["site"] = _site.name
             title = f"{title} in site {_site.name}"
 
         if label:
-            _label: CacheLabel = cli.cache.get_label_identifier(label)
+            _label: CacheLabel = common.cache.get_label_identifier(label)
             kwargs["label"] = _label.name
             title = f"{title} on devices with label {_label.name}"
 
@@ -2583,21 +2581,21 @@ def clients(
             title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     if not denylisted:
-        resp = api.session.request(cli.cache.refresh_client_db, **kwargs)
+        resp = api.session.request(common.cache.refresh_client_db, **kwargs)
     else:
         resp = api.session.request(api.configuration.get_denylist_clients, **kwargs)
 
     if not resp:
-        cli.display_results(resp, exit_on_fail=True)
+        render.display_results(resp, exit_on_fail=True)
 
     caption = None if any([client, denylisted, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     verbose_kwargs = {}
     if not denylisted:
         verbose_kwargs["cleaner"] = cleaner.get_clients
-        verbose_kwargs["cache"] = cli.cache
+        verbose_kwargs["cache"] = common.cache
         verbose_kwargs["verbosity"] = verbose
         verbose_kwargs["format"] = tablefmt
 
@@ -2606,7 +2604,7 @@ def clients(
         if sort_by.value == "last-connected":  # We invert so the most recent client is on top
             reverse = not reverse
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -2621,24 +2619,24 @@ def clients(
 
 @app.command()
 def tunnels(
-    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
     time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ) -> None:
     """Show Branch Gateway/VPNC Tunnel details"""
-    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
+    dev = common.cache.get_dev_identifier(gateway, dev_type="gw")
     resp = api.session.request(api.monitoring.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
     if resp:
@@ -2647,58 +2645,58 @@ def tunnels(
         if resp.output.get("tunnels"):
             resp.output = resp.output["tunnels"]
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
-    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+    render.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
 @app.command(hidden=config.is_cop)
 def uplinks(
-    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
     time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show Branch Gateway/VPNC Uplink details"""
-    dev = cli.cache.get_dev_identifier(gateway, dev_type="gw")
+    dev = common.cache.get_dev_identifier(gateway, dev_type="gw")
     resp = api.session.request(api.monitoring.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
-    cli.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+    render.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
 # TODO use common time parser see clishowbandwidth
 @app.command()
 def roaming(
-    client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=cli.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
-    start: datetime = cli.options(timerange="3h").start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
+    client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=common.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
+    start: datetime = common.options(timerange="3h").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
     refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
-    sort_by: SortClientOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ) -> None:
     """Show wireless client roaming history.
 
@@ -2708,18 +2706,18 @@ def roaming(
 
     The -R flag can be used to force a cache refresh prior to looking up roaming history.
     """
-    start, end = cli.verify_time_range(start, end=end, past=past)
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table)
+    start, end = common.verify_time_range(start, end=end, past=past)
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table)
     title = "Roaming history"
 
     if refresh:
-        resp = api.session.request(cli.cache.refresh_client_db, "wireless")
+        resp = api.session.request(common.cache.refresh_client_db, "wireless")
         if not resp:
-            cli.display_results(resp, exit_on_fail=True)
+            render.display_results(resp, exit_on_fail=True)
 
     mac = utils.Mac(client)
     if not mac.ok:
-        client: CacheClient = cli.cache.get_client_identifier(client)
+        client: CacheClient = common.cache.get_client_identifier(client)
         mac = utils.Mac(client.mac)
         title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
     else:
@@ -2729,7 +2727,7 @@ def roaming(
     resp = api.session.request(api.monitoring.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
     caption = None if not resp else f"{len(resp)} roaming events"
     caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
-    cli.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
+    render.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
 def show_logs_cencli_callback(ctx: typer.Context, cencli: bool) -> bool:
@@ -2752,23 +2750,23 @@ def logs(
         None,
         metavar='[LOG_ID|cencli]',
         help="Show details for a specific log_id or [cyan]cencli[/] to show cencli logs",
-        autocompletion=cli.cache.event_log_completion,
+        autocompletion=common.cache.event_log_completion,
         show_default=False,
     ),
     cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),  # callback=show_logs_cencli_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True),
-    group: str = cli.options.group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
     _all: bool = typer.Option(False, "-a", "--all", help="Display all available event logs.  Overrides default of 30m", show_default=False,),
     count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
-    start: datetime = cli.options(timerange="30m").start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    device: str = cli.options.device,
+    start: datetime = common.options(timerange="30m").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    device: str = common.options.device,
     swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
-    client: str = cli.options.client,
+    client: str = common.options.client,
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
     hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
     dev_type: EventDevTypeArgs = typer.Option(
@@ -2780,19 +2778,19 @@ def logs(
     ),
     description: str = typer.Option(None, help="Filter events by description (fuzzy match)", show_default=False,),
     event_type: str = typer.Option(None, "--event-type", help="Filter events by type (fuzzy match)", show_default=False,),  # TODO completion enum
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
     verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
 ) -> None:
     """Show device event logs (last 30m by default) or show cencli logs.
@@ -2803,29 +2801,29 @@ def logs(
     if cencli or (event_id and "cencli".startswith(event_id.lower())):
         from centralcli import log
         log.print_file() if not tail else log.follow()
-        cli.exit(code=0)
+        common.exit(code=0)
 
     if tail:
-        cli.ws_follow_tail(title=title, log_type="event")  # program will exit here
+        common.ws_follow_tail(title=title, log_type="event")  # program will exit here
 
     # TODO move to common func for use by show logs and show audit logs
     if event_id:
-        event_details = cli.cache.get_event_log_identifier(event_id)
-        cli.display_results(
+        event_details = common.cache.get_event_log_identifier(event_id)
+        render.display_results(
             Response(output=event_details),
             tablefmt="action",
         )
-        cli.exit(code=0)
+        common.exit(code=0)
 
     if (_all or count) and [start, end, past].count(None) != 3:
-        cli.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+        common.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
 
-    start, end = cli.verify_time_range(start, end=end, past=past)
+    start, end = common.verify_time_range(start, end=end, past=past)
     level = level if level is None else level.name
     dev_id = None
     swarm_id = None
     if device:
-        device = cli.cache.get_dev_identifier(device)
+        device = common.cache.get_dev_identifier(device)
         if swarm:
             if device.type != "ap":
                 log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
@@ -2839,7 +2837,7 @@ def logs(
         if utils.Mac(client).ok:
             client_mac = client
         else:
-            _client = cli.cache.get_client_identifier(client)
+            _client = common.cache.get_client_identifier(client)
             client_mac = _client.mac
 
     if _all:
@@ -2855,7 +2853,7 @@ def logs(
     kwargs = {
         "group": group,
         "swarm_id": swarm_id,
-        "label": None if not label else cli.cache.get_label_identifier(label).name,
+        "label": None if not label else common.cache.get_label_identifier(label).name,
         "from_time": start,
         "to_time": end,
         "client_mac": client_mac,
@@ -2863,7 +2861,7 @@ def logs(
         # "device_mac": None if not device else device.mac,  # no point we use serial
         "hostname": hostname,
         "device_type": dev_type,
-        "site": None if not site else cli.cache.get_site_identifier(site).name,
+        "site": None if not site else common.cache.get_site_identifier(site).name,
         "serial": dev_id,
         "level": level,
         "event_description": description,
@@ -2875,10 +2873,10 @@ def logs(
 
     resp = api.session.request(api.monitoring.get_events, **kwargs)
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     _cmd_txt = "[bright_green] show logs <id>[reset]"
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -2888,36 +2886,36 @@ def logs(
         reverse=not reverse,
         set_width_cols={"event type": {"min": 5, "max": 12}},
         cleaner=cleaner.get_event_logs if not verbose else None,
-        cache_update_func=cli.cache.update_event_db if not verbose else None,
+        cache_update_func=common.cache.update_event_db if not verbose else None,
         caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
     )
 
 
 @app.command()
 def alerts(
-    group: str = cli.options(timerange="24h").group,
-    site: str = cli.options.site,
-    label: str = cli.options.label,
-    device: str = cli.options.device,
+    group: str = common.options(timerange="24h").group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    device: str = common.options.device,
     severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
     search: str = typer.Option(None, help="Filter by alerts with supplied text in name/description/category.", show_default=False,),
     ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
     alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
-    start: datetime = cli.options.start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    sort_by: SortAlertOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: SortAlertOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
     verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
 ) -> None:
     """Show Alerts/Notifications (for past 24 hours by default).
@@ -2925,17 +2923,17 @@ def alerts(
     :information:  Notification must be Configured.
     """
     if device:
-        device: CacheDevice = cli.cache.get_dev_identifier(device)
+        device: CacheDevice = common.cache.get_dev_identifier(device)
     if group:
-        group: CacheGroup = cli.cache.get_group_identifier(group)
+        group: CacheGroup = common.cache.get_group_identifier(group)
     if site:
-        site: CacheSite = cli.cache.get_site_identifier(site)
+        site: CacheSite = common.cache.get_site_identifier(site)
     if label:
         if group:
             log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
             label = None
         else:
-            label: CacheLabel = cli.cache.get_label_identifier(label)
+            label: CacheLabel = common.cache.get_label_identifier(label)
 
     if alert_type:
         alert_type = "user_management" if alert_type == "user" else alert_type
@@ -2944,7 +2942,7 @@ def alerts(
     if severity:
         severity = severity.title() if severity != "info" else severity.upper()
 
-    start, end = cli.verify_time_range(start=start, end=end, past=past, end_offset=pendulum.duration(hours=24))
+    start, end = common.verify_time_range(start=start, end=end, past=past, end_offset=pendulum.duration(hours=24))
 
     kwargs = {
         "group": None if not group else group.name,
@@ -2961,12 +2959,12 @@ def alerts(
 
     resp = api.session.request(api.central.get_alerts, **kwargs)
 
-    caption = cli.get_time_range_caption(start, end, default="in past 24 hours.")
+    caption = common.get_time_range_caption(start, end, default="in past 24 hours.")
     caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
     cleaner_func = cleaner.get_alerts if not verbose else None
 
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     title = "Alerts/Notifications (Configured Notification Rules)"
     if device:
@@ -2980,7 +2978,7 @@ def alerts(
         if label:
             title = f"{title} label: [cyan]{site.name}[/]"
 
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -2996,19 +2994,19 @@ def alerts(
 @app.command()
 def notifications(
     search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
-    update_cache = cli.options.update_cache,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
 ) -> None:
     """Show alert/notification configuration.
 
@@ -3016,11 +3014,11 @@ def notifications(
     """
     resp = api.session.request(api.central.central_get_notification_config, search=search)
 
-    tablefmt = cli.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
 
     # TODO cleaner, currently raw response in yaml
-    cli.display_results(
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
@@ -3033,62 +3031,65 @@ def notifications(
 
 @app.command(short_help="Re-display output from Last command.", help="Re-display output from Last command.  (No API Calls)")
 def last(
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     if not config.last_command_file.exists():
-        cli.exit("Unable to find cache for last command.")
+        common.exit("Unable to find cache for last command.")
 
     kwargs = config.last_command_file.read_text()
     import json
     kwargs: dict[str, Any] = json.loads(kwargs)
 
     last_format = kwargs.get("tablefmt", "rich")
-    kwargs["tablefmt"] = cli.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
+    kwargs["tablefmt"] = common.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
     if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
         kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
                         f"{DateTime(int(config.last_command_file.stat().st_mtime))}"
     data = kwargs.pop("outdata")
 
-    cli.display_results(
+    render.display_results(
         data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=pager, stash=False, **kwargs
     )
 
 
-@app.command(help="Show configured webhooks")
+@app.command()
 def webhooks(
-    sort_by: SortWebHookOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortWebHookOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
+    """Show configured webhooks."""
     if sort_by is not None:
         sort_by = sort_by.name
-    ...
+
     resp = api.session.request(api.central.get_all_webhooks)
+
     caption = None
     if resp.ok and resp.output:
         caption = f"Counts: Webhooks: [cyan]{len(resp.output)}[/] | Destination URLs: [cyan]{sum([len(wh['urls']) for wh in resp.output])}[/]"
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    cli.display_results(
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    render.display_results(
         resp,
         tablefmt=tablefmt,
         title="WebHooks",
@@ -3121,9 +3122,9 @@ def hook_proxy(
     what: ShowHookProxyArgs = typer.Argument(None, callback=hook_proxy_what_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show hook-proxy logs)", is_eager=True),
     brief: bool = typer.Option(False, "-b", help="Brief output for 'pid' and 'port'"),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     def _get_process_details() -> tuple:
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
@@ -3142,27 +3143,27 @@ def hook_proxy(
     else:
         proc = _get_process_details()
         if not proc:
-            cli.exit("WebHook Proxy is not running.")
+            common.exit("WebHook Proxy is not running.")
 
         br = proc[1] if what == "port" else proc[0]
         _out = f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}" if not brief else br
-        cli.exit(_out, code=0)
+        common.exit(_out, code=0)
 
 
 @app.command()
 def archived(
-    sort_by: SortArchivedOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortArchivedOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show archived devices"""
     # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
@@ -3172,8 +3173,8 @@ def archived(
         caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
 
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    cli.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
 
 
 # TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
@@ -3182,96 +3183,96 @@ def portals(
     portal: List[str] = typer.Argument(
         None,
         metavar="[name|id]",
-        help=f"show details for a specific portal profile {cli.help_block('show summary for all portals')}",
-        autocompletion=cli.cache.portal_completion,
+        help=f"show details for a specific portal profile {common.help_block('show summary for all portals')}",
+        autocompletion=common.cache.portal_completion,
         show_default=False,),
     logo: bool = typer.Option(
         False,
         "-L", "--logo",
         metavar="PATH",
-        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {cli.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {common.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
         show_default = False,
         writable=True,
     ),
-    sort_by: SortPortalOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortPortalOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
     path = Path.cwd()
     if portal:
         if len(portal) > 2:
-            cli.exit("Too many Arguments")
+            common.exit("Too many Arguments")
         elif len(portal) > 1:
             if not logo:
-                cli.exit("Too many Arguments")
+                common.exit("Too many Arguments")
             path = Path(portal[-1])
             if not path.is_dir() and not path.parent.is_dir():
-                cli.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
+                common.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
         portal = portal[0]
 
     if portal is None:
-        resp: Response = api.session.request(cli.cache.refresh_portal_db)
+        resp: Response = api.session.request(common.cache.refresh_portal_db)
         _cleaner = cleaner.get_portals
     else:
-        p: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
+        p: CachePortal = common.cache.get_name_id_identifier("portal", portal)
         resp: Response = api.session.request(api.guest.get_portal_profile, p.id)
         _cleaner = cleaner.get_portal_profile
         if logo and resp.ok:
             download_logo(resp, path, p)  # this will exit CLI after writing to file
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if portal else "rich")
-    cli.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if portal else "rich")
+    render.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
 
 
 # TODO add sort_by completion, portal completion
 @app.command()
 def guests(
-    portal: str = typer.Argument(None, help=f"portal name {cli.help_block('Guests for all defined User/Pass portals')}", autocompletion=cli.cache.portal_completion, show_default=False,),
+    portal: str = typer.Argument(None, help=f"portal name {common.help_block('Guests for all defined User/Pass portals')}", autocompletion=common.cache.portal_completion, show_default=False,),
     refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show Guests configured for a Portal"""
     caption = None
     title="Guest Users"
     if portal:
-        portal: CachePortal = cli.cache.get_name_id_identifier("portal", portal)
-        resp = api.session.request(cli.cache.refresh_guest_db, portal.id, )
+        portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
+        resp = api.session.request(common.cache.refresh_guest_db, portal.id, )
         title = f"{title} for {portal.name} portal"
 
     else:
         if refresh:
-            _ = api.session.request(cli.cache.refresh_portal_db)
-        portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
+            _ = api.session.request(common.cache.refresh_portal_db)
+        portals = [portal for portal in common.cache.portals if "Username/Password" in portal["auth_type"]]
         for idx in range(0, 2):
-            portals = [portal for portal in cli.cache.portals if "Username/Password" in portal["auth_type"]]
+            portals = [portal for portal in common.cache.portals if "Username/Password" in portal["auth_type"]]
             if not portals:
                 if idx == 0 and not refresh:
-                    _ = api.session.request(cli.cache.refresh_portal_db)
+                    _ = api.session.request(common.cache.refresh_portal_db)
                 else:
-                    cli.exit(":information:  No portals configured with Username/Password auth type", code=0)
+                    common.exit(":information:  No portals configured with Username/Password auth type", code=0)
 
-        batch_resp = api.session.batch_request([BatchRequest(cli.cache.refresh_guest_db, portal["id"]) for portal in portals])
+        batch_resp = api.session.batch_request([BatchRequest(common.cache.refresh_guest_db, portal["id"]) for portal in portals])
         resp_by_name = {resp: portal for portal, resp in zip(portals, batch_resp)}
         passed = [r for r in batch_resp if r.ok]
         failed = [] if len(passed) == len(batch_resp) else [r for r in batch_resp if not r.ok]
@@ -3287,8 +3288,8 @@ def guests(
         else:
             resp = failed
 
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_guests, output_format=tablefmt)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_guests, output_format=tablefmt)
 
 def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
     try:
@@ -3327,26 +3328,26 @@ def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
 
 @app.command()
 def radios(
-    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    group: str = typer.Option(None, help="Filter by Group", autocompletion=cli.cache.group_completion, show_default=False,),
-    site: str = typer.Option(None, help="Filter by Site", autocompletion=cli.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=cli.cache.label_completion,show_default=False,),
+    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=common.cache.label_completion,show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    sort_by: str = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show details for Radios
     """
@@ -3357,9 +3358,9 @@ def radios(
             status = "Down" if down else "Up"
     status = None if not status else status.title()
 
-    group: CacheGroup = None if not group else cli.cache.get_group_identifier(group)
-    site: CacheSite = None if not site else cli.cache.get_site_identifier(site)
-    label: CacheLabel = None if not label else cli.cache.get_label_identifier(label)
+    group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
+    site: CacheSite = None if not site else common.cache.get_site_identifier(site)
+    label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
 
     params = {
         "group": None if not group else group.name,
@@ -3375,10 +3376,10 @@ def radios(
     }
 
     params = {k: v for k, v in params.items() if v is not None}
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     if aps:
-        aps: List[CacheDevice] = [cli.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+        aps: List[CacheDevice] = [common.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
         resp = api.session.batch_request([BatchRequest(api.monitoring.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
         passed = [r for r in resp if r.ok]
         failed = [r for r in resp if not r.ok]
@@ -3387,9 +3388,9 @@ def radios(
             resp = sorted(passed, key=lambda ap: ap.rl)[0]
             resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
         if failed:
-            cli.display_results(failed, tablefmt="action")
+            render.display_results(failed, tablefmt="action")
     else:
-        resp = api.session.request(cli.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
+        resp = api.session.request(common.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
             resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
 
@@ -3404,7 +3405,7 @@ def radios(
         if status:
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
-    cli.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+    render.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
 
 @app.command()
 def insights(
@@ -3413,35 +3414,35 @@ def insights(
         help="Show details for a specific insight id.",
         show_default=False,
     ),
-    start: datetime = cli.options(timerange="3h").start,
-    end: datetime = cli.options.end,
-    past: str = cli.options.past,
-    site: str = cli.options.site,
-    device: str = cli.options.get("device", help="Show insights related to a specific device"),
-    client: str = cli.options.get("client", help="Show insights related to a specific client"),
+    start: datetime = common.options(timerange="3h").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    site: str = common.options.site,
+    device: str = common.options.get("device", help="Show insights related to a specific device"),
+    client: str = common.options.get("client", help="Show insights related to a specific client"),
     severity: InsightSeverity = typer.Option(None, "-s", "--severity", help="Filter insights by severity", show_default=False,),
-    sort_by: SortInsightOptions = cli.options.sort_by,
-    reverse: bool = cli.options.reverse,
-    do_json: bool = cli.options.do_json,
-    do_yaml: bool = cli.options.do_yaml,
-    do_csv: bool = cli.options.do_csv,
-    do_table: bool = cli.options.do_table,
-    raw: bool = cli.options.raw,
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    sort_by: SortInsightOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Show AI Insights or details for a specific insight
 
     Shows Global Insights by default, or insights related to a site, device, or client based on provided options.
     Result of above will include insight id, which can be provided to show details for the insight.
     """
-    tablefmt = cli.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not insight_id else "yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not insight_id else "yaml")
     if not any([past, start]):
         start = pendulum.now(tz="UTC").subtract(hours=3)
-    start, end = cli.verify_time_range(start, end=end, past=past, max_days=None)  # this endpoint doesn't complain for longer ranges, but appears to only stores insights for a month
+    start, end = common.verify_time_range(start, end=end, past=past, max_days=None)  # this endpoint doesn't complain for longer ranges, but appears to only stores insights for a month
     duration: pendulum.Interval = end - start
     if duration.in_days() > 31:
         log.info(f":information:  Specified time range ({duration.in_words()}), exceeds the retention period for AI Insights (1 month).  Showing all available insights.", caption=True)
@@ -3449,21 +3450,21 @@ def insights(
     if insight_id:
         resp = api.session.request(api.aiops.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
         title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
-        cli.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
-        cli.exit(0)
+        render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
+        common.exit(0)
 
     site_id, serial, dev_type, client_mac = None, None, None, None
     if device:
-        device: CacheDevice = cli.cache.get_dev_identifier(device)
+        device: CacheDevice = common.cache.get_dev_identifier(device)
         serial = device.serial
         dev_type = device.generic_type
         title = f"AI Insights related to device {device.summary_text}"
     elif client:
-        client: CacheClient = cli.cache.get_client_identifier(client)
+        client: CacheClient = common.cache.get_client_identifier(client)
         client_mac = client.mac
         title = f"AI Insights related to Client {client.summary_text}"
     elif site:
-        site: CacheSite = cli.cache.get_site_identifier(site)
+        site: CacheSite = common.cache.get_site_identifier(site)
         site_id = site.id
         title = f"AI Insights related to site {site.name}"
     else:
@@ -3473,16 +3474,16 @@ def insights(
 
     resp = api.session.request(api.aiops.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
 
-    cli.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
 
 
 @app.command()
 def version(
-    debug: bool = cli.options.debug,
+    debug: bool = common.options.debug,
 ) -> None:
     """Show current cencli version, and latest available version.
     """
-    cli.version_callback()
+    common.version_callback()
 
 @app.command(hidden=os.name != "posix")
 def cron(
@@ -3493,7 +3494,7 @@ def cron(
     This will keep the tokens valid, even if cencli is not used.
     """
     if os.name != "posix":
-        cli.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
+        render.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
 
     user = getpass.getuser()
     exec_path = sys.argv[0]
@@ -3509,11 +3510,11 @@ def cron(
     template = Template(cron_weekly)
     config_out = template.render(config_data)
 
-    cli.econsole.rule("/etc/cron.weekly/cencli file contents")
-    cli.console.print(config_out)
-    cli.econsole.rule()
+    render.econsole.rule("/etc/cron.weekly/cencli file contents")
+    render.console.print(config_out)
+    render.econsole.rule()
 
-    cli.econsole.print(
+    render.econsole.print(
         "Place the above contents into a file: /etc/cron.weekly/cencli [grey42 italic](requires sudo)[/]\n"
         f"Alternatively you can pipe the output directly [cyan]cencli show cron {'' if not accounts else ' '.join(accounts)} | sudo tee /etc/cron.weekly/cencli[/]"
         "\nThen make it executable: [cyan]sudo chmod +x /etc/cron.weekly/cencli[/]"
@@ -3546,7 +3547,7 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
 
     caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
-    cli.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
+    render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 
 
 @app.callback()

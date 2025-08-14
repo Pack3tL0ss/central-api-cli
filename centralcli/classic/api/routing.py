@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ... import Response
-
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
+    from ...response import Response
 
 
 class RoutingAPI:

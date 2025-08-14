@@ -11,6 +11,7 @@ from typer.models import ArgumentInfo, OptionInfo
 
 from centralcli.cache import Cache
 from centralcli.constants import iden_meta
+from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
@@ -30,6 +31,7 @@ class CLIArgs:
         self.device_type: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.what: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.group: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
+        self.groups: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
         self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
         self.site: ArgumentInfo = typer.Argument(..., metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
         self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
@@ -50,54 +52,54 @@ class CLIArgs:
         self,
         argument: ArgumentType,
         *param_decls: Optional[Sequence[str]],
-        default: Optional[Any] = None,
-        callback: Optional[Callable[..., Any]] = None,
-        metavar: Optional[str] = None,
-        expose_value: bool = None,
-        is_eager: bool = None,
-        envvar: Optional[str | List[str]] = None,
+        default: Optional[Any] = UNSET,
+        callback: Optional[Callable[..., Any]] = UNSET,
+        metavar: Optional[str] = UNSET,
+        expose_value: bool = UNSET,
+        is_eager: bool = UNSET,
+        envvar: Optional[str | List[str]] = UNSET,
         shell_complete: Optional[
             Callable[
                 [click.Context, click.Parameter, str],
                 List["click.shell_completion.CompletionItem"] | List[str],
             ]
-        ] = None,
-        autocompletion: Optional[Callable[..., Any]] = None,
-        default_factory: Optional[Callable[[], Any]] = None,
+        ] = UNSET,
+        autocompletion: Optional[Callable[..., Any]] = UNSET,
+        default_factory: Optional[Callable[[], Any]] = UNSET,
         # Custom type
-        parser: Optional[Callable[[str], Any]] = None,
-        click_type: Optional[click.ParamType] = None,
+        parser: Optional[Callable[[str], Any]] = UNSET,
+        click_type: Optional[click.ParamType] = UNSET,
         # TyperArgument
-        show_default: bool | str = None,
-        show_choices: bool = None,
-        show_envvar: bool = None,
-        help: Optional[str] = None,
-        hidden: bool = None,
+        show_default: bool | str = UNSET,
+        show_choices: bool = UNSET,
+        show_envvar: bool = UNSET,
+        help: Optional[str] = UNSET,
+        hidden: bool = UNSET,
         # Choice
-        case_sensitive: bool = None,
+        case_sensitive: bool = UNSET,
         # Numbers
-        min: Optional[int | float] = None,
-        max: Optional[int | float] = None,
-        clamp: bool = None,
+        min: Optional[int | float] = UNSET,
+        max: Optional[int | float] = UNSET,
+        clamp: bool = UNSET,
         # DateTime
-        formats: Optional[List[str]] = None,
+        formats: Optional[List[str]] = UNSET,
         # File
-        mode: Optional[str] = None,
-        encoding: Optional[str] = None,
-        errors: Optional[str] = None,
-        lazy: Optional[bool] = None,
-        atomic: bool = None,
+        mode: Optional[str] = UNSET,
+        encoding: Optional[str] = UNSET,
+        errors: Optional[str] = UNSET,
+        lazy: Optional[bool] = UNSET,
+        atomic: bool = UNSET,
         # Path
-        exists: bool = None,
-        file_okay: bool = None,
-        dir_okay: bool = None,
-        writable: bool = None,
-        readable: bool = None,
-        resolve_path: bool = None,
-        allow_dash: bool = None,
-        path_type: None | Type[str] | Type[bytes] = None,
+        exists: bool = UNSET,
+        file_okay: bool = UNSET,
+        dir_okay: bool = UNSET,
+        writable: bool = UNSET,
+        readable: bool = UNSET,
+        resolve_path: bool = UNSET,
+        allow_dash: bool = UNSET,
+        path_type: None | Type[str] | Type[bytes] = UNSET,
         # Rich settings
-        rich_help_panel: str | None = None,
+        rich_help_panel: str | None = UNSET,
     ) -> ArgumentInfo:
         """Same fingerprint as typer.Argument
 
@@ -150,7 +152,7 @@ class CLIArgs:
             # Rich settings
             "rich_help_panel": rich_help_panel
         }
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        kwargs = {k: v for k, v in kwargs.items() if v is not UNSET}
         combined = {**attr.__dict__, **kwargs}
         param_decls = param_decls or combined["param_decls"]
         args = (combined["default"], *param_decls)
@@ -289,69 +291,69 @@ class CLIOptions:
         self,
         option: OptionType,
         *param_decls: Optional[Sequence[str]],
-        default: Optional[Any] = None,
-        callback: Optional[Callable[..., Any]] = None,
-        metavar: Optional[str] = None,
-        expose_value: bool = None,
-        is_eager: bool = None,
-        envvar: Optional[str | List[str]] = None,
+        default: Optional[Any] = UNSET,
+        callback: Optional[Callable[..., Any]] = UNSET,
+        metavar: Optional[str] = UNSET,
+        expose_value: bool = UNSET,
+        is_eager: bool = UNSET,
+        envvar: Optional[str | List[str]] = UNSET,
         shell_complete: Optional[
             Callable[
                 [click.Context, click.Parameter, str],
                 List["click.shell_completion.CompletionItem"] | List[str],
             ]
-        ] = None,
-        autocompletion: Optional[Callable[..., Any]] = None,
-        default_factory: Optional[Callable[[], Any]] = None,
+        ] = UNSET,
+        autocompletion: Optional[Callable[..., Any]] = UNSET,
+        default_factory: Optional[Callable[[], Any]] = UNSET,
         # Custom type
-        parser: Optional[Callable[[str], Any]] = None,
-        click_type: Optional[click.ParamType] = None,
+        parser: Optional[Callable[[str], Any]] = UNSET,
+        click_type: Optional[click.ParamType] = UNSET,
         # Option
-        show_default: bool | str = None,
-        prompt: bool |str = None,
-        confirmation_prompt: bool = None,
-        prompt_required: bool = None,
-        hide_input: bool = None,
-        is_flag: Optional[bool] = None,
-        flag_value: Optional[Any] = None,
-        count: bool = None,
-        allow_from_autoenv: bool = None,
-        help: Optional[str] = None,
-        hidden: bool = None,
-        show_choices: bool = None,
-        show_envvar: bool = None,
+        show_default: bool | str = UNSET,
+        prompt: bool |str = UNSET,
+        confirmation_prompt: bool = UNSET,
+        prompt_required: bool = UNSET,
+        hide_input: bool = UNSET,
+        is_flag: Optional[bool] = UNSET,
+        flag_value: Optional[Any] = UNSET,
+        count: bool = UNSET,
+        allow_from_autoenv: bool = UNSET,
+        help: Optional[str] = UNSET,
+        hidden: bool = UNSET,
+        show_choices: bool = UNSET,
+        show_envvar: bool = UNSET,
         # Choice
-        case_sensitive: bool = None,
+        case_sensitive: bool = UNSET,
         # Numbers
-        min: Optional[int | float] = None,
-        max: Optional[int | float] = None,
-        clamp: bool = None,
+        min: Optional[int | float] = UNSET,
+        max: Optional[int | float] = UNSET,
+        clamp: bool = UNSET,
         # DateTime
-        formats: Optional[List[str]] = None,
+        formats: Optional[List[str]] = UNSET,
         # File
-        mode: Optional[str] = None,
-        encoding: Optional[str] = None,
-        errors: Optional[str] = None,
-        lazy: Optional[bool] = None,
-        atomic: bool = None,
+        mode: Optional[str] = UNSET,
+        encoding: Optional[str] = UNSET,
+        errors: Optional[str] = UNSET,
+        lazy: Optional[bool] = UNSET,
+        atomic: bool = UNSET,
         # Path
-        exists: bool = None,
-        file_okay: bool = None,
-        dir_okay: bool = None,
-        writable: bool = None,
-        readable: bool = None,
-        resolve_path: bool = None,
-        allow_dash: bool = None,
-        path_type: None | Type[str] | Type[bytes] = None,
+        exists: bool = UNSET,
+        file_okay: bool = UNSET,
+        dir_okay: bool = UNSET,
+        writable: bool = UNSET,
+        readable: bool = UNSET,
+        resolve_path: bool = UNSET,
+        allow_dash: bool = UNSET,
+        path_type: None | Type[str] | Type[bytes] = UNSET,
         # Rich settings... set to False to disable
-        rich_help_panel: str | bool = None,
+        rich_help_panel: str | bool = UNSET,
 
     ) -> OptionInfo:
         """Same fingerprint as typer.Option
 
         set rich_help_panel="Options" to force the default panel
         """
-        if option == "in":
+        if option == "in":  # pragma: no cover
             option = "in_"
         attr = getattr(self, option)
         kwargs = {
@@ -407,7 +409,7 @@ class CLIOptions:
             # Rich settings  ... Set to "Options" for the default panel
             "rich_help_panel": rich_help_panel,
         }
-        kwargs = {k: v for k, v in kwargs.items() if v is not None}
+        kwargs = {k: v for k, v in kwargs.items() if v is not UNSET}
         combined = {**attr.__dict__, **kwargs}
         param_decls = param_decls or combined["param_decls"]
         args = (combined["default"], *param_decls)

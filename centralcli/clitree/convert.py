@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 from rich import print
 
-from centralcli import cli, config, utils
+from centralcli import common, config, render, utils
 
 app = typer.Typer()
 
@@ -18,11 +18,11 @@ def template(
         help="Optional variable file, will automatically look for file with same name as template and supported extension/format.",
         exists=True,
         ),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Convert jinja2 (j2) template into final form based on variable file.
 
@@ -44,18 +44,18 @@ def template(
             print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
             raise typer.Exit(1)
         elif  len(var_file) > 1:
-            cli.exit(f"Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
+            common.exit(f"Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
         else:
             var_file = var_file[0]
     final_config = utils.generate_template(template, var_file=var_file)
-    cli.display_results(data=final_config.splitlines(), outfile=outfile)
+    render.display_results(data=final_config.splitlines(), outfile=outfile)
 
 
 @app.command("config", hidden=not config.is_old_cfg)
 def config_(
-    yes: bool = cli.options.yes,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
+    yes: bool = common.options.yes,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
 ) -> None:
     """Convert Existing cencli config file to [dark_olive_green2]CFG_VERSION: 2[/]. Required to add support for [bright_green]GLP[/] and [dark_orange3]New Central[/].
 
@@ -72,12 +72,12 @@ def config_(
     for example with all available options.
     """
     if not config.file.is_file():
-        cli.exit(f"Config file {config.file} not found.")
+        common.exit(f"Config file {config.file} not found.")
     if not config.is_old_cfg:
-        cli.exit("Your config already appears to be [dark_olive_green2]CFG_VERSION: 2[/] compliant.")
+        common.exit("Your config already appears to be [dark_olive_green2]CFG_VERSION: 2[/] compliant.")
 
     print("Convert existing [cyan]cencli[/] config to [dark_olive_green2]CFG_VERSION: 2[/]")
-    cli.confirm(yes)
+    render.confirm(yes)
     bak_config = config.file.parent / f"{config.file.name}.bak"
     config.file.rename(bak_config)
     caption = [
@@ -86,7 +86,7 @@ def config_(
         "[yellow]:information:[/]  Add [cyan]glp:[/] section [dim italic](within a workspace)[/] with [cyan]client_id[/] and [cyan]client_secret[/] to enable commands that utilize GreenLake and/or New Central"
     ]
     config.file.write_text(config.new_config)
-    cli.display_results(data=config.new_config, caption=caption, tablefmt="simple")
+    render.display_results(data=config.new_config, caption=caption, tablefmt="simple")
 
 
 callback_str = f"Convert j2 Templates{'' if not config.is_old_cfg else ' or convert the cencli config to CFG_VERSION: 2'}"

@@ -6,8 +6,9 @@ import asyncio
 import typer
 from rich.console import Console
 
-from centralcli import Session, cli, config
+from centralcli import common, config, render
 from centralcli.cache import api
+from centralcli.client import Session
 
 app = typer.Typer()
 
@@ -17,13 +18,13 @@ def token(
     workspace_list: list[str] = typer.Argument(
         None,
         help="A list of workspaces to refresh tokens for (must be defined in the config).  This is useful automated for cron/task-scheduler refresh.",
-        autocompletion=cli.cache.account_completion,
+        autocompletion=common.cache.account_completion,
         show_default=False,
     ),
     all: bool = typer.Option(False, "-A", "--all", help="Refresh Tokens for all defined workspaces in config.",),
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ):
     """Refresh Classic Central API access/refresh tokens.
 
@@ -68,9 +69,9 @@ def token(
 
 @app.command()
 def cache(
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ):
     """Refresh local cache.
 
@@ -80,23 +81,23 @@ def cache(
     This is not necessary under normal circumstances as the cli will automatically refresh the cache if you provide an identifier
     that doesn't have a match.
     """
-    cli.cache(refresh=True)
+    common.cache(refresh=True)
 
 
 # CACHE add cache for webhooks
 @app.command()
 def webhook(
     wid: str = typer.Argument(..., help="WebHook ID. Use [cyan]cencli show webhooks[/] to get the required id.", show_default=False),
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ):
     """Refresh WebHook Token (generate a new token).
 
     Use [cyan]cencli show webhooks[/] to get the required webhook id (wid).
     """
     resp = api.session.request(api.central.refresh_webhook_token, wid)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
 
 @app.callback()

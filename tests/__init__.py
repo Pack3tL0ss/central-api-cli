@@ -82,7 +82,7 @@ def ensure_default_account(test_data: dict):
         msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
 
-if __name__ == "tests":
+if __name__ in ["tests", "__main__"]:
     test_log_file: Path = log.log_file.parent / "pytest.log"
     # update_log(f"\n__init__: cache: {id(common.cache)}")
     test_data: Dict[str, Any] = get_test_data()

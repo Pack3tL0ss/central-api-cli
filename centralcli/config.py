@@ -1,27 +1,26 @@
 from __future__ import annotations
 
-
-import sys
-# from os import environ as env
-from pathlib import Path
-from typing import Any, TextIO, Optional
-import tablib
-from tablib.exceptions import UnsupportedFormat
 import json
-from rich import print
-from rich.console import Console
-from rich.prompt import Confirm
+import sys
 import time
 from collections.abc import Mapping
-from .typedefs import JSON_TYPE
-from . import utils
-from .models.config import ConfigData
-from .constants import CLUSTER_URLS
-from .environment import env
 
+# from os import environ as env
+from pathlib import Path
+from typing import Any, Optional, TextIO
 
+import tablib
 import yaml
 from pydantic import ValidationError
+from rich import print
+from rich.console import Console
+from rich.prompt import Confirm, Prompt
+from tablib.exceptions import UnsupportedFormat
+
+from .constants import CLUSTER_URLS
+from .environment import env
+from .models.config import ConfigData
+from .typedefs import JSON_TYPE
 
 try:
     import readline  # noqa
@@ -60,6 +59,7 @@ NOT_ACCOUNT_KEYS = [
 ]
 
 
+# We can't import render without causing circular imports so confirm() and ask() are duplicated here.  Confirm is slightly customized vs confirm() in render
 def confirm(
     prompt: str = "",
     *,
@@ -80,6 +80,46 @@ def confirm(
     except (KeyboardInterrupt, EOFError):
         econsole.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
         sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
+
+    return choice
+
+
+def ask(
+    prompt: str = "",
+    *,
+    rich_console: Optional[Console] = None,
+    password: bool = False,
+    choices: Optional[list[str]] = None,
+    show_default: bool = True,
+    show_choices: bool = True,
+    default: Any = ...,
+) -> str:
+    """wrapper function for rich.Prompt().ask()
+
+    Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
+    """
+    con = rich_console or econsole
+    def abort():
+        con.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
+        sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
+
+    choices = choices if choices is None or "abort" in choices else ["abort", *choices]
+
+    try:
+        choice = Prompt.ask(
+            prompt,
+            console=Console(stderr=True),
+            password=password,
+            choices=choices,
+            show_default=show_default,
+            show_choices=show_choices,
+            default=default,
+        )
+    except (KeyboardInterrupt, EOFError):
+        abort()
+
+    if choice == "abort":
+        abort()
 
     return choice
 
@@ -322,6 +362,7 @@ class Config:
 
     def __len__(self):
         return len(self.data)
+
     @property
     def workspace(self) -> str:
         return self._workspace
@@ -561,11 +602,11 @@ class Config:
             print("\n[cyan]Client ID[reset] and [cyan]Client Secret[reset] are [dim red]required[/] for New Central.")
             print("Refer to [link='https://developer.arubanetworks.com/new-central/docs/generating-and-managing-access-tokens']HPE Aruba devhub[/] for details on how to generate the tokens.")
             print("\n[yellow]:information:[/]  Press return to skip New Central Configuration.  [dim italic][cyan]cencli[/] currently has limitted support for New Central[/]\n")
-            client_id = utils.ask("[dim italic]New Central/GreenLake[/] client id", default=client_id)
+            client_id = ask("[dim italic]New Central/GreenLake[/] client id", default=client_id)
             if not client_id or not client_id.strip():
                 return
 
-            client_secret = utils.ask("[dim italic]New Central/GreenLake[/] client secret")
+            client_secret = ask("[dim italic]New Central/GreenLake[/] client secret")
 
             workspace_dict["glp"] = {
                 "base_url": GLP_BASE_URL,
@@ -603,10 +644,10 @@ class Config:
             )
 
             print(clusters.menu)
-            choice = utils.ask("Central Cluster", choices=clusters.menu_names)
+            choice = ask("Central Cluster", choices=clusters.menu_names)
             if choice.lower() == "other":
                 print(f"Provide [dim italic]Classic Central[/] API gateway URL in the format [cyan]{CLUSTER_URLS['us5']['classic']}")
-                choice = utils.ask("[dim italic]Classic Central[/] API Gateway URL")
+                choice = ask("[dim italic]Classic Central[/] API Gateway URL")
                 base_url = choice.rstrip("/")
             else:
                 base_url = clusters[choice.lower()]["classic"]
@@ -615,11 +656,11 @@ class Config:
             # TODO pycentral library tokeStoreUtil makes customer_id optional, but load and refresh don't  so we need it here just
             # so the file has the expected name.  Would be nice just to use the format tok_account_name.json
             print("\nYour [cyan]customer id[/cyan] can be found by clicking the user icon in the upper right of the Central UI")
-            customer_id = utils.ask("customer id")
+            customer_id = ask("customer id")
             print("\n[cyan]Client ID[reset] and [cyan]Client Secret[reset] can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
             print("You can double click the field in the table to select then copy, it will copy the entire token even with the token truncated with ...")
-            client_id = utils.ask("[dim italic]Classic Central[/] client id")
-            client_secret = utils.ask("[dim italic]Classic Central[/] client secret")
+            client_id = ask("[dim italic]Classic Central[/] client id")
+            client_secret = ask("[dim italic]Classic Central[/] client secret")
 
             workspace_dict = {
                 "classic": {
@@ -644,10 +685,10 @@ class Config:
             print("\n[dark_olive_green2]Access[/] and [dark_olive_green2]Refresh[/] Tokens can be found after creating Tokens in Central UI -> API Gateway -> System Apps & Tokens")
             print("Click the [blue]View Tokens[/blue] link for the appropriate row in the System Apps and Tokens table.")
             print("then click the [blue]Download Tokens[/blue] link in the Token List.  (Tokens will be displayed in a popup)")
-            access_token = utils.ask("[dim italic]Classic Central[/] Access Token")
+            access_token = ask("[dim italic]Classic Central[/] Access Token")
             if access_token:
-                refresh_token = utils.ask("[dim italic]Classic Central[/] Refresh Token")
-            username = utils.ask("username")
+                refresh_token = ask("[dim italic]Classic Central[/] Refresh Token")
+            username = ask("username")
             if username.endswith("@hpe.com"):
                 print("\n[red]You need to use token Auth or configure a user with an external email")
                 print("[red]The OAUTH Flow does not work with hpe.com users (SSO).")
@@ -657,7 +698,7 @@ class Config:
                 username = password = None
                 print()  # They did not enter a username.  CR is for correct format of config output
             else:
-                password = utils.ask("password", password=True)
+                password = ask("password", password=True)
 
             valid = False
             if access_token:

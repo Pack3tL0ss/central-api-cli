@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, Literal, Optional, TypedDict, Union  # future annotations does not work here, need to use Union to support py < 3.10
+from typing import Dict, List, Literal, Optional, Sequence, TypedDict, Union  # future annotations does not work here, need to use Union to support py < 3.10
 
 from yarl import URL
 
@@ -27,13 +27,19 @@ SiteData = Union[
     ]
 ]
 PortalAuthType = Literal["user/pass", "anon", "self-reg"]
-PortalAuthTypes = List[PortalAuthType]
+PortalAuthTypes = Sequence[PortalAuthType]
 CacheTableName = Literal["devices", "sites", "groups", "labels", "macs", "mpsk", "subscriptions"]
 DynamicAntenna = Literal["narrow", "wide"]
 RadioType = Literal["2.4", "5", "6"]
 MPSKStatus = Literal["enabled", "disabled"]
 CertType = Literal["SERVER_CERT", "CA_CERT", "CRL", "INTERMEDIATE_CA", "OCSP_RESPONDER_CERT", "OCSP_SIGNER_CERT", "PUBLIC_CERT"]
 CertFormat = Literal["PEM", "DER", "PKCS12"]
+PrimaryDeviceTypes = Literal["ap", "cx", "sw", "gw"]
+SendConfigTypes = Literal["ap", "gw"]
+CloudAuthUploadTypes = Literal["mpsk", "mac"]
+TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate", "simple", "action"]
+LogType = Literal["event", "audit"]
+InsightSeverityType = Literal["high", "med", "low"]
 JSON_TYPE = Union[List, Dict, str]
 
 class CacheSiteDict(TypedDict):
@@ -48,6 +54,11 @@ class CacheSiteDict(TypedDict):
     lat: Optional[str]
     devices: int
 
+class UnsetType:
+    def __repr__(self):
+        return "UNSET"
+
+UNSET = UnsetType()
 
 # These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
 # fails to resolve or learn the attributes for the manual class when it's in the except block

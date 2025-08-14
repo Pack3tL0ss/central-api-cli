@@ -34,12 +34,11 @@ import typer
 from rich import print
 from rich.console import Console
 
+from centralcli import caas, cleaner, common, config, constants, render, utils
+from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
+from centralcli.client import BatchRequest
 
-from centralcli import caas, cleaner, cli, config, constants, utils, BatchRequest
-from centralcli.cache import api, CentralObject, CacheDevice
-
-
-cache = cli.cache
+cache = common.cache
 iden_meta = constants.iden_meta
 
 app = typer.Typer()
@@ -51,25 +50,26 @@ console = Console(emoji=False)
 @app.command()
 def bulk_edit(
     input_file: Path = typer.Argument(config.bulk_edit_file,),
-    yes: bool = cli.options.yes,
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ) -> None:
-    """"Import and Apply settings from bulk-edit.csv"
+    """Import and Apply settings from bulk-edit.csv
     """
     caasapi = caas.CaasAPI()
     cmds = caasapi.build_cmds(file=input_file)
     # TODO log cli
     if cmds:
-        cli.console.print(f"[bright_green]Send{'ing' if yes else ''} Commands[/]:")
-        cli.console.print("\n".join(cmds))
+        render.console.print(f"[bright_green]Send{'ing' if yes else ''} Commands[/]:")
+        render.console.print("\n".join(cmds))
 
-        cli.confirm(yes)
+        render.confirm(yes)
         for dev in caasapi.data:
             group_dev = f"{caasapi.data[dev]['_common'].get('group')}/{dev}"
             resp = api.session.request(caasapi.send_commands, group_dev, cmds)
-            caas.eval_caas_response(resp)
+            # caas.eval_caas_response(resp)  # TODO test below
+            render.display_results(resp, cleaner=cleaner.parse_caas_response)
 
 
 
@@ -85,9 +85,9 @@ def add_vlan(
     vrid: str = None,
     vrrp_ip: str = None,
     vrrp_pri: int = None,
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ) -> None:
     caasapi = caas.CaasAPI()
     cmds = []
@@ -104,17 +104,18 @@ def add_vlan(
         cmds += ["no shutdown", "!"]
 
     resp = api.session.request(caasapi.send_commands, group_dev, cmds)
-    caas.eval_caas_response(resp)
+    # caas.eval_caas_response(resp)  # TODO Test below
+    render.display_results(resp, cleaner=cleaner.parse_caas_response)
 
 
 @app.command()
 def import_vlan(
     key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
-    import_file: str = cli.arguments.import_file,
+    import_file: str = common.arguments.import_file,
     file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Add VLAN from stored_tasks file.
 
@@ -123,14 +124,14 @@ def import_vlan(
     """
     import_file = file or import_file or config.stored_tasks_file
     if import_file == config.stored_tasks_file and not key:
-        cli.exit("key is required when using the default import file")
+        common.exit("key is required when using the default import file")
 
     data = config.get_file_data(import_file)
     if key:
         data = data.get(key)
 
     if not data:
-        cli.exit(f"[cyan]{key}[/] Not found in [cyan]{import_file}[/]")
+        common.exit(f"[cyan]{key}[/] Not found in [cyan]{import_file}[/]")
 
     args = data.get("arguments", [])
     kwargs = data.get("options", {})
@@ -140,7 +141,7 @@ def import_vlan(
         f"\n    args: {', '.join(args)}\n    kwargs: {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
     )
     typer.echo(f"{_msg}")
-    if cli.confirm():
+    if render.confirm():
         add_vlan(*args, **kwargs)
 
 
@@ -151,10 +152,10 @@ def caas_batch(
     key: str = typer.Argument(None, help="The parent key in sthe stored-tasks file containing the arguments/options to supply to the command.", show_default=False,),
     file: Path = typer.Option(config.stored_tasks_file, exists=True,),
     command: str = typer.Option(None, help="The cencli batch command to run with the arguments/options from the stored-tasks file", show_default=False,),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Run Supported caas commands providing parameters via stored-tasks file
 
@@ -194,20 +195,20 @@ def caas_batch(
     """
     caasapi = caas.CaasAPI()
     if file == config.stored_tasks_file and not key:
-        cli.exit("key is required when using the default import file")
+        common.exit("key is required when using the default import file")
 
     data = config.get_file_data(file)
     data = data.get(key, data)
 
     if not data:
-        cli.exit(f"[cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
+        common.exit(f"[cyan]{key}[/] not found in [cyan]{file}[/].  No Data to Process")
 
     args = data.get("arguments", [])
     kwargs = data.get("options", {})
     cmds = data.get("cmds", [])
 
     if not args:
-        cli.exit("import data requires an argument specifying the group / device")
+        common.exit("import data requires an argument specifying the group / device")
 
     if command:
         command = command.replace('-', '_')
@@ -235,10 +236,11 @@ def caas_batch(
             print("  [bold]cli cmds[/]:")
         _ = [print(f"    [cyan]{c}[/]") for c in cmds]
 
-        cli.confirm()
+        render.confirm()
         kwargs = {**kwargs, **{"cli_cmds": cmds}}
         resp = api.session.request(caasapi.send_commands, *args, **kwargs)
-        caas.eval_caas_response(resp)
+        # caas.eval_caas_response(resp)  # TODO test below
+        render.display_results(resp, tablefmt="simple", cleaner=cleaner.parse_caas_response)
 
 
 @app.command()
@@ -267,15 +269,15 @@ def send_cmds(
     commands: List[str] = typer.Argument(
         None,
         help="The commands to send.  ([grey42]space seperated, with each command wrapped in quotes[/]).",
-        callback=cli.send_cmds_node_callback,
+        callback=common.send_cmds_node_callback,
         show_default=False,
     ),
     cmd_file: Path = typer.Option(None, help="Path to file containing commands (1 per line) to be sent to device", exists=True, show_default=False,),
     all: bool = typer.Option(False, "-A", "--all", help="Send command(s) to all gateways (device level update) when group is provided"),
-    yes: bool = cli.options.yes,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ) -> None:
     """Send commands to gateway(s) (group or device level)
 
@@ -300,10 +302,10 @@ def send_cmds(
         dev_file = Path(nodes)
         file_data = config.get_file_data(dev_file, text_ok=True)
         if not file_data:
-            cli.exit(f"No data parsed from file {dev_file.name}.")
+            common.exit(f"No data parsed from file {dev_file.name}.")
 
         if isinstance(file_data, list):
-            nodes: List[CentralObject] = [cache.get_identifier(d.strip(), qry_funcs=["dev", "group", "site"], device_type="gw") for d in file_data]
+            nodes: list[CacheDevice] | list[CacheGroup] | list[CacheSite] = [cache.get_identifier(d.strip(), qry_funcs=["dev", "group", "site"], device_type="gw") for d in file_data]
         else:
             devices = file_data.get("devices", file_data.get("gateways"))
             if devices:
@@ -313,35 +315,35 @@ def send_cmds(
             elif "sites" in file_data:
                 nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["site"] in file_data["sites"]]
             else:
-                cli.exit(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
+                common.exit(f"Expected 'gateways', 'groups', or 'sites' key in {dev_file.name}.")
 
             if "cmds" in file_data or "commands" in file_data:
                 if commands:
-                    cli.exit("Providing commands on the command line and in the import file is a strange thing to do.")
+                    common.exit("Providing commands on the command line and in the import file is a strange thing to do.")
 
                 commands = file_data.get("cmds", file_data.get("commands"))
         action = f'{", ".join(n.name for n in nodes)} defined in {dev_file.name}'
     elif kw1 == "device":
         if not isinstance(nodes, str):
-            cli.econsole.print(f":warning:  nodes is of type {type(nodes)} this is unexpected.", emoji=False)
+            render.econsole.print(f":warning:  nodes is of type {type(nodes)} this is unexpected.", emoji=False)
 
         nodes: List[CacheDevice] = [cache.get_identifier(nodes, qry_funcs=["dev"], device_type="gw")]
         action = f'{", ".join(n.name for n in nodes)}'
 
     if cmd_file:
         if commands:
-            cli.exit("Providing commands on the command line and in the import file is a strange thing to do.")
+            common.exit("Providing commands on the command line and in the import file is a strange thing to do.")
         else:
             commands = [line.rstrip() for line in cmd_file.read_text().splitlines()]
 
     # TODO common command confirmation func
     if not commands:
-        cli.exit("Error No commands provided")
+        common.exit("Error No commands provided")
 
     console.print(f"Sending the following to [cyan]{action}[/]")
     _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
 
-    if cli.confirm(yes):
+    if render.confirm(yes):
         caasapi = caas.CaasAPI()
         _reqs = [
             BatchRequest(
@@ -352,7 +354,7 @@ def send_cmds(
             for n in utils.listify(nodes)
         ]
         batch_res = api.session.batch_request(_reqs)
-        cli.display_results(batch_res, cleaner=cleaner.parse_caas_response)
+        render.display_results(batch_res, cleaner=cleaner.parse_caas_response)
 
 @app.callback()
 def callback():

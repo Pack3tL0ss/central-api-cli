@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Union
 
+from aiohttp import ClientResponse
 from rich import print
 from rich.console import Console
 from rich.text import Text
@@ -16,7 +17,7 @@ from centralcli.exceptions import CentralCliException
 from . import render
 
 if TYPE_CHECKING:
-    from aiohttp import ClientResponse
+    from requests import Response as RequestsResponse
 
 
 class RateLimit():
@@ -91,7 +92,6 @@ class RateLimit():
     def has_value(self) -> bool:
         return self.total_day > 0
 
-
 class Response:
     '''wrapper ClientResponse object
 
@@ -114,7 +114,7 @@ class Response:
     '''
     def __init__(
         self,
-        response: ClientResponse = None,
+        response: ClientResponse | RequestsResponse = None,
         url: Union[URL, str] = "",
         ok: bool = None,
         error: str = None,
@@ -122,7 +122,6 @@ class Response:
         raw: dict[str, Any] = None,
         status_code: int = None,
         elapsed: Union[int, float] = None,
-        rl_str: str = None,
         data_key: str = None,
         caption: str | list[str] = None
     ):
@@ -144,11 +143,10 @@ class Response:
             raw (Any, optional): raw response payload. Defaults to {}.
             status_code (int, optional): Response http status code. Defaults to None.
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
-            rl_str (str, optional): Rate Limit String. Defaults to None.
             data_key: (str, optional): The dict key where the actual data is held in the response.
             caption: (str | list[str], optional): Optional captions to be displayed with the response.
         """
-        self.rl = rl_str or RateLimit(response)
+        self.rl = RateLimit(response)
         self._response = response
         self.output = output or {}
         self.raw = raw or {}
@@ -160,10 +158,10 @@ class Response:
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason
-            try:
+            if isinstance(response, ClientResponse):
                 self.status = response.status
                 self.method = response.method
-            except AttributeError:  # Using requests module for templates due to multi-part issue in aiohttp
+            else:  # Using requests module for templates due to multi-part issue in aiohttp
                 self.status = response.status_code
                 self.method = response.request.method
 
@@ -179,7 +177,7 @@ class Response:
             _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
-                if isinstance(self.output, dict) and "description" in self.output or "detail" in self.output:
+                if isinstance(self.output, dict) and ("description" in self.output or "detail" in self.output):
                     log.error(_log_msg.replace("Elapsed:", f'{self.output.get("description", self.output.get("detail", ""))} Elapsed:'))
                 else:
                     log.error(_log_msg)
@@ -214,29 +212,12 @@ class Response:
     def ok(self):
         return self.__bool__()
 
+    @ok.setter
+    def ok(self, ok: bool):
+        self._ok = ok
+
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
-
-    # DEPRECATED cab be removed once we ensure no ill effects of simplifying __rich__
-    @staticmethod
-    def _split_inner(val):
-        pfx = ''
-        if isinstance(val, list):
-            pfx = '\n'
-            if len(val) == 1:
-                val = val[0] if "\n" not in val[0] else "\n    " + "\n    ".join(val[0].split("\n"))
-            elif all(isinstance(d, dict) for d in val):
-                val = render.output(outdata=val, tablefmt="yaml")
-                val = "\n".join([f"    {line}" for line in val.file.splitlines()])
-
-        if isinstance(val, dict):
-            pfx = '\n'
-            val = render.output(outdata=[val], tablefmt="yaml")
-            val = "\n".join([f"      {line}" for line in val.file.splitlines() if not line.endswith(": []")])
-
-        val = f'{pfx}{val}' if not hasattr(val, "__rich__") else val.__rich__()
-
-        return val
 
     def __rich__(self):
         fg = "red" if not self.ok else "bright_green"

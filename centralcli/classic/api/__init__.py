@@ -3,7 +3,8 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from ... import Session, config
+from ... import config
+from ...client import Session
 from .aiops import AiOpsAPI
 from .central import CentralAPI
 from .cloudauth import CloudAuthAPI
@@ -20,7 +21,7 @@ from .routing import RoutingAPI
 from .topology import TopologyAPI
 from .troubleshooting import TroubleShootingAPI
 
-if TYPE_CHECKING:
+if TYPE_CHECKING:  # pragma: no cover
     from aiohttp.client import ClientSession
 
     from ...typedefs import StrOrURL
@@ -79,7 +80,7 @@ class ClassicAPI:
 
     @cached_property
     def routing(self) -> RoutingAPI:
-        return RoutingAPI(self.session)
+        return RoutingAPI(self.session)  # pragma: no cover
 
     @cached_property
     def topo(self) -> TopologyAPI:
@@ -95,5 +96,5 @@ class ClassicAPI:
 
     @cached_property
     def kms(self) -> KmsAPI:
-        return KmsAPI(self.session)
+        return KmsAPI(self.session)  # pragma: no cover
 

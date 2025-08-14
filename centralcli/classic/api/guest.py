@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-from ... import Response, constants, utils
+from ... import constants, utils
 
 if TYPE_CHECKING:
-    from ... import Session
+    from ...client import Session
+    from ...response import Response
 
 class GuestAPI:
     def __init__(self, session: Session):

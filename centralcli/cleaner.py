@@ -22,10 +22,11 @@ from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, Swit
 from .models.cache import Sites
 from .models.formatter import CloudAuthUploadResponse
 from .objects import DateTime, ShowInterfaceFilters
+from .render import tty
 
 if TYPE_CHECKING:
-    from .constants import DevTypes, InsightSeverityType, LibAllDevTypes, StatusOptions
-    from .typedefs import CertType
+    from .constants import DevTypes, LibAllDevTypes, StatusOptions
+    from .typedefs import CertType, InsightSeverityType
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
 
@@ -1375,8 +1376,8 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
     ]
     data = strip_no_value(data)
 
-    if format == "rich" and not verbose and utils.tty:
-        data = data[0:utils.tty.rows - 12]
+    if format == "rich" and not verbose and tty:
+        data = data[0:tty.rows - 12]
 
     return data
 

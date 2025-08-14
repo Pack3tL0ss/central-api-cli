@@ -3,10 +3,14 @@
 
 from pathlib import Path
 from time import sleep
-from typing import List
 
 import typer
 from rich.progress import track
+
+from centralcli import cleaner, common, render, utils
+from centralcli.cache import CacheDevice
+from centralcli.clicommon import APIClients
+from centralcli.constants import iden_meta, lib_to_api
 
 try:
     from fuzzywuzzy import process  # type: ignore noqa
@@ -15,32 +19,24 @@ except Exception:
     FUZZ = False
     pass
 
-
-from centralcli import cleaner, cli, utils
-from centralcli.cache import CacheDevice
-from centralcli.clicommon import APIClients
-from centralcli.constants import IdenMetaVars, lib_to_api
-
 api_clients = APIClients()
 api = api_clients.classic
 
 app = typer.Typer()
 
-iden_meta = IdenMetaVars()
 
-
-def send_cmds_by_id(device: CacheDevice, commands: List[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
+def send_cmds_by_id(device: CacheDevice, commands: list[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
     _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
     resp = api.session.request(api.tshooting.start_ts_session, device.serial, device_type=_type, commands=commands)
-    cli.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action")
 
     if not resp:
         if not exit:
             return
         else:
-            cli.exit()
+            common.exit()
 
     complete = False
     while not complete:
@@ -58,20 +54,20 @@ def send_cmds_by_id(device: CacheDevice, commands: List[int], pager: bool = Fals
                 show_tech_ap = [115, 369, 465]
                 tablefmt = "clean" if sorted(commands) != show_tech_ap else "raw"
 
-                cli.display_results(ts_resp, pager=pager, outfile=outfile, tablefmt=tablefmt)
+                render.display_results(ts_resp, pager=pager, outfile=outfile, tablefmt=tablefmt)
                 complete = True
                 break
             else:
-                cli.econsole.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+                render.econsole.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
 
         if not complete:
-            cli.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{device.name}[/]')
-            if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
-                cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
+            render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{device.name}[/]')
+            if not render.confirm(prompt="Continue to wait/retry?", abort=False):
+                render.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
     if exit:
-        cli.exit(code=0 if complete else 1)
+        common.exit(code=0 if complete else 1)
 
 def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: bool,) -> None:
     """Helper command to send troubleshooting output (user provides command) and print results
@@ -82,7 +78,7 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
         outfile (Path): Optional output to file
         pager (bool): Optional Use Pager
     """
-    dev: CacheDevice = cli.cache.get_dev_identifier(device)
+    dev: CacheDevice = common.cache.get_dev_identifier(device)
     dev_type = lib_to_api(dev.type, "tshoot")
     if all(c.isdigit() for c in cmd):  # allows user to enter cmd id from show ts commands output.
         send_cmds_by_id(dev, commands=[int(c) for c in cmd], pager=pager, outfile=outfile, exit=True)
@@ -92,32 +88,32 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
     cmd = cmd.replace("  ", " ").strip().lower()
     resp = api.session.request(api.tshooting.get_ts_commands, dev_type)
     if not resp:
-        cli.econsole.print('[dark_orange3]:warning:[/]  [bright_red]Unable to get troubleshooting command list')
-        cli.display_results(resp)
+        render.econsole.print('[dark_orange3]:warning:[/]  [bright_red]Unable to get troubleshooting command list')
+        render.display_results(resp)
     else:
         cmd_list = resp.output
         cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == cmd]
         if not cmd_id:
             if FUZZ:
                 fuzz_match, fuzz_confidence = process.extract(cmd, [c["command"].strip() for c in cmd_list], limit=1)[0]
-                cli.econsole.print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
-                if fuzz_confidence >= 70 and cli.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
+                render.econsole.print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
+                if fuzz_confidence >= 70 and render.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
                     cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == fuzz_match]
 
         if not cmd_id:
             caption = f'[bright_red]Error[/]: [cyan]{cmd}[/] not found in available troubleshooting commands for {dev.type}. See available commands above.'
-            cli.display_results(resp, caption=caption, title=f"Available troubleshooting commands for {dev.type}", cleaner=cleaner.show_ts_commands)
+            render.display_results(resp, caption=caption, title=f"Available troubleshooting commands for {dev.type}", cleaner=cleaner.show_ts_commands)
         else:
             send_cmds_by_id(dev, commands=cmd_id, pager=pager, outfile=outfile)
 
 @app.command()
 def overlay(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_sw_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show GW or AP Overlay details (Tunneled SSIDs) or AOS-SW User Based Tunneling  (valid on AP, GW, and AOS-SW)
 
@@ -151,20 +147,20 @@ def overlay(
         "gw": [2452, 2515, 2453, 2131, 2441, 2454, 2455],
         "sw": [1189, 1195, 1196, 1191]
     }
-    dev = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
+    dev = common.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 @app.command()
 def clients(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_sw_completion, show_default=False,),
     wired: bool = typer.Option(False, "-w", "--wired", help="Include [cyan]show clients wired[/] (applies to AP)",),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show output of client related commands  (valid on AP, GW, and AOS-SW)
 
@@ -192,26 +188,26 @@ def clients(
         "sw": [1028, 1089],
         "gw": [2163, 2095],
     }
-    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     commands = ids_by_dev_type[dev.type]
     if wired:
         if dev.type == "ap":
             commands += [123]
         else:
-            cli.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]--wired[/] flag ignored, only applies to APs, not {dev.type}.")
+            render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]--wired[/] flag ignored, only applies to APs, not {dev.type}.")
 
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
 @app.command()
 def dpi(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show DPI output (valid on APs and GWs)
 
@@ -233,19 +229,19 @@ def dpi(
         "ap": [190, 210, 211, 317, 318],
         "gw": [2394, 2395, 2553]
     }
-    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=("ap", "gw"))
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=("ap", "gw"))
     commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
 @app.command()
 def ssid(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show output of commands to help troubleshoot SSIDs/broadcasting (APs Only)
 
@@ -256,19 +252,19 @@ def ssid(
     [cyan]-[/] show cluster bss-table
     [cyan]-[/] show ap-env
     """
-    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=("ap"))
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=("ap"))
     commands = [4, 24, 177, 53]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
 @app.command()
 def show_tech(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show Tech Support
 
@@ -276,7 +272,7 @@ def show_tech(
 
     [cyan]-[/] APs include show tech-support supplemental and show tech-support memory.
     """
-    dev: CacheDevice = cli.cache.get_dev_identifier(device)
+    dev: CacheDevice = common.cache.get_dev_identifier(device)
     ids_by_dev_type = {
         "ap": [115, 369, 465],
         "sw": [1032],
@@ -289,12 +285,12 @@ def show_tech(
 
 @app.command()
 def images(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_ap_gw_sw_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_gw_sw_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show image versions (Valid for AP, GW, and AOS-SW)
 
@@ -311,7 +307,7 @@ def images(
     [bright_green]AOS-SW[/]
     [cyan]-[/] show flash
     """
-    dev: CacheDevice = cli.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=["ap", "gw", "sw"])
 
     ids_by_dev_type = {
         "ap": [119, 213],
@@ -324,31 +320,31 @@ def images(
 
 @app.command()
 def inventory(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=cli.cache.dev_gw_completion, show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Show Inventory (valid on Gateways)
     """
-    dev = cli.cache.get_dev_identifier(device, dev_type=("gw"))
+    dev = common.cache.get_dev_identifier(device, dev_type=("gw"))
     commands = [2013]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
 @app.command(short_help="Ping a host from a Central managed device")
 def ping(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to ping from", autocompletion=cli.cache.dev_completion),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to ping from", autocompletion=common.cache.dev_completion),
     host: str = typer.Argument(..., help="host to ping (IP of FQDN)"),
     mgmt: bool = typer.Option(None, "-m", help="ping using VRF mgmt, (only applies to cx)"),
     repititions: int = typer.Option(None, "-r", help="repititions (only applies to AOS-SW)"),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     command_ids = {
         "ap": 165,
@@ -356,7 +352,7 @@ def ping(
         "cx": 6006,
         "sw": 1036
     }
-    dev = cli.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device)
     cmd_id = command_ids[dev.type]
     cmd_args = {"Host": host}
 
@@ -370,7 +366,7 @@ def ping(
     dev_type = lib_to_api(dev.type, "tshoot")
 
     resp = api.session.request(api.tshooting.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
-    cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
     complete = False
     while not complete:
@@ -383,52 +379,52 @@ def ping(
             if ts_resp.output.get("status", "") == "COMPLETED":
                 if "output" in ts_resp.output:
                     ts_resp.output = ts_resp.output["output"]
-                cli.display_results(ts_resp)
+                render.display_results(ts_resp)
                 complete = True
                 break
             else:
-                cli.console.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+                render.console.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
 
         if not complete:
-            cli.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{dev.name}[/]')
-            cli.econsole.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
-            if not cli.confirm(prompt="Continue to wait/retry?", abort=False):
-                cli.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
+            render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{dev.name}[/]')
+            render.econsole.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
+            if not render.confirm(prompt="Continue to wait/retry?", abort=False):
+                render.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
 
 @app.command(hidden=True)  # Currently hidden as the API is not returning a task_id
 def speed_test(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to run speedtest from", autocompletion=cli.cache.dev_ap_gw_completion),
+    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to run speedtest from", autocompletion=common.cache.dev_ap_gw_completion),
     host: str = typer.Argument("ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org", help="speedtest host (IP of FQDN)"),
     options: str = typer.Option(None, "-o", help="Formatted string of optional arguments"),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    debug: bool = cli.options.debug,
-    default: bool = cli.options.default,
-    workspace: str = cli.options.workspace,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
 ):
     """Initiate a speedtest from a device (Gateways and AOS8 IAP).
     """
-    dev = cli.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device)
     if dev.type == "ap" and dev.is_aos10:
-        cli.exit("This command is not supported on AOS10 APs")
+        common.exit("This command is not supported on AOS10 APs")
     if dev.type not in ["ap", "gw"]:
-        cli.exit(f"This command is supported on Gateways and AOS8 IAP not {dev.type}")
+        common.exit(f"This command is supported on Gateways and AOS8 IAP not {dev.type}")
 
     resp = api.session.request(api.device_management.run_speedtest, dev.serial, host=host, options=options)
-    cli.display_results(resp, tablefmt="action", exit_on_fail=True)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
 @app.command(short_help="Send troubleshooting command to a device")
 def command(
-    device: str = cli.arguments.device,
-    cmd: List[str] = typer.Argument(..., help="command to send to switch, must be supported by API.", show_default=False,),
-    outfile: Path = cli.options.outfile,
-    pager: bool = cli.options.pager,
-    default: bool = cli.options.default,
-    debug: bool = cli.options.debug,
-    workspace: str = cli.options.workspace,
+    device: str = common.arguments.device,
+    cmd: list[str] = typer.Argument(..., help="command to send to switch, must be supported by API.", show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
 ):
     """
     [cyan]Send a user provided troubleshooting commands to a device and wait for results.[/]

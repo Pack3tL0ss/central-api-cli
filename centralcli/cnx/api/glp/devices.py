@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from ....client import Session
-from .... import utils, BatchRequest
 from typing import TYPE_CHECKING
 
+from .... import utils
+from ....client import BatchRequest, Session
+
 if TYPE_CHECKING:
-    from centralcli import Response
+    from ....response import Response
 
 class GreenLakeDevicesAPI:
     def __init__(self, session: Session):
