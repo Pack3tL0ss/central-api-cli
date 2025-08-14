@@ -119,8 +119,8 @@ class CentralObject:
         return self.data[key]
 
     def __getattr__(self, name: str) -> Any:
-        import sys
-        print("CentralObject __getattr__", name, file=sys.stderr)
+        # import sys
+        # print("CentralObject __getattr__", name, file=sys.stderr)
         if hasattr(self, "data") and self.data:
             if name in self.data:
                 return self.data[name]
