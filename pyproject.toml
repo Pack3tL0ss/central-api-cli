@@ -120,6 +120,7 @@ omit = [
     "centralcli/wh2snow.py",
     "centralcli/dashboard/*",
     "centralcli/vscodeargs.py",
+    "centralcli/clitree/dev.py",
     "noxfile.py"
 ]
 
