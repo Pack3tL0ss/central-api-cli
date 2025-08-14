@@ -98,8 +98,29 @@ omit = [
 [tool.coverage.report]
 exclude_lines = [
     "if __name__ == \"__main__\":",
+    "if TYPE_CHECKING:",
     "# pragma: no cover",
-    "update_log(result.stdout)"
+    "update_log(result.stdout)",
+    "if show_example:",
+    "if not import_file:"
+]
+exclude_also = [
+    # 1. Exclude an except clause of a specific form:
+    # 'except ValueError:\n\s*assume\(False\)',
+    # 2. Comments to turn coverage on and off:
+    'no cover: start(?s:.)*?no cover: stop',
+    # 3. A pragma comment that excludes an entire file:
+    '\A(?s:.*# pragma: exclude file.*)\Z',
+]
+omit = [
+    "tests/test_rate_limit.py",
+    "tests/cache_test.py",
+    "*/snow.py",
+    "*/webhook.py",
+    "centralcli/wh2snow.py",
+    "centralcli/dashboard/*",
+    "centralcli/vscodeargs.py",
+    "noxfile.py"
 ]
 
 [tool.ruff]
