@@ -402,7 +402,7 @@ def show_devices(
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = api.session.request(common.cache.refresh_inv_db_classic, device_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db_classic, dev_type=dev_type)
             resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
