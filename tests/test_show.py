@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from centralcli import cache
 from centralcli.cli import app
 
-from . import test_data, update_log
+from . import test_data
 
 runner = CliRunner()
 
@@ -313,7 +313,7 @@ def test_show_clients_wired():
     cache.updated = []
     result = runner.invoke(app, ["show", "clients", "--wired", "--table", "--debug"],)
     print(result.stdout)
-    if result.exception:
+    if result.exception:  # pragma: no cover
         import traceback
         traceback.print_exception(result.exception)
     assert result.exit_code == 0
@@ -494,6 +494,18 @@ def test_show_insights_low_severity():
     assert "API Rate Limit" in result.stdout
 
 
+def test_show_insights_site():
+    result = runner.invoke(app, [
+            "show",
+            "insights",
+            "--site",
+            test_data["ap"]["site"]
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API Rate Limit" in result.stdout
+
+
 def test_show_notifications():
     result = runner.invoke(app, [
             "show",
@@ -502,3 +514,66 @@ def test_show_notifications():
     )
     assert result.exit_code == 0
     assert "category" in result.stdout
+
+
+def test_show_firmware_swarm():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "swarm",
+            test_data["aos8_ap"]["name"],
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_device_multi():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "device",
+            test_data["ap"]["name"],
+            test_data["switch"]["name"],
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_list_verbose():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "list",
+            test_data["switch"]["name"],
+            "-v"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_compliance_raw():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "compliance",
+            "cx",
+            test_data["switch"]["group"],
+            "--raw"
+        ]
+    )
+    assert result.exit_code == 0
+
+
+def test_show_webhooks():
+    result = runner.invoke(app, [
+            "show",
+            "webhooks",
+            "--sort",
+            "token-created"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "API" in result.stdout
