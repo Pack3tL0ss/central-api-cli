@@ -421,9 +421,9 @@ class CacheInvMonDevice(CentralObject):
     def summary_text(self) -> str:
         id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
         _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
-        mon_parts = [p for p in [self.name, _status, self.serial, self.mac, self.ip, self.type, self.model] if p]
-        inv_parts = [p for p in [self.serial, self.mac, self.type, self.model, self.sku, id_str] if p]
-        parts = [*inv_parts, *mon_parts]
+        mon_parts = [p for p in [self.name, self.type, _status, self.serial, self.mac, self.ip, self.model] if p]
+        inv_parts = [p for p in [self.sku, id_str] if p]
+        parts = list(set([*mon_parts, *inv_parts]))
         return "[reset]" + "|".join(
             [
                 f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
