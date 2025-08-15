@@ -63,6 +63,7 @@ app.add_typer(clidev.app, name="dev", hidden=True)
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
+# see cliadd.device uses serial/mac/group vs kw#_val
 @app.command()
 def move(
     device: list[str, ] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_kwarg_completion, show_default=False,),
