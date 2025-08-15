@@ -142,10 +142,11 @@ def subscription(
 
     _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
 
-    res_ids = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r).id for r in devices]
+    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
+    res_ids = [d.id for d in devs]
 
     _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
-    _msg = f"{_msg} {utils.summarize_list(res_ids, max=12)}"
+    _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
     render.econsole.print(_msg)
     if render.confirm(yes):
         resp = glp_api.session.request(glp_api.devices.assign_subscription_to_devices, res_ids, subscription_ids=sub.id)
