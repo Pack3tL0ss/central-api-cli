@@ -56,7 +56,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
     if license:
         try:
             license = utils.unlistify(license)
-            license: str = license.upper().replace("-", " "),
+            license: str = license.lower().replace("_", "-").replace(" ", "-"),
         except Exception as e:
             log.exception(f"{e.__class__.__name__} Exception in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
 
