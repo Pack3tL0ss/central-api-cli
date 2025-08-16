@@ -305,7 +305,7 @@ def reset(
 def blink(
     device: str = typer.Argument(..., show_default=False, metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_ap_completion),
     action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
-    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for {secs} seconds.", show_default=False,),
+    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for this many seconds.", show_default=False,),
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
