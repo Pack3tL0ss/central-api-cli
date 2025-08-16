@@ -38,15 +38,32 @@ Bottom Line.
 
 
 """
-# from cli import cli as common
+import asyncio
 import json
+from functools import partial
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional, Type, Union
+from unittest.mock import Mock
+
+import pytest
+from aiohttp import RequestInfo, StreamReader
+from aiohttp.client import ClientResponse, ClientSession, hdrs
+from aiohttp.client_proto import ResponseHandler
+from aiohttp.helpers import TimerNoop
+from aioresponses import aioresponses
+from multidict import CIMultiDict, CIMultiDictProxy
+from rich.console import Console
+from yarl import URL
 
 from centralcli.cli import config, log
 from centralcli.clicommon import APIClients
 
 api_clients = APIClients()
+
+# def mock_get(url: str, params: dict[str, Any]):
+#     ...
+responses = json.loads(config.closed_capture_file.read_text())
+
 
 class InvalidAccountError(Exception):
     ...
@@ -56,6 +73,82 @@ class BatchImportFileError(Exception):
 
 class ConfigNotFoundError(Exception):
     ...
+
+def _build_raw_headers(headers: Dict) -> tuple:
+    """
+    Convert a dict of headers to a tuple of tuples
+
+    Mimics the format of ClientResponse.
+    """
+    raw_headers = []
+    for k, v in headers.items():
+        raw_headers.append((k.encode('utf8'), v.encode('utf8')))
+    return tuple(raw_headers)
+
+def stream_reader_factory(  # noqa
+    loop: 'Optional[asyncio.AbstractEventLoop]' = None
+) -> StreamReader:
+    protocol = ResponseHandler(loop=loop)
+    return StreamReader(protocol, limit=2 ** 16, loop=loop)
+
+def _build_response(
+        url: 'Union[URL, str]',
+        method: str = hdrs.METH_GET,
+        request_headers: Optional[Dict] = None,
+        status: int = 200,
+        body: Union[str, bytes] = '',
+        content_type: str = 'application/json',
+        payload: Optional[Dict] = None,
+        headers: Optional[Dict] = None,
+        response_class: Optional[Type[ClientResponse]] = None,
+        reason: Optional[str] = "OK"
+    ) -> ClientResponse:
+    if response_class is None:
+        response_class = ClientResponse
+    if payload is not None:
+        body = json.dumps(payload)
+    if not isinstance(body, bytes):
+        body = str.encode(body)
+    if request_headers is None:
+        request_headers = {}
+    loop = Mock()
+    loop.get_debug = Mock()
+    loop.get_debug.return_value = True
+    kwargs = {}  # type: Dict[str, Any]
+    url = URL(url)
+    kwargs['request_info'] = RequestInfo(
+        url=url,
+        method=method,
+        headers=CIMultiDictProxy(CIMultiDict(**request_headers)),
+        real_url=url
+    )
+    kwargs['writer'] = None
+    kwargs['continue100'] = None
+    kwargs['timer'] = TimerNoop()
+    kwargs['traces'] = []
+    kwargs['loop'] = loop
+    kwargs['session'] = None
+
+    # We need to initialize headers manually
+    _headers = CIMultiDict({hdrs.CONTENT_TYPE: content_type})
+    if headers:
+        _headers.update(headers)
+    raw_headers = _build_raw_headers(_headers)
+    resp = response_class(method, url, **kwargs)
+
+    for hdr in _headers.getall(hdrs.SET_COOKIE, ()):
+        resp.cookies.load(hdr)
+
+    # Reified attributes
+    resp._headers = _headers
+    resp._raw_headers = raw_headers
+
+    resp.status = status
+    resp.reason = reason
+    resp.content = stream_reader_factory(loop)
+    resp.content.feed_data(body)
+    resp.content.feed_eof()
+    return resp
 
 def update_log(txt: str):
     with test_log_file.open("a") as f:
@@ -82,9 +175,36 @@ def ensure_default_account(test_data: dict):
         msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
 
+def monkeypatch_rich_console():
+    test_console = partial(Console, height=55, width=190)
+    pytest.MonkeyPatch().setattr("rich.console.Console", test_console)
+
+
+def get_test_response(method: str, url_path: str):
+    key = f"{method.upper()}_{url_path}"
+    resp_candidates = [r[key] for r in responses if key in r]
+    for resp in resp_candidates:
+        return resp
+    # yield from resp_candidates
+
+@pytest.fixture
+def mock_aioresponse():
+    with aioresponses() as m:
+        yield m
+
+@pytest.mark.asyncio
+async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any], **kwargs):
+    return _build_response(url, status=200, payload=get_test_response(method, url))
+    # mock_aioresponse.get(url, status=200, payload=get_test_response(url.path))
+
+
 if __name__ in ["tests", "__main__"]:
     test_log_file: Path = log.log_file.parent / "pytest.log"
     # update_log(f"\n__init__: cache: {id(common.cache)}")
+    monkeypatch_rich_console()
+    if config.dev.mock_tests:
+        pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
+    # monkeypatch_aiohttp_client_methods()
     test_data: Dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")

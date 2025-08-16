@@ -14,9 +14,16 @@ runner = CliRunner()
 def clean_mac(mac: str) -> str:
     return mac.replace(":", "").replace("-", "").replace(".", "").lower()
 
+# @pytest.fixture
+# def mock_aioresponse():
+#     with aioresponses() as m:
+#         yield m
+
 # Need to use --table for most tests, the default (rich) will elipsis headers
 # when they overrun the tty.  tty for test runner is 80 cols, 24 rows
 # --table wraps, does not elipsis/truncate any headers/values.
+# url_path = "/monitoring/v2/aps"
+# mock_aioresponse.get(f"{config.classic.base_url}{url_path}", status=200, payload=get_test_response(url_path))
 def test_show_aps():
     result = runner.invoke(app, ["-d", "show", "aps", "--debug", "--table"],)
     assert result.exit_code == 0
