@@ -1,28 +1,11 @@
-import pytest
 from typer.testing import CliRunner
 
-from centralcli import cache
-from centralcli.cli import app  # type: ignore # NoQA
+from centralcli.cli import app
 
 from . import test_data
 
 runner = CliRunner()
 
-
-def do_nothing():
-    ...
-
-
-@pytest.fixture(scope='session', autouse=True)
-def cleanup():
-    # Will be executed before the first test
-    yield do_nothing()
-    # executed after test is run
-    del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
-    if del_groups:
-        result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
-        assert "Success" in result.stdout
-        assert result.exit_code == 0
 
 def test_bounce_interface():
     result = runner.invoke(app, ["bounce",  "interface", test_data["switch"]["name"].lower(),
@@ -40,8 +23,22 @@ def test_bounce_poe():
     assert "task_id:" in result.stdout
 
 
-def test_blink_switch():
+def test_blink_switch_on_timed():
+    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on", "1"])
+    assert result.exit_code == 0
+    assert "state:" in result.stdout
+    assert "task_id:" in result.stdout
+
+
+def test_blink_switch_on():
     result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on"])
+    assert result.exit_code == 0
+    assert "state:" in result.stdout
+    assert "task_id:" in result.stdout
+
+
+def test_blink_switch_off():
+    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "off"])
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -62,7 +59,7 @@ def test_blink_wrong_dev_type():
 
 
 # This group remains as it is deleted in cleanup of test_update
-def test_clone_group(cleanup):
+def test_clone_group():
     result = runner.invoke(app, ["-d", "clone", "group", test_data["gateway"]["group"], test_data["clone"]["to_group"], "-Y"])
     assert result.exit_code == 0  # TODO check this we are not returning a 1 exit_code on resp.ok = False?
     assert "201" in result.stdout or "400" in result.stdout

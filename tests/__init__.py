@@ -59,21 +59,16 @@ from centralcli.cli import config, log
 from centralcli.clicommon import APIClients
 
 api_clients = APIClients()
-
-# def mock_get(url: str, params: dict[str, Any]):
-#     ...
-responses = json.loads(config.closed_capture_file.read_text())
+responses = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
 
 
-class InvalidAccountError(Exception):
-    ...
+class InvalidAccountError(Exception): ...
+class BatchImportFileError(Exception): ...
+class ConfigNotFoundError(Exception): ...
 
-class BatchImportFileError(Exception):
-    ...
 
-class ConfigNotFoundError(Exception):
-    ...
-
+# MOCKED aiohttp.client.ClientResponse object
+# vendored/customized from aioresponses
 def _build_raw_headers(headers: Dict) -> tuple:
     """
     Convert a dict of headers to a tuple of tuples
@@ -185,7 +180,6 @@ def get_test_response(method: str, url_path: str):
     resp_candidates = [r[key] for r in responses if key in r]
     for resp in resp_candidates:
         return resp
-    # yield from resp_candidates
 
 @pytest.fixture
 def mock_aioresponse():
@@ -194,8 +188,7 @@ def mock_aioresponse():
 
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any], **kwargs):
-    return _build_response(url, status=200, payload=get_test_response(method, url))
-    # mock_aioresponse.get(url, status=200, payload=get_test_response(url.path))
+    return _build_response(**get_test_response(method, url))
 
 
 if __name__ in ["tests", "__main__"]:
@@ -204,7 +197,6 @@ if __name__ in ["tests", "__main__"]:
     monkeypatch_rich_console()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
-    # monkeypatch_aiohttp_client_methods()
     test_data: Dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
