@@ -196,6 +196,44 @@ class Response:
         if isinstance(self.output, dict) and "error" in self.output and "error_description" in self.output:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
+        try:
+            if config.dev.capture_raw:
+                with render.Spinner("Capturing raw response"):
+                    if not config.capture_file.exists():
+                        config.capture_file.write_text("[\n")
+                    with config.capture_file.open("a") as f:
+                        f.write(self.dump())
+        except Exception as e:
+            log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
+
+    def dump(self) -> str:
+        key = f"{self.method}_{self.url.path}"
+        out = {
+            key: {
+                "url": self.url.path,
+                "method": self.method,
+                "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
+                "status": self.status,
+                "body": '',
+                "content_type": "application/json" if not self._response else self._response.content_type,
+                "payload": {},
+                "headers": {} if not self._response else dict(self._response.headers),
+                "reason": self.error,
+                }
+            }
+        try:
+            if self.raw:
+                _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
+                out[key]["payload"] = self.raw
+            elif self._response:
+                out[key]["body"] = self._response._body
+        except json.JSONDecodeError as e:
+            log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
+            out[key]["body"] = self._response._body
+
+        return f"\n{json.dumps(out)},"
+
+
     def __bool__(self):
         if self._response:
             return self._response.ok
