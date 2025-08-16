@@ -8,7 +8,7 @@ from rich.progress import track
 from ...response import Response
 
 if TYPE_CHECKING:
-    from ... import Session
+    from centralcli.client import Session
 
 class DeviceManagementAPI:
     def __init__(self, session: Session):
@@ -75,7 +75,7 @@ class DeviceManagementAPI:
         if responses[0].ok and duration and "blink_led" in command and "off" not in command:
             for _ in track(range(1, duration + 1), description="[turquoise2 blink]Blinking LED[/]..."):
                 time.sleep(1)
-            responses += await self.session.post(url.replace("_on", "_off"))
+            responses += [await self.session.post(url.replace("_on", "_off"))]
         return responses
 
     async def kick_users(
