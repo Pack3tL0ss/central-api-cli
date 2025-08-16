@@ -3523,12 +3523,12 @@ def cron(
 
 
 def _get_cencli_config(all_workspaces: bool = False) -> None:
-    omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev_options", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
+    omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
     if not config.is_old_cfg:
         omit += ["is_old_cfg"]
-    if not config.dev_options.capture_raw:
+    if not config.dev.capture_raw:
         omit += ["capture_file"]
-    if not config.dev_options.sanitize:
+    if not config.dev.sanitize:
         omit += ["sanitize_file"]
     out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
     defined_workspaces = out.pop("defined_workspaces", [])
@@ -3536,7 +3536,7 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     out = {**out, "defined_workspaces": ", ".join(defined_workspaces), "current_workspace": f"[bright_green]{current_workspace}[/]"}
     workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
 
-    dev_options = config.dev_options.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
+    dev_options = config.dev.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
     if dev_options:
         out = {**out, "dev_options": dev_options}
 

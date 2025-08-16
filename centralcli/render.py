@@ -565,7 +565,7 @@ def output(
         outdata = outdata.splitlines()
 
     # sanitize output for demos
-    if config and config.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
+    if config and config.dev.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
         outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]
 
     # -- // List[str, ...] \\ --  Bypass all formatters, (config file output, etc...)
@@ -1061,7 +1061,7 @@ def display_results(
                     else:
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         plain_console = Console(color_system=None, emoji=False)
-                        if config.sanitize:
+                        if config.dev.sanitize:
                             r.raw = json.loads(Output().sanitize_strings(json.dumps(r.raw), config=config))
                         if pager:
                             with plain_console.pager:

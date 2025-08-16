@@ -249,7 +249,7 @@ class Session():
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
-        if config.sanitize and utils.is_serial(end_name):
+        if config.dev.sanitize and utils.is_serial(end_name):
             end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
@@ -461,9 +461,9 @@ class Session():
         offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
 
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
-        if params and params.get("limit") and config.dev_options.limit:
-            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.dev_options.limit}')
-            params["limit"] = config.dev_options.limit
+        if params and params.get("limit") and config.dev.limit:
+            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.dev.limit}')
+            params["limit"] = config.dev.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
