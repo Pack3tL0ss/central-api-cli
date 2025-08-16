@@ -99,6 +99,8 @@ class Spinner(Status):
             speed (float, optional): Speed factor for spinner animation. Defaults to 1.0.
             refresh_per_second (float, optional): Number of refreshes per second. Defaults to 12.5.
     """
+    _instance = None
+
     def __init__(
         self,
         status: RenderableType,
@@ -109,7 +111,17 @@ class Spinner(Status):
         speed: float = 1.0,
         refresh_per_second: float = 12.5,
     ):
-        super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
+        if not hasattr(self, '_initialized'): # Prevent re-initialization
+            super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
+        else:
+            self._instance.update(status, spinner=spinner, spinner_style=spinner_style, speed=speed)
+        self._initialized = True
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+
+        return cls._instance
 
     def fail(self, text: RenderableType = None) -> None:
         if self._live.is_started:
@@ -145,7 +157,6 @@ class Spinner(Status):
         exc_tb: Optional[TracebackType],
     ) -> None:
         self.stop()
-
 
 
 class Output():
@@ -1010,17 +1021,17 @@ def display_results(
             tablefmt = "raw"
 
         for idx, r in enumerate(resp):
-            try:
-                if config.dev.capture_raw:  # and r.method == "GET":
-                    with Spinner("Capturing raw response"):
-                        raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
-                        raw = {f"{r.method}_{k}": v for k, v in r.raw.items()}  # TODO Do this in the Response object
-                        if not config.capture_file.exists():
-                            config.capture_file.write_text("[")
-                        with config.capture_file.open("a") as f:
-                            f.write(f"{json.dumps(raw)},")
-            except Exception as e:
-                log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
+            # try:
+            #     if config.dev.capture_raw:  # and r.method == "GET":
+            #         with Spinner("Capturing raw response"):
+            #             raw = r.raw if r.url.path in r.raw else {r.url.path: r.raw}
+            #             raw = {f"{r.method}_{k}": v for k, v in r.raw.items()}  # TODO Do this in the Response object
+            #             if not config.capture_file.exists():
+            #                 config.capture_file.write_text("[")
+            #             with config.capture_file.open("a") as f:
+            #                 f.write(f"{json.dumps(raw)},")
+            # except Exception as e:
+            #     log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
 
             # Multi request url line (example below)
             # Request 1 [POST: /platform/device_inventory/v1/devices]
