@@ -301,7 +301,6 @@ class Config:
         self.log_dir = self.base_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.capture_file = self.log_dir / "raw-capture.json"
-        self.closed_capture_file = self.log_dir / "raw-capture-closed.json"
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
@@ -370,6 +369,16 @@ class Config:
     def workspace(self, workspace: str):
         self._workspace = workspace
         self.set_attributes()
+
+    @property
+    def closed_capture_file(self) -> Path:
+        file = self.log_dir / "raw-capture-closed.json"
+        if file.exists():
+            return file
+        if self.capture_file.exists():
+            file.write_text(f"{self.capture_file.read_text().rstrip().rstrip(',')}\n]")
+            return file
+        raise FileNotFoundError(f"Neither {file} nor {self.capture_file} exist.  Run tests with 'mock_tests: false' (under dev_options:) in the config to populate the capture file.")
 
     @property
     def workspaces(self) -> dict[str, Any]:
