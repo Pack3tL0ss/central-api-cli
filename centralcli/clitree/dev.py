@@ -187,10 +187,27 @@ def close_raw(
     if not config.capture_file.exists():
         common.exit(f"{config.capture_file} does not exist.")
 
-    closed_file = config.capture_file.parent / f"{config.capture_file.stem}-closed{config.capture_file.suffix}"
-    closed_file.write_text(f"{config.capture_file.read_text().rstrip().rstrip(',')}\n]")
+    config.closed_capture_file.write_text(f"{config.capture_file.read_text().rstrip().rstrip(',')}\n]")
 
-    render.console.print(f"Raw Capture file {config.capture_file} coppied to {closed_file} with closing ] to ensure proper JSON.")
+    render.console.print(f"Raw Capture file {config.capture_file} coppied to {config.closed_capture_file} with closing ] to ensure proper JSON.")
+
+
+@app.command()
+def clear_raw(
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+) -> None:
+    """Delete raw capture file
+
+    Typically done to allow it to be populated with new data.
+    """
+    if not config.capture_file.exists():
+        common.exit(f"{config.capture_file} does not exist.")
+
+    render.console.print(f"Delet{'ing' if yes else 'e'} active capture file [cyan italic]{config.capture_file}[/]...", end="")
+    render.confirm(yes)
+    config.capture_file.unlink()
+    render.console.print(" [bright_green]Done[/]")
 
 
 @app.callback()
