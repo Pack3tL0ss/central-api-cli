@@ -183,7 +183,7 @@ class DevOptions(BaseModel):
 
     @model_validator(mode="before")
     def capture_if_not_mocking(data: dict[str, int | bool]) -> dict[str, int | bool]:
-        if data.get("mock_tests") and data.get("capture_raw") is None:
+        if not data.get("mock_tests") and data.get("capture_raw") is None:
             data["capture_raw"] = True
         return data
 
