@@ -1543,10 +1543,10 @@ class Cache:
         return resp
 
     @staticmethod
-    def account_completion(ctx: typer.Context, args: List[str], incomplete: str):
-        for a in config.defined_accounts:
-            if a.lower().startswith(incomplete.lower()):
-                yield a
+    def workspace_completion(ctx: typer.Context, args: List[str], incomplete: str):
+        for ws in config.defined_workspaces:
+            if ws.lower().startswith(incomplete.lower()):
+                yield ws  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
 
     def method_test_completion(self, incomplete: str, args: List[str] = []):
         # Prevents exception during completion when config missing or invalid

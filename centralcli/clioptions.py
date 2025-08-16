@@ -211,7 +211,7 @@ class CLIOptions:
             envvar=env_var.workspace,
             help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace to use [dim italic](must be defined in the config)[/]",
             rich_help_panel="Common Options",
-            autocompletion=cache.account_completion,
+            autocompletion=cache.workspace_completion,
         )
         self.verbose: OptionInfo = typer.Option(
             0,

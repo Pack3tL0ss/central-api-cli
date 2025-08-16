@@ -18,7 +18,7 @@ def token(
     workspace_list: list[str] = typer.Argument(
         None,
         help="A list of workspaces to refresh tokens for (must be defined in the config).  This is useful automated for cron/task-scheduler refresh.",
-        autocompletion=common.cache.account_completion,
+        autocompletion=common.cache.workspace_completion,
         show_default=False,
     ),
     all: bool = typer.Option(False, "-A", "--all", help="Refresh Tokens for all defined workspaces in config.",),
