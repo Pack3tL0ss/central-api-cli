@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, KeysView
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, model_validator, field_validator
+from typing import Any, Dict, KeysView, Optional
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
+
 from ..constants import CLUSTER_URLS, ClusterName
+
 
 class Defaults:
     def __init__(self):
@@ -175,7 +178,8 @@ class Workspaces(RootModel):
 class DevOptions(BaseModel):
     limit: Optional[int] = None
     sanitize: Optional[bool] = False
-    capture_raw: Optional[bool] = False
+    capture_raw: Optional[bool | None] = None
+    mock_tests: Optional[bool] = True
 
 
 class ConfigData(BaseModel):

@@ -44,6 +44,7 @@ forget_ws_after: 90   # when using an alternate workspace via --ws myotherws.  I
 dev_options:          # --- Developer Options ---
   limit: 10           # Overrides the default pagination limit requested for each API call.  To test pagination/rate-limiting
   sanitize: false     # Sanitize output (for video demo, animated GIF creation).
-  capture_raw: false  # Captures the raw response of all get commands in a common file.  So they can be used for automated testing.
-  # There are also hidden command line flags supported globally for these options
+  capture_raw: null   # Captures the raw response of all get commands in a common file.  So they can be used for automated testing.  Default is unset/null.
+  mock_tests: true    # Set to false to do real API calls when running automated tests.  This will also result in capture_raw being enabled (unless you specifically set it to false).  Defaults to true, (API calls will be simulated during automated testing).
+  # There are also hidden command line flags supported globally for the following options:
   # --debug-limit --sanitize --capture-raw

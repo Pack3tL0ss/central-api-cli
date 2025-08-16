@@ -152,17 +152,17 @@ if "--raw" in sys.argv:
     raw_out = True
     _ = sys.argv.pop(sys.argv.index("--raw"))
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
-    config.capture_raw = True
+    config.dev.capture_raw = True
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 if "--debug-limit" in sys.argv:
     _idx = sys.argv.index("--debug-limit")
     _ = sys.argv.pop(sys.argv.index("--debug-limit"))
     if len(sys.argv) - 1 >= _idx and sys.argv[_idx].isdigit():
-        config.dev_options.limit = int(sys.argv[_idx])
+        config.dev.limit = int(sys.argv[_idx])
         _ = sys.argv.pop(_idx)
 if "--sanitize" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--sanitize"))
-    config.sanitize = True
+    config.dev.sanitize = True
 if "--debugv" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--debugv"))
     # config var updated above, just stripping flag here.

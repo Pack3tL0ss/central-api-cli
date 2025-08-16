@@ -301,6 +301,7 @@ class Config:
         self.log_dir = self.base_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.capture_file = self.log_dir / "raw-capture.json"
+        self.closed_capture_file = self.log_dir / "raw-capture-closed.json"
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
@@ -339,9 +340,7 @@ class Config:
         self.ssl_verify = c.current_workspace.ssl_verify if c.current_workspace.ssl_verify is not None else c.ssl_verify
         self.debug = False if c is None else c.debug
         self.debugv = False if c is None else c.debugv
-        self.sanitize = False if not c.dev_options else c.dev_options.sanitize
-        self.capture_raw = False if not c.dev_options else c.dev_options.capture_raw
-        self.dev_options = c.dev_options
+        self.dev = c.dev_options
         self.central_info = {} if c is None else c.classic_info
         self.classic = c.current_workspace.classic
         self.glp = c.current_workspace.glp

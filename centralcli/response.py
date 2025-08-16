@@ -275,7 +275,7 @@ class Response:
         r = self._colorize_output(r)
 
         # sanitize sensitive data for demos
-        if config.sanitize and config.sanitize_file.is_file():
+        if config.dev.sanitize and config.sanitize_file.is_file():
             r = render.Output().sanitize_strings(r)
 
         return f"{status_code}{r}"

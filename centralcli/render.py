@@ -197,8 +197,8 @@ class Output():
             str: Sanitized str output with sensitive data redacted.
         """
         config = config or self.config
-        if config and config.sanitize and config.sanitize_file.is_file():
-            sanitize_data = config.get_file_data(config.sanitize_file)
+        if config and config.dev.sanitize and config.sanitize_file.is_file():
+            sanitize_data: dict[str, list[str | dict[str, str]]] = config.get_file_data(config.sanitize_file)
             for s in sanitize_data.get("redact_strings", {}):
                 if len(s) > len("--redacted--"):
                     strings = strings.replace(s, f"{'--redacted--':{len(s)}}")
