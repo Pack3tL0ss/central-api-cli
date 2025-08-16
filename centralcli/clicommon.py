@@ -7,6 +7,7 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
@@ -125,9 +126,14 @@ class PreConfig:
 
 
 class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-    def __init__(self):
-        self.classic = ClassicAPI(config.classic.base_url)
-        self.glp = None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)
+
+    @cached_property
+    def classic(self):
+        return ClassicAPI(config.classic.base_url)
+
+    @cached_property
+    def glp(self):
+        return None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)
 
 
 class CLICommon:
