@@ -373,12 +373,9 @@ class Config:
     @property
     def closed_capture_file(self) -> Path:
         file = self.log_dir / "raw-capture-closed.json"
-        if file.exists():
-            return file
         if self.capture_file.exists():
             file.write_text(f"{self.capture_file.read_text().rstrip().rstrip(',')}\n]")
-            return file
-        raise FileNotFoundError(f"Neither {file} nor {self.capture_file} exist.  Run tests with 'mock_tests: false' (under dev_options:) in the config to populate the capture file.")
+        return file
 
     @property
     def workspaces(self) -> dict[str, Any]:
