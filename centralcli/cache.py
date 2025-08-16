@@ -1308,7 +1308,7 @@ class Cache:
         return self.GroupDB.all()
 
     @property
-    def groups_by_name(self) -> Dict[str: CacheGroup]:
+    def groups_by_name(self) -> dict[str: CacheGroup]:
         return {g["name"]: CacheGroup(g) for g in self.groups}
 
     @property
@@ -4296,6 +4296,13 @@ class Cache:
         query_str: str,
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
         swack: bool,
+    ) -> CacheDevice: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str,
+        dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
     ) -> CacheDevice: ...
 
     @overload
