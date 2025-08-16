@@ -1,21 +1,11 @@
 import sys
 from pathlib import Path
 
-# import logging
-
+# vscode v1.103.1 and may have started prior to that release... launches debug even if you hit Escape in promptString dialogue.
+if '${input:cliArgs}' in str(sys.argv):
+    sys.exit()
 
 debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
-# fmt_str = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
-# date_str = "%m/%d/%Y %I:%M:%S %p"
-# logging.basicConfig(
-#     level=logging.DEBUG if debug else logging.INFO,
-#     format=fmt_str,
-#     datefmt=date_str,
-#     handlers=[
-#         logging.StreamHandler(),
-#     ],
-# )
-# log = logging.getLogger()
 
 batch_dir = Path().home() / "git/myrepos/cencli-batch"
 
