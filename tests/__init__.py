@@ -169,9 +169,12 @@ def ensure_default_account(test_data: dict):
         msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
 
-def monkeypatch_rich_console():
+def monkeypatch_terminal_size():
     TestConsole = partial(Console, height=55, width=190)
+    def get_terminal_size(*args, **kwargs):
+        return (190, 55,)
     pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
+    pytest.MonkeyPatch().setattr("shutil.get_terminal_size", get_terminal_size)
 
 class TestResponses:
     used_responses: list[int] = []
@@ -199,7 +202,7 @@ async def mock_request(session: ClientSession, method: str, url: str, **kwargs):
 if __name__ in ["tests", "__main__"]:
     test_log_file: Path = log.log_file.parent / "pytest.log"
     # update_log(f"\n__init__: cache: {id(common.cache)}")
-    monkeypatch_rich_console()
+    monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
     test_data: dict[str, Any] = get_test_data()
