@@ -78,7 +78,7 @@ class ConfigAPI:
         Returns:
             Response: centralcli Response Object
         """
-        resp = await self.session.get_group_names()
+        resp = await self.get_group_names()
         if not resp.ok:
             return resp
 
@@ -90,8 +90,8 @@ class ConfigAPI:
 
         batch_resp = await self.session._batch_request(
             [
-                BatchRequest(self.session.get_groups_template_status, groups),
-                BatchRequest(self.session.get_groups_properties, groups)
+                BatchRequest(self.get_groups_template_status, groups),
+                BatchRequest(self.get_groups_properties, groups)
             ]
         )
         if all([not r.ok for r in batch_resp]):  # if first call fails possible to only have 1 call returned.
@@ -131,7 +131,7 @@ class ConfigAPI:
         # Central API method doesn't actually take a list it takes a string with
         # group names separated by comma (NO SPACES)
         if groups is None:
-            resp = await self.session.get_group_names()
+            resp = await self.get_group_names()
             if not resp.ok:
                 return resp
             else:
@@ -363,7 +363,7 @@ class ConfigAPI:
         """
         url = f"/configuration/v2/groups/{group}/properties"
 
-        resp = await self.session.get_groups_properties(group)
+        resp = await self.get_groups_properties(group)
         if resp:
             if not isinstance(resp.output, list):
                 raise ValueError(f"Expected list of dicts from get_groups_properties got {type(resp.output)}")
@@ -661,7 +661,7 @@ class ConfigAPI:
             groups = [groups]
 
         if not groups:
-            resp = await self.session.get_group_names()
+            resp = await self.get_group_names()
             if not resp.ok:
                 return resp
             groups: List[str] = resp.output
@@ -723,7 +723,7 @@ class ConfigAPI:
             Response: centralcli Response Object
         """
         if not groups:
-            resp = await self.session.get_groups_template_status()
+            resp = await self.get_groups_template_status()
             if not resp:
                 return resp
 
@@ -1542,7 +1542,7 @@ class ConfigAPI:
             'usb_port_disable': usb_port_disable,
         }
         if None in _json_data.values():
-            resp: Response = await self.session._request(self.session.get_ap_settings, serial)
+            resp: Response = await self.get_ap_settings(serial)
             if not resp:
                 log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
                 return resp
@@ -2021,8 +2021,8 @@ class ConfigAPI:
 
         updated_clis_list = [await self._add_altitude_to_config(resp.output, altitude=as_dict[iden]) for iden, resp in passed.items()]
 
-        skipped = [Response(error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
-        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, resp), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+        skipped = [Response(error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
         update_resp = await self.session._batch_request(update_reqs)
 
