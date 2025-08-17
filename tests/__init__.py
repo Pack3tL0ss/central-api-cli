@@ -171,15 +171,22 @@ def ensure_default_account(test_data: dict):
         raise InvalidAccountError(msg)
 
 def monkeypatch_rich_console():
-    test_console = partial(Console, height=55, width=190)
-    pytest.MonkeyPatch().setattr("rich.console.Console", test_console)
+    TestConsole = partial(Console, height=55, width=190)
+    pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
 
+class TestResponses:
+    used_responses: list[int] = []
 
-def get_test_response(method: str, url_path: str):
-    key = f"{method.upper()}_{url_path}"
-    resp_candidates = [r[key] for r in responses if key in r]
-    for resp in resp_candidates:
-        return resp
+    def get_test_response(self, method: str, url_path: str):
+        key = f"{method.upper()}_{url_path}"
+        resp_candidates = [r[key] for r in responses if key in r]
+        for resp in resp_candidates:
+            res_hash = hash(str(resp))
+            if res_hash not in self.used_responses:
+                self.used_responses += [res_hash]
+                return resp
+
+test_responses = TestResponses()
 
 @pytest.fixture
 def mock_aioresponse():
@@ -188,7 +195,7 @@ def mock_aioresponse():
 
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any], **kwargs):
-    return _build_response(**get_test_response(method, url))
+    return _build_response(**test_responses.get_test_response(method, url))
 
 
 if __name__ in ["tests", "__main__"]:
