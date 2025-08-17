@@ -1695,7 +1695,7 @@ def labels(
     """Show labels/details"""
     resp = api.session.request(common.cache.refresh_label_db)
     tablefmt = common.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
-    render.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, set_width_cols={"name": {"min": 30}}, cleaner=cleaner.get_labels)
+    render.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_labels)
 
 
 def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
