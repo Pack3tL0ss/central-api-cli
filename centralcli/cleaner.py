@@ -10,7 +10,7 @@ import ipaddress
 import json
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Callable, Literal
 
 import pendulum
 from rich.console import Console
@@ -372,7 +372,7 @@ def short_value(key: str, value: Any):
 
     return short_key(key), _unlist(value)
 
-def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None, strip_keys: list[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True) -> list[dict[str, Any]]:
+def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None, strip_keys: list[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True, filter: Callable = None) -> list[dict[str, Any]]:
     """Default simple formatter
 
     Args:
@@ -383,6 +383,7 @@ def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None,
         strip_null (bool, optional): Set True to strip keys that have no value for any items.  Defaults to False.
         emoji_bools (bool, optional): Replace boolean values with emoji ✅ for True ❌ for False. Defaults to False.
         show_false (bool, optional): When emoji_bools is True.  Set this to False to only show ✅ for True items, leave blank for False.
+        filter (Callable, optional): Callable that returns a bool, if set only items in the list that return True will be included.
 
     Returns:
         list[dict[str, Any]]: Formatted data
@@ -399,7 +400,7 @@ def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None,
 
     strip_keys = strip_keys or []
     if key_order:
-        data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data]
+        data = [{k: inner_dict.get(k) for k in key_order} for inner_dict in data if not filter or filter(inner_dict)]
 
     data = [
         dict(
@@ -461,19 +462,8 @@ def get_labels(
     data: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
     data = utils.listify(data)
-    data = [
-        dict(
-            short_value(
-                k,
-                d.get(k),
-            )
-            for k in d.keys()
-            if not k.startswith("category_")
-        )
-        for d in data
-        if d["category_id"] == 1
-    ]
-    data = strip_no_value(data)
+    field_order = ["label_name", "label_id", "associated_device_count", "tags"]
+    data = simple_kv_formatter(data, key_order=field_order, strip_null=True, filter=lambda d: d["category_id"] == 1)
 
     return data
 
