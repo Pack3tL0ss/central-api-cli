@@ -466,7 +466,8 @@ def rich_output(
             header_style='magenta',
             show_lines=False,
             box=HORIZONTALS,
-            row_styles=['none', 'dark_sea_green']
+            row_styles=['none', 'dark_sea_green'],
+            min_width=40  # this is the length of the RateLimit string.
         )
 
         fold_cols = [*fold_cols, *RICH_FOLD_COLS]
