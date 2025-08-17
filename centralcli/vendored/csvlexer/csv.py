@@ -17,6 +17,7 @@ from __future__ import print_function
 from pygments.lexer import RegexLexer, bygroups
 from pygments.token import Keyword, Literal, Name, Operator, Punctuation
 
+
 class CsvLexer(RegexLexer):
     """ Simple CSV lexer for Pygments.
 
@@ -102,8 +103,10 @@ class CsvLexer(RegexLexer):
         ],
     }
 
-sample_csv_material = """
-trailer,125
+
+
+if __name__ == '__main__':
+    sample_csv_material = """trailer,125
 header,125,11,session start,0,Wed Mar  6 11:04:43 2019, + 414 msec
 argument,1,0x0,sflags
 argument,2,0x0,am_success
@@ -123,12 +126,7 @@ subject,-1,root,wheel,root,wheel,290,100000,0,0.0.0.0
 text,Touch ID authentication
 return,success,0
 """
-
-def test():
-    from pygments.formatters import Terminal256Formatter
     from pygments import highlight
+    from pygments.formatters import Terminal256Formatter
 
     print(highlight(sample_csv_material, CsvLexer(), Terminal256Formatter()))
-
-if __name__ == '__main__':
-    test()
