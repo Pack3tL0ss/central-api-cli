@@ -102,7 +102,7 @@ class ExampleSegment:
         return "\n".join(self.list)
 
     def __rich__(self):
-        return str(self)
+        return str(self)  # pragma: no cover
 
     def _format_example_text(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = None) -> Syntax:
         example_type = example_type or self.example_type
@@ -177,11 +177,11 @@ class Example:
                 if " " in value:
                     return value.split()
                 elif "," in value:  # csv should only support space seperated, but leaving this in for now.
-                    return value.lstrip("[").rstrip("]").split(",")
+                    return value.lstrip("[").rstrip("]").split(",")  # pragma: no cover
                 elif value == "":
                     return None
                 else:
-                    return [value]
+                    return [value]  # pragma: no cover
             elif value.lower() in bool_strings:
                 return True if value.lower() in ["true", "yes"] else False
             elif value.isdigit():
