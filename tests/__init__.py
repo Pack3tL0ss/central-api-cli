@@ -186,6 +186,9 @@ class TestResponses:
                 self.used_responses += [res_hash]
                 return resp
 
+        # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
+        return {"url": url_path} if not resp_candidates else  resp_candidates[-1]
+
 test_responses = TestResponses()
 
 @pytest.fixture
