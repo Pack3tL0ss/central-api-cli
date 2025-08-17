@@ -21,10 +21,12 @@ def test_add_group1():
 
 def test_add_group2_wired_tg():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group2", "--sw", "--wired-tg", "-Y"])
-    assert True in [
-        result.exit_code == 0 and "Created" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
-    ]
+    assert any(
+        [
+            result.exit_code == 0 and "Created" in result.stdout,
+            result.exit_code == 1 and "already exists" in result.stdout
+        ]
+    )
 
 
 def test_add_group3_wlan_tg():
