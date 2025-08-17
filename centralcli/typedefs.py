@@ -56,7 +56,7 @@ class CacheSiteDict(TypedDict):
 
 class UnsetType:
     def __repr__(self):
-        return "UNSET"
+        return "UNSET"  # pragma: no cover
 
 UNSET = UnsetType()
 
@@ -66,7 +66,7 @@ UNSET = UnsetType()
 # typing.Self added in python 3.11+
 class Self:
     def __init__(self):
-        self.serial: str
+        self.serial: str  # pragma: no cover
 
 try:
     from typing import Self  # noqa
