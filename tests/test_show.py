@@ -14,16 +14,8 @@ runner = CliRunner()
 def clean_mac(mac: str) -> str:
     return mac.replace(":", "").replace("-", "").replace(".", "").lower()
 
-# @pytest.fixture
-# def mock_aioresponse():
-#     with aioresponses() as m:
-#         yield m
-
-# Need to use --table for most tests, the default (rich) will elipsis headers
-# when they overrun the tty.  tty for test runner is 80 cols, 24 rows
-# --table wraps, does not elipsis/truncate any headers/values.
-# url_path = "/monitoring/v2/aps"
-# mock_aioresponse.get(f"{config.classic.base_url}{url_path}", status=200, payload=get_test_response(url_path))
+# tty size is MonkeyPatched to 190, 55 the end result during pytest runs is 156, 31
+# Not sure why but it's larger than the 80, 24 fallback which it was using.
 def test_show_aps():
     result = runner.invoke(app, ["-d", "show", "aps", "--debug", "--table"],)
     assert result.exit_code == 0
@@ -46,7 +38,7 @@ def test_show_gateways():
 
 
 def test_show_all():
-    result = runner.invoke(app, ["show", "all", "--table"],)
+    result = runner.invoke(app, ["show", "all"],)
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "serial" in result.stdout
@@ -456,6 +448,29 @@ def test_show_config_ap_dev():
     )
     assert result.exit_code == 0
     assert "wlan" in result.stdout
+
+
+def test_show_config_cencli():  # output is yaml
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            "cencli",
+        ]
+    )
+    assert result.exit_code == 0
+    assert "current_workspace" in result.stdout
+
+
+def test_show_config_cencli_verbose():  # output is yaml
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            "cencli",
+            "-v"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "workspaces" in result.stdout
 
 
 def test_show_portals():
