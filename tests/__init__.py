@@ -42,7 +42,7 @@ import asyncio
 import json
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Optional, Type, Union
+from typing import Any, Optional, Type, Union
 from unittest.mock import Mock
 
 import pytest
@@ -50,7 +50,6 @@ from aiohttp import RequestInfo, StreamReader
 from aiohttp.client import ClientResponse, ClientSession, hdrs
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import TimerNoop
-from aioresponses import aioresponses
 from multidict import CIMultiDict, CIMultiDictProxy
 from rich.console import Console
 from yarl import URL
@@ -69,7 +68,7 @@ class ConfigNotFoundError(Exception): ...
 
 # MOCKED aiohttp.client.ClientResponse object
 # vendored/customized from aioresponses
-def _build_raw_headers(headers: Dict) -> tuple:
+def _build_raw_headers(headers: dict[str, str]) -> tuple[tuple[bytes, bytes]]:
     """
     Convert a dict of headers to a tuple of tuples
 
@@ -89,12 +88,12 @@ def stream_reader_factory(  # noqa
 def _build_response(
         url: 'Union[URL, str]',
         method: str = hdrs.METH_GET,
-        request_headers: Optional[Dict] = None,
+        request_headers: Optional[dict] = None,
         status: int = 200,
         body: Union[str, bytes] = '',
         content_type: str = 'application/json',
-        payload: Optional[Dict] = None,
-        headers: Optional[Dict] = None,
+        payload: Optional[dict] = None,
+        headers: Optional[dict] = None,
         response_class: Optional[Type[ClientResponse]] = None,
         reason: Optional[str] = "OK"
     ) -> ClientResponse:
@@ -109,7 +108,7 @@ def _build_response(
     loop = Mock()
     loop.get_debug = Mock()
     loop.get_debug.return_value = True
-    kwargs = {}  # type: Dict[str, Any]
+    kwargs = {}  # type: dict[str, Any]
     url = URL(url)
     kwargs['request_info'] = RequestInfo(
         url=url,
@@ -191,13 +190,9 @@ class TestResponses:
 
 test_responses = TestResponses()
 
-@pytest.fixture
-def mock_aioresponse():
-    with aioresponses() as m:
-        yield m
 
 @pytest.mark.asyncio
-async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any], **kwargs):
+async def mock_request(session: ClientSession, method: str, url: str, **kwargs):
     return _build_response(**test_responses.get_test_response(method, url))
 
 
@@ -207,7 +202,7 @@ if __name__ in ["tests", "__main__"]:
     monkeypatch_rich_console()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
-    test_data: Dict[str, Any] = get_test_data()
+    test_data: dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
     test_site_file: Path = setup_batch_import_file(test_data=test_data)
