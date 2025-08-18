@@ -750,7 +750,7 @@ class ConfigAPI:
             'query': query,
         }
 
-        reqs = [BatchRequest(self.session.get_all_templates_in_group, group, **params) for group in template_groups]
+        reqs = [BatchRequest(self.get_all_templates_in_group, group, **params) for group in template_groups]
         # TODO maybe call the aggregator from _bath_request
         responses = await self.session._batch_request(reqs)
         failed = [r for r in responses if not r]
