@@ -204,7 +204,7 @@ class Response:
                     with config.capture_file.open("a") as f:
                         f.write(self.dump())
         except Exception as e:
-            log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
+            log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}")
 
     def dump(self) -> str:
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
