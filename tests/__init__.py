@@ -44,6 +44,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Type, Union
 from unittest.mock import Mock
+from urllib.parse import unquote_plus
 
 import pytest
 from aiohttp import RequestInfo, StreamReader
@@ -54,7 +55,7 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from rich.console import Console
 from yarl import URL
 
-from centralcli.cli import config, log
+from centralcli import config, log, utils
 from centralcli.clicommon import APIClients
 
 api_clients = APIClients()
@@ -179,8 +180,12 @@ def monkeypatch_terminal_size():
 class TestResponses:
     used_responses: list[int] = []
 
-    def get_test_response(self, method: str, url_path: str):
-        key = f"{method.upper()}_{url_path}"
+    def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
+        url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
+        if params:
+            params = utils.remove_time_params(params)
+            url = url.with_query(params)
+        key = f"{method.upper()}_{url}"
         resp_candidates = [r[key] for r in responses if key in r]
         for resp in resp_candidates:
             res_hash = hash(str(resp))
@@ -189,14 +194,14 @@ class TestResponses:
                 return resp
 
         # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
-        return {"url": url_path} if not resp_candidates else  resp_candidates[-1]
+        return {"url": url} if not resp_candidates else  resp_candidates[-1]
 
 test_responses = TestResponses()
 
 
 @pytest.mark.asyncio
-async def mock_request(session: ClientSession, method: str, url: str, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url))
+async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
+    return _build_response(**test_responses.get_test_response(method, url, params=params))
 
 
 if __name__ in ["tests", "__main__"]:
