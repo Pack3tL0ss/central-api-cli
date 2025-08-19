@@ -13,7 +13,7 @@ app = typer.Typer()
 
 @app.command()
 def health(
-    site: str = common.arguments.site,
+    site: str = common.arguments.get("site", default=None, help=f"Show branch health for a specific site. {render.help_block('All Sites')}"),
     wan_down: bool = typer.Option(False, "--wan-down", help="Show branches with wan uplinks or tunnels Down."),
     down: bool = typer.Option(None, "--down", help="Show branches with down devices."),
     verbose: int = common.options.verbose,
@@ -31,6 +31,7 @@ def health(
     workspace: str = common.options.workspace,
 ):
     """Show Branch Health statistics"""
+
     resp = api.session.request(api.other.get_branch_health, name=site)
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
