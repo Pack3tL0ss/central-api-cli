@@ -64,4 +64,3 @@ def test_clone_group():
     assert result.exit_code == 0  # TODO check this we are not returning a 1 exit_code on resp.ok = False?
     assert "201" in result.stdout or "400" in result.stdout
     assert "Created" in result.stdout or "already exists" in result.stdout
-
