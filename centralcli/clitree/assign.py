@@ -109,14 +109,6 @@ def label_(
         render.display_results(resp, tablefmt="action")
         # We don't cache device label assignments
 
-        # self.end: OptionInfo = typer.Option(
-        #     None,
-        #     "-e", "--end",
-        #     help=f"End of time-range (24hr notation) [dim]{escape('[default: Now]')}[/]",
-        #     formats=["%m/%d/%Y-%H:%M", "%Y-%m-%dT%H:%M", "%m/%d/%Y", "%Y-%m-%d"],
-        #     # rich_help_panel="Time Range Options",
-        #     show_default=False,
-        # )
 
 @app.command(hidden=not glp_api)
 def subscription(
