@@ -603,3 +603,8 @@ class Utils:
         singular = singular or ''
         plural = plural or 's'
         return plural if cnt > 1 else singular
+
+    @staticmethod
+    def remove_time_params(params: dict[str, Any]) -> dict[str, Any]:
+        time_params = ["start_time", "end_time", "from_timestamp", "to_timestamp", "from", "to"]
+        return {k: v for k, v in params.items() if k not in time_params}
