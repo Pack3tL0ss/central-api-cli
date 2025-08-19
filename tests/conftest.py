@@ -25,10 +25,12 @@ def stash_cache_file():
 
 def restore_cache_file():
     if cache_bak_file.exists():
-        log.info(f"Restoring real cache from {cache_bak_file} after mock test run")
         log.info(f"Stashing cache from mock test run for later use {cache_bak_file.name.removesuffix('.bak')}")
-        _ = shutil.copy(cache_bak_file, config.cache_file)
-        cache_bak_file.rename(cache_bak_file.name.removesuffix('.bak'))  # we keep the pytest cache as running individual tests on subsequent runs would not work otherwise
+        config.cache_file.rename(cache_bak_file.parent / cache_bak_file.name.removesuffix('.bak'))  # we keep the pytest cache as running individual tests on subsequent runs would not work otherwise
+
+        log.info(f"Restoring real cache from {cache_bak_file} after mock test run")
+        cache_bak_file.rename(config.cache_file.parent / config.cache_file.name)
+
 
         return config.cache_file.exists()
 
