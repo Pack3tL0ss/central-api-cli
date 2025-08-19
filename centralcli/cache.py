@@ -1304,11 +1304,15 @@ class Cache:
         return {s["id"]: s for s in self.sites}
 
     @property
+    def sites_by_name(self) -> dict[str, CacheSite]:
+        return {s["name"]: CacheSite(s) for s in self.sites}
+
+    @property
     def groups(self) -> list:
         return self.GroupDB.all()
 
     @property
-    def groups_by_name(self) -> dict[str: CacheGroup]:
+    def groups_by_name(self) -> dict[str, CacheGroup]:
         return {g["name"]: CacheGroup(g) for g in self.groups}
 
     @property
@@ -1324,7 +1328,7 @@ class Cache:
         return self.LabelDB.all()
 
     @property
-    def labels_by_name(self) -> Dict[str: CacheLabel]:
+    def labels_by_name(self) -> dict[str: CacheLabel]:
         return {label["name"]: CacheLabel(label) for label in self.labels}
 
     @property
