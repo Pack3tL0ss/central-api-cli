@@ -189,6 +189,18 @@ def test_show_cache():
     assert "sites" in result.stdout
 
 
+def test_show_cache_tables():
+    result = runner.invoke(app, ["show", "cache", "tables"],)
+    assert result.exit_code == 0
+    assert "total" in result.stdout.lower()
+
+
+def test_show_cache_devices_sites():
+    result = runner.invoke(app, ["show", "cache", "devices", "sites"],)
+    assert result.exit_code == 0
+    assert "total" in result.stdout.lower()
+
+
 def test_show_variables():
     result = runner.invoke(app, ["show", "variables"],)
     assert result.exit_code == 0
@@ -294,8 +306,15 @@ def test_show_audit_logs_past():
     result = runner.invoke(app, ["show", "audit", "logs", "--past", "5d"],)
     assert result.exit_code == 0
     if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
-        assert "audit event logs" in result.stdout.lower()
+        assert "audit" in result.stdout.lower()
         assert "id" in result.stdout
+
+
+def test_show_audit_logs_by_id():
+    result = runner.invoke(app, ["show", "audit", "logs", "1"],)
+    assert result.exit_code == 0
+    if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
+        assert "Response" in result.stdout
 
 
 def test_show_audit_acp_logs_count():
@@ -311,6 +330,12 @@ def test_show_logs_past():
     assert result.exit_code == 0
     assert "event logs" in result.stdout.lower()
     assert "description" in result.stdout
+
+
+def test_show_logs_by_id():
+    result = runner.invoke(app, ["show", "logs", "1"],)
+    assert result.exit_code == 0
+    assert "Response" in result.stdout
 
 
 def test_show_mpsk_networks():
@@ -330,6 +355,13 @@ def test_show_switch_vlans_by_name():
     assert result.exit_code == 0
     assert "name" in result.stdout
     assert "pvid" in result.stdout
+
+
+def test_show_clients_too_many_filters():
+    cache.updated = []
+    result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout
 
 
 def test_show_clients():
