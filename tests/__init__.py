@@ -145,15 +145,18 @@ def _build_response(
     resp.content.feed_eof()
     return resp
 
+
 def update_log(txt: str):
     with test_log_file.open("a") as f:
         f.write(f'{txt.rstrip()}\n')
+
 
 def get_test_data():
     test_file = Path(__file__).parent / 'test_devices.json'
     if not test_file.is_file():
         raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")
     return json.loads(test_file.read_text())
+
 
 def setup_batch_import_file(test_data: dict, import_type: str = "sites") -> Path:
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
@@ -164,11 +167,13 @@ def setup_batch_import_file(test_data: dict, import_type: str = "sites") -> Path
         raise BatchImportFileError("Batch import file creation from test_data returned 0 chars written")
     return test_batch_file
 
+
 def ensure_default_account(test_data: dict):
     api = api_clients.classic
     if api.session.auth.central_info["customer_id"] != str(test_data["customer_id"]):
         msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
+
 
 def monkeypatch_terminal_size():
     TestConsole = partial(Console, height=55, width=190)
