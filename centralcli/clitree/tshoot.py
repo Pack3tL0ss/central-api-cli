@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+from functools import partial
 from pathlib import Path
 from time import sleep
 
@@ -23,6 +24,8 @@ api_clients = APIClients()
 api = api_clients.classic
 
 app = typer.Typer()
+typer.Argument = partial(typer.Argument, show_default=False)
+typer.Option = partial(typer.Option, show_default=False)
 
 
 def send_cmds_by_id(device: CacheDevice, commands: list[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
@@ -334,10 +337,10 @@ def inventory(
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
 
-@app.command(short_help="Ping a host from a Central managed device")
+@app.command()
 def ping(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to ping from", autocompletion=common.cache.dev_completion),
-    host: str = typer.Argument(..., help="host to ping (IP of FQDN)"),
+    device: str = common.arguments.get("device", help="Aruba Central device to ping from",),
+    host: str = typer.Argument(..., help="host to ping (IP or FQDN)"),
     mgmt: bool = typer.Option(None, "-m", help="ping using VRF mgmt, (only applies to cx)"),
     repititions: int = typer.Option(None, "-r", help="repititions (only applies to AOS-SW)"),
     outfile: Path = common.options.outfile,
@@ -346,6 +349,7 @@ def ping(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ):
+    """Ping a host from a Central managed device."""
     command_ids = {
         "ap": 165,
         "gw": 2369,
