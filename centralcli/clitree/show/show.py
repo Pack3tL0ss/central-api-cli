@@ -1597,9 +1597,9 @@ def cache_(
             if t.name == "devices":
                 data = sort_devices(data)
 
-            render.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[cyan]{len(data)} {t.name} items in cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            render.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[turquoise2]{len(data)}[/] items in [medium_spring_green]{t.name}[/] cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
             if not no_page and render.econsole.is_terminal and not idx == length:
-                render.pause()
+                render.pause()  # pragma: no cover
 
     elif "tables" in args:
         tables = common.cache.all_tables
@@ -1628,7 +1628,7 @@ def cache_(
                 full_cols=[] if "subscriptions" not in args else "tier",
             )
             if not no_page and render.econsole.is_terminal and not idx == len(args):
-                render.pause()
+                render.pause()  # pragma: no cover
 
     account_msg = "" if config.workspace in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.workspace}[/] "
     render.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(common.cache)}[/], Cache File Size: [cyan]{common.cache.size}[reset]')
