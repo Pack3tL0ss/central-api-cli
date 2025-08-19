@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import typer
@@ -13,10 +14,15 @@ app = typer.Typer()
 
 
 def toggle_bak_file(file: StrPath, *, conf_msg: str = None, yes: bool | None = None) -> Path:
-    """Helper to rename file.  Will add or remove .bak extension from provided file.
+    """Helper to rename file.  Will add or remove .bak or pytest.bak extension from provided file.
 
-    If file currently ends with .bak it will be renamed without .bak.
-    If file lacks the .bak extension is will be renamed with .bak.
+    If file currently ends with .bak/.pytest.bak it will be renamed without.
+    If file lacks the .bak extension iy will be renamed with the .bak extension.
+
+    Note: pytest is for restoration only.  The real cache is coppied to db.json.pytest.bak during
+    test runs with mocked responses (to prevent mocked responses from mucking with the real cache).
+    If the test run is aborted and pytest does not run cleanup, the cache would need to be restored
+    manually.  restore_cache with --pytest option does this.
 
     Args:
         file (StrPath): The file to rename.  Either add or remove .bak extension.
@@ -29,11 +35,19 @@ def toggle_bak_file(file: StrPath, *, conf_msg: str = None, yes: bool | None = N
     Raises: typer.Exit is raised if the file does not exist or the rejects confirmation prompt.
     """
     file = file if isinstance(file, Path) else Path(file)
+    pytest = False
 
     new_name = f"{str(file)}.bak" if file.suffix != ".bak" else str(file).removesuffix(".bak")
+    if new_name.endswith("pytest"):
+        pytest_cache = Path(new_name)
+        new_name = new_name.removesuffix(".pytest")
+        pytest = True
+
     new = Path(new_name)
 
-    if new.exists():
+    if pytest:
+        shutil.copy(new, pytest_cache)  # we keep db.json.pytest for future mocked test runs.
+    elif new.exists():
         common.exit(f"[cyan]{new.name}[/] [red]already exists[/] in {new.parent}.\nAborting...")
     if not file.exists():
         new_msg = "" if not new.exists() else f" and [dark_olive_green2]{new.name}[/] already exists."
@@ -107,6 +121,7 @@ def no_cache(
 
 @app.command()
 def restore_cache(
+    pytest: bool = typer.Option(False, "--pytest", help="Restore cache from aborted pytest run 'db.json.pytest.bak'", show_default=False,),
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
@@ -114,8 +129,11 @@ def restore_cache(
     """Restore previously stashed [cyan]cencli[/] cache file.
 
     Restores cache previously stashed with [cyan]cencli dev no-cache[/]
+
+    :information:  Use [cyan]--pytest[/] :triangular_flag: to restore real cache in the event a test run
+    is aborted and pytest teardown did not restore it.
     """
-    cache_bak = Path(f"{str(config.cache_file)}.bak")
+    cache_bak = Path(f"{str(config.cache_file)}.{'bak' if not pytest else 'pytest.bak'}")
     conf_msg = f"Restoring [cyan]cencli[/] cache from [cyan]{cache_bak.name}[/]..."
     toggle_bak_file(cache_bak, conf_msg=conf_msg)
 
