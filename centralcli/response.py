@@ -207,7 +207,8 @@ class Response:
             log.error(f"Exception whilte attempting to capture raw output {repr(e)}")
 
     def dump(self) -> str:
-        key = f"{self.method}_{self.url.path}"
+        _url = self.url.with_query(utils.remove_time_params(self.url.query))
+        key = f"{self.method}_{_url.path_qs}"
         out = {
             key: {
                 "url": self.url.path,
@@ -231,7 +232,7 @@ class Response:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
             out[key]["body"] = self._response._body
 
-        return f"\n{json.dumps(out)},"
+        return f"{json.dumps(out)},\n"
 
 
     def __bool__(self):
