@@ -1,7 +1,7 @@
 # from pathlib import Path
 from typer.testing import CliRunner
 
-from centralcli import cache
+from centralcli import cache, log
 from centralcli.cli import app  # type: ignore # NoQA
 
 from . import test_data, update_log
@@ -13,6 +13,8 @@ runner = CliRunner()
 
 def test_add_group1():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group1", "-Y"])
+    if result.exit_code != 0:
+        log.error(f"Error in test_add_group1:\n{result.stdout}")
     assert True in [
         result.exit_code == 0 and "Created" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout

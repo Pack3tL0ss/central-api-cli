@@ -3,6 +3,7 @@ import shutil
 import pytest
 from typer.testing import CliRunner
 
+from centralcli import log
 from centralcli.cli import app  # type: ignore # NoQA
 
 from . import config, test_batch_device_file, test_data, test_group_file, test_site_file, update_log
@@ -41,6 +42,8 @@ def test_batch_del_devices():
 
 def test_batch_del_groups():
     result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
+    if result.exit_code != 0:
+        log.error(f"Error in test_batch_del_groups:\n{result.stdout}")
     if test_group_file.is_file():
         test_group_file.unlink()
     assert result.exit_code == 0

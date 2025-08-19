@@ -1,6 +1,7 @@
 import pytest
 from typer.testing import CliRunner
 
+from centralcli import log
 from centralcli.cli import app
 
 from . import ConfigNotFoundError, config, gw_group_config_file, test_data
@@ -37,7 +38,7 @@ def test_update_gw_group_config(cleanup):
         ]
     )
     if result.exit_code != 0:  # pragma: no cover
-        print(result.stdout)
+        log.error(f"Error in test_update_gw_group_config: {result.stdout}")
     assert result.exit_code == 0
     assert "Global Result:" in result.stdout
     assert "[OK]" in result.stdout
