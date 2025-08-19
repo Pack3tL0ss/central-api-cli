@@ -59,7 +59,7 @@ from centralcli import config, log, utils
 from centralcli.clicommon import APIClients
 
 api_clients = APIClients()
-responses = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
+responses: list[dict[str, dict[str, Any]]] = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
 
 
 class InvalidAccountError(Exception): ...
@@ -185,13 +185,24 @@ def monkeypatch_terminal_size():
 class TestResponses:
     used_responses: list[int] = []
 
+    @staticmethod
+    def _get_candidates(key: str) -> dict[str, Any]:
+        if "/audit_trail_" in key:
+            key = f'{key.split("/audit_trail_")[0]}/audit_trail_'
+            return [v for r in responses for k, v in r.items() if key in k]
+
+        return [r[key] for r in responses if key in r]
+
+
     def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
         url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
         if params:
             params = utils.remove_time_params(params)
             url = url.with_query(params)
         key = f"{method.upper()}_{url}"
-        resp_candidates = [r[key] for r in responses if key in r]
+
+        resp_candidates = self._get_candidates(key)
+
         for resp in resp_candidates:
             res_hash = hash(str(resp))
             if res_hash not in self.used_responses:
@@ -199,6 +210,7 @@ class TestResponses:
                 return resp
 
         # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
+        log.warning(f"No Mock Response found for {url}")
         return {"url": url} if not resp_candidates else  resp_candidates[-1]
 
 test_responses = TestResponses()
