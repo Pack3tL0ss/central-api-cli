@@ -107,7 +107,10 @@ exclude_lines = [
     "# pragma: no cover",
     "update_log(result.stdout)",
     "if show_example:",
-    "if not import_file:"
+    "if not import_file:",
+    "if result.exit_code != 0",
+    "if result.exception"
+
 ]
 exclude_also = [
     # 1. Exclude an except clause of a specific form:
