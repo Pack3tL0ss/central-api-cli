@@ -197,14 +197,14 @@ class Response:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
         try:
-            if config.dev.capture_raw:
+            if config.dev.capture_raw and self.url:
                 with render.Spinner("Capturing raw response"):
                     if not config.capture_file.exists():
                         config.capture_file.write_text("[\n")
                     with config.capture_file.open("a") as f:
                         f.write(self.dump())
         except Exception as e:
-            log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}")
+            log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}", log=True, caption=True)
 
     def dump(self) -> str:
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
@@ -227,10 +227,10 @@ class Response:
                 _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
                 out[key]["payload"] = self.raw
             elif self._response:
-                out[key]["body"] = self._response._body
+                out[key]["body"] = self._response._body.decode("utf-8")
         except json.JSONDecodeError as e:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
-            out[key]["body"] = self._response._body
+            out[key]["body"] = self._response._body.decode("utf-8")
 
         return f"{json.dumps(out)},\n"
 
