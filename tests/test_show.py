@@ -58,10 +58,13 @@ def test_show_branch_health_wan_down():
     assert "API" in result.stdout
 
 
+# Output here will not be the same during mocked test run as it is outside of tests
+# API returns csv, the Response.output attribute is converted in cloudauth.get_registered_macs()
+# to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
 def test_show_cloud_auth_registered_macs():
     result = runner.invoke(app, ["show", "cloud-auth", "registered-macs"],)
     assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert "MAC" in result.stdout
 
 
 def test_show_cluster():
