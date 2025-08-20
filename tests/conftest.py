@@ -1,4 +1,5 @@
 import shutil
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -65,7 +66,11 @@ def cleanup_test_labels():
 def pytest_sessionfinish(session: pytest.Session):
     if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:
         unused = "\n".join(test_responses.unused)
-        log.warning(f"The following {len(test_responses.unused)} mock responses were not used during this test run\n{unused}")
+        unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
+        log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+        unused_log_file.write_text(
+            f"The following {len(test_responses.unused)} mock responses were not used during this test run\n{unused}"
+        )
 
 
 def do_nothing():

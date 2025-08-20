@@ -1,11 +1,9 @@
 from typer.testing import CliRunner
 
-from centralcli import cache, log
-from centralcli.cli import app  # type: ignore # NoQA
+from centralcli import log
+from centralcli.cli import app
 
-from . import test_data, update_log
-
-update_log(f'{__file__.split("/")[-1]}: {id(cache)}')
+from . import test_data
 
 runner = CliRunner()
 

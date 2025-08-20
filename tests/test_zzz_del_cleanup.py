@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from centralcli import log
 from centralcli.cli import app  # type: ignore # NoQA
 
-from . import config, test_batch_device_file, test_data, test_group_file, test_site_file, update_log
+from . import config, test_batch_device_file, test_data, test_group_file, test_site_file
 
 runner = CliRunner()
 
@@ -59,6 +59,7 @@ def test_batch_del_sites():
     assert "success" in result.stdout
     assert result.stdout.count("success") == len(test_data["batch"]["sites"])
 
+
 # Groups are created in test_add
 def test_del_group():
     result = runner.invoke(app, [
@@ -105,6 +106,7 @@ def test_del_site4():
     assert result.exit_code == 0
     assert "uccess" in result.stdout
 
+
 # cencli_test_label1 is deleted in test_zdel (last), it's used in other tests prior
 def test_del_label_multi():
     result = runner.invoke(app, [
@@ -117,6 +119,7 @@ def test_del_label_multi():
     assert result.exit_code == 0
     assert "200" in result.stdout
 
+
 def test_del_guest():
     result = runner.invoke(app, ["-d", "delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
     assert True in [
@@ -126,6 +129,7 @@ def test_del_guest():
     assert "cache update ERROR" not in result.stdout
     assert "xception" not in result.stdout
 
+
 def test_del_label():
     result = runner.invoke(app, [
         "delete",
@@ -134,6 +138,6 @@ def test_del_label():
         "-Y"
         ])
     if result.exit_code != 0:
-        update_log(result.stdout)
+        log.error(f"Error in test_del_label:\n{result.stdout}")
     assert result.exit_code == 0
     assert "200" in result.stdout

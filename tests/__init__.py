@@ -146,34 +146,29 @@ def _build_response(
     return resp
 
 
-def update_log(txt: str):
-    with test_log_file.open("a") as f:
-        f.write(f'{txt.rstrip()}\n')
-
-
 def get_test_data():
     test_file = Path(__file__).parent / 'test_data.yaml'
     if not test_file.is_file():
-        raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")
+        raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")  # pragma: no cover
     return config.get_file_data(test_file)
 
 
 def setup_batch_import_file(test_data: dict | str | Path, import_type: str = "sites") -> Path:
     if isinstance(test_data, (str, Path)):
-        return test_data if isinstance(test_data, Path) else Path(test_data)
+        return test_data if isinstance(test_data, Path) else Path(test_data)  # pragma: no cover
 
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
     res = test_batch_file.write_text(
         json.dumps(test_data["batch"][import_type])
     )
     if not res:
-        raise BatchImportFileError("Batch import file creation from test_data returned 0 chars written")
+        raise BatchImportFileError("Batch import file creation from test_data returned 0 chars written")  # pragma: no cover
     return test_batch_file
 
 
 def ensure_default_account(test_data: dict):
     api = api_clients.classic
-    if api.session.auth.central_info["customer_id"] != str(test_data["customer_id"]):
+    if api.session.auth.central_info["customer_id"] != str(test_data["customer_id"]):  # pragma: no cover
         msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
         raise InvalidAccountError(msg)
 
@@ -218,8 +213,8 @@ class TestResponses:
                 return resp
 
         # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
-        log.warning(f"No Mock Response found for {key}")
-        return {"url": url} if not resp_candidates else  resp_candidates[-1]
+        log.warning(f"No Mock Response found for {key}")  # pragma: no cover
+        return {"url": url} if not resp_candidates else  resp_candidates[-1]  # pragma: no cover
 
 test_responses = TestResponses()
 
@@ -230,8 +225,6 @@ async def mock_request(session: ClientSession, method: str, url: str, params: di
 
 
 if __name__ in ["tests", "__main__"]:
-    test_log_file: Path = log.log_file.parent / "pytest.log"
-    # update_log(f"\n__init__: cache: {id(common.cache)}")
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
@@ -241,4 +234,3 @@ if __name__ in ["tests", "__main__"]:
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
     test_site_file: Path = setup_batch_import_file(test_data=test_data)
     gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
-    # test_batch_device_file: Path = test_data["batch"]["devices"]

@@ -1,13 +1,12 @@
+import pendulum
 from typer.testing import CliRunner
 
-import pendulum
-
+from centralcli import log
 from centralcli.cli import app
 
-from . import test_data, update_log
+from . import test_data
 
 runner = CliRunner()
-now = pendulum.now()
 
 
 def test_show_wids_group():
@@ -45,12 +44,13 @@ def test_show_wids_neighbors_by_label():
         ]
     )
     if result.exit_code != 0:
-        update_log(result.stdout)  # pragma: no cover
+        log.error(f"Error in test_show_wids_neighbors_by_label:\n{result.stdout}")
     assert result.exit_code == 0
     assert "ogue" in result.stdout or "Empty Response" in result.stdout
 
 
 def test_show_wids_interfering():
+    now = pendulum.now()
     result = runner.invoke(app, [
             "show",
             "wids",
