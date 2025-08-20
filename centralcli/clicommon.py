@@ -338,7 +338,7 @@ class CLICommon:
                 ]
             )
             msg += f'\n\nVersion: {current}'
-        else:
+        else:  # TODO there is a version key in the response.  should be resp.output["info"]["version"]
             major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2])
             minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major])
             patch = max([int(str(k).split(".")[2]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major and int(str(k).split(".")[1]) == minor])
@@ -1821,7 +1821,6 @@ class CLICommon:
             reboot_resp = self._reboot_after_changes(req_info, batch_resp=batch_resp) or []
 
         render.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
-
 
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
