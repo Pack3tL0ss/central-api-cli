@@ -118,7 +118,6 @@ def test_show_radios_site():
 
 
 def test_show_all_verbose():
-    cache.updated = []
     cache.responses.dev = None  # Necessary as pytest treats all this as one session, so cache is already populated with clean data
     result = runner.invoke(app, ["show", "all", "-v"],)
     if result.exit_code != 0:
