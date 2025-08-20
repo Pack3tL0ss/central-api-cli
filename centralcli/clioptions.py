@@ -15,7 +15,7 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "sort_by", "default", "workspace", "verbose",
@@ -32,8 +32,10 @@ class CLIArgs:
         self.what: ArgumentInfo = typer.Argument(..., show_default=False,)
         self.group: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.groups: ArgumentInfo = typer.Argument(..., metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
-        self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_ap_gw_completion, show_default=False,)
+        self.group_dev: ArgumentInfo = typer.Argument(..., metavar="[GROUP|DEVICE]", help="Group or device", autocompletion=cache.group_dev_completion, show_default=False,)
+        self.session_id: ArgumentInfo = typer.Argument(None, help="The session id of a previously run troubleshooting session", show_default=False,)
         self.site: ArgumentInfo = typer.Argument(..., metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
+        self.ssid: ArgumentInfo = typer.Argument(..., help="SSIDs are not cached.  Ensure text/case is accurate.", show_default=False,)
         self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.version: ArgumentInfo = typer.Argument(
@@ -166,6 +168,8 @@ class CLIOptions:
         self.timerange: str = timerange
         self.include_mins: bool = include_mins if include_mins is not None else True
         self.client: OptionInfo = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cache.client_completion, show_default=False,)
+        self.do_gw: OptionInfo = typer.Option(None, "--gw", help="Update group level config for gateways.")
+        self.do_ap: OptionInfo = typer.Option(None, "--ap", help="Update group level config for APs.")
         self.group: OptionInfo = typer.Option(None, help="Filter by Group", metavar=iden_meta.group, autocompletion=cache.group_completion, show_default=False,)
         self.group_many: OptionInfo = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
         self.site: OptionInfo = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)

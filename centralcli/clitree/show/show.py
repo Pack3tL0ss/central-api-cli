@@ -217,7 +217,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             if clients:
                 _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
         except Exception as e:
-            log.exception(f"Exception occured in _build_caption\n{e}")
+            log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
     if not inventory_only:
         caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. " if not verbosity else " "
@@ -2374,8 +2374,8 @@ def wlans(
 
 @app.command()
 def cluster(
-    group: str = typer.Argument(..., autocompletion=common.cache.group_completion, show_default=False,),
-    ssid: str = typer.Argument(..., help="SSIDs are not cached.  Ensure text/case is accurate.", show_default=False,),
+    group: str = common.arguments.group,
+    ssid: str = common.arguments.ssid,
     sort_by: str = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,

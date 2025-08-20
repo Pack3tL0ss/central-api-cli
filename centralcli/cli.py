@@ -188,12 +188,7 @@ def bounce(
 @app.command()
 def remove(
     devices: list[str] = common.arguments.devices,
-    site: str = typer.Argument(
-        ...,
-        metavar="[site <SITE>]",
-        show_default=False,
-        autocompletion=common.cache.remove_completion
-    ),
+    site: str = common.arguments.get("site", metavar="[site <SITE>]", autocompletion=common.cache.remove_completion),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
