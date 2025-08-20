@@ -15,6 +15,7 @@ from centralcli import cleaner, common, log, render, utils
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
 from centralcli.client import BatchRequest
+from centralcli.config import VALID_EXT
 from centralcli.constants import DevTypes, DynamicAntMode, GatewayRole, IAPTimeZoneNames, NotifyToArgs, RadioBandOptions, iden_meta, state_abbrev_to_pretty
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
@@ -260,21 +261,27 @@ def generate_template(template_file: Path | str, var_file: Path | str, group_dev
 
     return group_dev
 
+config_help = f"""Update group or device level config (ap or gw).
 
-@app.command("config")
+[cyan]cli_file[/] Can be raw CLI (no variables or conditional logic) or a jinja2 template.
+[italic][deep_sky_blue]:information:[/]  If the cli_file is a [medium_spring_green].j2[/] file the template will be converted based on variables in [cyan]var_file[/] prior to sending.[/italic]
+
+If providing a jinja2 template, this command will automatically look for a [cyan]var_file[/] with the same name and a valid suffix [italic]({utils.color(VALID_EXT, color_str="medium_spring_green")})[/].
+[cyan]--var-file <PATH>[/] can be used to specify the variable file explicitly.
+
+"""
+@app.command("config", help=config_help)
 def config_(
-    group_dev: str = common.arguments.group_dev,
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
-    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, autocompletion=lambda incomplete: tuple(), show_default=False,),
-    do_gw: bool = typer.Option(None, "--gw", help="Update group level config for gateways."),
-    do_ap: bool = typer.Option(None, "--ap", help="Update group level config for APs."),
+    group_dev: str = common.arguments.get("group_dev", autocompletion=common.cache.group_dev_ap_gw_completion),
+    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
+    var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, show_default=False,),
+    do_gw: bool = common.options.do_gw,
+    do_ap: bool = common.options.do_ap,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Update group or device level config (ap or gw).
-    """
     group_dev: CacheDevice | CacheGroup = common.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
@@ -444,7 +451,7 @@ def swarm(
 # Any options below that are list[str] will have all items beyond the first evaluated as if it was aps
 @app.command()
 def ap(
-    aps: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_ap_completion, show_default=False, lazy=True,),
+    aps: list[str] = common.arguments.get("devices", autocompletion=common.cache.dev_ap_completion,),
     hostname: str = typer.Option(None, help="Rename/Set AP hostname", show_default=False),
     ip: str = typer.Option(None, metavar=iden_meta.ip_dhcp, help="Configure Static IP or reset AP to [cyan]dhcp[/] [dim italic][cyan]--mask[/], [cyan]--gateway[/], and [cyan]--dns[/] must be provided if configuring static IP[/]", show_default=False,),
     mask: str = typer.Option(None, help="Subnet mask in format 255.255.255.0 [dim italic]Required/Applies when --ip is provided[/]", show_default=False,),
@@ -474,18 +481,18 @@ def ap(
     antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [dim italic]Only applies to AP 679[/]", show_default=False,),
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
     gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [dim italic]Must be set for 6Ghz SP[/]", show_default=False,),
-    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [dim]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
+    reboot: bool = typer.Option(False, "--reboot", "-R", help="Automatically reboot device if IP or VLAN is changed [dim italic]Reboot is required for changes to take effect when IP or VLAN settings are changed[/]"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Update per-ap-settings (ap env) and/or add/update gps ap-altitude to ap level config
+    """Update per-ap-settings (ap env) and/or add/update gps ap-altitude to ap level config.
 
-    Multiple APs can be provided (same settings would apply)
+    Multiple APs can be provided (same settings would apply).
 
-    :warning:  :warning:  If providing more than one value for the options that support it
-    You currently have to separate with a comma and ensure there are no spaces
+    [dark_orange3]:warning:[/]  If providing more than one value for the options that support it
+    You currently have to separate with a comma and ensure there are no spaces.
     [bright_green]i.e.[/]: [cyan]-E 2.4,5,6[/]
     You can also wrap the value in quotes and separate with a space
     [bright_green]i.e.[/]: [cyan]--dns '10.0.30.51 10.0.30.52'[/]
@@ -494,6 +501,8 @@ def ap(
 
     Use [cyan]--ip dhcp[/] to reset an AP that was previously provisioned with a static address to use DHCP
         This will clear the ip, mask, gateway, dns, and domain if configured.
+
+    [dark_sky_blue1]:information:[/]  See [cyan]cencli batch update aps --help[/] for details on updating APs in batch based on setting provided via import file.
     """
     if len(aps) > 1 and (hostname or (ip and ip.lower() != "dhcp")):
         common.exit("Setting hostname/ip on multiple APs doesn't make sesnse")
