@@ -4,7 +4,7 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cleaner, common, render
+from centralcli import cache, cleaner, common, render
 from centralcli.cache import api
 
 app = typer.Typer()
@@ -31,8 +31,8 @@ def health(
     workspace: str = common.options.workspace,
 ):
     """Show Branch Health statistics"""
-
-    resp = api.session.request(api.other.get_branch_health, name=site)
+    _site = None if not site else cache.get_site_identifier(site)
+    resp = api.session.request(api.other.get_branch_health, name=None if not site else _site.name)
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     cf = "[italic dark_olive_green2]"
@@ -58,8 +58,6 @@ def health(
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.get_branch_health if not verbose else None,
-        # wan_down=wan_down,
-        # down=down,
         caption=f"{caption}\n"
     )
 
