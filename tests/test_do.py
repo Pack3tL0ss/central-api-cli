@@ -81,7 +81,7 @@ def test_kick_all():
 
 
 def test_kick_all_by_ssid():
-    result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], test_data["kick_ssid"], "--yes"])
+    result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"], "--yes"])
     assert result.exit_code == 0
     assert "200" in result.stdout
 
