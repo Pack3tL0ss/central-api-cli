@@ -13,7 +13,7 @@ from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType
 app = typer.Typer()
 
 
-@app.command("registered-macs")
+@app.command()
 def registered_macs(
     search: str = typer.Argument(None, help="Optional search string (name/mac contains)", show_default=False),
     sort_by: CloudAuthMacSortBy = common.options.sort_by,
@@ -29,8 +29,7 @@ def registered_macs(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Show Cloud-Auth MAC registrations.
-    """
+    """Show Cloud-Auth MAC registrations."""
     if sort_by:
         sort_full_names = {
             "name": "Client Name",
