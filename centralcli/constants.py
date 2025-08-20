@@ -698,6 +698,7 @@ class ArgToWhat:
         self.site = self.sites = "site"
         self.group = self.groups = "group"
         self.wlan = self.wlans = "wlan"
+        self.label = self.labels = "label"
         self.device = self.devices = self.dev = "device"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
