@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import typer
-from rich import print
 
 from centralcli import cleaner, common, render
 from centralcli.clicommon import APIClients
