@@ -7,28 +7,24 @@ from rich import print
 
 from centralcli import cleaner, common, render
 from centralcli.clicommon import APIClients
-from centralcli.constants import IdenMetaVars, SortTsCmdOptions, TSDevTypes, lib_to_api  # noqa
+from centralcli.constants import SortTsCmdOptions, TSDevTypes, iden_meta, lib_to_api  # noqa
 
 api_clients = APIClients()
 api = api_clients.classic
 
 app = typer.Typer()
 
-iden_meta = IdenMetaVars()
 
 
+# TODO --clean... wouldn't that accomplish the same as --raw.  Verify with --raw output is not processed for formatting
 @app.command()
 def results(
     device: str = common.arguments.device,
-    session_id: str = typer.Argument(
-        None,
-        help="The session id of a previously run troubleshooting session",
-        show_default=False,
-    ),
+    session_id: str = common.arguments.session_id,
     clean: bool = typer.Option(
         False,
         "--clean",
-        help="Clean response, don't send through any formatters.  [grey42 italic]Useful for excessively long output[/]",
+        help="Clean response, don't send through any formatters.  [dim italic]Useful for excessively long output[/]",
         show_default=False,
     ),
     outfile: Path = common.options.outfile,
@@ -46,14 +42,7 @@ def results(
     dev = common.cache.get_dev_identifier(device)
 
     # Fetch session ID if not provided
-    if not session_id:
-        resp = api.session.request(api.tshooting.get_ts_session_id, dev.serial)
-        if resp.ok and "session_id" in resp.output:
-            session_id = resp.output["session_id"]
-        else:
-            print(f"No session id provided, unable to find active session id for {dev.name}")
-            render.display_results(resp, exit_on_fail=True)
-
+    session_id = session_id or dev.get_ts_session_id()
     title = f"Troubleshooting output for {dev.name} session {session_id}"
 
     resp = api.session.request(api.tshooting.get_ts_output, dev.serial, session_id=session_id)

@@ -363,6 +363,25 @@ class CacheDevice(CentralObject):
             ]
         )
 
+    def get_ts_session_id(self, exit_on_fail: bool = True) -> int | Response:
+        resp = api.session.request(api.tshooting.get_ts_session_id, self.serial)
+        if resp.ok and "session_id" in resp.output:
+            return resp.output["session_id"]
+
+        if resp.status == 404:
+            log.warning(f"No session id found for {self.summary_text}", caption=True)
+            _ret = 0
+        else:
+            log.error(f"Attempt to determine session_id for {self.summary_text} failed.", caption=True)
+            _ret = resp
+
+        if not exit_on_fail:
+            return _ret
+
+        render.display_results(resp, exit_on_fail=True)
+
+
+
 class CacheInvMonDevice(CentralObject):
     def __init__(self, inventory: CacheInvDevice, monitoring: CacheDevice = None):
         if inventory and monitoring and inventory.serial != monitoring.serial:
@@ -3083,6 +3102,7 @@ class Cache:
         for m in out:
             yield m
 
+    # TODO wrapper function to handle if not config.valid
     def remove_completion(
         self,
         incomplete: str,
@@ -4307,6 +4327,13 @@ class Cache:
         self,
         query_str: str,
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
+    ) -> CacheDevice: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str,
+        conductor_only: bool,
     ) -> CacheDevice: ...
 
     @overload

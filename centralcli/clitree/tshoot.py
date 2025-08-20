@@ -420,7 +420,7 @@ def speed_test(
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
-@app.command(short_help="Send troubleshooting command to a device")
+@app.command()
 def command(
     device: str = common.arguments.device,
     cmd: list[str] = typer.Argument(..., help="command to send to switch, must be supported by API.", show_default=False,),
@@ -431,14 +431,33 @@ def command(
     workspace: str = common.options.workspace,
 ):
     """
-    [cyan]Send a user provided troubleshooting commands to a device and wait for results.[/]
+    Send user provided troubleshooting commands to a device and wait for the results.
 
     Returns response (from device) to troubleshooting commands.
-    Commands must be supported by the API, use [cyan]show tshoot commands <dev-type>[/] to see available commands
+    :information:  Commands must be supported by the API, use [cyan]cencli show ts commands <dev-type>[/] to see available commands
 
-    [bright_green]Example:[/] [cyan]cencli tshoot command barn.518.2816-ap show ap-env[/]
+    [bright_green]Example:[/] [cyan]cencli ts command barn.518.2816-ap show ap-env[/]
     """
     ts_send_command(device, cmd, outfile, pager)
+
+
+@app.command()
+def clear(
+    device: str = common.arguments.device,
+    session_id: str = common.arguments.session_id,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    default: bool = common.options.default,
+    debug: bool = common.options.debug,
+    workspace: str = common.options.workspace,
+):
+    """
+    Clear previously ran troubleshooting session and output for a device.
+    """
+    dev = common.cache.get_dev_identifier(device)
+    session_id = session_id or dev.get_ts_session_id()
+    resp = api.session.request(api.tshooting.clear_ts_session, dev.serial, session_id=session_id)
+    render.display_results(resp, tablefmt="action", outfile=outfile, pager=pager)
 
 
 @app.callback()
