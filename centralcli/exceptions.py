@@ -15,6 +15,9 @@ class CentralCliException(Exception):
 class MissingFieldException(CentralCliException):
     pass
 
+class MissingRequiredArgumentException(TypeError):
+    pass
+
 class ImportException(CentralCliException):
     pass
 

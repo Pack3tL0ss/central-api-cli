@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Literal
 
 from rich.progress import track
 
+from ...exceptions import MissingRequiredArgumentException
 from ...response import Response
 
 if TYPE_CHECKING:
@@ -94,11 +95,10 @@ class DeviceManagementAPI:
             payload = {"disconnect_user_mac": f"{mac}"}
         elif ssid:
             payload = {"disconnect_user_network": f"{ssid}"}
-
-        if payload:
-            return await self.session.post(url, json_data=payload)
         else:
-            return Response(error="Missing Required Parameters")
+            raise MissingRequiredArgumentException("One of the following is required: 'kick_all', 'mac', or 'ssid'")
+
+        return await self.session.post(url, json_data=payload)
 
     async def get_task_status(
         self,
