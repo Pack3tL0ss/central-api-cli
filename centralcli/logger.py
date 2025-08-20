@@ -1,18 +1,17 @@
 from __future__ import annotations
 
+# from rich.logging import RichHandler
+import logging
+from logging.handlers import RotatingFileHandler
 from os import environ
 from pathlib import Path
-from typing import Union, List, Any
-from logging.handlers import RotatingFileHandler
 from time import sleep
-from rich.console import Console
-# from rich.logging import RichHandler
+from typing import Any, List, Union
 
-import logging
 import typer
+from rich.console import Console
 
 from . import utils
-
 
 log_colors = {
     "error": typer.colors.RED,
@@ -183,6 +182,7 @@ class MyLogger:
         self.setLevel(logging.DEBUG if value else logging.INFO)
 
     # If caption=True we assume log=False unless you specify log=True, default it to log, no caption.
+    # TODO additional arguments for logging methods exc_info: bool = None, extra: bool = None, stack_info: bool = False, stacklevel: int = 1,
     def debug(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
         log = log if log is not None else not caption
         self.log_print(msgs, log=log, show=show, caption=caption, level='debug', *args, **kwargs)
