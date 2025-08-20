@@ -221,13 +221,14 @@ test_responses = TestResponses()
 
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url, params=params, **kwargs))
+    return _build_response(**test_responses.get_test_response(method, url, params=params))
 
 
 if __name__ in ["tests", "__main__"]:
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
+        pytest.MonkeyPatch().setattr("pycentral.ArubaCentralBase.storeToken", lambda: True)
     test_data: dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
     test_batch_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
