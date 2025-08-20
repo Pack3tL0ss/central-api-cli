@@ -214,14 +214,14 @@ class TestResponses:
 
         # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
         log.warning(f"No Mock Response found for {key}")  # pragma: no cover
-        return {"url": url} if not resp_candidates else  resp_candidates[-1]  # pragma: no cover
+        return {"url": url, "status": 418, "reason": f"No Mock Response Found for {key}"} if not resp_candidates else  resp_candidates[-1]  # pragma: no cover
 
 test_responses = TestResponses()
 
 
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url, params=params))
+    return _build_response(**test_responses.get_test_response(method, url, params=params, **kwargs))
 
 
 if __name__ in ["tests", "__main__"]:
