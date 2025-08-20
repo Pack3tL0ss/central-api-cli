@@ -11,7 +11,7 @@ from copy import deepcopy
 from enum import Enum
 from functools import lru_cache, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Set, Tuple, Union, overload
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
 import pendulum
 import typer
@@ -1285,9 +1285,12 @@ class Cache:
         return self.DevDB.all()
 
     @property
-    def device_types(self) -> Set[str]:
-        db = self.InvDB if self.InvDB else self.DevDB
-        return set([d["type"] for d in db.all()])
+    def inv_device_types(self) -> set[str]:
+        return set() if not self.InvDB else set([d["type"] for d in self.InvDB.all()])
+
+    @property
+    def mon_device_types(self) -> set[str]:
+        return set([d["type"] for d in self.DevDB.all()])
 
     @property
     def devices_by_serial(self) -> Dict[str, Document]:
@@ -4493,14 +4496,19 @@ class Cache:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
+                    fuzz_match = None
                     if FUZZ and self.devices and not silent:
                         if dev_type:
-                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)[0]
+                            fuzzy_match = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)
+                            if fuzzy_match:
+                                fuzz_match, fuzz_confidence = fuzzy_match[0]
                         else:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d], limit=1)[0]
-                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = self.DevDB.search(self.Q.name == fuzz_match)
+
+                        if fuzz_match:
+                            confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                            if fuzz_confidence >= 70 and render.confirm(prompt=confirm_str, abort=False):
+                                match = self.DevDB.search(self.Q.name == fuzz_match)
 
                     # If there is an inventory only match we still update monitoring cache (to see if device came online since it was added. Otherwise commands like move will reject due to only being in Inventory)
                     if not match or Model == CacheInvDevice:
