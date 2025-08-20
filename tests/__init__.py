@@ -152,13 +152,16 @@ def update_log(txt: str):
 
 
 def get_test_data():
-    test_file = Path(__file__).parent / 'test_devices.json'
+    test_file = Path(__file__).parent / 'test_data.yaml'
     if not test_file.is_file():
         raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")
-    return json.loads(test_file.read_text())
+    return config.get_file_data(test_file)
 
 
-def setup_batch_import_file(test_data: dict, import_type: str = "sites") -> Path:
+def setup_batch_import_file(test_data: dict | str | Path, import_type: str = "sites") -> Path:
+    if isinstance(test_data, (str, Path)):
+        return test_data if isinstance(test_data, Path) else Path(test_data)
+
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
     res = test_batch_file.write_text(
         json.dumps(test_data["batch"][import_type])
@@ -193,13 +196,18 @@ class TestResponses:
 
         return [r[key] for r in responses if key in r]
 
+    @property
+    def unused(self) -> list[str]:  # pragma: no cover
+        return [
+            f"{idx}:{k}" for idx, r in enumerate(responses) for k, v in r.items() if hash(str(v)) not in self.used_responses
+        ]
 
     def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
         url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
         if params:
             params = utils.remove_time_params(params)
             url = url.with_query(params)
-        key = f"{method.upper()}_{url}"
+        key = f"{method.upper()}_{url.path_qs}"
 
         resp_candidates = self._get_candidates(key)
 
@@ -210,7 +218,7 @@ class TestResponses:
                 return resp
 
         # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
-        log.warning(f"No Mock Response found for {url}")
+        log.warning(f"No Mock Response found for {key}")
         return {"url": url} if not resp_candidates else  resp_candidates[-1]
 
 test_responses = TestResponses()
@@ -229,7 +237,8 @@ if __name__ in ["tests", "__main__"]:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
     test_data: dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
+    test_batch_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
     test_site_file: Path = setup_batch_import_file(test_data=test_data)
     gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
-    test_batch_device_file: Path = test_data["batch"]["devices"]
+    # test_batch_device_file: Path = test_data["batch"]["devices"]

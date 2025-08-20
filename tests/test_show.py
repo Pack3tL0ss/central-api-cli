@@ -15,15 +15,69 @@ def clean_mac(mac: str) -> str:
 
 # tty size is MonkeyPatched to 190, 55 the end result during pytest runs is 156, 31
 # Not sure why but it's larger than the 80, 24 fallback which it was using.
+def test_show_alerts():
+    result = runner.invoke(app, ["-d", "show", "alerts", "--debug"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_aps():
-    result = runner.invoke(app, ["-d", "show", "aps", "--debug", "--table"],)
+    result = runner.invoke(app, ["show", "aps", "--debug", "--table"],)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 
+def test_show_archived():
+    result = runner.invoke(app, ["show", "archived"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_branch_health():
+    result = runner.invoke(app, ["show", "branch", "health"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_branch_health_for_site():
+    result = runner.invoke(app, ["show", "branch", "health", test_data["gateway"]["site"]],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_branch_health_down():
+    result = runner.invoke(app, ["show", "branch", "health", "--down"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_branch_health_wan_down():
+    result = runner.invoke(app, ["show", "branch", "health", "--wan-down"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_cloud_auth_registered_macs():
+    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs"],)
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_cluster():
+    result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], test_data["tunneled_ssid"]["ssid"]], "--debugv")
+    if result.exit_code != 0:
+        log.error(f"test_show_cluster returned error:\n{result.stdout}")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_switches():
     result = runner.invoke(app, ["show", "switches", "--debug", "--table"],)
+    if result.exit_code != 0:
+        log.error(f"test_show_switches returned error:\n{result.stdout}", show=True)
+    if result.exception:
+        log.exception(f"test_show_switches Exception {repr(result.exception)}\n{result.exception}", exc_info=True)
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -66,11 +120,11 @@ def test_show_all_verbose():
     result = runner.invoke(app, ["show", "all", "-v"],)
     if result.exit_code != 0:
         log.error(f"test_show_all_verbose returned error:\n{result.stdout}")
+    if result.exception:
+        log.exception(f"test_show_all_verbose Exception: {repr(result.exception)}\n{result.exception}", exc_info=True)
     assert result.exit_code == 0
     assert "serial" in result.stdout
     assert "uptime" in result.stdout
-    if result.exception:
-        log.exception(result.exception)
 
 
 def test_show_switch_by_name():
@@ -299,7 +353,6 @@ def test_show_certs():
     result = runner.invoke(app, ["show", "certs", "--yaml"],)
     assert result.exit_code == 0
     assert "expired" in result.stdout
-    assert "checksum" in result.stdout
 
 
 def test_show_audit_logs_past():

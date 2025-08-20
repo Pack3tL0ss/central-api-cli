@@ -18,7 +18,7 @@ def do_nothing():
 def stash_cache_file():
     pytest_cache = config.cache_file.parent / f"{config.cache_file.name}.pytest"
     if config.cache_file.exists():
-        update_log(f"{pytest_cache} stored for mock test based on contents of  {config.cache_file}.  This is stored after adds, prior to delete tests.")
+        log.info(f"{pytest_cache} stored for mock test based on contents of  {config.cache_file}.  This is stored after adds, prior to delete tests.")
         shutil.copy(config.cache_file, pytest_cache)
 
 
@@ -43,7 +43,7 @@ def test_batch_del_devices():
 def test_batch_del_groups():
     result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
     if result.exit_code != 0:
-        log.error(f"Error in test_batch_del_groups:\n{result.stdout}")
+        log.error(f"Error in test_batch_del_groups:\n{result.stdout}", show=True)
     if test_group_file.is_file():
         test_group_file.unlink()
     assert result.exit_code == 0

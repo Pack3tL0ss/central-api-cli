@@ -6,6 +6,8 @@ from typer.testing import CliRunner
 from centralcli import cache, config, log
 from centralcli.cli import app
 
+from . import test_responses
+
 runner = CliRunner()
 
 cache_bak_file = config.cache_file.parent / f"{config.cache_file.name}.pytest.bak"
@@ -34,12 +36,14 @@ def restore_cache_file():
 
         return config.cache_file.exists()
 
+
 def cleanup_test_groups():
     del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
         assert "Success" in result.stdout
         assert result.exit_code == 0
+
 
 def cleanup_test_sites():
     del_sites = [s for s in cache.sites_by_name if s.startswith("cencli_test_")]
@@ -48,12 +52,21 @@ def cleanup_test_sites():
         assert "Success" in result.stdout
         assert result.exit_code == 0
 
+
 def cleanup_test_labels():
     del_labels = [label for label in cache.labels_by_name if label.startswith("cencli_test_")]
     if del_labels:
         result = runner.invoke(app, ["delete", "label", *del_labels, "-Y"])
         assert "Success" in result.stdout
         assert result.exit_code == 0
+
+
+@pytest.hookimpl()
+def pytest_sessionfinish(session: pytest.Session):
+    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:
+        unused = "\n".join(test_responses.unused)
+        log.warning(f"The following {len(test_responses.unused)} mock responses were not used during this test run\n{unused}")
+
 
 def do_nothing():
     ...
