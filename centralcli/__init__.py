@@ -65,7 +65,7 @@ from .logger import MyLogger
 from . import constants
 from .config import Config
 
-if os.environ.get("TERM_PROGRAM") == "vscode":
+if os.environ.get("TERM_PROGRAM") == "vscode":  # pragma: no cover
     from .vscodeargs import vscode_arg_handler
     vscode_arg_handler()
 

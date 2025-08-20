@@ -204,11 +204,7 @@ class CaasAPI(BuildCLI):
         super().__init__(data=data)
 
     async def send_commands(self, group_dev: str, cli_cmds: list = None):
-        if ":" in group_dev and len(group_dev) == 17:
-            key = "node_name"
-        else:
-            key = "group_name"
-
+        key = "node_name" if ":" in group_dev and len(group_dev) == 17 else "group_name"
         url = "/caasapi/v1/exec/cmd"
 
         if not config.classic.customer_id:
