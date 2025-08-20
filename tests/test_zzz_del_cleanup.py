@@ -3,8 +3,8 @@ import shutil
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import log
-from centralcli.cli import app  # type: ignore # NoQA
+from centralcli import cache, log
+from centralcli.cli import app
 
 from . import config, test_batch_device_file, test_data, test_group_file, test_site_file
 
@@ -41,6 +41,7 @@ def test_batch_del_devices():
 
 
 def test_batch_del_groups():
+    cache.responses.group = None  # Necessary as pytest treats all this as one session, so it thinks cache has been refreshed already
     result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
     if result.exit_code != 0:
         log.error(f"Error in test_batch_del_groups:\n{result.stdout}", show=True)
