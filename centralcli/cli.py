@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 import subprocess
 import sys
-from os import environ as env
 from time import sleep
 
 import typer
 from rich.markup import escape
 
-from centralcli import common, config, log, render, utils
+from centralcli import cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
 from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, tshoot, unassign, update, upgrade
@@ -17,15 +16,8 @@ from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
 from centralcli.clitree.set import set as cliset
 from centralcli.clitree.show import show
-from centralcli.constants import (  #noqa
-    BlinkArgs,
-    BounceArgs,
-    EnableDisableArgs,
-    ResetArgs,
-    StartArgs,
-    iden_meta,
-)
-from centralcli.environment import env  #noqa
+from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, ResetArgs, StartArgs, do_load_pycentral, iden_meta
+from centralcli.environment import env
 
 try:
     import psutil
@@ -705,34 +697,28 @@ def renew_license(
 
 
 def all_commands_callback(ctx: typer.Context, update_cache: bool):
-    # --raw and --debug-limit are honored and stripped out in init
+    # --raw, --debug, --debugv, and --debug-limit are honored and stripped out in init
     if ctx.resilient_parsing:
         config.is_completion = True
         return
 
-    # if not ctx.resilient_parsing:
-    version, workspace, debug, debugv, default, update_cache = None, None, None, None, None, None
+    version, workspace, default, update_cache = None, None, None, None, None
     for idx, arg in enumerate(sys.argv[1:]):
         if idx == 0 and arg in ["-v", "-V", "--version"]:
             version = True
-        if arg == "--debug":
-            debug = True
-        if arg == "--debugv":
-            debugv = True
         elif arg == "-d":
             default = True
         elif arg in ["--ws", "--workspace"] and "-d" not in sys.argv:
             workspace = sys.argv[idx + 2]  # sys.argv enumeration is starting at index 1 so need to adjust idx by 2 for next arg
         elif arg == "-U":
             update_cache = True
-        elif arg.startswith("-") and not arg.startswith("--"):  # -dU is allowed
+        elif arg.startswith("-") and arg.count("-") == 1:  # -dU is allowed
             if "d" in arg:
                 default = True
             if "U" in arg:
                 update_cache = True
 
     workspace = workspace or env.workspace
-    debug = debug or env.debug
 
     if version:
         common.version_callback(ctx)
@@ -746,16 +732,9 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
     else:
         common.workspace_name_callback(ctx, workspace=workspace)
 
-    if debug:
-        common.debug_callback(ctx, debug=debug)
-    if debugv:
-        log.DEBUG = config.debug = log.verbose = config.debugv = debugv
-        _ = sys.argv.pop(sys.argv.index("--debugv"))
     if update_cache:
-        render.econsole.print("Pretend I'm updating the cache...")
-        # cli.cache(refresh=True)
-        # _ = sys.argv.pop(sys.argv.index("-U"))
-        # TODO ensure cache update is removed from all commands as we are doing it here now
+        cache(refresh=True)
+        _ = sys.argv.pop(sys.argv.index("-U"))
 
 
 @app.callback()
@@ -781,10 +760,12 @@ def callback(
        - Useful if you want to see the same output in a different format or you want to output to file (--out <FILE>)
        - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
-    ...
+    if not config.cache_file_ok and do_load_pycentral():
+        cache.check_fresh(refresh=True)
 
 
-log.debug(f'{__name__} called with Arguments: {" ".join(sys.argv)}')
+
+log.debugv(f'[cyan]cencli[/] called with Arguments: {" ".join(sys.argv[1:])}')
 
 if __name__ == "__main__":
     app()
