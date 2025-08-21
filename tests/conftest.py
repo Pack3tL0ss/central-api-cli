@@ -108,3 +108,13 @@ def session_setup_teardown():
 
     # executed after test is run
     teardown()
+
+def _clear_lru_caches():
+    cache.get_inv_identifier.cache_clear()
+    cache.get_combined_inv_dev_identifier.cache_clear()
+    cache.get_name_id_identifier.cache_clear()
+
+@pytest.fixture(scope='function', autouse=True)
+def clear_lru_caches():
+    _clear_lru_caches()
+    yield
