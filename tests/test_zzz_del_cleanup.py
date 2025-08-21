@@ -1,12 +1,10 @@
 import shutil
 
-import pytest
 from typer.testing import CliRunner
 
-from centralcli import cache, log
 from centralcli.cli import app
 
-from . import config, test_batch_device_file, test_data, test_group_file, test_site_file
+from . import cache, capture_logs, config, log, test_batch_device_file, test_data, test_group_file, test_site_file
 
 runner = CliRunner()
 
@@ -37,6 +35,7 @@ def stash_cache_file():
 
 def test_batch_del_devices():
     result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+    capture_logs(result, "test_batch_del_devices")
     assert result.exit_code == 0
     assert "subscriptions successfully removed" in result.stdout.lower()
     assert "200" in result.stdout
@@ -45,8 +44,7 @@ def test_batch_del_devices():
 def test_batch_del_groups():
     cache.responses.group = None  # Necessary as pytest treats all this as one session, so it thinks cache has been refreshed already
     result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
-    if result.exit_code != 0:
-        log.error(f"Error in test_batch_del_groups:\n{result.stdout}", show=True)
+    capture_logs(result, "test_batch_del_groups")
     if test_group_file.is_file():
         test_group_file.unlink()
     assert result.exit_code == 0
@@ -56,6 +54,7 @@ def test_batch_del_groups():
 
 def test_batch_del_sites():
     result = runner.invoke(app, ["batch", "delete",  "sites", str(test_site_file), "-Y"])
+    capture_logs(result, "test_batch_del_sites")
     if test_site_file.is_file():
         test_site_file.unlink()
     assert result.exit_code == 0
@@ -71,6 +70,7 @@ def test_del_group():
         "cencli_test_group1",
         "-Y"
         ])
+    capture_logs(result, "test_del_group")
     assert result.exit_code == 0
     assert "Success" in result.stdout
 
@@ -83,6 +83,7 @@ def test_del_group_multiple():
         "cencli_test_group4",
         "-Y"
         ])
+    capture_logs(result, "test_del_group_multiple")
     assert result.exit_code == 0
     assert "Success" in result.stdout
     assert result.stdout.count("Success") == 2
@@ -95,6 +96,7 @@ def test_del_site_by_address():
         "123 Main St.",
         "-Y"
         ])
+    capture_logs(result, "test_del_site_by_address")
     assert result.exit_code == 0
     assert "uccess" in result.stdout
 
@@ -106,6 +108,7 @@ def test_del_site4():
         "cencli_test_site4",
         "-Y"
         ])
+    capture_logs(result, "test_del_site4")
     assert result.exit_code == 0
     assert "uccess" in result.stdout
 
@@ -119,6 +122,7 @@ def test_del_label_multi():
         "cencli_test_label3",
         "-Y"
         ])
+    capture_logs(result, "test_del_label_multi")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
@@ -140,7 +144,6 @@ def test_del_label():
         "cencli_test_label1",
         "-Y"
         ])
-    if result.exit_code != 0:
-        log.error(f"Error in test_del_label:\n{result.stdout}")
+    capture_logs(result, "test_del_label")
     assert result.exit_code == 0
     assert "200" in result.stdout
