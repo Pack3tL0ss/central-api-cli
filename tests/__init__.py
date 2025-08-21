@@ -51,16 +51,19 @@ from aiohttp import RequestInfo, StreamReader
 from aiohttp.client import ClientResponse, ClientSession, hdrs
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import TimerNoop
+from click.testing import Result
 from multidict import CIMultiDict, CIMultiDictProxy
 from rich.console import Console
+from rich.traceback import install
 from yarl import URL
 
-from centralcli import config, log, utils
+from centralcli import cache, config, log, utils
+from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
 
+install(show_locals=True)  # rich.traceback hook
 api_clients = APIClients()
 responses: list[dict[str, dict[str, Any]]] = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
-
 
 class InvalidAccountError(Exception): ...
 class BatchImportFileError(Exception): ...
@@ -146,6 +149,17 @@ def _build_response(
     return resp
 
 
+def capture_logs(result: Result, test_func: str = None):
+    test_func = test_func or "UNDEFINED"
+    if result.exit_code != 0:
+        log.error(f"{test_func} returned error:\n{result.stdout}", show=True)
+        if "unable to gather device" in result.stdout:
+            cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
+            log.error(f"{repr(cache)} devices\n{cache_devices}")
+    if result.exception:
+        log.exception(result.exception, exc_info=True, show=True)
+
+
 def get_test_data():
     test_file = Path(__file__).parent / 'test_data.yaml'
     if not test_file.is_file():
@@ -224,11 +238,18 @@ async def mock_request(session: ClientSession, method: str, url: str, params: di
     return _build_response(**test_responses.get_test_response(method, url, params=params))
 
 
+@pytest.mark.asyncio
+async def fake_sleep(*args, **kwargs):
+    return await asyncio.sleep(0)
+
+
 if __name__ in ["tests", "__main__"]:
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
-        pytest.MonkeyPatch().setattr("pycentral.ArubaCentralBase.storeToken", lambda: True)
+        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", lambda: True)
+        pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
+        pytest.MonkeyPatch().setattr("asyncio.sleep", fake_sleep)
     test_data: dict[str, Any] = get_test_data()
     ensure_default_account(test_data=test_data)
     test_batch_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
