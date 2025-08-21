@@ -40,6 +40,7 @@ Bottom Line.
 """
 import asyncio
 import json
+import sys
 from functools import partial
 from pathlib import Path
 from typing import Any, Optional, Type, Union
@@ -157,7 +158,7 @@ def capture_logs(result: Result, test_func: str = None):
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
     if result.exception:
-        log.exception(result.exception, exc_info=True, show=True)
+        log.exception(f"{test_func} {repr(result.exception)}", exc_info=True, show=True)
 
 
 def get_test_data():
@@ -242,12 +243,21 @@ async def mock_request(session: ClientSession, method: str, url: str, params: di
 async def fake_sleep(*args, **kwargs):
     return await asyncio.sleep(0)
 
+def store_tokens(*args, **kwargs) -> bool:
+    log.info("mock store_tokens called.")
+    return True
+
+def refresh_tokens(_, old_token: dict) -> dict:
+    log.info("mock refresh_tokens called.  Simulating token refresh.")
+    return old_token
+
 
 if __name__ in ["tests", "__main__"]:
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
-        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", lambda: True)
+        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
+        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
         pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("asyncio.sleep", fake_sleep)
     test_data: dict[str, Any] = get_test_data()
@@ -256,3 +266,5 @@ if __name__ in ["tests", "__main__"]:
     test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
     test_site_file: Path = setup_batch_import_file(test_data=test_data)
     gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
+    if "--collect-only" not in sys.argv:
+        log.info("------ Test Run START ------")
