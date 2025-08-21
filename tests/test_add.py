@@ -1,17 +1,15 @@
 from typer.testing import CliRunner
 
-from centralcli import log
 from centralcli.cli import app
 
-from . import test_data
+from . import capture_logs, test_data
 
 runner = CliRunner()
 
 
 def test_add_group1():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group1", "-Y"])
-    if result.exit_code != 0:
-        log.error(f"Error in test_add_group1:\n{result.stdout}")
+    capture_logs(result, "test_add_group1")
     assert True in [
         result.exit_code == 0 and "Created" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout
@@ -46,6 +44,7 @@ def test_add_group4_aos10_gw_wlan():
 
 def test_add_site_by_address():
     result = runner.invoke(app, ["-d", "add", "site",  "cencli_test_site3", "123 Main St.", "Gallatin", "TN", "37066", "US", "-Y"])
+    capture_logs(result, "test_add_site_by_address")
     assert True in [
         result.exit_code == 0 and "37066" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout

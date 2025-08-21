@@ -40,7 +40,6 @@ def test_blink_wrong_dev_type():
             "on"
         ]
     )
-    log.info("ABOVE ERRORS related to device identifier matching but wrong type are from test run, and can be ignored")
     assert result.exit_code == 1
     assert "Unable to gather" in result.stdout
     assert "excluded" in result.stdout

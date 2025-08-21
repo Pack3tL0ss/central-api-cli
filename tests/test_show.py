@@ -2,10 +2,10 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from centralcli import cache, log
+from centralcli import cache
 from centralcli.cli import app
 
-from . import test_data
+from . import capture_logs, test_data
 
 runner = CliRunner()
 
@@ -69,18 +69,14 @@ def test_show_cloud_auth_registered_macs():
 
 def test_show_cluster():
     result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], test_data["tunneled_ssid"]["ssid"]], "--debugv")
-    if result.exit_code != 0:
-        log.error(f"test_show_cluster returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_cluster")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_switches():
     result = runner.invoke(app, ["show", "switches", "--debug", "--table"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_switches returned error:\n{result.stdout}", show=True)
-    if result.exception:
-        log.exception(f"test_show_switches Exception {repr(result.exception)}\n{result.exception}", exc_info=True)
+    capture_logs(result, "test_show_switches")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -88,8 +84,7 @@ def test_show_switches():
 
 def test_show_gateways():
     result = runner.invoke(app, ["show", "gateways", "--table"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_gateways returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_gateways")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -97,8 +92,7 @@ def test_show_gateways():
 
 def test_show_all():
     result = runner.invoke(app, ["show", "all"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_all returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_all")
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "serial" in result.stdout
@@ -106,6 +100,7 @@ def test_show_all():
 
 def test_show_radios():
     result = runner.invoke(app, ["show", "radios", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_radios")
     assert result.exit_code == 0
     assert "mac" in result.stdout
 
@@ -120,10 +115,7 @@ def test_show_radios_site():
 def test_show_all_verbose():
     cache.responses.dev = None  # Necessary as pytest treats all this as one session, so cache is already populated with clean data
     result = runner.invoke(app, ["show", "all", "-v"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_all_verbose returned error:\n{result.stdout}")
-    if result.exception:
-        log.exception(f"test_show_all_verbose Exception: {repr(result.exception)}\n{result.exception}", exc_info=True)
+    capture_logs(result, "test_show_all_verbose")
     assert result.exit_code == 0
     assert "serial" in result.stdout
     assert "uptime" in result.stdout
@@ -131,8 +123,7 @@ def test_show_all_verbose():
 
 def test_show_switch_by_name():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["name"], "--debug"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_switch_by_name returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_switch_by_name")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -140,8 +131,7 @@ def test_show_switch_by_name():
 
 def test_show_switch_by_ip():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["ip"], "--debug"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_switch_by_ip returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_switch_by_ip")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -149,8 +139,7 @@ def test_show_switch_by_ip():
 
 def test_show_switch_by_mac():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["mac"], "--debug"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_switch_by_mac returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_switch_by_mac")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -158,8 +147,7 @@ def test_show_switch_by_mac():
 
 def test_show_switch_by_serial():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["serial"], "--debug"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_switch_by_serial returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_switch_by_serial")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -188,10 +176,7 @@ def test_show_ap_by_serial():
 
 def test_show_gateway_by_name():
     result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["name"], "--debug"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_firmware_list_verbose returned error:\n{result.stdout}")
-    if result.exception:
-        log.exception(f"test_show_firmware_list_verbose Exception:\n{result.exception}", exc_info=True,)
+    capture_logs(result, "test_show_firmware_list_verbose")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -328,8 +313,7 @@ def test_show_lldp_by_ap_name():
 
 def test_show_all_ap_lldp_neighbors():
     result = runner.invoke(app, ["show", "aps", "-n", "--site", test_data["ap"]["site"].lower(), "--table"],)
-    if result.exit_code != 0:
-        log.error(f"test_show_all_ap_lldp_neighbors returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_all_ap_lldp_neighbors")
     assert result.exit_code == 0
     assert "serial" in result.stdout
     assert "switch" in result.stdout
@@ -337,8 +321,7 @@ def test_show_all_ap_lldp_neighbors():
 
 def test_show_cx_switch_lldp_neighbors():
     result = runner.invoke(app, ["show", "lldp", test_data["switch"]["mac"].lower(),],)
-    if result.exit_code != 0:
-        log.error(f"test_show_cx_switch_lldp_neighbors returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_cx_switch_lldp_neighbors")
     assert result.exit_code == 0
     assert "chassis" in result.stdout
     assert "remote port" in result.stdout.replace("_", " ")
@@ -437,8 +420,7 @@ def test_show_clients_wireless():
 def test_show_clients_wired():
     cache.updated = []
     result = runner.invoke(app, ["show", "clients", "--wired", "--table", "--debug"],)
-    if result.exception:  # pragma: no cover
-        log.exception(f"Exception in test_show_clients_wired:\n{result.exception}")
+    capture_logs(result, "test_show_clients_wired")
     assert result.exit_code == 0
     assert "vlan" in result.stdout
     assert "mac" in result.stdout
@@ -447,8 +429,7 @@ def test_show_clients_wired():
 def test_show_client_by_mac():
     mac = test_data["client"]["wireless"]["mac"]
     result = runner.invoke(app, ["show", "clients", mac],)
-    if result.exit_code != 0:
-        log.error(f"test_show_client_by_mac ({mac}) returned error:\n{result.stdout}")
+    capture_logs(result, f"test_show_client_by_mac ({mac})")
     assert result.exit_code == 0
     assert "role" in result.stdout
     assert f'mac {clean_mac(mac)}' in clean_mac(result.stdout)
@@ -683,8 +664,7 @@ def test_show_firmware_device_multi():
             test_data["switch"]["name"],
         ]
     )
-    if result.exit_code != 0:
-        log.error(f"test_show_firmware_device_multi returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_firmware_device_multi")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -698,8 +678,7 @@ def test_show_firmware_list_verbose():
             "-v"
         ]
     )
-    if result.exit_code != 0:
-        log.error(f"test_show_firmware_list_verbose returned error:\n{result.stdout}")
+    capture_logs(result, "test_show_firmware_list_verbose")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
