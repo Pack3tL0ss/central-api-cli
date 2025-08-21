@@ -2870,17 +2870,22 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
+        _completion: list[tuple[str, str]] = [
+            ("cencli", "Show cencli logs (alias for self)"),
+            ("self", "Show cencli logs"),
+            ("pytest", "Show cencli test run logs"),
+            *[(x['id'], f"{x['id']}|{x['device'].split('Group:')[0].rstrip()}") for x in self.events]
+        ]
+
         if incomplete == "":
-            out = [("cencli", "Show cencli logs"), *[(x['id'], f"{x['id']}|{x['device'].split('Group:')[0].rstrip()}") for x in self.events]]
-            for m in out:
+            for m in _completion:
                 yield m[0], m[1]
 
-        elif "cencli".startswith(incomplete.lower()):
-            yield "cencli", "Show cencli logs"
         else:
-            for event in self.events:
-                if str(event["id"]).startswith(incomplete):
-                    yield event["id"], f"{event['id']}|{event['device'].split('Group:')[0].rstrip()}"
+            args = args or []
+            for m in _completion:
+                if m[0].startswith(incomplete) and m[0] not in args:
+                    yield m
 
     def audit_log_completion(
         self,
