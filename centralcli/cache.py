@@ -1189,7 +1189,7 @@ class Cache:
     ) -> None:
         """Central-API-CLI Cache object
         """
-        self.updated: list = []  # TODO change from list of methods to something easier
+        self.updated: list = []  # TODO # DEPRECATED change from list of methods to something easier
         self.config = config
         self.responses = CacheResponses()
         # self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
