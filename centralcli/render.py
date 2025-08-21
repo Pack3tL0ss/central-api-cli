@@ -160,10 +160,11 @@ class Spinner(Status):
 
 
 class Output():
-    def __init__(self, rawdata: str = "", prettydata: str = "", config: Config = None):
+    def __init__(self, rawdata: str = "", prettydata: str = "", config: Config = None, tablefmt: TableFormat | None = None):
         self.config = config
         self._file = rawdata  # found typer.unstyle AFTER I built this
         self.tty = prettydata
+        self.tablefmt = tablefmt
 
     def __len__(self):
         return len(str(self).splitlines())
@@ -668,7 +669,7 @@ def output(
     if isinstance(raw_data, str):  # HACK replace first pass is to line up cols but if table is tighter second pass will swap them regardless
         raw_data = raw_data.replace('✅  ', 'True').replace('❌   ', 'False').replace('✅', 'True').replace('❌', 'False')   #  TODO handle this better
 
-    return Output(rawdata=raw_data, prettydata=table_data, config=config)
+    return Output(rawdata=raw_data, prettydata=table_data, config=config, tablefmt=tablefmt)
 
 
 def ask(
@@ -931,7 +932,7 @@ def _display_results(
         "fold_cols": fold_cols,
     }
     with Spinner("Rendering Output..."):
-        outdata = output(**kwargs)
+        outdata = output(**kwargs)  # tablefmt may be updated use outdata.tablefmt for final format based on payload.
 
     if stash:
         config.last_command_file.write_text(
@@ -940,7 +941,7 @@ def _display_results(
 
     typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
-    if caption and tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
+    if caption and outdata.tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
         econsole.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
     if config.is_old_cfg and " ".join(sys.argv[1:]) != "convert config":
