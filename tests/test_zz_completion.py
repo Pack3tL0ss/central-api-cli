@@ -74,3 +74,8 @@ def test_client_completion_partial_name(incomplete: str = test_data["client"]["w
     result = list(cache.client_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_event_log_completion_pytest(incomplete: str = "pyte"):
+    result = list(cache.event_log_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
