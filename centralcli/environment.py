@@ -1,12 +1,6 @@
 from os import environ
 
 
-# NEXT-MAJOR
-# class EnvVars:
-#     def __init__(self):
-#         self.workspace = "CENCLI_WORKSPACE"
-#         self.debug = "CENCLI_DEBUG"
-
 class EnvVar:
     def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG"):
         self.workspace = workspace
@@ -27,6 +21,10 @@ class Env:
     @property
     def is_completion(self) -> bool:
         return bool(environ.get("COMP_WORDS"))
+
+    @property
+    def is_pytest(self) -> bool:
+        return bool(environ.get("PYTEST_VERSION"))
 
 
 env = Env()
