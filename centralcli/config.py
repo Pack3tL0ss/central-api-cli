@@ -178,8 +178,13 @@ class CentralURLs(Mapping):
 clusters = CentralURLs()
 
 
-def _get_config_file(dirs: list[Path]) -> Path:
-    dirs = [dirs] if not isinstance(dirs, list) else dirs
+def _get_config_file(cwd: Path) -> Path:
+    dirs = [
+        Path().home() / ".config" / "centralcli",
+        Path().home() / ".centralcli",
+        cwd / "config",
+        cwd,
+    ]
     for _dir in dirs:
         if Path.joinpath(_dir, "config.yaml").is_file():
             return _dir / "config.yaml"
@@ -258,14 +263,7 @@ class Config:
         except FileNotFoundError:  # In the very rare event the user launches a command from a directory that they've deleted in another session.
             self.cwd = Path.home()
 
-        self.file = _get_config_file(
-            [
-                Path().home() / ".config" / "centralcli",
-                Path().home() / ".centralcli",
-                self.cwd / "config",
-                self.cwd,
-            ]
-        )
+        self.file = _get_config_file(self.cwd)
         if self.file:
             self.dir = self.file.parent
             self.base_dir = self.dir.parent if self.dir.name != "centralcli" else self.dir
@@ -411,7 +409,9 @@ class Config:
 
     @property
     def cache_file(self):
-        return self.default_cache_file if self.workspace in ["central_info", "default"] else self.cache_dir / f"{self._normalized_workspace}.json"
+        if not (env.is_pytest and self.dev.mock_tests):
+            return self.default_cache_file if self.workspace in ["central_info", "default"] else self.cache_dir / f"{self._normalized_workspace}.json"
+        return self.cache_dir / "db.mocked.json"
 
     @property
     def cache_file_ok(self):
