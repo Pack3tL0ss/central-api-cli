@@ -216,6 +216,8 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
             if clients:
                 _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+        except AttributeError as e:
+            log.exception(f"AttribueError occured in _build_caption\n{resp.output = }\n{e}", exc_info=True)
         except Exception as e:
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
