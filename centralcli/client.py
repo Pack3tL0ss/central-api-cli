@@ -605,7 +605,7 @@ class Session():
                     if not silent:
                         self.spinner.stop()
                     break
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 log.exception(f"Attempt to refresh token returned {e.__class__.__name__} {e}")
 
         if token:
