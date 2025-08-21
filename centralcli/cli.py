@@ -22,7 +22,7 @@ from centralcli.environment import env
 try:
     import psutil
     hook_enabled = True
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
 CONTEXT_SETTINGS = {
@@ -120,7 +120,7 @@ def move(
         elif a == "site":
             site = b
         else:
-            device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site", "device", "devices"]])  # Allow unnecessary keyword device(s) 'cencli batch move devices ...'
+            device += tuple([aa for aa in [a, b] if aa and aa not in ["group", "site", "device", "devices"]])  # Allow unnecessary keyword device(s) 'cencli batch move devices ...
 
     group = group or _group
 
@@ -223,7 +223,7 @@ def remove(
 @app.command()
 def reboot(
     devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
-    swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [grey42 italic](IAP cluster)[/] associated with the provided device (AP)."),
+    swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [dim italic](IAP cluster)[/] associated with the provided device (AP)."),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -273,7 +273,7 @@ def reset(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover  (404 the requested URL was not found on the server.  this endpoint may no longer be enabled.)
     """Reset overlay control connection (OTO/ORO)
     """
     # Not sure this works on APs/MB AP
@@ -344,19 +344,20 @@ def nuke(
         render.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Save Device Running Config to Startup")
+@app.command()
 def save(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_completion),
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Save Device Running Config to Startup"""
     dev = common.cache.get_dev_identifier(device)
     resp = api.session.request(api.device_management.send_command_to_device, dev.serial, 'save_configuration')
     render.display_results(resp, tablefmt="action")
 
 
-@app.command(short_help="Sync/Refresh device config with Aruba Central")
+@app.command()
 def sync(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False),
     debug: bool = common.options.debug,
@@ -390,7 +391,7 @@ start_help = f"""Start WebHook Proxy Service on this system in the background
       - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
 
     [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli{escape("[hook-proxy]")}[reset]'
-    """
+    """  # pragma: no cover
 @app.command(help=start_help, short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
@@ -403,7 +404,7 @@ def start(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
@@ -458,7 +459,7 @@ def start(
             render.console.print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
 
-@app.command(short_help="Stop WebHook Proxy", hidden=not hook_enabled)
+@app.command(hidden=not hook_enabled)
 def stop(
     what: StartArgs = typer.Argument(
         ...,
@@ -468,9 +469,8 @@ def stop(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
-    """Stop WebHook Proxy (background process).
-    """
+) -> None:  # pragma: no cover
+    """Stop WebHook Proxy (background process)."""
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
@@ -591,6 +591,7 @@ def unarchive(
     render.display_results(resp, tablefmt="action")
 
 
+# TOGLP
 @app.command(hidden=True)
 def enable(
     what: EnableDisableArgs = typer.Argument("auto-sub"),
@@ -647,7 +648,7 @@ def disable(
         svc = services[0]
         _msg = f'{_msg} {svc.name}'
     render.econsole.print(_msg)
-    render.econsole.print('\n[dark_orange]!![/] Disabling auto subscribe removes auto-subscribe for all models of the same type.')
+    render.econsole.print('\n[dark_orange3]:warning:[/]  Disabling auto subscribe removes auto-subscribe for all models of the same type.')
     render.econsole.print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
     render.econsole.print('Not just the 6300.')
     if render.confirm(yes):
