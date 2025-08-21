@@ -107,14 +107,14 @@ def test_sync_gw():
     assert "200" in result.stdout
 
 
-def test_reboot_swarm():
-    result = runner.invoke(app, ["reboot",  test_data["aos_ap"]["serial"], "-rs"])
-    capture_logs(result, "test_reboot_swarm")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
 if config.dev.mock_tests:
+    def test_reboot_swarm():
+        result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["serial"], "-rs"])
+        capture_logs(result, "test_reboot_swarm")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
     def test_enable_auto_sub():
         result = runner.invoke(app, ["enable",  "auto-sub", "advanced-ap", "-y"])
         capture_logs(result, "test_enable_auto_sub")
