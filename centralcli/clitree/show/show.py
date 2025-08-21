@@ -919,7 +919,7 @@ def subscriptions(
     elif what == "auto":
         resp = api.session.request(api.platform.get_auto_subscribe)
         if resp and "services" in resp.output:
-            resp.output = resp.output["services"]
+            resp.output = [{"services": [s for s in resp.output["services"] if s != "dm"]}]
         title = "Services with auto-subscribe enabled"
     elif what == "stats":
         resp = api.session.request(api.platform.get_subscription_stats)
