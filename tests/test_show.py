@@ -17,12 +17,14 @@ def clean_mac(mac: str) -> str:
 # Not sure why but it's larger than the 80, 24 fallback which it was using.
 def test_show_alerts():
     result = runner.invoke(app, ["-d", "show", "alerts", "--debug"],)
+    capture_logs(result, "test_show_alerts")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_aps():
     result = runner.invoke(app, ["show", "aps", "--debug", "--table"],)
+    capture_logs(result, "test_show_aps")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -30,30 +32,35 @@ def test_show_aps():
 
 def test_show_archived():
     result = runner.invoke(app, ["show", "archived"],)
+    capture_logs(result, "test_show_archived")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_branch_health():
     result = runner.invoke(app, ["show", "branch", "health"],)
+    capture_logs(result, "test_show_branch_health")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_branch_health_for_site():
     result = runner.invoke(app, ["show", "branch", "health", test_data["gateway"]["site"]],)
+    capture_logs(result, "test_show_branch_health_for_site")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_branch_health_down():
     result = runner.invoke(app, ["show", "branch", "health", "--down"],)
+    capture_logs(result, "test_show_branch_health_down")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_branch_health_wan_down():
     result = runner.invoke(app, ["show", "branch", "health", "--wan-down"],)
+    capture_logs(result, "test_show_branch_health_wan_down")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -63,6 +70,7 @@ def test_show_branch_health_wan_down():
 # to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
 def test_show_cloud_auth_registered_macs():
     result = runner.invoke(app, ["show", "cloud-auth", "registered-macs"],)
+    capture_logs(result, "test_show_cloud_auth_registered_macs")
     assert result.exit_code == 0
     assert "MAC" in result.stdout
 
@@ -107,6 +115,7 @@ def test_show_radios():
 
 def test_show_radios_site():
     result = runner.invoke(app, ["show", "radios", "--site", test_data["ap"]["site"]],)
+    capture_logs(result, "test_show_radios_site")
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "band" in result.stdout
@@ -155,6 +164,7 @@ def test_show_switch_by_serial():
 
 def test_show_ap_by_name():
     result = runner.invoke(app, ["show", "aps", test_data["ap"]["name"], "--debug"],)
+    capture_logs(result, "test_show_ap_by_name")
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
@@ -162,6 +172,7 @@ def test_show_ap_by_name():
 
 def test_show_ap_by_ip():
     result = runner.invoke(app, ["show", "aps", test_data["ap"]["ip"], "--debug"],)
+    capture_logs(result, "test_show_ap_by_ip")
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
@@ -169,6 +180,7 @@ def test_show_ap_by_ip():
 
 def test_show_ap_by_serial():
     result = runner.invoke(app, ["show", "aps", test_data["ap"]["serial"], "--debug"],)
+    capture_logs(result, "test_show_ap_by_serial")
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
@@ -176,13 +188,14 @@ def test_show_ap_by_serial():
 
 def test_show_gateway_by_name():
     result = runner.invoke(app, ["show", "gateways", test_data["gateway"]["name"], "--debug"],)
-    capture_logs(result, "test_show_firmware_list_verbose")
+    capture_logs(result, "test_show_gateway_by_name")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
 
 def test_show_device_by_name():
     result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
+    capture_logs(result, "test_show_device_by_name")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -190,6 +203,7 @@ def test_show_device_by_name():
 
 def test_show_device_by_ip():
     result = runner.invoke(app, ["show", "devices", test_data["ap"]["ip"], "--debug"],)
+    capture_logs(result, "test_show_device_by_ip")
     assert result.exit_code == 0
     assert "model" in result.stdout
     assert "status" in result.stdout
@@ -197,6 +211,7 @@ def test_show_device_by_ip():
 
 def test_show_device_by_mac():
     result = runner.invoke(app, ["show", "devices", test_data["gateway"]["mac"], "--debug"],)
+    capture_logs(result, "test_show_device_by_mac")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -204,6 +219,7 @@ def test_show_device_by_mac():
 
 def test_show_device_by_serial():
     result = runner.invoke(app, ["show", "devices", test_data["switch"]["serial"], "--debug"],)
+    capture_logs(result, "test_show_device_by_serial")
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
@@ -211,6 +227,7 @@ def test_show_device_by_serial():
 
 def test_show_interfaces_switch():
     result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--table"],)
+    capture_logs(result, "test_show_interfaces_switch")
     assert result.exit_code == 0
     assert "vlan" in result.stdout
     assert "status" in result.stdout
@@ -218,6 +235,7 @@ def test_show_interfaces_switch():
 
 def test_show_interfaces_site_aps():
     result = runner.invoke(app, ["show", "interfaces", "--site", test_data["ap"]["site"], "--ap"],)
+    capture_logs(result, "test_show_interfaces_site_aps")
     assert result.exit_code == 0
     assert "".join(test_data["ap"]["name"][0:6]) in result.stdout
     assert "mac" in result.stdout
@@ -225,6 +243,7 @@ def test_show_interfaces_site_aps():
 
 def test_show_cache():
     result = runner.invoke(app, ["show", "cache"],)
+    capture_logs(result, "test_show_cache")
     assert result.exit_code == 0
     assert "devices" in result.stdout
     assert "sites" in result.stdout
@@ -232,18 +251,21 @@ def test_show_cache():
 
 def test_show_cache_tables():
     result = runner.invoke(app, ["show", "cache", "tables"],)
+    capture_logs(result, "test_show_cache_tables")
     assert result.exit_code == 0
     assert "total" in result.stdout.lower()
 
 
 def test_show_cache_devices_sites():
     result = runner.invoke(app, ["show", "cache", "devices", "sites"],)
+    capture_logs(result, "test_show_cache_devices_sites")
     assert result.exit_code == 0
     assert "total" in result.stdout.lower()
 
 
 def test_show_variables():
     result = runner.invoke(app, ["show", "variables"],)
+    capture_logs(result, "test_show_variables")
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
@@ -251,6 +273,7 @@ def test_show_variables():
 
 def test_show_variables_by_serial():
     result = runner.invoke(app, ["show", "variables", test_data["template_switch"]["serial"]],)
+    capture_logs(result, "test_show_variables_by_serial")
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
@@ -258,6 +281,7 @@ def test_show_variables_by_serial():
 
 def test_show_variables_by_name():
     result = runner.invoke(app, ["show", "variables", test_data["template_switch"]["name"].title()],)
+    capture_logs(result, "test_show_variables_by_name")
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
     assert "_sys_lan_mac" in result.stdout
@@ -265,6 +289,7 @@ def test_show_variables_by_name():
 
 def test_show_templates_by_group():
     result = runner.invoke(app, ["show", "templates", "--group", test_data["template_switch"]["group"]],)
+    capture_logs(result, "test_show_templates_by_group")
     assert result.exit_code == 0
     assert "group" in result.stdout
     assert "version" in result.stdout
@@ -272,6 +297,7 @@ def test_show_templates_by_group():
 
 def test_show_template_by_dev_name():
     result = runner.invoke(app, ["show", "templates", test_data["template_switch"]["name"].lower()],)
+    capture_logs(result, "test_show_template_by_dev_name")
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
@@ -279,6 +305,7 @@ def test_show_template_by_dev_name():
 
 def test_show_template_by_dev_serial():
     result = runner.invoke(app, ["show", "templates", test_data["template_switch"]["serial"]],)
+    capture_logs(result, "test_show_template_by_dev_serial")
     assert result.exit_code == 0
     assert "BEGIN TEMPLATE" in result.stdout
     assert "%_sys_hostname%" in result.stdout
@@ -286,6 +313,7 @@ def test_show_template_by_dev_serial():
 
 def test_show_template_by_name():
     result = runner.invoke(app, ["show", "templates", test_data["template"]["name"].lower(), "--group", test_data["template"]["group"].upper()])
+    capture_logs(result, "test_show_template_by_name")
     assert result.exit_code == 0
     assert "_sys_hostname%" in result.stdout
     assert "_sys_ip_address%" in result.stdout
@@ -293,19 +321,21 @@ def test_show_template_by_name():
 
 def test_show_ts_commands():
     result = runner.invoke(app, ["show", "ts", "commands", "cx"])
+    capture_logs(result, "test_show_ts_commands")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_ts_results():
     result = runner.invoke(app, ["show", "ts", "results", test_data["switch"]["name"]])
+    capture_logs(result, "test_show_ts_results")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_lldp_by_ap_name():
     result = runner.invoke(app, ["show", "lldp", test_data["ap"]["name"].lower()],)
-    print(result.stdout)
+    capture_logs(result, "test_show_lldp_by_ap_name")
     assert result.exit_code == 0
     assert "serial" in result.stdout
     assert "neighbor" in result.stdout
@@ -342,6 +372,7 @@ def test_show_certs():
 
 def test_show_audit_logs_past():
     result = runner.invoke(app, ["show", "audit", "logs", "--past", "5d"],)
+    capture_logs(result, "test_show_audit_logs_past")
     assert result.exit_code == 0
     if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
         assert "audit" in result.stdout.lower()
@@ -350,6 +381,7 @@ def test_show_audit_logs_past():
 
 def test_show_audit_logs_by_id():
     result = runner.invoke(app, ["show", "audit", "logs", "1"],)
+    capture_logs(result, "test_show_audit_logs_by_id")
     assert result.exit_code == 0
     if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
         assert "Response" in result.stdout
@@ -357,6 +389,7 @@ def test_show_audit_logs_by_id():
 
 def test_show_audit_acp_logs_count():
     result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
+    capture_logs(result, "test_show_audit_acp_logs_count")
     assert result.exit_code == 0
     if "Empty Response" not in result.stdout and "no data" not in result.stdout.lower():
         assert "acp audit logs" in result.stdout.lower()
@@ -365,6 +398,7 @@ def test_show_audit_acp_logs_count():
 
 def test_show_logs_past():
     result = runner.invoke(app, ["show", "logs", "--past", "30m"],)
+    capture_logs(result, "test_show_logs_past")
     assert result.exit_code == 0
     assert "event logs" in result.stdout.lower()
     assert "description" in result.stdout
@@ -372,31 +406,35 @@ def test_show_logs_past():
 
 def test_show_logs_by_id():
     result = runner.invoke(app, ["show", "logs", "1"],)
+    capture_logs(result, "test_show_logs_by_id")
     assert result.exit_code == 0
     assert "Response" in result.stdout
 
 
 def test_show_mpsk_networks():
     result = runner.invoke(app, ["show", "mpsk", "networks"],)
+    capture_logs(result, "test_show_mpsk_networks")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_mpsk_named():
     result = runner.invoke(app, ["show", "mpsk", "named", test_data["mpsk_ssid"]],)
+    capture_logs(result, "test_show_mpsk_named")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
 def test_show_switch_vlans_by_name():
     result = runner.invoke(app, ["show", "vlans", test_data["switch"]["name"], "--table"],)
+    capture_logs(result, "test_show_switch_vlans_by_name")
     assert result.exit_code == 0
     assert "name" in result.stdout
     assert "pvid" in result.stdout
 
 
 def test_show_clients_too_many_filters():
-    cache.updated = []
+    cache.responses.client = None
     result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
     assert result.exit_code == 1
     assert "one of" in result.stdout
@@ -404,14 +442,16 @@ def test_show_clients_too_many_filters():
 
 def test_show_clients():
     result = runner.invoke(app, ["show", "clients", "--table"],)
+    capture_logs(result, "test_show_clients")
     assert result.exit_code == 0
     assert "name" in result.stdout
     assert "mac" in result.stdout
 
 
 def test_show_clients_wireless():
-    cache.updated = []
+    cache.responses.client = None
     result = runner.invoke(app, ["show", "clients", "--wireless", "--table", "--debug"],)
+    capture_logs(result, "test_show_clients_wireless")
     assert result.exit_code == 0
     assert "ip" in result.stdout
     assert "mac" in result.stdout
@@ -446,6 +486,7 @@ def test_show_group_level_config():
             "--debug"
         ]
     )
+    capture_logs(result, "test_show_group_level_config")
     assert result.exit_code == 0
     assert "!" in result.stdout
     assert "mgmt-user" in result.stdout
@@ -517,6 +558,7 @@ def test_show_config_gw_group():
             "--gw"
         ]
     )
+    capture_logs(result, "test_show_config_gw_group")
     assert result.exit_code == 0
     assert "mgmt-user" in result.stdout
 
@@ -528,6 +570,7 @@ def test_show_config_gw_dev():
             test_data["gateway"]["name"]
         ]
     )
+    capture_logs(result, "test_show_config_gw_dev")
     assert result.exit_code == 0
     assert "firewall" in result.stdout
 
@@ -540,6 +583,7 @@ def test_show_config_ap_group():
             "--ap"
         ]
     )
+    capture_logs(result, "test_show_config_ap_group")
     assert result.exit_code == 0
     assert "rule any any" in result.stdout
 
@@ -551,6 +595,7 @@ def test_show_config_ap_dev():
             test_data["ap"]["name"]
         ]
     )
+    capture_logs(result, "test_show_config_ap_dev")
     assert result.exit_code == 0
     assert "wlan" in result.stdout
 
@@ -562,6 +607,7 @@ def test_show_config_cencli():  # output is yaml
             "cencli",
         ]
     )
+    capture_logs(result, "test_show_config_cencli")
     assert result.exit_code == 0
     assert "current_workspace" in result.stdout
 
@@ -574,6 +620,7 @@ def test_show_config_cencli_verbose():  # output is yaml
             "-v"
         ]
     )
+    capture_logs(result, "test_show_config_cencli_verbose")
     assert result.exit_code == 0
     assert "workspaces" in result.stdout
 
@@ -584,6 +631,7 @@ def test_show_portals():
             "portals"
         ]
     )
+    capture_logs(result, "test_show_portals")
     assert result.exit_code == 0
     assert "name" in result.stdout or "Empty Response" in result.stdout
 
@@ -595,6 +643,7 @@ def test_show_guests():
             test_data["portal"]["name"]
         ]
     )
+    capture_logs(result, "test_show_guests")
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
 
@@ -605,6 +654,7 @@ def test_show_insights():
             "insights",
         ]
     )
+    capture_logs(result, "test_show_insights")
     assert result.exit_code == 0
     assert "API Rate Limit" in result.stdout
 
@@ -617,6 +667,7 @@ def test_show_insights_low_severity():
             "low"
         ]
     )
+    capture_logs(result, "test_show_insights_low_severity")
     assert result.exit_code == 0
     assert "API Rate Limit" in result.stdout
 
@@ -629,6 +680,7 @@ def test_show_insights_site():
             test_data["ap"]["site"]
         ]
     )
+    capture_logs(result, "test_show_insights_site")
     assert result.exit_code == 0
     assert "API Rate Limit" in result.stdout
 
@@ -639,6 +691,7 @@ def test_show_notifications():
             "notifications",
         ]
     )
+    capture_logs(result, "test_show_notifications")
     assert result.exit_code == 0
     assert "category" in result.stdout
 
@@ -651,6 +704,7 @@ def test_show_firmware_swarm():
             test_data["aos8_ap"]["name"],
         ]
     )
+    capture_logs(result, "test_show_firmware_swarm")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -693,6 +747,7 @@ def test_show_firmware_compliance_raw():
             "--raw"
         ]
     )
+    capture_logs(result, "test_show_firmware_compliance_raw")
     assert result.exit_code == 0
 
 
@@ -704,6 +759,7 @@ def test_show_roaming():
             "--refresh"
         ]
     )
+    capture_logs(result, "test_show_roaming")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -715,6 +771,7 @@ def test_show_run():
             test_data["ap"]["name"],
         ]
     )
+    capture_logs(result, "test_show_run")
     assert result.exit_code == 0
     assert "version" in result.stdout
 
@@ -725,6 +782,7 @@ def test_show_swarms():
             "swarms"
         ]
     )
+    capture_logs(result, "test_show_swarms")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -735,6 +793,7 @@ def test_show_token():
             "token"
         ]
     )
+    capture_logs(result, "test_show_token")
     assert result.exit_code == 0
     assert "refresh" in result.stdout.lower()  # Attempting to Refresh Tokens
     assert "access" in result.stdout.lower()   # Access Token: ...
@@ -747,6 +806,7 @@ def test_show_uplinks():
             test_data["gateway"]["name"]
         ]
     )
+    capture_logs(result, "test_show_uplinks")
     assert result.exit_code == 0
     assert "uplink" in result.stdout.lower()
 
@@ -757,6 +817,7 @@ def test_show_version():
             "version"
         ]
     )
+    capture_logs(result, "test_show_version")
     assert result.exit_code == 0
     assert "version" in result.stdout.lower()
 
@@ -769,5 +830,6 @@ def test_show_webhooks():
             "token-created"
         ]
     )
+    capture_logs(result, "test_show_webhooks")
     assert result.exit_code == 0
     assert "API" in result.stdout
