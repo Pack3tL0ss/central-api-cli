@@ -27,7 +27,7 @@ except (ImportError, ModuleNotFoundError):
 from centralcli import caas, cache, cleaner, common, config, log, render, utils
 from centralcli.cache import CentralObject
 from centralcli.client import BatchRequest
-from centralcli.clitree import tshoot as clitshoot
+from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
     LIB_DEV_TYPE,
     AlertSeverity,
@@ -2755,8 +2755,9 @@ def logs(
         autocompletion=common.cache.event_log_completion,
         show_default=False,
     ),
-    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),  # callback=show_logs_cencli_callback),
-    tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),
+    pytest: bool = typer.Option(False, "--pytest", hidden=True),
+    tail: bool = typer.Option(False, "-f", help="follow tail on log file [dim italic](wss_key must be configured unless used to show cencli logs locally)[/]", is_eager=True),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
@@ -2800,9 +2801,10 @@ def logs(
     [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
     """
     title="Device event Logs"
-    if cencli or (event_id and "cencli".startswith(event_id.lower())):
+    pytest = pytest or (event_id and event_id == "pytest")
+    if cencli or pytest or (event_id and "cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower())):
         from centralcli import log
-        log.print_file() if not tail else log.follow()
+        log.print_file(pytest) if not tail else log.follow(pytest)
         common.exit(code=0)
 
     if tail:
