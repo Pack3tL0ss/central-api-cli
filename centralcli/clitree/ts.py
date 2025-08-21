@@ -370,12 +370,13 @@ def ping(
     dev_type = lib_to_api(dev.type, "tshoot")
 
     resp = api.session.request(api.tshooting.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
-    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    render.display_results(resp, tablefmt="action", suppress_rl=True, exit_on_fail=True)
+    render.econsole.print()  # Add a space after results
 
     complete = False
     while not complete:
         for _ in range(3):
-            _delay = 15 if dev.type == "cx" else 10
+            _delay = 13 if dev.type == "cx" else 10
             for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
                 sleep(1)
             ts_resp = api.session.request(api.tshooting.get_ts_output, dev.serial, resp.session_id)
@@ -387,7 +388,7 @@ def ping(
                 complete = True
                 break
             else:
-                render.console.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
+                render.console.print(f'{ts_resp.output.get("message", "").split(".")[0]}. [cyan]Waiting...[/]')
 
 
         if not complete:
