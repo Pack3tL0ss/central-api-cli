@@ -702,7 +702,7 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):
         config.is_completion = True
         return
 
-    version, workspace, default, update_cache = None, None, None, None, None
+    version, workspace, default, update_cache = None, None, None, None
     for idx, arg in enumerate(sys.argv[1:]):
         if idx == 0 and arg in ["-v", "-V", "--version"]:
             version = True
