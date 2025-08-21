@@ -74,12 +74,14 @@ class MyLogger:
         )
         return logging.getLogger(self.log_file.stem)
 
-    def print_file(self) -> None:
-        console.print(self.log_file.read_text(),)
+    def print_file(self, pytest: bool = False) -> None:
+        file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
+        console.print(file.read_text(),)
 
-    def follow(self) -> None:
+    def follow(self, pytest: bool = False) -> None:
         """generator function that yields new lines in log file"""
-        with self.log_file.open("r") as lf:
+        file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
+        with file.open("r") as lf:
             lines = lf.readlines()
             console.print("".join(lines[int(f"-{len(lines) if len(lines) <= 20 else 20}"):]).rstrip())
 
