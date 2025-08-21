@@ -197,7 +197,7 @@ class Response:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
         try:
-            if config.dev.capture_raw and self.url:
+            if config.dev.capture_raw and self.url and self.url.path not in self.raw:  # url.path being in raw response indicates this is a CombinedResponse
                 with render.Spinner("Capturing raw response"):
                     if not config.capture_file.exists():
                         config.capture_file.write_text("[\n")
