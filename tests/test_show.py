@@ -822,6 +822,27 @@ def test_show_version():
     assert "version" in result.stdout.lower()
 
 
+def test_show_subscriptions_auto():
+    result = runner.invoke(app, [
+            "show",
+            "subscriptions",
+            "auto"
+        ]
+    )
+    capture_logs(result, "test_show_subscriptions_auto")
+    assert result.exit_code == 0
+
+
+def test_show_subscriptions_details():  # glp
+    result = runner.invoke(app, [
+            "show",
+            "subscriptions"
+        ]
+    )
+    capture_logs(result, "test_show_subscriptions_details")
+    assert result.exit_code == 0
+
+
 def test_show_webhooks():
     result = runner.invoke(app, [
             "show",

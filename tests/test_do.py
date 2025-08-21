@@ -1,11 +1,10 @@
 from typer.testing import CliRunner
 
-from centralcli import log
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.exceptions import MissingRequiredArgumentException
 
-from . import test_data
+from . import capture_logs, config, test_data
 
 runner = CliRunner()
 
@@ -90,5 +89,41 @@ def test_kick_all_missing_argument():
         api.session.request(api.device_management.kick_users, test_data["ap"]["serial"])
     except MissingRequiredArgumentException:
         ...  # Test Passes
-    else:
+    else:  # pragma: no cover
         raise AssertionError("test_kick_all_missing_argument should have raised a MissingRequiredArgumentException but did not")
+
+
+def test_save():
+    result = runner.invoke(app, ["save",  test_data["switch"]["serial"]])
+    capture_logs(result, "test_reboot_save")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_sync_gw():
+    result = runner.invoke(app, ["sync",  test_data["gateway"]["name"]])
+    capture_logs(result, "test_reboot_save")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_reboot_swarm():
+    result = runner.invoke(app, ["reboot",  test_data["aos_ap"]["serial"], "-rs"])
+    capture_logs(result, "test_reboot_swarm")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+if config.dev.mock_tests:
+    def test_enable_auto_sub():
+        result = runner.invoke(app, ["enable",  "auto-sub", "advanced-ap", "-y"])
+        capture_logs(result, "test_enable_auto_sub")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_disable_auto_sub():
+        result = runner.invoke(app, ["disable",  "auto-sub", "advanced-ap", "-y"])
+        capture_logs(result, "test_disable_auto_sub")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
