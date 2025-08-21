@@ -5369,7 +5369,7 @@ class Cache:
         DEV NOTE appears only to be used by portal and subscription currently
 
         Args:
-            cache_name (Literal[&quot;dev&quot;, &quot;site&quot;, &quot;sub&quot;, &quot;template&quot;, &quot;group&quot;, &quot;label&quot;, &quot;mpsk_network&quot;, &quot;mpsk&quot;, &quot;portal&quot;]): The cache to search
+            cache_name (Literal['dev', 'site', 'sub', 'template', 'group', 'label', 'mpsk_network', 'mpsk', 'portal']): The cache to search
             query_str (str): The query string used to search the cache for a match
             retry (bool, optional): Refresh the cache via API and retry if no match is found. Defaults to True.
             completion (bool, optional): Indicates function is being called for CLI completion... effectively the equiv of retry=False, Silent=True. Defaults to False.
