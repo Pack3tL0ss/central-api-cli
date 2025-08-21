@@ -1,6 +1,7 @@
 import shutil
 from pathlib import Path
 
+import pendulum
 import pytest
 from typer.testing import CliRunner
 
@@ -68,8 +69,10 @@ def pytest_sessionfinish(session: pytest.Session):
         unused = "\n".join(test_responses.unused)
         unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
         log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+        now = pendulum.now()
+        ts = " ".join(now.to_day_datetime_string().split(", ")[1:])
         unused_log_file.write_text(
-            f"The following {len(test_responses.unused)} mock responses were not used during this test run\n{unused}"
+            f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
         )
 
 def cleanup_test_items():
