@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from enum import Enum
 from typing import Literal
@@ -2307,7 +2308,12 @@ class IAPTimeZoneNames(str, Enum):
 
 NO_LOAD_COMMANDS = [
     "show config cencli",
+    "show config self",
+    "show logs cencli",
+    "show logs self",
     "show last",
+    "show version",
+    "dev \\w*.*",
     "convert"
 ]
 
@@ -2317,11 +2323,14 @@ NO_LOAD_FLAGS = [
     "--cencli",
     "--show-completion",
     "--install-completion",
+    "--version",
+    "-v",
+    "-V"
 ]
 
 
 def do_load_pycentral() -> bool:
-    """Determine if provided command requires pycentral load
+    """Determine if provided command requires pycentral load and cache initialization check.
 
     Allows command to complete even if config has yet to be configured.
     Useful for first run commands and auto docs.
@@ -2331,11 +2340,12 @@ def do_load_pycentral() -> bool:
         for command to complete.
     """
     args = [arg for arg in sys.argv[1:] if "--debug" not in arg]
-    for x in NO_LOAD_FLAGS:
-        if x in args:
-            return False
+    # for x in NO_LOAD_FLAGS:
+    if [a for a in args if a in NO_LOAD_FLAGS]:
+        return False
 
-    if " ".join([a for a in args if not a.startswith("-")]).lower() in NO_LOAD_COMMANDS:
+    cmd = " ".join([a for a in args if not a.startswith("-")]).lower()
+    if any([re.search(c, cmd) for c in NO_LOAD_COMMANDS]):
         return False
     else:
         return True
