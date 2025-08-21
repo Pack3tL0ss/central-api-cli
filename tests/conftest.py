@@ -38,7 +38,7 @@ def restore_cache_file():
         return config.cache_file.exists()
 
 
-def cleanup_test_groups():
+def _cleanup_test_groups():
     del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
@@ -46,7 +46,7 @@ def cleanup_test_groups():
         assert result.exit_code == 0
 
 
-def cleanup_test_sites():
+def _cleanup_test_sites():
     del_sites = [s for s in cache.sites_by_name if s.startswith("cencli_test_")]
     if del_sites:
         result = runner.invoke(app, ["delete", "site", *del_sites, "-Y"])
@@ -54,7 +54,7 @@ def cleanup_test_sites():
         assert result.exit_code == 0
 
 
-def cleanup_test_labels():
+def _cleanup_test_labels():
     del_labels = [label for label in cache.labels_by_name if label.startswith("cencli_test_")]
     if del_labels:
         result = runner.invoke(app, ["delete", "label", *del_labels, "-Y"])
@@ -72,21 +72,30 @@ def pytest_sessionfinish(session: pytest.Session):
             f"The following {len(test_responses.unused)} mock responses were not used during this test run\n{unused}"
         )
 
+def cleanup_test_items():
+    try:
+        _cleanup_test_groups()
+        _cleanup_test_labels()
+        _cleanup_test_sites()
+    except AssertionError as e:
+        log.exception(f"An error ({repr(e)}) may have occured during test run cleanup.  You may need to verify test objects have been deleted from central.", exc_info=True)
 
 def do_nothing():
     ...
 
 def setup():
     if config.dev.mock_tests:
-        yield stash_cache_file()
+        yield do_nothing()
+        # yield stash_cache_file()
     else:
         yield do_nothing()
 
 def teardown():
     if config.dev.mock_tests:
-        return restore_cache_file()
+        return do_nothing()
+        # return restore_cache_file()
     else:
-        return cleanup_test_groups()
+        return cleanup_test_items()
 
 
 @pytest.fixture(scope='session', autouse=True)

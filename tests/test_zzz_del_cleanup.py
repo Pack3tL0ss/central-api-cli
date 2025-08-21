@@ -24,13 +24,15 @@ def stash_cache_file():
 
 # We stash the cache file after all adds have occured, so subsequent mocked partial test runs will have the cache
 # in an expected state (devices, sites, groups, etc) will exist in cache.
-@pytest.fixture(scope="module", autouse=True)
-def session_setup_teardown():
-    # Will be executed before the first test
-    yield stash_cache_file()
 
-    # executed after test is run
-    do_nothing()
+
+# @pytest.fixture(scope="module", autouse=True)
+# def session_setup_teardown():
+#     # Will be executed before the first test
+#     yield stash_cache_file()
+
+#     # executed after test is run
+#     do_nothing()
 
 
 def test_batch_del_devices():
