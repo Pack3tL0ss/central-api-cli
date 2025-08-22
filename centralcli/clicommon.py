@@ -759,6 +759,9 @@ class CLICommon:
         return resp or Response(error="No Groups were added")
 
 
+    # TODO # FIXME incossistent return type. other batch_add... methods return a list[Response]  this returns a single combined response
+    # for the sake of the output.  Probably best to do the combining elsewhere so the return is consistent
+    # complicated further as this can return a list if there are any failures.
     def batch_add_sites(self, import_file: Path = None, data: dict = None, yes: bool = False) -> Response:
         if all([d is None for d in [import_file, data]]):
             raise ValueError("batch_add_sites requires import_file or data arguments, neither were provided")
@@ -874,7 +877,7 @@ class CLICommon:
         return ok
 
     # TOGLP
-    def batch_add_devices(self, import_file: Path = None, data: dict = None, yes: bool = False) -> List[Response]:
+    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: bool = False) -> List[Response]:
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
         data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices")
         if not data:
@@ -1510,9 +1513,9 @@ class CLICommon:
             return
 
         if isinstance(batch_resp[1].raw, dict) and "succeeded_devices" in batch_resp[1].raw:
-            try:
-                cache_inv_to_del = [self.cache.inventory_by_serial.get(d["serial_number"]) for d in batch_resp[1].raw["succeeded_devices"]]
-                inv_doc_ids = [dev.doc_id for dev in cache_inv_to_del]
+            try:  # Normal circumstances serial should be in inventory, but for test runs the unarchive response may be a different mock response with different serial numbers not in inventory.
+                cache_inv_to_del = [inv_dev for inv_dev in [self.cache.inventory_by_serial.get(d["serial_number"]) for d in batch_resp[1].raw["succeeded_devices"]] if inv_dev is not None]
+                inv_doc_ids = [dev.doc_id for dev in cache_inv_to_del] or None
             except Exception as e:
                 log.exception(f"Exception while attempting to extract unarchive results for Inv Cache Update.\n{e}")
                 return
