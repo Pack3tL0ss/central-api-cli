@@ -2802,7 +2802,7 @@ def logs(
     """
     title="Device event Logs"
     pytest = pytest or (event_id and event_id == "pytest")
-    if cencli or pytest or (event_id and "cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower())):
+    if cencli or pytest or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):
         from centralcli import log
         log.print_file(pytest) if not tail else log.follow(pytest)
         common.exit(code=0)
