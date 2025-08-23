@@ -261,7 +261,7 @@ def group(
             monitor_only_cx=mon_only_cx,
             cnx=cnx
         )
-        if not resp.ok:
+        if not resp.ok:  # pragma: no cover
             log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
         render.display_results(resp, tablefmt="action", exit_on_fail=True)
         # prep data for cache
@@ -284,7 +284,7 @@ def group(
 
 
 # TODO autocompletion
-@app.command(short_help="Add WLAN (SSID)")
+@app.command()
 def wlan(
     group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=common.cache.group_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
@@ -312,6 +312,7 @@ def wlan(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Add WLAN (SSID)"""
     group = common.cache.get_group_identifier(group)
     kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
     _to_name = {
