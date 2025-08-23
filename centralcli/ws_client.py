@@ -1,14 +1,19 @@
-import aiohttp
-import asyncio
-from . import config, log
-from .objects import DateTime
-from .protobuf import monitoring_pb2, streaming_pb2, audit_pb2
-# from yarl import URL
-from rich.console import Console
-from typing import Literal
+# import asyncio
 import base64
+from typing import Literal
+
+import aiohttp
 from rich import inspect
 
+# from yarl import URL
+from rich.console import Console
+
+from centralcli import render
+from centralcli.cache import api
+
+from . import config, log
+from .objects import DateTime
+from .protobuf import audit_pb2, monitoring_pb2, streaming_pb2
 
 console = Console(emoji=False)
 econsole = Console(stderr=True)
@@ -40,12 +45,21 @@ async def _clean_data(data):
     inspect(data)
 
 async def follow_event_logs():
-    headers = {"Authorization": config.wss_key, "Topic": "monitoring"}
-    if config.username:
-        headers["UserName"] = config.username
-
     monitoring_data = monitoring_pb2.MonitoringInformation()
     base_url = 'wss://internal-ui.central.arubanetworks.com'  #f'wss://{URL(config.base_url).host}'  # TODO makes sense for config.url to returl URL object.  All urls should be URL object
+
+    resp = await api.other.validate_wss_key(base_url, config.wss_key)
+    if not resp.ok:
+        log.error("Unable to validate wss key.", caption=True)
+        render.display_results(resp, exit_on_fail=True)
+    # TODO wss key needs to be stored for future use
+
+    wss_key = resp.raw["token"]
+
+
+    headers = {"Authorization": wss_key, "Topic": "monitoring"}
+    if config.username:
+        headers["UserName"] = config.username
     session = aiohttp.ClientSession(base_url=base_url, headers=headers)
 
     try:
@@ -57,7 +71,7 @@ async def follow_event_logs():
 
                     monitoring_data = monitoring_pb2.MonitoringInformation()
                     monitoring_data.ParseFromString(stream_data.data)
-                    asyncio.create_task(_clean_data(monitoring_data))
+                    # asyncio.create_task(_clean_data(monitoring_data))
                     console.print(f"-- {DateTime(stream_data.timestamp / 1000 / 1000 / 1000)} --\n{monitoring_data}")
                     ...
                 elif msg.type == aiohttp.WSMsgType.ERROR:
