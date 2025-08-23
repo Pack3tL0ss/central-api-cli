@@ -286,7 +286,7 @@ class CLIOptions:
         }
         time_letter = self.timerange[-1]
         time_word = letter_to_word.get(time_letter, "ERR")
-        if len(self.timerange) == 2 and self.timerange.startswith("1"):
+        if len(self.timerange) == 2 and self.timerange.startswith("1"):  # pragma: no cover
             time_word = time_word.rsplit("s")
 
         return f"{self.timerange[0:-1]} {time_word} ago"

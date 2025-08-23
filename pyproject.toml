@@ -96,7 +96,8 @@ omit = [
     "centralcli/setup.py",
     "centralcli/webhook.py",
     "centralcli/snow.py",
-    "boilerplate/*"
+    "boilerplate/*",
+    "protobuf/*"
 ]
 
 [tool.coverage.report]

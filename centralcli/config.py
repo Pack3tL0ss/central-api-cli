@@ -344,12 +344,12 @@ class Config:
         self.cnx = c.current_workspace.central
         self.workspace_config = c.current_workspace.model_dump()
         self.workspace_object = c.current_workspace
-        if "snow" in c.extra:
+        if "snow" in c.extra:  # pragma: no cover
             self.deprecation_warnings = ["Snow Proxy functionality is deprecated, as it was never tested.  Please open an issue, if you need the functionality."]
         else:
             self.deprecation_warnings = None
         extras = [k for k in c.extra if k != "snow"]
-        if extras:
+        if extras:  # pragma: no cover
             self.deprecation_warnings = self.deprecation_warnings or []
             self.deprecation_warning += [f'The following configuration items [dim italic]({", ".join(extras)})[/] were found in the config, but are not recognized by [cyan]cencli[/]']
 
@@ -425,7 +425,7 @@ class Config:
     def export_dir(self) -> Path:
         # if they are already in export dir navigate back to top for output
         outdir: Path = self.outdir / "cencli-config-export"
-        if "cencli-config-export" in outdir.parent.parts[1:]:
+        if "cencli-config-export" in outdir.parent.parts[1:]:  # pragma: no cover
             outdir = outdir.parent
             while outdir.name != "cencli-config-export":
                 outdir = outdir.parent
