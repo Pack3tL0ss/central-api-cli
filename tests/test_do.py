@@ -1,5 +1,9 @@
+import asyncio
+
+import pytest
 from typer.testing import CliRunner
 
+from centralcli import cache
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.exceptions import MissingRequiredArgumentException
@@ -7,6 +11,71 @@ from centralcli.exceptions import MissingRequiredArgumentException
 from . import capture_logs, config, test_data
 
 runner = CliRunner()
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_test_ap():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": test_data["test_add_do_del_ap"]["serial"],
+                "mac": test_data["test_add_do_del_ap"]["mac"],
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group3():
+    if config.dev.mock_tests:
+        groups = [
+            {
+                "name": "cencli_test_group3",
+                "allowed_types": ["ap"],
+                "gw_role": "branch",
+                "aos10": False,
+                "microbranch": False,
+                "wlan_tg": True,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=groups))
+    yield
+
+
+def test_archive(ensure_cache_test_ap):
+    result = runner.invoke(app, ["archive", test_data["test_add_do_del_ap"]["mac"], "-y"])
+    assert result.exit_code == 0
+    assert "succeeded" in result.stdout
+
+
+def test_unarchive(ensure_cache_test_ap):
+    result = runner.invoke(app, ["unarchive", test_data["test_add_do_del_ap"]["serial"]])
+    assert result.exit_code == 0
+    assert "succeeded" in result.stdout
+
+
+def test_move_pre_provision(ensure_cache_group3, ensure_cache_test_ap):
+    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "-y"])
+    assert result.exit_code == 0
+    assert "201" in result.stdout
 
 
 def test_blink_switch_on_timed():
