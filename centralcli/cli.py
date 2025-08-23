@@ -16,7 +16,7 @@ from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
 from centralcli.clitree.set import set as cliset
 from centralcli.clitree.show import show
-from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, ResetArgs, StartArgs, do_load_pycentral, iden_meta
+from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, LicenseTypes, ResetArgs, StartArgs, do_load_pycentral, iden_meta
 from centralcli.environment import env
 
 try:
@@ -242,7 +242,7 @@ def reboot(
         func = api.device_management.send_command_to_device
         arg = dev.serial
 
-        if swarm:  # TODO reboot swarm has not been tested
+        if swarm:
             if dev.type != "ap":
                 render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring [green]-s[/]|[cyan]--swarm[/], as it only applies to APs not {dev.type}\n")
             elif dev.version.startswith("10."):
@@ -256,7 +256,8 @@ def reboot(
         confirm_msgs += [conf_msg]
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
-    render.console.print(f'\u26a0  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)  # use unicode chars here as confirm message could have mac looks like emoji markup :cd:
+    # \u267b = ♻ :recycle: use unicode chars here as confirm message could have mac looks like emoji markup :cd:
+    render.console.print(f'\u267b  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)
     if len(batch_reqs) > 1:
         render.econsole.print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
@@ -288,15 +289,16 @@ def reset(
         render.display_results(resp, tablefmt="action")
 
 
-@app.command(help="Blink LED")
+@app.command()
 def blink(
     device: str = typer.Argument(..., show_default=False, metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_ap_completion),
-    action: BlinkArgs = typer.Argument(..., show_default=False),  # metavar="Device: [on|off|<# of secs to blink>]"),
-    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for this many seconds.", show_default=False,),
+    action: BlinkArgs = typer.Argument(..., show_default=False),
+    secs: int = typer.Argument(None, metavar="SECONDS", help="Blink for this many seconds.  [dim italic]Applies to [cyan]on[/] action[/]", show_default=False,),
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Blink LEDs / Chassis-locator on supported devices (switches and APs)"""
     command = f'blink_led_{action.value}'
     dev = common.cache.get_dev_identifier(device, dev_type=["switch", "ap"])
     resp = api.session.request(api.device_management.send_command_to_device, dev.serial, command, duration=secs)
@@ -639,7 +641,7 @@ def disable(
     Disabling auto subscribe removes auto-subscribe for all models of the same type.
     i.e. `disable auto-sub advanced-switch-6300` will disable auto subscribe for all switch tiers (6100, 6200, etc)
     """
-
+    services: list[LicenseTypes] = services  # retyping common.cache.LicenseTypes
     _msg = "[bright_green]Disable[/] auto-subscribe for license"
     if len(services) > 1:
         _svc_msg = '\n    '.join([s.name for s in services])
