@@ -2,4 +2,3 @@ ruff
 pytest
 nox
 pytest-cov
-pytest-aioresponses
