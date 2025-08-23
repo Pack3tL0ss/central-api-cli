@@ -114,3 +114,33 @@ class OtherAPI:
         }
 
         return await self.session.get(url, params=params)
+
+
+
+    async def validate_wss_key(
+        self,
+        wss_base_url: str,
+        wss_key: str,
+    ) -> Response:
+        """Validate wss (websocket) key
+
+        Existing wss_key should be provided.  The return will either be the same key
+        if it's still valid, or a new valid key.
+
+        Args:
+            wss_base_url (str): The websocket base url, in the form `https://internal-ui.central.arubanetworks.com`
+            wss_key (str): Existing websocket key
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/streaming/token/validate"
+        headers = {
+            "Authorization": wss_key
+        }
+        _old_base = self.session.base_url
+        self.session.base_url = wss_base_url
+        resp = await self.session.get(url, headers=headers)
+        self.session.base_url = _old_base
+
+        return resp
