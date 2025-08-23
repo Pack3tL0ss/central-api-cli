@@ -325,7 +325,7 @@ class Config:
         self.username = c.current_workspace.classic.username
         self.cache_client_days = c.current_workspace.cache_client_days
         self.webhook = c.current_workspace.classic.webhook
-        self.wss_key = c.current_workspace.classic.webhook.token
+        self.wss_key = c.current_workspace.classic.tokens.wss_key
         self.defined_workspaces: list[str] = list(c.workspaces.keys())
         self.is_old_cfg = True if "workspaces" not in self.data else False
         if self.is_old_cfg:
