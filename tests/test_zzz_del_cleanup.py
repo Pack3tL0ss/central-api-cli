@@ -221,6 +221,14 @@ def ensure_cache_del_site4():
     yield
 
 
+
+def test_del_wlan(ensure_cache_del_group):
+    result = runner.invoke(app, ["-d", "delete", "wlan",  "cencli_test_group1",  "delme", "--yes"])
+    capture_logs(result, "test_del_wlan")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_del_device(ensure_cache_del_device):
     result = runner.invoke(app, ["delete",  "device", "CN63HH906Z", "-Y"])
     capture_logs(result, "test_del_device")
@@ -330,9 +338,6 @@ def test_del_label_multi(ensure_cache_del_label_multi):
 
 def test_del_guest(ensure_cache_del_guest):
     result = runner.invoke(app, ["-d", "delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
-    assert True in [
-        result.exit_code == 0 and "200" in result.stdout,
-        result.exit_code != 0 and "Unable to gather" in result.stdout
-    ]
-    assert "cache update ERROR" not in result.stdout
-    assert "xception" not in result.stdout
+    capture_logs(result, "test_del_guest")
+    assert result.exit_code == 0
+    assert "200" in result.stdout

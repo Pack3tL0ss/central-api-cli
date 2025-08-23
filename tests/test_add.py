@@ -1,10 +1,37 @@
+import asyncio
+
+import pytest
 from typer.testing import CliRunner
 
+from centralcli import cache, config
 from centralcli.cli import app
 
 from . import capture_logs, test_data
 
 runner = CliRunner()
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group1():
+    if config.dev.mock_tests:
+        batch_del_group1 = [
+            {
+                "name": "cencli_test_group1",
+                "allowed_types": ["ap", "gw", "cx", "sw"],
+                "gw_role": "branch",
+                "aos10": False,
+                "microbranch": False,
+                "wlan_tg": False,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+    yield
 
 
 def test_add_group1():
@@ -91,3 +118,9 @@ def test_add_device():
     ]
     assert "cache update ERROR" not in result.stdout
     assert "xception" not in result.stdout
+
+
+def test_add_wlan(ensure_cache_group1):
+    result = runner.invoke(app, ["-d", "add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "psk", "C3ncliR0cks!", "--hidden", "--yes"])
+    assert result.exit_code == 0
+    assert "200" in result.stdout
