@@ -186,15 +186,12 @@ def remove(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Remove a device from a site
-    """
+    """Remove device(s) from a site."""
     devs = (d for d in devices if d != "site")
     devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devs]
     site: CacheSite = common.cache.get_site_identifier(site)
 
-    render.econsole.print(
-        f"Remove {', '.join([f'[bright_green]{dev.name}[/bright_green]' for dev in devices])} from site [bright_green]{site.name}"
-    )
+    render.econsole.print(f"Remov{'e' if not yes else 'ing'} {utils.summarize_list([dev.rich_help_text for dev in devices], color=None)}\n  from site [bright_green]{site.name}[/]")
     if render.confirm(yes):
         devs_by_type = {}
         for d in devices:
