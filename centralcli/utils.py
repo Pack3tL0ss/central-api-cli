@@ -2,6 +2,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import binascii
 import json
 import logging
 import os
@@ -58,7 +59,7 @@ class ToBool:
         else:
             return True
 class Convert:
-    def __init__(self, mac, fuzzy: bool = False):
+    def __init__(self, mac: str, fuzzy: bool = False):
         self.orig = mac
         if not mac:
             mac = '0'
@@ -106,7 +107,9 @@ class Convert:
 
 
 class Mac(Convert):
-    def __init__(self, mac, fuzzy: bool = False):
+    def __init__(self, mac: str | bytes, fuzzy: bool = False):
+        if isinstance(mac, bytes):
+            mac: str = binascii.hexlify(mac).decode('utf-8')
         super().__init__(mac, fuzzy=fuzzy)
         oobm = hex(self.dec + 1).lstrip('0x')
         self.oobm = Convert(oobm)
@@ -117,8 +120,8 @@ class Mac(Convert):
     def __bool__(self):
         return self.ok
 
-    def __eq__(self, value):
-        other = Convert(value)
+    def __eq__(self, value: str | Mac):
+        other = value if isinstance(value, Mac) else Convert(value)
         return other.dec == self.dec
 
     def __hash__(self):
