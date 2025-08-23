@@ -110,7 +110,8 @@ exclude_lines = [
     "if not import_file:",
     "if result.exit_code != 0",
     "if result.exception",
-    "if missing:"
+    "if missing:",
+    "if ctx.resilient_parsing:"
 
 ]
 exclude_also = [
