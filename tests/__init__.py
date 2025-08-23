@@ -77,9 +77,9 @@ def capture_logs(result: Result, test_func: str = None):
 
 def ensure_default_account():
     if "--collect-only" in sys.argv:
-        return
+        return  # pragma: no cover
 
-    if config.workspace != config.default_workspace:
+    if config.workspace != config.default_workspace:  # pragma: no cover
         raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.", show=True)
 
 
