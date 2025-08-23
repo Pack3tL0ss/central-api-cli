@@ -109,7 +109,7 @@ def test_sync_gw():
 
 if config.dev.mock_tests:
     def test_reboot_swarm():
-        result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["serial"], "-rs"])
+        result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["name"], "-sy"])
         capture_logs(result, "test_reboot_swarm")
         assert result.exit_code == 0
         assert "200" in result.stdout

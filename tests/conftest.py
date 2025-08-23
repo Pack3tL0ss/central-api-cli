@@ -8,7 +8,8 @@ from typer.testing import CliRunner
 from centralcli import cache, config, log
 from centralcli.cli import app
 
-from . import test_responses
+from ._mock_request import test_responses
+from ._test_data import test_device_file, test_group_file, test_site_file
 
 runner = CliRunner()
 
@@ -75,7 +76,8 @@ def pytest_sessionfinish(session: pytest.Session):
             f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
         )
 
-def cleanup_test_items():
+
+def cleanup_test_items():  # prama: no cover
     try:
         _cleanup_test_groups()
         _cleanup_test_labels()
@@ -83,8 +85,17 @@ def cleanup_test_items():
     except AssertionError as e:
         log.exception(f"An error ({repr(e)}) may have occured during test run cleanup.  You may need to verify test objects have been deleted from central.", exc_info=True)
 
+
 def do_nothing():
     ...
+
+
+def cleanup_import_files():
+    test_files = [test_group_file, test_site_file, test_device_file]
+    for file in test_files:
+        if file.exists():
+            file.unlink()
+
 
 def setup():
     if config.dev.mock_tests:
@@ -93,12 +104,14 @@ def setup():
     else:
         yield do_nothing()
 
+
 def teardown():
+    cleanup_import_files()
     if config.dev.mock_tests:
         return do_nothing()
         # return restore_cache_file()
     else:
-        return cleanup_test_items()
+        return cleanup_test_items()  # pragma: no cover
 
 
 @pytest.fixture(scope='session', autouse=True)
@@ -109,12 +122,12 @@ def session_setup_teardown():
     # executed after test is run
     teardown()
 
-def _clear_lru_caches():
-    cache.get_inv_identifier.cache_clear()
-    cache.get_combined_inv_dev_identifier.cache_clear()
-    cache.get_name_id_identifier.cache_clear()
 
 @pytest.fixture(scope='function', autouse=True)
 def clear_lru_caches():
-    _clear_lru_caches()
+    cache.get_inv_identifier.cache_clear()
+    cache.get_combined_inv_dev_identifier.cache_clear()
+    cache.get_name_id_identifier.cache_clear()
+    for db in cache._tables:
+        db.clear_cache()
     yield

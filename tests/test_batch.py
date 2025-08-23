@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 
 from centralcli.cli import app  # type: ignore # NoQA
 
-from . import test_batch_device_file, test_data, test_group_file, test_site_file
+from ._test_data import test_data, test_device_file, test_group_file, test_site_file
 
 runner = CliRunner()
 
@@ -25,7 +25,7 @@ def test_batch_add_sites():
 
 
 def test_batch_unarchive_devices():
-    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_batch_device_file)}'])
+    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
     assert result.exit_code == 0
     assert "uccess" in result.stdout
     if result.exception:
@@ -34,7 +34,7 @@ def test_batch_unarchive_devices():
 
 
 def test_batch_add_devices():
-    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_device_file)}', "-Y"])
     assert result.exit_code == 0
     assert "uccess" in result.stdout
     assert "200" in result.stdout  # /platform/device_inventory/v1/devices

@@ -38,116 +38,28 @@ Bottom Line.
 
 
 """
-import asyncio
-import json
 import sys
+import traceback
 from functools import partial
-from pathlib import Path
-from typing import Any, Optional, Type, Union
-from unittest.mock import Mock
-from urllib.parse import unquote_plus
+from unittest import mock
 
 import pytest
-from aiohttp import RequestInfo, StreamReader
-from aiohttp.client import ClientResponse, ClientSession, hdrs
-from aiohttp.client_proto import ResponseHandler
-from aiohttp.helpers import TimerNoop
 from click.testing import Result
-from multidict import CIMultiDict, CIMultiDictProxy
 from rich.console import Console
 from rich.traceback import install
-from yarl import URL
 
-from centralcli import cache, config, log, utils
+from centralcli import cache, config, log
 from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
+from centralcli.exceptions import CentralCliException
+
+from ._mock_request import mock_request
+from ._test_data import test_data as test_data
 
 install(show_locals=True)  # rich.traceback hook
 api_clients = APIClients()
-responses: list[dict[str, dict[str, Any]]] = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
 
-class InvalidAccountError(Exception): ...
-class BatchImportFileError(Exception): ...
-class ConfigNotFoundError(Exception): ...
-
-
-# MOCKED aiohttp.client.ClientResponse object
-# vendored/customized from aioresponses
-def _build_raw_headers(headers: dict[str, str]) -> tuple[tuple[bytes, bytes]]:
-    """
-    Convert a dict of headers to a tuple of tuples
-
-    Mimics the format of ClientResponse.
-    """
-    raw_headers = []
-    for k, v in headers.items():
-        raw_headers.append((k.encode('utf8'), v.encode('utf8')))
-    return tuple(raw_headers)
-
-def stream_reader_factory(  # noqa
-    loop: 'Optional[asyncio.AbstractEventLoop]' = None
-) -> StreamReader:
-    protocol = ResponseHandler(loop=loop)
-    return StreamReader(protocol, limit=2 ** 16, loop=loop)
-
-def _build_response(
-        url: 'Union[URL, str]',
-        method: str = hdrs.METH_GET,
-        request_headers: Optional[dict] = None,
-        status: int = 200,
-        body: Union[str, bytes] = '',
-        content_type: str = 'application/json',
-        payload: Optional[dict] = None,
-        headers: Optional[dict] = None,
-        response_class: Optional[Type[ClientResponse]] = None,
-        reason: Optional[str] = "OK"
-    ) -> ClientResponse:
-    if response_class is None:
-        response_class = ClientResponse
-    if payload is not None:
-        body = json.dumps(payload)
-    if not isinstance(body, bytes):
-        body = str.encode(body)
-    if request_headers is None:
-        request_headers = {}
-    loop = Mock()
-    loop.get_debug = Mock()
-    loop.get_debug.return_value = True
-    kwargs = {}  # type: dict[str, Any]
-    url = URL(url)
-    kwargs['request_info'] = RequestInfo(
-        url=url,
-        method=method,
-        headers=CIMultiDictProxy(CIMultiDict(**request_headers)),
-        real_url=url
-    )
-    kwargs['writer'] = None
-    kwargs['continue100'] = None
-    kwargs['timer'] = TimerNoop()
-    kwargs['traces'] = []
-    kwargs['loop'] = loop
-    kwargs['session'] = None
-
-    # We need to initialize headers manually
-    _headers = CIMultiDict({hdrs.CONTENT_TYPE: content_type})
-    if headers:
-        _headers.update(headers)
-    raw_headers = _build_raw_headers(_headers)
-    resp = response_class(method, url, **kwargs)
-
-    for hdr in _headers.getall(hdrs.SET_COOKIE, ()):
-        resp.cookies.load(hdr)
-
-    # Reified attributes
-    resp._headers = _headers
-    resp._raw_headers = raw_headers
-
-    resp.status = status
-    resp.reason = reason
-    resp.content = stream_reader_factory(loop)
-    resp.content.feed_data(body)
-    resp.content.feed_eof()
-    return resp
+class NonDefaultWorkspaceException(CentralCliException): ...
 
 
 def capture_logs(result: Result, test_func: str = None):
@@ -158,90 +70,31 @@ def capture_logs(result: Result, test_func: str = None):
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
     if result.exception:
-        log.exception(f"{test_func} {repr(result.exception)}", exc_info=True, show=True)
+        log.exception(f"{test_func} {repr(result.exception)}", exc_info=True)
+        with log.log_file.open("a") as log_file:
+            traceback.print_exception(result.exception, file=log_file)
 
 
-def get_test_data():
-    test_file = Path(__file__).parent / 'test_data.yaml'
-    if not test_file.is_file():
-        raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")  # pragma: no cover
-    return config.get_file_data(test_file)
+def ensure_default_account():
+    if "--collect-only" in sys.argv:
+        return
 
-
-def setup_batch_import_file(test_data: dict | str | Path, import_type: str = "sites") -> Path:
-    if isinstance(test_data, (str, Path)):
-        return test_data if isinstance(test_data, Path) else Path(test_data)  # pragma: no cover
-
-    test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
-    res = test_batch_file.write_text(
-        json.dumps(test_data["batch"][import_type])
-    )
-    if not res:
-        raise BatchImportFileError("Batch import file creation from test_data returned 0 chars written")  # pragma: no cover
-    return test_batch_file
-
-
-def ensure_default_account(test_data: dict):
-    api = api_clients.classic
-    if api.session.auth.central_info["customer_id"] != str(test_data["customer_id"]):  # pragma: no cover
-        msg = f'customer_id {api.session.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
-        raise InvalidAccountError(msg)
+    if config.workspace != config.default_workspace:
+        raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.", show=True)
 
 
 def monkeypatch_terminal_size():
     TestConsole = partial(Console, height=55, width=190)
     def get_terminal_size(*args, **kwargs):
-        return (190, 55,)
+        return (190, 55)
     pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
     pytest.MonkeyPatch().setattr("shutil.get_terminal_size", get_terminal_size)
 
-class TestResponses:
-    used_responses: list[int] = []
-
-    @staticmethod
-    def _get_candidates(key: str) -> dict[str, Any]:
-        if "/audit_trail_" in key:
-            key = f'{key.split("/audit_trail_")[0]}/audit_trail_'
-            return [v for r in responses for k, v in r.items() if key in k]
-
-        return [r[key] for r in responses if key in r]
-
-    @property
-    def unused(self) -> list[str]:  # pragma: no cover
-        return [
-            f"{idx}:{k}" for idx, r in enumerate(responses) for k, v in r.items() if hash(str(v)) not in self.used_responses
-        ]
-
-    def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
-        url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
-        if params:
-            params = utils.remove_time_params(params)
-            url = url.with_query(params)
-        key = f"{method.upper()}_{url.path_qs}"
-
-        resp_candidates = self._get_candidates(key)
-
-        for resp in resp_candidates:
-            res_hash = hash(str(resp))
-            if res_hash not in self.used_responses:
-                self.used_responses += [res_hash]
-                return resp
-
-        # If they hit this it's repeated test, but we are out of unique responses, so repeat the last response (useful for testing different output formats)
-        log.warning(f"No Mock Response found for {key}")  # pragma: no cover
-        return {"url": url, "status": 418, "reason": f"No Mock Response Found for {key}"} if not resp_candidates else  resp_candidates[-1]  # pragma: no cover
-
-test_responses = TestResponses()
 
 
-@pytest.mark.asyncio
-async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url, params=params))
+aiosleep_mock = mock.AsyncMock()
+aiosleep_mock.return_value = None
 
-
-@pytest.mark.asyncio
-async def fake_sleep(*args, **kwargs):
-    return await asyncio.sleep(0)
 
 def store_tokens(*args, **kwargs) -> bool:
     log.info("mock store_tokens called.")
@@ -259,12 +112,8 @@ if __name__ in ["tests", "__main__"]:
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
         pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
-        pytest.MonkeyPatch().setattr("asyncio.sleep", fake_sleep)
-    test_data: dict[str, Any] = get_test_data()
-    ensure_default_account(test_data=test_data)
-    test_batch_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
-    test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
-    test_site_file: Path = setup_batch_import_file(test_data=test_data)
-    gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
+        pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
+    ensure_default_account()
     if "--collect-only" not in sys.argv:
-        log.info("------ Test Run START ------")
+        log.info(f"{' Test Run START ':{'-'}^{150}}")
+

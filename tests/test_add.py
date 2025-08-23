@@ -82,3 +82,12 @@ def test_add_guest():
     ]
     assert "cache update ERROR" not in result.stdout
     assert "xception" not in result.stdout
+
+
+def test_add_device():
+    result = runner.invoke(app, ["-d", "add", "device",  "serial", "CN63HH906Z", "mac", "F0:5C:19:CE:7A:86", "group", "atm-local", "-s", "foundation-ap", "--yes"])
+    assert True in [
+        result.exit_code == 0 and "200" in result.stdout,
+    ]
+    assert "cache update ERROR" not in result.stdout
+    assert "xception" not in result.stdout
