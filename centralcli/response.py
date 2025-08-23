@@ -213,12 +213,12 @@ class Response:
             key: {
                 "url": self.url.path,
                 "method": self.method,
-                "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
+                # "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
                 "status": self.status,
                 "body": '',
                 "content_type": "application/json" if not self._response else self._response.content_type,
                 "payload": {},
-                "headers": {} if not self._response else dict(self._response.headers),
+                "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-")},
                 "reason": self.error,
                 }
             }
