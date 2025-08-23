@@ -29,7 +29,10 @@ class ImportSite(BaseModel):
 
     @field_validator("state")
     @classmethod
-    def short_to_long(cls, v: str) -> str:
+    def short_to_long(cls, v: str | None) -> str | None:
+        if v is None:
+            return
+
         if v.lower() == "district of columbia":
             return "District of Columbia"
 
@@ -58,7 +61,7 @@ class ImportSites(RootModel):
     @staticmethod
     def _convert_site_key(_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         def auto_usa(data: Dict[str, str | int | float]) -> str | None:
-            _country = data.get("country", "")
+            _country = data.get("country") or ""
             if _country.isdigit():  # Data from large customer had country as '1' for some sites
                 _country = ""
 
