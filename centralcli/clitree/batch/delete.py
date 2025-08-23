@@ -29,7 +29,7 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> list[Response
         common.exit(f"Import data failed validation, refer to [cyan]cencli batch delete sites --example[/] for example formats.\n{repr(e)}")
 
     cache_sites: list[CacheSite | None] = [common.cache.get_site_identifier(s.site_name, silent=True, exit_on_fail=False) for s in verified_sites]
-    not_in_central = [name for name, data in zip(verified_sites, cache_sites) if data is None]
+    not_in_central = [model.site_name for model, data in zip(verified_sites, cache_sites) if data is None]
 
     if not_in_central:
         render.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]site{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
