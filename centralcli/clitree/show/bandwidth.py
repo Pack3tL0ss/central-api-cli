@@ -43,13 +43,13 @@ def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", 
 
 @app.command()
 def ap(
-    ap: str = typer.Argument(None, help=f"Show Bandwidth details for a specific AP [grey42]{escape('[default: All APs]')}[/]", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
+    ap: str = typer.Argument(None, help=f"Show Bandwidth details for a specific AP {render.help_block('All APs')}", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
-    swarm: bool = typer.Option(False, "-s", "--swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [grey42]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]", show_default=False),
-    band: RadioBandOptions = typer.Option(None, help=f"Show Bandwidth for a specific band [grey42]{escape('[ap must be provided]')}[/]", autocompletion=common.cache.group_completion, show_default=False),
-    ssid: str = typer.Option(None, help=f"Show Bandwidth for a specifc ssid [grey42]{escape('[ap must be provided]')}[/]", show_default=False),
+    swarm: bool = typer.Option(False, "-s", "--swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [dim]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]", show_default=False),
+    band: RadioBandOptions = typer.Option(None, help=f"Show Bandwidth for a specific band [dim]{escape('[ap must be provided]')}[/]", autocompletion=common.cache.group_completion, show_default=False),
+    ssid: str = typer.Option(None, help=f"Show Bandwidth for a specifc ssid [dim]{escape('[ap must be provided]')}[/]", show_default=False),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
     start: datetime = common.options.start,
     end: datetime = common.options.end,
