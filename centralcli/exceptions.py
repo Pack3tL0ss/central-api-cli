@@ -24,6 +24,9 @@ class ImportException(CentralCliException):
 class InvalidConfigException(CentralCliException):
     pass
 
+class ConfigNotFoundException(CentralCliException):
+    pass
+
 class WorkSpaceNotFoundException(CentralCliException):
     pass
 
