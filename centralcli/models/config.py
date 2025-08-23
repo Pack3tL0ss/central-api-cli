@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, KeysView, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, ValidationError, field_validator, model_validator
 
 from ..constants import CLUSTER_URLS, ClusterName
 
@@ -65,6 +65,28 @@ class Tokens(BaseModel):
         return True if self.access and self.refresh else False
 
 
+class WSSConfig(BaseModel):
+    base_url: Optional[str] = None
+    key: Optional[str] = None
+
+    def __bool__(self):
+        return self.ok()
+
+    def ok(self):
+        return self.base_url and self.key
+
+    @field_validator("base_url", mode="before")
+    @classmethod
+    def _ensure_proto(cls, v: str):
+        if v.startswith("https://"):
+            return v.replace(r"https://", r"wss://")
+
+        if not v.startswith(r"wss://"):
+            raise ValidationError("wss base_url should start with wss://")
+
+        return v
+
+
 class Webhook(BaseModel):
     token: Optional[str] = None
     port: Optional[int] = 9443
@@ -79,6 +101,7 @@ class Classic(BaseModel):
     password: Optional[str] = Field(None, alias=AliasChoices("password", "pass"))
     tokens: Optional[Tokens] = Field(None, alias=AliasChoices("tokens", "token"))
     webhook: Optional[Webhook] = Webhook()
+    wss: Optional[WSSConfig] = WSSConfig()
 
     @field_validator("customer_id", mode="before")
     @classmethod

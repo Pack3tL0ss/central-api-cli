@@ -12,7 +12,6 @@ import typer
 from centralcli import cleaner, common, log, render, utils
 from centralcli.cache import api
 from centralcli.constants import LogAppArgs, LogSortBy
-from centralcli.ws_client import follow_audit_logs
 
 if TYPE_CHECKING:
     from centralcli.cache import CacheDevice, CacheGroup
@@ -196,18 +195,20 @@ def logs(
     :clock2:  Displays prior 2 days if no time options are provided.
     """
     title = "audit event logs"
-    caption = None
     if tail:
-        render.econsole.print(f"Following tail on {title}.  Use CTRL-C to stop.")
-        try:
-            api.session.request(follow_audit_logs)
-        except KeyboardInterrupt:
-            common.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
-        except Exception as e:
-            common.exit(str(e))
-        common.exit()
+        common.ws_follow_tail(title=title, log_type="audit")  # program will exit here
+    # if tail:
+    #     render.econsole.print(f"Following tail on {title}.  Use CTRL-C to stop.")
+    #     try:
+    #         api.session.request(follow_audit_logs)
+    #     except KeyboardInterrupt:
+    #         common.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
+    #     except Exception as e:
+    #         common.exit(str(e))
+    #     common.exit()
 
     start, end = common.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=2))
+    caption = None
 
     if all(x is None for x in [start, end]):
         start = pendulum.now(tz="UTC").subtract(days=2)

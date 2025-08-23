@@ -36,7 +36,7 @@ from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
 from .models.imports import ImportDevices
 from .response import Response
-from .ws_client import follow_audit_logs, follow_event_logs
+from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
     from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
@@ -1839,20 +1839,19 @@ class CLICommon:
         return f"[{style}]{escape(f'[{help_type}: {default_txt}]')}[/{style}]"
 
     def ws_follow_tail(self, title: str = None, log_type: LogType = "event") -> None:
-        title = title or "Device event Logs"
-        func = follow_event_logs if log_type == "event" else follow_audit_logs
+        title = title or "device event Logs"
         render.econsole.print(f"Following tail on {title} (Streaming API).  Use CTRL-C to stop.")
-        if len(sys.argv[1:]) > 3:
+        if ("audit" not in sys.argv and len(sys.argv[1:]) > 3) or len(sys.argv[1:]) > 4:
             honored = ['show', 'audit', 'logs', '-f']
             ignored = [option for option in sys.argv[1:] if option not in honored]
             render.econsole.print(f"[dark_orange3]:warning:[/]  Provided options {','.join(ignored)} [bright_red]ignored[/].  Not valid with [cyan]-f[/]")
         try:
-            api.session.request(func)
+            api.session.request(follow_logs, config.classic.wss, log_type=log_type)
         except KeyboardInterrupt:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
             self.exit(str(e))
-        self.exit()
+
 
 if __name__ == "__main__":
     pass
