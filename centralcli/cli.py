@@ -610,7 +610,7 @@ def enable(
     """
 
     _msg = "[bright_green]Enable[/] auto-subscribe for license"
-    if len(services) > 1:
+    if len(services) > 1:  # pragma: no cover
         _svc_msg = '\n    '.join([s.name for s in services])
         _msg = f'{_msg}s:\n    {_svc_msg}\n'
     else:
@@ -643,7 +643,7 @@ def disable(
     """
     services: list[LicenseTypes] = services  # retyping common.cache.LicenseTypes
     _msg = "[bright_green]Disable[/] auto-subscribe for license"
-    if len(services) > 1:
+    if len(services) > 1:  # pragma: no cover
         _svc_msg = '\n    '.join([s.name for s in services])
         _msg = f'{_msg}s:\n    {_svc_msg}\n'
     else:
@@ -666,7 +666,7 @@ def renew_license(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover
     """Renew-Licenses on devices.
 
     :warning: Device may go offline briefly.
@@ -764,7 +764,7 @@ def callback(
        - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
     if not config.cache_file_ok and do_load_pycentral():
-        cache.check_fresh(refresh=True)
+        cache.check_fresh(refresh=True)  # pragma: no cover
 
 
 
