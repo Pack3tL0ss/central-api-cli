@@ -99,30 +99,35 @@ def ensure_cache_group3():
 
 def test_archive(ensure_cache_test_ap):
     result = runner.invoke(app, ["archive", test_data["test_add_do_del_ap"]["mac"], "-y"])
+    capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 
 
 def test_unarchive(ensure_cache_test_ap):
     result = runner.invoke(app, ["unarchive", test_data["test_add_do_del_ap"]["serial"]])
+    capture_logs(result, "test_unarchive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 
 
 def test_move_pre_provision(ensure_cache_group3, ensure_cache_test_ap):
     result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "-y"])
+    capture_logs(result, "test_move_pre_provision")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
 def test_remove_test_ap_from_site(ensure_cache_test_ap, ensure_cache_test_ap_devdb, ensure_cache_site1):
     result = runner.invoke(app, ["remove", test_data["test_add_do_del_ap"]["serial"], "site", "cencli_test_group3", "-y"])
+    capture_logs(result, "test_remove_test_ap_from_site")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
 def test_blink_switch_on_timed():
     result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on", "1"])
+    capture_logs(result, "test_blink_switch_on_timed")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -130,6 +135,7 @@ def test_blink_switch_on_timed():
 
 def test_blink_switch_on():
     result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on"])
+    capture_logs(result, "test_blink_switch_on")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -137,6 +143,7 @@ def test_blink_switch_on():
 
 def test_blink_switch_off():
     result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "off"])
+    capture_logs(result, "test_blink_switch_off")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -158,6 +165,7 @@ def test_blink_wrong_dev_type():
 
 def test_bounce_interface():
     result = runner.invoke(app, ["bounce",  "interface", test_data["switch"]["name"].lower(), test_data["switch"]["test_ports"][0], "-Y", "--debug"])
+    capture_logs(result, "test_bounce_interface")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -165,6 +173,7 @@ def test_bounce_interface():
 
 def test_bounce_poe_multiport():
     result = runner.invoke(app, ["bounce", "poe", test_data["switch"]["name"].lower(), ",".join(test_data["switch"]["test_ports"]), "-Y", "--debug"])
+    capture_logs(result, "test_bounce_poe_multiport")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -173,6 +182,7 @@ def test_bounce_poe_multiport():
 # This group remains as it is deleted in cleanup of test_update
 def test_clone_group():
     result = runner.invoke(app, ["-d", "clone", "group", test_data["gateway"]["group"], test_data["clone"]["to_group"], "-Y"])
+    capture_logs(result, "test_clone_group")
     assert result.exit_code == 0  # TODO check this we are not returning a 1 exit_code on resp.ok = False?
     assert "201" in result.stdout or "400" in result.stdout
     assert "Created" in result.stdout or "already exists" in result.stdout
@@ -180,18 +190,21 @@ def test_clone_group():
 
 def test_kick_client():
     result = runner.invoke(app, ["kick",  "client", test_data["client"]["wireless"]["name"][0:-2], "--yes"])
+    capture_logs(result, "test_kick_client")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_kick_all():
     result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], "--yes"])
+    capture_logs(result, "test_kick_all")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_kick_all_by_ssid():
     result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"], "--yes"])
+    capture_logs(result, "test_kick_all_by_ssid")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
