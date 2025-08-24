@@ -701,7 +701,7 @@ def strip_no_value(data: list[dict] | dict[dict], aggressive: bool = False) -> l
             data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_keys} for id in data}
     else:
         log.error(
-            f"cleaner.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is."
+            f"cleaner.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is.\n{data}"
         )
 
     return data
