@@ -1173,6 +1173,24 @@ class CacheResponses:
     def device_type(self, device_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes]):
         self._device_type = utils.listify(device_type)
 
+    def clear(self) -> None:
+        """Clears response cache.  Primarily used for pytest runs."""
+        self._dev = None
+        self._inv = None
+        self._sub = None
+        self._site = None
+        self._template = None
+        self._group = None
+        self._label = None
+        self._mpsk_network = None
+        self._mpsk = None
+        self._portal = None
+        self._license = None
+        self._client = None
+        self._guest = None
+        self._cert = None
+        self._device_type = None
+
 
 # TODO Verify, but the set_config class method should be able to be removed as ordering
 # changed in __init__

@@ -130,4 +130,5 @@ def clear_lru_caches():
     cache.get_name_id_identifier.cache_clear()
     for db in cache._tables:
         db.clear_cache()
+    cache.resonses.clear()
     yield
