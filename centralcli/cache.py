@@ -1474,6 +1474,28 @@ class Cache:
     async def get_hooks_by_serial(self, serial):
         return self.HookDataDB.get(self.Q.device_id == serial)
 
+    def fuzz_lookup(self, query_str: str, db: Table, field: str = "name", group: str = None, portal_id: str = None, dev_type: list[constants.LibAllDevTypes] = None) -> list[Document] | None:
+        if not render.console.is_terminal or not db.all():
+            return
+
+        def _conditions(item: Document, group: str = None, portal_id: str = None) -> bool:
+            if not any([group, portal_id, dev_type]):
+                return True
+            if group:
+                return item["group"] == group
+            if portal_id:
+                return item["portal_id"] == portal_id
+            if dev_type:
+                return item["type"] in dev_type
+
+        fuzz_resp = process.extract(
+            query_str, [item[field] for item in db.all() if _conditions(item, group=group, portal_id=portal_id)], limit=1
+        )
+        if fuzz_resp:
+            fuzz_match, fuzz_confidence = fuzz_resp[0]
+            if fuzz_confidence >= 70 and render.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
+                return db.search(getattr(Query(), field) == fuzz_match)
+
     @staticmethod
     def verify_db_action(db: Table, *, expected: int, response: List[int | List[int]], remove: bool = False, elapsed: int | float = None) -> bool:
         """Evaluate TinyDB Cache results (search/add/update/delete).
@@ -1942,10 +1964,11 @@ class Cache:
             if retry and not match and self.responses.guest is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.guests and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.guests if portal_id is None or g["portal_id"] == portal_id], limit=1)[0]
-                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.GuestDB.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_lookup(query_str, db=self.GuestDB, portal_id=portal_id)
+                    # fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.guests if portal_id is None or g["portal_id"] == portal_id], limit=1)[0]
+                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                    #     match = self.GuestDB.search(self.Q.name == fuzz_match)
                 if not match:
                     if not portal_id:
                         econsole.print(f"[red]:warning:[/]  Unable to gather guest from provided identifier {query_str}.  Use [cyan]cencli show guest <PORTAL>[/] to update cache.")
@@ -2071,10 +2094,11 @@ class Cache:
             if retry and not match and self.responses.cert is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.certs and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]  # <-- IndexError occurs here if list is empty
-                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.GuestDB.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_lookup(query_str, self.GuestDB)
+                    # fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]  # <-- IndexError occurs here if list is empty
+                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                    #     match = self.GuestDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating certificate Cache")
                     api.session.request(self.refresh_cert_db)
@@ -4499,21 +4523,22 @@ class Cache:
                         _msg = "[bright_red]No Match found[/] in Inventory or Device (monitoring) Cache"
                     else:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
-                    dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
+                    dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
-                    fuzz_match = None
+                    # fuzz_match = None
                     if FUZZ and self.devices and not silent:
-                        if dev_type:
-                            fuzzy_match = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)
-                            if fuzzy_match:
-                                fuzz_match, fuzz_confidence = fuzzy_match[0]
-                        else:
-                            fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d], limit=1)[0]
+                        match = self.fuzz_lookup(query_str, db=self.DevDB, dev_type=dev_type)
+                        # if dev_type:
+                        #     fuzzy_match = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)
+                        #     if fuzzy_match:
+                        #         fuzz_match, fuzz_confidence = fuzzy_match[0]
+                        # else:
+                        #     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d], limit=1)[0]
 
-                        if fuzz_match:
-                            confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                            if fuzz_confidence >= 70 and render.confirm(prompt=confirm_str, abort=False):
-                                match = self.DevDB.search(self.Q.name == fuzz_match)
+                        # if fuzz_match:
+                        #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                        #     if fuzz_confidence >= 70 and render.confirm(prompt=confirm_str, abort=False):
+                        #         match = self.DevDB.search(self.Q.name == fuzz_match)
 
                     # If there is an inventory only match we still update monitoring cache (to see if device came online since it was added. Otherwise commands like move will reject due to only being in Inventory)
                     if not match or Model == CacheInvDevice:
@@ -5047,11 +5072,12 @@ class Cache:
 
             if retry and not match and self.responses.template is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and self.templates and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates if group is None or t["group"] == group], limit=1)[0]
-                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.TemplateDB.search(self.Q.name == fuzz_match)
+                if FUZZ and not silent:
+                    match = self.fuzz_lookup(query_str, self.TemplateDB, group=group)
+                    # fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates if group is None or t["group"] == group], limit=1)[0]
+                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                    #     match = self.TemplateDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating template Cache")
                     self.check_fresh(refresh=True, template_db=True)
@@ -5161,11 +5187,8 @@ class Cache:
             # no match found try fuzzy match (typos) and initiate cache update
             if retry and not match and self.responses.client is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and self.clients and render.console.is_terminal and not silent:
-                    fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
-                    confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                        match = self.ClientDB.search(self.Q.name == fuzz_match)
+                if FUZZ and not silent:
+                    match = self.fuzz_lookup(query_str, self.ClientDB)
                 if not match:  # on demand update only for WLAN as roaming and kick only applies to WLAN currently
                     econsole.print(":arrows_clockwise: Updating [cyan]client[/] Cache")
                     api.session.request(self.refresh_client_db, "wireless")
@@ -5302,14 +5325,15 @@ class Cache:
                 )
 
             if not match and retry and self.responses.mpsk_network is None:
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.mpsk_networks and not silent:
-                    econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                    fuzz_resp = process.extract(query_str, [net["name"] for net in self.mpsk_networks], limit=1)
-                    if fuzz_resp:
-                        fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = self.MpskNetDB.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_match(query_str, self.MpskNetDB)
+                    # fuzz_resp = process.extract(query_str, [net["name"] for net in self.mpsk_networks], limit=1)
+                    # if fuzz_resp:
+                    #     fuzz_match, fuzz_confidence = fuzz_resp[0]
+                    #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    #     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                    #         match = self.MpskNetDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
                     api.session.request(self.refresh_mpsk_networks_db)
@@ -5450,12 +5474,13 @@ class Cache:
             if not match and retry and not cache_updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and db_all and not silent:
-                    fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
-                    if fuzz_resp:
-                        fuzz_match, fuzz_confidence = fuzz_resp[0]
-                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                            match = db.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_lookup(query_str, db=db)
+                    # fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
+                    # if fuzz_resp:
+                    #     fuzz_match, fuzz_confidence = fuzz_resp[0]
+                    #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                    #     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                    #         match = db.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
                     api.session.request(this.cache_update_func)
