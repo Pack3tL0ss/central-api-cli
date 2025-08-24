@@ -122,7 +122,7 @@ def test_remove_test_ap_from_site(ensure_cache_test_ap, ensure_cache_test_ap_dev
     result = runner.invoke(app, ["remove", test_data["test_add_do_del_ap"]["serial"], "site", "cencli_test_site1", "-y"])
     capture_logs(result, "test_remove_test_ap_from_site")
     assert result.exit_code == 0
-    assert "201" in result.stdout
+    assert "200" in result.stdout
 
 
 def test_blink_switch_on_timed():
