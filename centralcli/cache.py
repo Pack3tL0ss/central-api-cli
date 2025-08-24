@@ -5153,7 +5153,7 @@ class Cache:
             # no match found try fuzzy match (typos) and initiate cache update
             if retry and not match and self.responses.client is not None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and self.clients and not silent:
+                if FUZZ and self.clients and render.console.is_terminal and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
