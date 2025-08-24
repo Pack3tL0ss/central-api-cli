@@ -387,6 +387,12 @@ def test_show_audit_logs_by_id():
         assert "Response" in result.stdout
 
 
+def test_show_audit_logs_invalid_id():
+    result = runner.invoke(app, ["show", "audit", "logs", "999"],)
+    assert result.exit_code == 1
+    assert "nable to gather" in result.stdout
+
+
 def test_show_audit_acp_logs_count():
     result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
     capture_logs(result, "test_show_audit_acp_logs_count")
