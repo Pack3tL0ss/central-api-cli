@@ -25,7 +25,7 @@ def subscriptions(
     """
     if show_example:
         examples = ImportExamples()
-        render.console.print(examples.assign_subscriptions, emoji=False)
+        render.console.print(examples.assign_subscriptions)
         return
 
     if not import_file:
