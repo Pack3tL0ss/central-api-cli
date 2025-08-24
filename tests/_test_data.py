@@ -13,9 +13,9 @@ def get_test_data():
     return config.get_file_data(test_file)
 
 
-def setup_batch_import_file(test_data: dict | str | Path, import_type: str = "sites") -> Path:
-    if isinstance(test_data, (str, Path)):
-        return test_data if isinstance(test_data, Path) else Path(test_data)  # pragma: no cover
+def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -> Path:
+    if isinstance(test_data["batch"][import_type], str):
+        return Path(test_data["batch"][import_type])  # pragma: no cover
 
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
     res = test_batch_file.write_text(
