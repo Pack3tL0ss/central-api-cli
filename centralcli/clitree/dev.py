@@ -198,6 +198,27 @@ def emoji(
 
 
 @app.command()
+def show_raw(
+    line: int = typer.Argument(None, help="Show raw capture from this line in raw_capture file", show_default=False,),
+    debug: bool = common.options.debug,
+) -> None:
+    """Adds closing ] to raw capture file"""
+    if not config.capture_file.exists():
+        common.exit(f"{config.capture_file} does not exist.")
+
+    lines = config.capture_file.read_text()
+    if not line:
+        render.console.print(lines)
+    else:
+        output = lines.splitlines()[line].rstrip(",")
+        from rich import print_json
+        print_json(output)
+
+
+
+
+
+@app.command()
 def close_raw(
     debug: bool = common.options.debug,
 ) -> None:

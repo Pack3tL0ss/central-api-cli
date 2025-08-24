@@ -74,9 +74,27 @@ class MyLogger:
         )
         return logging.getLogger(self.log_file.stem)
 
-    def print_file(self, pytest: bool = False) -> None:
-        file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
-        console.print(file.read_text(),)
+    def print_file(self, pytest: bool = False, show_all: bool = False, unused_mocks: bool = False) -> None:
+        if unused_mocks:
+            unused_mock_file = self.log_file.parent / "pytest-unused-mocks.log"
+            logs = unused_mock_file.read_text()
+        elif not pytest:
+            logs = self.log_file.read_text()
+        else:
+            pytest_log_file = self.log_file.parent / "pytest.log"
+            logs = pytest_log_file.read_text()
+            if not show_all:
+                lines = logs.splitlines(keepends=True)
+                for idx, line in enumerate(lines[::-1], start=1):
+                    if "test run start" in line.lower():
+                        break
+                logs = "".join(lines[len(lines) - idx:])
+
+        console.print(logs)
+
+
+
+
 
     def follow(self, pytest: bool = False) -> None:
         """generator function that yields new lines in log file"""

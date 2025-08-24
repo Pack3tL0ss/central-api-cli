@@ -109,8 +109,8 @@ class TestResponses:
     @property
     def unused(self) -> list[str]:  # pragma: no cover
         return [
-            f"{idx}:{k}" for idx, r in enumerate(responses) for k, v in r.items() if hash(str(v)) not in self.used_responses
-        ]
+            f"{idx}:{k}" for idx, r in enumerate(responses, start=1) for k, v in r.items() if hash(str(v)) not in self.used_responses
+        ]  # start=1 to account for '[' at the top of the raw_capture file.  So idx is line # in raw_capture file.
 
     def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
         url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus

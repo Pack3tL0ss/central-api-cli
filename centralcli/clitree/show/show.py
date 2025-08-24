@@ -2757,6 +2757,7 @@ def logs(
     ),
     cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),
     pytest: bool = typer.Option(False, "--pytest", hidden=True),
+    unused_mocks: bool = typer.Option(False, "-u", "--unused-mocks", hidden=True),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file [dim italic](wss_key must be configured unless used to show cencli logs locally)[/]", is_eager=True),
     group: str = common.options.group,
     site: str = common.options.site,
@@ -2796,15 +2797,12 @@ def logs(
     update_cache = common.options.update_cache,
     verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
 ) -> None:
-    """Show device event logs (last 30m by default) or show cencli logs.
-
-    [italic]Audit logs have moved to [cyan]cencli show audit logs[/cyan][/italic]
-    """
+    """Show device event logs (last 30m by default) or show cencli logs."""
     title="Device event Logs"
     pytest = pytest or (event_id and event_id == "pytest")
-    if cencli or pytest or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):
+    if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):
         from centralcli import log
-        log.print_file(pytest) if not tail else log.follow(pytest)
+        log.print_file(pytest, show_all=_all, unused_mocks=unused_mocks) if not tail else log.follow(pytest)
         common.exit(code=0)
 
     if tail:
