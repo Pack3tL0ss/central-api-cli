@@ -5090,8 +5090,16 @@ class Cache:
     def get_client_identifier(
         self,
         query_str: str,
-        completion: bool = False,
-    ) -> list[CacheClient]:
+        completion: bool = Literal[False],
+    ) -> CacheClient:
+        ...
+
+    @overload
+    def get_client_identifier(
+        self,
+        query_str: str,
+        exit_on_fail: bool = Literal[True],
+    ) -> CacheClient:
         ...
 
     def get_client_identifier(
@@ -5151,7 +5159,7 @@ class Cache:
                         )
 
             # no match found try fuzzy match (typos) and initiate cache update
-            if retry and not match and self.responses.client is not None:
+            if retry and not match and self.responses.client is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.clients and render.console.is_terminal and not silent:
                     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.clients], limit=1)[0]
