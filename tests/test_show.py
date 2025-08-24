@@ -130,6 +130,13 @@ def test_show_all_verbose():
     assert "uptime" in result.stdout
 
 
+def test_show_sites():
+    result = runner.invoke(app, ["show", "sites"],)
+    capture_logs(result, "test_show_sites")
+    assert result.exit_code == 0
+    assert "site" in result.stdout.lower()
+
+
 def test_show_switch_by_name():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["name"], "--debug"],)
     capture_logs(result, "test_show_switch_by_name")
