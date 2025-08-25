@@ -26,5 +26,11 @@ class Env:
     def is_pytest(self) -> bool:
         return bool(environ.get("PYTEST_VERSION"))
 
+    @property
+    def current_test(self) -> str | None:
+        cur_test = environ.get("PYTEST_CURRENT_TEST")
+        if cur_test:
+            return cur_test.split("::")[1].split()[0]
+
 
 env = Env()
