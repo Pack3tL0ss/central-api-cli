@@ -163,7 +163,7 @@ def device(
 
 @app.command()
 def group(
-    group: str = typer.Argument(..., metavar="[GROUP NAME]", autocompletion=common.cache.group_completion, show_default=False,),
+    group: str = common.arguments.group,
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
     gw_role: GatewayRole = typer.Option(None, help=f"Configure Gateway Role [grey42]{escape('[default: vpnc if --sdwan branch if not]')}[/]", show_default=False,),
@@ -287,25 +287,17 @@ def group(
 @app.command()
 def wlan(
     group: str = typer.Argument(..., metavar="[GROUP NAME|SWARM ID]", autocompletion=common.cache.group_completion, show_default=False,),
-    name: str = typer.Argument(..., show_default=False,),
-    kw1: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]", show_default=False,),
-    kw2: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']", show_default=False,),
-    kw3: Tuple[AddWlanArgs, str] = typer.Argument(("vlan", ""), metavar="vlan [VLAN]", show_default=False,),
-    kw4: Tuple[AddWlanArgs, str] = typer.Argument(("zone", ""), metavar="zone [ZONE]", show_default=False,),
-    kw5: Tuple[AddWlanArgs, str] = typer.Argument(("ssid", None), metavar="ssid [SSID]", show_default=False,),
-    kw6: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_up", ""), metavar="bw-limit-up [LIMIT]", show_default=False,),
-    kw7: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_down", ""), metavar="bw-limit-down [LIMIT]", show_default=False,),
-    kw8: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_user_up", ""), metavar="bw-limit-user-up [LIMIT]", show_default=False,),
-    kw9: Tuple[AddWlanArgs, str] = typer.Argument(
-        ("bw_limit_user_down", ""),
-        metavar="bw-limit-user-down [LIMIT]",
-        show_default=False,
-    ),
-    kw10: Tuple[AddWlanArgs, str] = typer.Argument(
-        ("portal_profile", ""),
-        metavar="portal-profile [PORTAL PROFILE]",
-        show_default=False,
-    ),
+    name: str = typer.Argument(..., show_default=False, help="The WLAN profile name.  Also the SSID if not provided."),
+    psk: Tuple[AddWlanArgs, str] = typer.Argument(("psk", None), metavar="psk [WPA PASSPHRASE]", show_default=False, show_choices=False,),
+    wlan_type: Tuple[AddWlanArgs, str] = typer.Argument(("type", "employee"), metavar="type ['employee'|'guest']", show_default=False,),
+    vlan: Tuple[AddWlanArgs, str] = typer.Argument(("vlan", ""), metavar="vlan [VLAN]", show_default=False,),
+    zone: Tuple[AddWlanArgs, str] = typer.Argument(("zone", ""), metavar="zone [ZONE]", show_default=False,),
+    ssid: Tuple[AddWlanArgs, str] = typer.Argument(("ssid", None), metavar="ssid [SSID]", help="By default the SSID will match the WLAN profile name.", show_default=False,),
+    bw_up: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_up", ""), metavar="bw-limit-up [LIMIT]", show_default=False,),
+    bw_down: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_down", ""), metavar="bw-limit-down [LIMIT]", show_default=False,),
+    bw_user_up: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_user_up", ""), metavar="bw-limit-user-up [LIMIT]", show_default=False,),
+    bw_user_down: Tuple[AddWlanArgs, str] = typer.Argument(("bw_limit_user_down", ""), metavar="bw-limit-user-down [LIMIT]", show_default=False,),
+    portal_profile: Tuple[AddWlanArgs, str] = typer.Argument(("portal_profile", ""), metavar="portal-profile [PORTAL PROFILE]", show_default=False,),
     hidden: bool = typer.Option(False, "--hidden", help="Make WLAN hidden"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -314,7 +306,7 @@ def wlan(
 ) -> None:
     """Add WLAN (SSID)"""
     group = common.cache.get_group_identifier(group)
-    kwarg_list = [kw1, kw2, kw3, kw4, kw5, kw6, kw7, kw8, kw9, kw10]
+    kwarg_list = [psk, wlan_type, vlan, zone, ssid, bw_up, bw_down, bw_user_up, bw_user_down, portal_profile]
     _to_name = {
         "psk": "wpa_passphrase",
         "ssid": "essid",
