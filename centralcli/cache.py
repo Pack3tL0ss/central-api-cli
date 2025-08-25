@@ -4679,14 +4679,14 @@ class Cache:
             # retry with case insensitive name match if no match with original query
             if not match:
                 match = self.InvDB.search(
-                    (self.Q.id.test(lambda v: v.lower() == query_str.lower()))
+                    (self.Q.id.test(lambda v: v and v.lower() == query_str.lower()))
                     | self.Q.serial.test(lambda v: v.lower() == query_str.lower())
                 )  # We don't need MAC as utils.Mac will match regardless of case or delimeter
 
             # Last Chance try to match name if it startswith provided value
             if not match:
                 match = self.InvDB.search(
-                    self.Q.id.test(lambda v: v.lower().startswith(query_str.lower()))
+                    self.Q.id.test(lambda v: v and v.lower().startswith(query_str.lower()))
                     | self.Q.serial.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
                 if not match:
