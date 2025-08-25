@@ -117,28 +117,7 @@ def variables(
     dev = common.cache.get_dev_identifier(device)
     serial = dev.serial
 
-    vars, vals, get_next = [], [], False
-    for var in var_value:
-        var = var.rstrip(",")
-        if var == '=':
-            continue
-        if '=' not in var:
-            if get_next:
-                vals += [var]
-                get_next = False
-            else:
-                vars += [var]
-                get_next = True
-        else:
-            _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
-            vars += [_[0]]
-            vals += [_[1]]
-            get_next = False
-
-    if len(vars) != len(vals):
-        common.exit("Something went wrong parsing variables.  Unequal length for Variables vs Values")
-
-    var_dict = {k: v for k, v in zip(vars, vals)}
+    var_dict = common.parse_var_value_list(var_value)
 
     msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
     render.econsole.print(f"{msg} {dev.rich_help_text}", emoji=False)
