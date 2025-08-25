@@ -15,12 +15,11 @@ from centralcli.cache import CentralObject, api
 from centralcli.client import BatchRequest
 from centralcli.constants import (
     BatchRenameArgs,
-    BatchUpdateArgs,
     iden_meta,
 )
 from centralcli.response import Response
 
-from . import add, assign, delete, examples
+from . import add, assign, delete, examples, update
 
 try:
     import readline  # noqa imported for backspace support during prompts.
@@ -31,6 +30,7 @@ app = typer.Typer()
 app.add_typer(assign.app, name="assign",)
 app.add_typer(delete.app, name="delete",)
 app.add_typer(add.app, name="add",)
+app.add_typer(update.app, name="update",)
 
 
 class FstrInt:
@@ -714,34 +714,6 @@ def rename(
         cache_data = [common.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
         cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
         api.session.request(common.cache.update_dev_db, data=cache_data)
-
-
-@app.command()
-def update(
-    what: BatchUpdateArgs = common.arguments.what,
-    import_file: Path = common.arguments.import_file,
-    show_example: bool = common.options.show_example,
-    reboot: bool = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device if IP or VLAN is changed [grey62]{escape('[Reboot is required for changes to take effect when IP or VLAN settings are changed]')}[/]"),
-    yes: bool = common.options.yes,
-    debug: bool = common.options.debug,
-    debugv: bool = common.options.debugv,
-    default: bool = common.options.default,
-    workspace: str = common.options.workspace,
-) -> None:
-    """Update per-ap-settings or ap-altitude (at AP level) in mass based on settings from import file
-
-    Use [cyan]--example[/] to see expected import file format and required fields.
-    """
-    if show_example:
-        print(examples.update_aps)
-        return
-
-    if not import_file:
-        common.exit(render._batch_invalid_msg("cencli batch update aps [OPTIONS] [IMPORT_FILE]"))
-
-    if what == BatchUpdateArgs.aps:
-        data = common._get_import_file(import_file, "devices")
-        common.batch_update_aps(data, yes=yes, reboot=reboot)
 
 
 @app.command()

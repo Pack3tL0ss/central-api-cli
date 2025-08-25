@@ -515,10 +515,6 @@ class BatchApArgs(str, Enum):
     rename = "rename"
 
 
-class BatchUpdateArgs(str, Enum):
-    aps = "aps"
-
-
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
