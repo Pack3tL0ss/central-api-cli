@@ -62,9 +62,9 @@ api_clients = APIClients()
 class NonDefaultWorkspaceException(CentralCliException): ...
 
 
-def capture_logs(result: Result, test_func: str = None):
+def capture_logs(result: Result, test_func: str = None, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
-    if result.exit_code != 0:
+    if result.exit_code != 0 if not expect_failure else 1:
         log.error(f"{test_func} returned error:\n{result.stdout}", show=True)
         if "unable to gather device" in result.stdout:
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
