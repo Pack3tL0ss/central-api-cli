@@ -103,6 +103,74 @@ def restore_config(
 
 
 @app.command()
+def new_config(
+    yes: bool = common.options.yes,
+    overwrite: bool = typer.Option(False, "-o", "--overwrite", help=f"Overwrite existing bak file if one exists.  {render.help_block('exit if bak file already exists')}"),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Restore v2 cencli config from previously stashed/created config.yaml.v2.bak
+
+    Provided the existing config is a V1 config:
+        coppies [cyan]config.yaml[/] --> [dark_olive_green2]config.yaml.v1.bak[/]
+        coppies [cyan]config.yaml.v2.bak[/] --> [dark_olive_green2]config.yaml[/]
+    """
+    v1_bak_file = config.dir / "config.yaml.v1.bak"
+    v2_bak_file = config.dir / "config.yaml.v2.bak"
+    if not config.is_old_cfg:
+        common.exit(f"{config.file} appears to be a v2 config.")
+    if not v2_bak_file.exists():
+        common.exit(f"{v2_bak_file} not found.")
+    if not overwrite and v1_bak_file.exists():
+        common.exit(f"{v1_bak_file.name} exists.  Use [cyan]--overwrite[/]|[cyan]-o[/] to overwrite.")
+
+    conf_msg = [
+        f"Stash{'' if not yes else 'ing'} existing config [cyan]{config.file.name}[/] to [dark_olive_green2]{v1_bak_file.name}[/]",
+        f"Restor{'e' if not yes else 'ing'} v2 config [cyan]{v2_bak_file.name}[/] to [dark_olive_green2]{config.file.name}[/]",
+    ]
+
+    render.econsole.print("\n".join(conf_msg))
+    render.confirm(yes)
+    shutil.copy(config.file, v1_bak_file)
+    shutil.copy(v2_bak_file, config.file)
+
+
+@app.command()
+def old_config(
+    yes: bool = common.options.yes,
+    overwrite: bool = typer.Option(False, "-o", "--overwrite", help=f"Overwrite existing bak file if one exists.  {render.help_block('exit if bak file already exists')}"),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Restore v1 cencli config from previously stashed/created config.yaml.v1.bak
+
+    Provided the existing config is a V1 config:
+        coppies [cyan]config.yaml[/] --> [dark_olive_green2]config.yaml.v2.bak[/]
+        coppies [cyan]config.yaml.v1.bak[/] --> [dark_olive_green2]config.yaml[/]
+    """
+    v1_bak_file = config.dir / "config.yaml.v1.bak"
+    v2_bak_file = config.dir / "config.yaml.v2.bak"
+    if config.is_old_cfg:
+        common.exit(f"{config.file} appears to be a v1 config.")
+    if not v1_bak_file.exists():
+        common.exit(f"{v1_bak_file} not found.")
+    if not overwrite and v2_bak_file.exists():
+        common.exit(f"{v2_bak_file.name} exists.  Use [cyan]--overwrite[/]|[cyan]-o[/] to overwrite.")
+
+    conf_msg = [
+        f"Stash{'' if not yes else 'ing'} existing config [cyan]{config.file.name}[/] to [dark_olive_green2]{v2_bak_file.name}[/]",
+        f"Restor{'e' if not yes else 'ing'} v1 config [cyan]{v1_bak_file.name}[/] to [dark_olive_green2]{config.file.name}[/]",
+    ]
+
+    render.econsole.print("\n".join(conf_msg))
+    render.confirm(yes)
+    shutil.copy(config.file, v2_bak_file)
+    shutil.copy(v1_bak_file, config.file)
+
+
+@app.command()
 def no_cache(
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
