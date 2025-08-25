@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import typer
-from rich import print
 
 from centralcli import common, config, render, utils
 
@@ -40,8 +39,8 @@ def template(
             if Path.joinpath(template.parent, f"{template.stem}{sfx}").exists()
         ]
         if not var_file:
-            print(f":x: No variable file found matching template base-name [cyan]{template.stem}[/]")
-            print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
+            render.econsole.print(f":x: No variable file found matching template base-name [cyan]{template.stem}[/]")
+            render.econsole.print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
             raise typer.Exit(1)
         elif  len(var_file) > 1:
             common.exit(f"Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
@@ -76,7 +75,7 @@ def config_(
     if not config.is_old_cfg:
         common.exit("Your config already appears to be [dark_olive_green2]CFG_VERSION: 2[/] compliant.")
 
-    print("Convert existing [cyan]cencli[/] config to [dark_olive_green2]CFG_VERSION: 2[/]")
+    render.econsole.print("Convert existing [cyan]cencli[/] config to [dark_olive_green2]CFG_VERSION: 2[/]")
     render.confirm(yes)
     bak_config = config.file.parent / f"{config.file.name}.bak"
     config.file.rename(bak_config)
