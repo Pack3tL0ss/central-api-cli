@@ -1,9 +1,8 @@
 from typer.testing import CliRunner
 
-from centralcli import log
 from centralcli.cli import app
 
-from . import test_data
+from . import capture_logs, test_data
 
 runner = CliRunner()
 
@@ -20,8 +19,23 @@ def test_assign_label():
             "-Y"
         ]
     )
-    if result.exit_code != 0:
-        log.error(f"Error in test_assign_label:\n{result.stdout}")
+    capture_logs(result, "test_assign_label")
     assert result.exit_code == 0
     assert "200" in result.stdout
     assert test_data["ap"]["serial"].upper() in result.stdout
+
+
+def test_assign_subscription():
+    result = runner.invoke(
+        app,
+        [
+            "assign",
+            "subscription",
+            "advanced-ap",
+            test_data["ap"]["name"],
+            "-Y"
+        ]
+    )
+    capture_logs(result, "test_assign_subscription")
+    assert result.exit_code == 0
+    assert "202" in result.stdout

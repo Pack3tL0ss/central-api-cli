@@ -40,7 +40,7 @@ def test_batch_add_devices():
 
 
 def test_batch_assign_subscriptions_with_tags():
-    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file)}', "--tags", "testtag1 = testval1, testtag2 = testval2", "-Y"])
+    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
     capture_logs(result, "test_batch_assign_subscriptions_with_tags")
     assert result.exit_code == 0
     assert result.stdout.count("202") == 2
