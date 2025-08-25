@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from centralcli.typedefs import UNSET
+
 from .... import utils
 from ....client import BatchRequest, Session
 
@@ -17,7 +19,12 @@ class GreenLakeDevicesAPI:
 
         return await self.session.get(url)
 
-    async def assign_subscription_to_devices(self, device_ids: list[str] | str, subscription_ids: list[str] | str) -> Response:
+    async def assign_subscription_to_devices(
+            self,
+            device_ids: list[str] | str,
+            subscription_ids: list[str] | str,
+            tags: dict[str, str] = None
+        ) -> list[Response]:
         url = "/devices/v2beta1/devices"
         header = {"Content-Type": "application/merge-patch+json"}
         device_ids = utils.listify(device_ids)
@@ -37,9 +44,48 @@ class GreenLakeDevicesAPI:
             query_str = "&".join([f"id={dev}" for dev in chunk])
             url = f"{url}?{query_str}"
             batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
+            if tags:  # Needs to be separate call... "description: Subscription and device update operations should not be together."
+                batch_reqs += [BatchRequest(self.session.patch, url, json_data={"tags": tags}, headers=header)]
 
         return await self.session._batch_request(batch_reqs)
 
+    async def update_devices(
+            self,
+            device_ids: str | list[str],
+            subscription_ids: list[str] | str | None = None,
+            tags: dict[str, str] | None = None,
+            application_id: str | None = UNSET,
+            archive: bool = None,
+            unarchive: bool = None,
+        ) -> Response:
+        url = "/devices/v2beta1/devices"
+        header = {"Content-Type": "application/merge-patch+json"}
+        device_ids = utils.listify(device_ids)
+        subscription_ids = utils.listify(subscription_ids)
+
+        if archive and unarchive:
+            raise ValueError("Specifying archive and unarchive both is invalid.")
+        payload = {}
+        if subscription_ids:
+            payload["subscription"] = [
+                {
+                "id": sub
+                } for sub in subscription_ids
+            ]
+        if tags:
+            payload["tags"] = tags
+        if archive or unarchive:
+            payload["archived"] = True if archive else False
+        if application_id is not UNSET:
+            payload["application"] = {"id": application_id}
+
+        batch_reqs = []
+        for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
+            query_str = "&".join([f"id={dev}" for dev in chunk])
+            url = f"{url}?{query_str}"
+            batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
+
+        return await self.session._batch_request(batch_reqs)
 
     async def remove_devices(self, device_ids: list[str] | str, remove_app: bool = True) -> Response:
         url = "/devices/v2beta1/devices"

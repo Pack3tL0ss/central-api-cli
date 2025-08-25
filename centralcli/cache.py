@@ -389,7 +389,7 @@ class CacheInvMonDevice(CentralObject):
 
         self.inv = inventory
         self.mon = monitoring
-        mon_data = self.mon.data or {}  # device can be in inventory but not monitoring db
+        mon_data = {} if not monitoring else monitoring.data  # device can be in inventory but not monitoring db
         data = {**self.inv.data, **mon_data}
 
         super().__init__('dev', data=data)
@@ -437,17 +437,21 @@ class CacheInvMonDevice(CentralObject):
         return f'[bright_green]{self.type}[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
     @property
-    def summary_text(self) -> str:
-        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
+    def rich_help_text(self) -> str:
         _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
         mon_parts = [p for p in [self.name, self.type, _status, self.serial, self.mac, self.ip, self.model] if p]
-        inv_parts = [p for p in [self.sku, id_str] if p]
-        parts = list(set([*mon_parts, *inv_parts]))
+        inv_parts = [] if not self.sku else [self.sku]
+        parts = [*mon_parts, *inv_parts]
         return "[reset]" + "|".join(
             [
                 f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
             ]
         )
+
+    @property
+    def summary_text(self) -> str:
+        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
+        return f"{self.rich_help_text()}{'' if not id_str else f'|{id_str}'}"
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
@@ -1324,8 +1328,13 @@ class Cache:
         return {d["serial"]: d for d in self.inventory}
 
     @property
-    def inventory_by_id(self) -> Dict[str, CacheInvDevice]:
-        return {d["id"]: d for d in self.inventory}
+    def invdev_by_id(self) -> Dict[str, CacheInvMonDevice]:
+        return {
+            d["id"]: CacheInvMonDevice(
+                inventory=CacheInvDevice(d),
+                monitoring=None if d["serial"] not in self.devices_by_serial else CacheDevice(self.devices_by_serial[d["serial"]])
+            ) for d in self.inventory
+        }
 
     @property
     def subscriptions(self) -> Dict[str, Document]:
@@ -4684,9 +4693,17 @@ class Cache:
                             self.Q.mac.test(lambda v: v.lower().startswith(utils.Mac(query_str, fuzzy=completion).cols.lower()))
                         )
 
+            # Try Monitoring DB may be using non inventory field
+            if not match and _ == 0:
+                dev = self.get_dev_identifier(query_str, dev_type=dev_type, retry=False, exit_on_fail=False)
+                if dev:
+                    query_str = dev.serial
+                    continue
+
             if match and dev_type:
                 all_match: list[Document] = match.copy()
                 match = [d for d in all_match if d.get("type", "") in dev_type]
+
 
 
             # no match found initiate cache update

@@ -34,7 +34,7 @@ from .client import BatchRequest, Session
 from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
-from .models.imports import ImportDevices
+from .models.imports import ImportSubDevices
 from .response import Response
 from .ws_client import follow_logs
 
@@ -531,7 +531,24 @@ class CLICommon:
 
         return md5.hexdigest()
 
-    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, text_ok: bool = False,) -> list[dict[str, Any]]:
+    def _parse_subscription_data(self, data: dict[str, list | str] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if not isinstance(data, dict):
+            return data
+
+        devices = []
+        for idx, (sub, dev) in enumerate(data.items(), start=1):
+            if not utils.is_resource_id(sub):
+                sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
+                if not sub_obj:
+                    self.exit(f"Unable to determine subscription id from subscription {sub} on line {idx} of import file.")
+
+                sub = sub_obj.id
+            inv_devs = [self.cache.get_combined_inv_dev_identifier(d) for d in utils.listify(dev)]
+            devices += [{"serial": d.serial, "subscription": sub} for d in inv_devs]
+
+        return devices
+
+    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, subscriptions: bool = False, text_ok: bool = False,) -> list[dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
@@ -545,6 +562,10 @@ class CLICommon:
 
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
+
+        if subscriptions:
+            data = self._parse_subscription_data(data)
+
 
         import_type = import_type or ""
         if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
@@ -1664,11 +1685,11 @@ class CLICommon:
         if inv_doc_ids:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
-    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, yes: bool = False,) -> List[Response]:
+    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, tags: dict[str, str] = None, yes: bool = False,) -> List[Response]:
         BR = BatchRequest
         glp_api = GreenLakeAPI()
         try:
-            _data = ImportDevices(data)
+            _data = ImportSubDevices(data)
         except ValidationError as e:
             self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
 
@@ -1676,19 +1697,28 @@ class CLICommon:
         confirm_msg, batch_reqs = [], []
         for sub_id, res in devs_by_sub_id.items():
             csub: CacheSub = res.cache_sub
-            confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(res.devices).lstrip()}\n"]
+            # confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(res.devices).lstrip()}\n"]
+            _inv_mon_devs = [self.cache.invdev_by_id[dev_id] for dev_id in res.devices]
+            _help_text_list = [d.rich_help_text for d in _inv_mon_devs]
+            confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(_help_text_list).lstrip()}\n"]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
                 confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription.\n"]
-            batch_reqs += [BR(glp_api.devices.assign_subscription_to_devices, device_ids=res.devices, subscription_ids=sub_id)]
+            batch_reqs += [BR(glp_api.devices.assign_subscription_to_devices, device_ids=res.devices, subscription_ids=sub_id, tags=tags)]
+
+        if tags:
+            _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in tags.items()])
+            confirm_msg += [f"\n[bright_green]The following tags will be assigned to the devices[/]:\n{_tag_msg}"]
 
         if not self.cache.responses.sub:
-            confirm_msg += ["\n[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
         render.econsole.print(f"[italic deep_sky_blue1]:information:[/]  [dark_olive_green2]Mak{'e' if not yes else 'ing'} the following assignments[/]:")
         render.econsole.print("\n".join(confirm_msg), emoji=False)
         render.confirm(yes) # aborts here if they don't confirm
-        return glp_api.session.batch_request(batch_reqs)
+        batch_res = glp_api.session.batch_request(batch_reqs)
+        # assign_subscription_to_devices returns a list of Responses so need to flatten list
+        return [r for res_list in batch_res for r in res_list]
 
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
@@ -1851,6 +1881,30 @@ class CLICommon:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
             self.exit(str(e))
+
+    def parse_var_value_list(self, var_value: list[str, str], *, error_name: str = "variables") -> dict[str, str]:
+        vars, vals, get_next = [], [], False
+        for var in var_value:
+            var = var.rstrip(",")
+            if var == '=':
+                continue
+            if '=' not in var:
+                if get_next:
+                    vals += [var]
+                    get_next = False
+                else:
+                    vars += [var]
+                    get_next = True
+            else:
+                _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
+                vars += [_[0]]
+                vals += [_[1]]
+                get_next = False
+
+        if len(vars) != len(vals):
+            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
+
+        return {k: v for k, v in zip(vars, vals)}
 
 
 if __name__ == "__main__":
