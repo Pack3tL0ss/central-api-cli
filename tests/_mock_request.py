@@ -128,7 +128,7 @@ class TestResponses:
                 return resp
 
         if resp_candidates:  # pragma: no cover
-            log.info(f"Reusing previously used response for {key}")
+            log.info(f"Reusing previously used response for {url.path}")
             return resp_candidates[-1]
 
         log.error(f"No Mock Response found for {key}.  Returning failed response.")  # pragma: no cover
