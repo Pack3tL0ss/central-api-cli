@@ -451,7 +451,7 @@ class CacheInvMonDevice(CentralObject):
     @property
     def summary_text(self) -> str:
         id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
-        return f"{self.rich_help_text()}{'' if not id_str else f'|{id_str}'}"
+        return f"{self.rich_help_text}{'' if not id_str else f'|{id_str}'}"
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
