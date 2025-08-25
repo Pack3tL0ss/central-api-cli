@@ -132,6 +132,7 @@ omit = [
     "centralcli/dashboard/*",
     "centralcli/vscodeargs.py",
     "centralcli/clitree/dev.py",
+    "centralcli/protobuf/*",
     "noxfile.py"
 ]
 
