@@ -344,7 +344,6 @@ def show_devices(
     include_inventory: bool = False,
     verbosity: int = 0,
     outfile: Path = None,
-    update_cache: bool = False,
     group: str = None,
     site: str = None,
     label: str = None,
@@ -363,9 +362,6 @@ def show_devices(
     do_table: bool = False
 ) -> None:
     # include subscription implies include_inventory
-    if update_cache:
-        api.session.request(common.cache.refresh_dev_db)
-
     if group:
         group: CacheGroup = common.cache.get_group_identifier(group)
     if site:
@@ -479,7 +475,6 @@ def all_(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     """Show details for All devices [dim italic](that have checked in with Central).[/]
     """
@@ -489,9 +484,10 @@ def all_(
         status = "Up"
 
     show_devices(
-        dev_type='all', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache,
-        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+        dev_type='all', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, status=status, state=state,
+        label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse, pager=pager,
+        do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+    )
 
 
 @app.command()
@@ -529,7 +525,6 @@ def devices(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     """Show details for devices
     """
@@ -547,9 +542,10 @@ def devices(
         dev_type = None
 
     show_devices(
-        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, update_cache=update_cache,
-        group=group, site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, group=group,
+        site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
+        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+    )
 
 
 @app.command()
@@ -579,7 +575,6 @@ def aps(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for APs
 
@@ -611,7 +606,7 @@ def aps(
         render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
     else:
         show_devices(
-            aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label, status=status,
+            aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label, status=status,
             state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
@@ -641,7 +636,6 @@ def switches_(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for switches
     """
@@ -651,7 +645,7 @@ def switches_(
         status = "Up"
 
     show_devices(
-        switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -682,7 +676,6 @@ def gateways_(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     """Show details for gateways
     """
@@ -692,7 +685,7 @@ def gateways_(
         status = "Up"
 
     show_devices(
-        gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
@@ -723,7 +716,6 @@ def controllers_(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     """Show details for controllers
 
@@ -735,7 +727,7 @@ def controllers_(
         status = "Up"
 
     show_devices(
-        controllers, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, update_cache=update_cache, group=group, site=site, label=label,
+        controllers, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
         status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
         pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
 
@@ -762,7 +754,6 @@ def stacks(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show details for switch stacks
     """
@@ -1465,7 +1456,6 @@ def dhcp(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show DHCP pool or lease details (gateways only)
 
@@ -1513,7 +1503,6 @@ def upgrade(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     """Show firmware upgrade status (by device)
     """
@@ -1873,7 +1862,6 @@ def variables(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ):
     if device and device != "all":
         device = common.cache.get_dev_identifier(device, conductor_only=True)
@@ -1916,7 +1904,6 @@ def lldp(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 
 ) -> None:
     """Show lldp neighbor information
@@ -2309,7 +2296,6 @@ def wlans(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show WLAN(SSID)/details
 
@@ -2490,7 +2476,6 @@ def clients(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache: bool = common.options.update_cache,
 ) -> None:
     """Show clients/details
 

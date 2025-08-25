@@ -696,13 +696,13 @@ def renew_license(
     # i.e. Foundation-90/70xx vs foundation_70xx
 
 
-def all_commands_callback(ctx: typer.Context, update_cache: bool):  # pragma: no cover  test_runner does not hit regardless of command line options
-    # --raw, --debug, --debugv, and --debug-limit are honored and stripped out in init
+def all_commands_callback(ctx: typer.Context, **kwargs):  # pragma: no cover  test_runner does not hit regardless of command line options
+    # --raw, --debug, --debugv, and --debug-limit are honored and stripped out in init (for normal runs, pytest does not expose commands native sys.argv)
     if ctx.resilient_parsing:
         config.is_completion = True
         return
 
-    version, workspace, default, update_cache = None, None, None, None
+    version, workspace, default = None, None, None
     for idx, arg in enumerate(sys.argv[1:]):
         if idx == 0 and arg in ["-v", "-V", "--version"]:
             version = True
@@ -710,13 +710,9 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):  # pragma: no
             default = True
         elif arg in ["--ws", "--workspace"] and "-d" not in sys.argv:
             workspace = sys.argv[idx + 2]  # sys.argv enumeration is starting at index 1 so need to adjust idx by 2 for next arg
-        elif arg == "-U":
-            update_cache = True
         elif arg.startswith("-") and arg.count("-") == 1:  # -dU is allowed
             if "d" in arg:
                 default = True
-            if "U" in arg:
-                update_cache = True
 
     workspace = workspace or env.workspace
 
@@ -732,10 +728,6 @@ def all_commands_callback(ctx: typer.Context, update_cache: bool):  # pragma: no
     else:
         common.workspace_name_callback(ctx, workspace=workspace)
 
-    if update_cache:
-        cache(refresh=True)
-        _ = sys.argv.pop(sys.argv.index("-U"))
-
 
 @app.callback()
 def callback(
@@ -747,7 +739,7 @@ def callback(
     default: bool = common.options.get("default", rich_help_panel="Options"),
 
     workspace: str = common.options.get("workspace", rich_help_panel="Options"),
-    update_cache: bool = common.options.get("update_cache", lazy=True, callback=all_commands_callback)
+    _: bool = typer.Option(False, hidden=True, lazy=True, callback=all_commands_callback)
 ) -> None:
     """
     Aruba Central API CLI.  A CLI for interacting with Aruba Central APIs.

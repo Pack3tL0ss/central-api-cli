@@ -241,7 +241,7 @@ class CLIOptions:
             # rich_help_panel="Time Range Options",
             show_default=False,
         )
-        self.update_cache: OptionInfo = typer.Option(False, "-U", hidden=True)
+        self.update_cache: OptionInfo = typer.Option(False, "-U", help="Update the local cache.", show_default=False)
         self.show_example: OptionInfo = typer.Option(False, "--example", help="Show Example import file format.", show_default=False)
         self.at: OptionInfo = typer.Option(
             None,
