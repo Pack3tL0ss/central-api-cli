@@ -16,7 +16,7 @@ runner = CliRunner()
 cache_bak_file = config.cache_file.parent / f"{config.cache_file.name}.pytest.bak"
 
 
-def stash_cache_file():
+def stash_cache_file():  # pragma: no cover
     if config.cache_file.exists():
         log.info(f"Real Cache {config.cache_file}, backed up to {cache_bak_file} as mock test run is starting (which will add items that don't actually exist to the cache)")
         shutil.copy(config.cache_file, cache_bak_file)
@@ -28,7 +28,7 @@ def stash_cache_file():
 
 
 
-def restore_cache_file():
+def restore_cache_file():  # pragma: no cover
     if cache_bak_file.exists():
         log.info(f"Stashing cache from mock test run for later use {cache_bak_file.name.removesuffix('.bak')}")
         config.cache_file.rename(cache_bak_file.parent / cache_bak_file.name.removesuffix('.bak'))  # we keep the pytest cache as running individual tests on subsequent runs would not work otherwise
@@ -40,7 +40,7 @@ def restore_cache_file():
         return config.cache_file.exists()
 
 
-def _cleanup_test_groups():
+def _cleanup_test_groups():  # pragma: no cover
     del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
     if del_groups:
         result = runner.invoke(app, ["delete", "group", *del_groups, "-Y"])
@@ -48,7 +48,7 @@ def _cleanup_test_groups():
         assert result.exit_code == 0
 
 
-def _cleanup_test_sites():
+def _cleanup_test_sites():  # pragma: no cover
     del_sites = [s for s in cache.sites_by_name if s.startswith("cencli_test_")]
     if del_sites:
         result = runner.invoke(app, ["delete", "site", *del_sites, "-Y"])
@@ -56,7 +56,7 @@ def _cleanup_test_sites():
         assert result.exit_code == 0
 
 
-def _cleanup_test_labels():
+def _cleanup_test_labels():  # pragma: no cover
     del_labels = [label for label in cache.labels_by_name if label.startswith("cencli_test_")]
     if del_labels:
         result = runner.invoke(app, ["delete", "label", *del_labels, "-Y"])
@@ -77,7 +77,7 @@ def pytest_sessionfinish(session: pytest.Session):
         )
 
 
-def cleanup_test_items():  # prama: no cover
+def cleanup_test_items():  # pragma: no cover
     try:
         _cleanup_test_groups()
         _cleanup_test_labels()
@@ -101,7 +101,7 @@ def setup():
     if config.dev.mock_tests:
         yield do_nothing()
         # yield stash_cache_file()
-    else:
+    else:  # pragma: no cover
         yield do_nothing()
 
 

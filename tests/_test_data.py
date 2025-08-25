@@ -34,5 +34,6 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -
 test_data: dict[str, Any] = get_test_data()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
+test_sub_file: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions")
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
