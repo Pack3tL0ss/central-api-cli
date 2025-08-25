@@ -696,7 +696,7 @@ def renew_license(
     # i.e. Foundation-90/70xx vs foundation_70xx
 
 
-def all_commands_callback(ctx: typer.Context, update_cache: bool):
+def all_commands_callback(ctx: typer.Context, update_cache: bool):  # pragma: no cover  test_runner does not hit regardless of command line options
     # --raw, --debug, --debugv, and --debug-limit are honored and stripped out in init
     if ctx.resilient_parsing:
         config.is_completion = True

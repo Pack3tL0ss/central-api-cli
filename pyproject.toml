@@ -128,6 +128,7 @@ omit = [
     "tests/cache_test.py",
     "*/snow.py",
     "*/webhook.py",
+    "centralcli/__init__.py",
     "centralcli/wh2snow.py",
     "centralcli/dashboard/*",
     "centralcli/vscodeargs.py",
