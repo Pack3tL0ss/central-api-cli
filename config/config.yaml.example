@@ -19,11 +19,13 @@ workspaces:
       tokens:
         access: M4wADeIsS0c00148KGipv1v09k4uB3cM                      # FYI: the tokens in the config become stale as soon as they are refreshed by cencli.  The refreshed tokens
         refresh: s4lhIvwADeIsS0c00Lxlo7Llr0OURQMT                     #   are stored elsewhere in the cache.  This allows for an easy place to update them if needed.
-        webhook: 7RSaW8hZQkO1qVAqzPsE                                 # Optional, Only applies if optional extra 'hook-proxy' is installed.  See README
+      wss:
+        base_url: "wss://internal-ui.central.arubanetworks.com"       # Optional, but required to use -f option with 'cencli show logs -f' and 'cencli show audit logs -f'.  Streaming should be subscribed for Audit and Monitoring.
         wss_key: ezkGbGd_really_long_key_blah_blah                    # Optional, but required to use -f option with 'cencli show logs -f' and 'cencli show audit logs -f'.  Streaming should be subscribed for Audit and Monitoring.
       webhook:
+        token: 7RSaW8hZQkO1qVAqzPsE                                   # Optional, Only applies if optional extra 'hook-proxy' is installed.  See README
         port: 9443                                                    # Optional, Port this system would listen on for webhooks from Aruba Central.  Only applies if optional extra 'hook-proxy' is installed.  See README
-  other-workspace:                                                  # webhook proxy will listen on 9443 by default
+  other-workspace:                                                    # webhook proxy will listen on 9443 by default
     cluster: us5
     # ... Same format as above.  Repeat for any other workspaces you want to interact with
 
