@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, KeysView, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, ValidationError, field_validator, model_validator
 
+from centralcli import utils
+
 from ..constants import CLUSTER_URLS, ClusterName
 
 
+@dataclass
 class Defaults:
-    def __init__(self):
-        self.cache_client_days: int = 90
-        self.glp_base_url: str = "https://global.api.greenlake.hpe.com"
-        self.account: str = "default"
-        self.config_version: int = 2
+    cache_client_days: int = 90
+    glp_base_url: str = "https://global.api.greenlake.hpe.com"
+    account: str = "default"
+    config_version: int = 2
 
 default = Defaults()
 
@@ -70,14 +73,18 @@ class WSSConfig(BaseModel):
     key: Optional[str] = None
 
     def __bool__(self):
-        return self.ok()
+        return self.ok
 
-    def ok(self):
-        return self.base_url and self.key
+    @property
+    def ok(self) -> bool:
+        return all([self.base_url, self.key])
 
     @field_validator("base_url", mode="before")
     @classmethod
     def _ensure_proto(cls, v: str):
+        if not v:
+            return v
+
         if v.startswith("https://"):
             return v.replace(r"https://", r"wss://")
 
@@ -235,10 +242,11 @@ class ConfigData(BaseModel):
         if data["central_info"].get(tok_key, {}).get(wh_tok_key):
             wh_token = data["central_info"][tok_key][wh_tok_key]
             del data["central_info"][tok_key][wh_tok_key]
-            if "webhook" in data["central_info"]:
-                data["central_info"]["webhook"]["token"] = wh_token
-            else:
-                data["central_info"]["webhook"] = {"token": wh_token}
+            data["central_info"]["webhook"] = utils.update_dict(data["central_info"]["webhook"], key="token", value=wh_token)
+            # if "webhook" in data["central_info"]:
+            #     data["central_info"]["webhook"]["token"] = wh_token
+            # else:
+            #     data["central_info"]["webhook"] = {"token": wh_token}
 
         return data
 

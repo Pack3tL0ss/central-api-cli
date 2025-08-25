@@ -251,6 +251,8 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
 
 
 class Config:
+    example_link = EXAMPLE_LINK
+
     def __init__(self, base_dir: Path = None):
         #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
         self.is_completion = env.is_completion
@@ -325,7 +327,7 @@ class Config:
         self.username = c.current_workspace.classic.username
         self.cache_client_days = c.current_workspace.cache_client_days
         self.webhook = c.current_workspace.classic.webhook
-        self.wss_key = c.current_workspace.classic.tokens.wss_key
+        self.wss = c.current_workspace.classic.wss
         self.defined_workspaces: list[str] = list(c.workspaces.keys())
         self.is_old_cfg = True if "workspaces" not in self.data else False
         if self.is_old_cfg:
@@ -436,8 +438,7 @@ class Config:
     def new_config(self) -> str | None:
         if not self.is_old_cfg:
             return
-        example_str = "\n# See Example at link below for all options.\n"
-        example_str += "# https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/config/config.yaml.example"
+        example_str = f"\n# See Example at link below for all options.\n# {EXAMPLE_LINK}"
         data_str = yaml.safe_dump(self.data, sort_keys=False)
         return f"CFG_VERSION: 2\n\n{data_str}{example_str}\n"
 

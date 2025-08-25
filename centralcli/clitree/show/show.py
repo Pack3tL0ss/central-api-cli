@@ -2792,6 +2792,13 @@ def logs(
         common.exit(code=0)
 
     if tail:
+        if not config.wss:
+            common.exit(
+                "Missing all or part of required configuration for this command.\n"
+                "[cyan]-f[/] option for logs streams events from the streaming API.\n"
+                f"[cyan]wss[/]: [dim italic](websocket)[/] [cyan]base_url[/] and [cyan]key[/] are [dim red]required[/] in {config.file}\n"
+                f"See example @ {config.example_link}\n"
+            )
         common.ws_follow_tail(title=title, log_type="event")  # program will exit here
 
     # TODO move to common func for use by show logs and show audit logs
