@@ -973,6 +973,10 @@ class CacheSub(CentralObject, Text):
         return hash(self.id)
 
     @property
+    def api_name(self) -> str:
+        return self.name.replace("-", "_")
+
+    @property
     def text(self) -> Text:
         _expired_str = f"[red1]expired[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires [cyan]{self.expire_string}[/]"
         return Text.from_markup(
@@ -5494,7 +5498,7 @@ class Cache:
                 if "_" in query_str or "-" in query_str:
                     match = db.search(
                         self.Q.name.test(
-                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
+                            lambda v: v.lower().replace("_", "-") == query_str.lower().replace("_", "-")
                         )
                     )
 

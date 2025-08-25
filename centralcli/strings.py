@@ -36,7 +36,7 @@ ADD_FIELDS = {
         "required": ["serial", "mac"],
         "optional": {
             "group": "Pre-provision device to group",
-            "license": "Apply license to device"
+            "subscription": "Apply subscription to device"
         }
     },
     "groups": {
@@ -276,7 +276,7 @@ generic_end = """
 # -- // ADD DEVICES \\ --  NOT USED
 # This uses example.full_text property, retaining for reference
 device_add_data = """
-serial,mac,group,license
+serial,mac,group,subscription
 CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
 CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
 """
@@ -408,7 +408,7 @@ Where [cyan]serial[/] The serial of the AP to be updated
 
 # -- // DELETE DEVICES \\ --
 data = """
-serial,license
+serial,subscription
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap
@@ -421,7 +421,7 @@ Accepts the following keys (include as header row for csv import):
 
 {example.ignore_text}
 
-[italic]Examples show extra [cyan]license[/] field which is ignored:
+[italic]Examples show extra [cyan]subscription[/] field which is ignored:
 {example}
 {example.parent_key_text}
 {common_add_delete_end}

@@ -842,7 +842,7 @@ class CLICommon:
 
         return resp
 
-    def validate_license_type(self, data: List[Dict[str, Any]]):
+    def validate_license_type(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
         """validate device add import data for valid subscription name.
 
         Args:
@@ -852,6 +852,7 @@ class CLICommon:
             Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
                 The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
         """
+        _final_sub_key = "subscription"
         sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
         sub_key = None if not sub_key else sub_key[0]
         warn = False
@@ -863,13 +864,14 @@ class CLICommon:
             if d.get(sub_key):
                 for idx in range(2):
                     try:
-                        d[sub_key] = self.cache.LicenseTypes(d[sub_key].lower().replace("_", "-")).name
-                        if sub_key != "license":
+                        sub = self.cache.get_sub_identifier(d[sub_key], best_match=True)
+                        d[sub_key] = sub.api_name
+                        if sub_key != _final_sub_key:
                             del d[sub_key]
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
-                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["license"]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
+                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
                             resp = api.session.request(self.cache.refresh_license_db)  # TOGLP
                             if not resp:
                                 render.display_results(resp, exit_on_fail=True)
@@ -906,7 +908,7 @@ class CLICommon:
 
         _reqd_cols = ["serial", "mac"]
         self.verify_required_fields(
-            data, required=_reqd_cols, optional=['group', 'license'], example_text='cencli batch add devices --show-example'
+            data, required=_reqd_cols, optional=['group', 'subscription'], example_text='cencli batch add devices --show-example'
         )
         data, warn = self.validate_license_type(data)
         word = "Adding" if not warn and yes else "Add"
