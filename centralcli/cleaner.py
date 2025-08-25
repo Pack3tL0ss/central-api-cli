@@ -18,7 +18,7 @@ from rich.markup import escape
 
 from centralcli import log, utils
 
-from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, SwitchRolesShort
+from .constants import STRIP_KEYS, GenericDeviceTypes, LLDPCapabilityTypes, PoEDetectionStatus, SwitchRolesShort
 from .models.cache import Sites
 from .models.formatter import CloudAuthUploadResponse
 from .objects import DateTime, ShowInterfaceFilters
@@ -1371,7 +1371,7 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
 
     return data
 
-def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]:
+def get_subscriptions(data: list[dict], default_sort: bool = True, dev_type: GenericDeviceTypes = None) -> list[dict]:
     field_order = [
         "id",
         "name",
@@ -1397,6 +1397,10 @@ def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]
     data = [
         dict(short_value(k, d[k]) for k in field_order if k in d) for d in data
     ]
+    if dev_type:
+        data = [
+            item for item in data if item["type"] == dev_type.value
+        ]
 
     return data
 

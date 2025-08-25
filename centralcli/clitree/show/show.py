@@ -904,9 +904,10 @@ def subscriptions(
         title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
         if resp.ok:
             _cleaner = cleaner.get_subscriptions
+            _cleaner_kwargs = {"dev_type": dev_type}
             set_width_cols = {"name": {"min": 39}}
             if sort_by:
-                _cleaner_kwargs = {"default_sort": False}
+                _cleaner_kwargs["default_sort"] = False
             if not glp_api:
                 try:
                     _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
