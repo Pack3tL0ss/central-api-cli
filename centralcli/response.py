@@ -211,15 +211,15 @@ class Response:
         key = f"{self.method}_{_url.path_qs}"
         out = {
             key: {
-                "url": self.url.path,
-                "method": self.method,
-                # "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
-                "status": self.status,
-                "body": '',
-                "content_type": "application/json" if not self._response else self._response.content_type,
-                "payload": {},
-                "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-")},
-                "reason": self.error,
+                    "reason": self.error,
+                    "url": self.url.path,
+                    "method": self.method,
+                    # "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
+                    "status": self.status,
+                    "content_type": "application/json" if not self._response else self._response.content_type,
+                    "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-")},
+                    "body": '',
+                    "payload": {}
                 }
             }
         try:
@@ -281,6 +281,12 @@ class Response:
                 r = "  {}".format(
                     self.output.replace('\n  ', '\n').replace('\n', '\n  ')
                 )
+        elif not self.output:
+            if self.status not in [201, 202]:
+                emoji = '\u2139' if self.ok else '\u26a0'
+                r = f"  {emoji}  Empty Response.  This may be normal."
+            else:
+                r = f"  [bright_green]{self.error}[/]"  # error is ClientResponse.reason  Usually Accepted / CREATED in these cases which is more valuable here.
         elif isinstance(self.output, dict):  # TODO just use yaml.safe_dump here
             data = utils.strip_none(self.output, strip_empty_obj=True)
             # remove redundant status_code if response includes it in output
@@ -295,10 +301,8 @@ class Response:
                 r = "\n".join([f"  {line}" for line in str(r).splitlines()])
             else:
                 emoji = '\u2139' if self.ok else '\u26a0'
+                r = f"  {emoji}  Empty Response.  This may be normal."
                 r = "" if stripped_status else f"  {emoji}  Empty Response.  This may be normal."
-        elif not self.output:
-            emoji = '\u2139' if self.ok else '\u26a0'  # \u2139 = :information:, \u26a0 = :warning:
-            r = f"  {emoji}  Empty Response.  This may be normal."
         else:
             r = f"  {self.output}"
 
