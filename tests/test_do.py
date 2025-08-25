@@ -1,9 +1,5 @@
-import asyncio
-
-import pytest
 from typer.testing import CliRunner
 
-from centralcli import cache
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.exceptions import MissingRequiredArgumentException
@@ -13,112 +9,28 @@ from . import capture_logs, config, test_data
 runner = CliRunner()
 
 
-@pytest.fixture(scope="function")
-def ensure_cache_test_ap():
-    if config.dev.mock_tests:
-        devices = [
-            {
-                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
-                "serial": test_data["test_add_do_del_ap"]["serial"],
-                "mac": test_data["test_add_do_del_ap"]["mac"],
-                "type": "ap",
-                "model": "IAP-205-US",
-                "sku": "JL185A",
-                "services": "foundation-ap",
-                "subscription_key": "ADURDXCTOYTUXKJE",
-                "subscription_expires": 1788715367,
-                "assigned": True,
-                "archived": False
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
-            assert asyncio.run(cache.update_inv_db(data=devices))
-    yield
-
-
-@pytest.fixture(scope="function")
-def ensure_cache_test_ap_devdb():
-    if config.dev.mock_tests:
-        devices = [
-            {
-                "name": "cencli-test-ap",
-                "status": "Down",
-                "type": "ap",
-                "model": "205",
-                "ip": "10.0.31.99",
-                "mac": test_data["test_add_do_del_ap"]["mac"],
-                "serial": test_data["test_add_do_del_ap"]["serial"],
-                "group": "cencli_test_group3",
-                "site": "cencli_test_site1",
-                "version": "10.7.2.0_92876",
-                "swack_id": test_data["test_add_do_del_ap"]["serial"],
-                "switch_role": None
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.devices_by_serial]
-        if missing:
-            assert asyncio.run(cache.update_dev_db(data=devices))
-    yield
-
-
-@pytest.fixture(scope="function")
-def ensure_cache_site1():
-    if config.dev.mock_tests:
-        batch_del_sites = [
-            {"address":"123 test ave","city":"Nashville","country":"United States","latitude":"36.1626638","longitude":"-86.7816016","site_id":1109,"site_name":"cencli_test_site1","state":"Tennessee","zipcode":""},
-        ]
-        missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
-        if missing:
-            assert asyncio.run(cache.update_site_db(data=batch_del_sites))
-    yield
-
-
-@pytest.fixture(scope="function")
-def ensure_cache_group3():
-    if config.dev.mock_tests:
-        groups = [
-            {
-                "name": "cencli_test_group3",
-                "allowed_types": ["ap"],
-                "gw_role": "branch",
-                "aos10": False,
-                "microbranch": False,
-                "wlan_tg": True,
-                "wired_tg": False,
-                "monitor_only_sw": False,
-                "monitor_only_cx": False,
-                "cnx": None
-            }
-        ]
-        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=groups))
-    yield
-
-
-def test_archive(ensure_cache_test_ap):
+def test_archive(ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["archive", test_data["test_add_do_del_ap"]["mac"], "-y"])
     capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 
 
-def test_unarchive(ensure_cache_test_ap):
+def test_unarchive(ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["unarchive", test_data["test_add_do_del_ap"]["serial"]])
     capture_logs(result, "test_unarchive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 
 
-def test_move_pre_provision(ensure_cache_group3, ensure_cache_test_ap):
+def test_move_pre_provision(ensure_cache_group3, ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "-y"])
     capture_logs(result, "test_move_pre_provision")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
-def test_remove_test_ap_from_site(ensure_cache_test_ap, ensure_cache_test_ap_devdb, ensure_cache_site1):
+def test_remove_test_ap_from_site(ensure_inv_cache_test_ap, ensure_dev_cache_test_ap, ensure_cache_site1):
     result = runner.invoke(app, ["remove", test_data["test_add_do_del_ap"]["serial"], "site", "cencli_test_site1", "-y"])
     capture_logs(result, "test_remove_test_ap_from_site")
     assert result.exit_code == 0
@@ -158,6 +70,7 @@ def test_blink_wrong_dev_type():
             "on"
         ]
     )
+    capture_logs(result, "test_blink_wrong_dev_type", expect_failure=True)
     assert result.exit_code == 1
     assert "Unable to gather" in result.stdout
     assert "excluded" in result.stdout
@@ -238,7 +151,7 @@ def test_sync_gw():
     assert "200" in result.stdout
 
 
-if config.dev.mock_tests:
+if config.dev.mock_tests:  # pragma: no cover
     def test_reboot_swarm():
         result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["name"], "-sy"])
         capture_logs(result, "test_reboot_swarm")

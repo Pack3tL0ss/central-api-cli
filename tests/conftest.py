@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 from pathlib import Path
 
@@ -5,9 +6,10 @@ import pendulum
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import cache, config, log
+from centralcli import cache, common, config, log
 from centralcli.cli import app
 
+from . import test_data
 from ._mock_request import test_responses
 from ._test_data import test_device_file, test_group_file, test_site_file
 
@@ -113,6 +115,7 @@ def teardown():
     else:
         return cleanup_test_items()  # pragma: no cover
 
+# -- FIXTURES --
 
 @pytest.fixture(scope='session', autouse=True)
 def session_setup_teardown():
@@ -131,4 +134,370 @@ def clear_lru_caches():
     for db in cache._tables:
         db.clear_cache()
     cache.responses.clear()
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group1():
+    if config.dev.mock_tests:
+        batch_del_group1 = [
+            {
+                "name": "cencli_test_group1",
+                "allowed_types": ["ap", "gw", "cx", "sw"],
+                "gw_role": "branch",
+                "aos10": False,
+                "microbranch": False,
+                "wlan_tg": False,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group2():
+    if config.dev.mock_tests:
+        batch_del_group1 = [
+            {
+                "name": "cencli_test_group2",
+                "allowed_types": ["sw"],
+                "gw_role": "branch",
+                "aos10": False,
+                "microbranch": False,
+                "wlan_tg": False,
+                "wired_tg": True,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group3():
+    if config.dev.mock_tests:
+        batch_del_group1 = [
+            {
+                "name": "cencli_test_group3",
+                "allowed_types": ["ap"],
+                "gw_role": "branch",
+                "aos10": False,
+                "microbranch": False,
+                "wlan_tg": True,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group4():
+    if config.dev.mock_tests:
+        batch_del_group1 = [
+            {
+                "name": "cencli_test_group4",
+                "allowed_types": ["ap", "gw"],
+                "gw_role": "wlan",
+                "aos10": True,
+                "microbranch": False,
+                "wlan_tg": False,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": False
+            }
+        ]
+        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_test_ap():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": test_data["test_add_do_del_ap"]["serial"],
+                "mac": test_data["test_add_do_del_ap"]["mac"],
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_ap():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "name": "cencli-test-ap",
+                "status": "Down",
+                "type": "ap",
+                "model": "205",
+                "ip": "10.0.31.99",
+                "mac": test_data["test_add_do_del_ap"]["mac"],
+                "serial": test_data["test_add_do_del_ap"]["serial"],
+                "group": "cencli_test_group3",
+                "site": "cencli_test_site1",
+                "version": "10.7.2.0_92876",
+                "swack_id": test_data["test_add_do_del_ap"]["serial"],
+                "switch_role": None
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.devices_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_dev_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_site1():
+    if config.dev.mock_tests:
+        batch_del_sites = [
+            {
+                "id": 1109,
+                "name": "cencli_test_site1",
+                "address": "123 test ave",
+                "city": "Nashville",
+                "state":  "Tennessee",
+                "zip": "",
+                "country": "United States",
+                "lat": "36.1626638",
+                "lon": "-86.7816016",
+                "devices": 0,
+            },
+        ]
+        missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
+        if missing:
+            assert asyncio.run(cache.update_site_db(data=batch_del_sites))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_site2():
+    if config.dev.mock_tests:
+        batch_del_sites = [
+            {
+                "id": 1110,
+                "name": "cencli_test_site2",
+                "address": "",
+                "city": "",
+                "state": "",
+                "zip": "",
+                "country": "",
+                "lat": "40.251300",
+                "lon": "-86.592030",
+                "devices": 0
+            }
+        ]
+        missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
+        if missing:
+            assert asyncio.run(cache.update_site_db(data=batch_del_sites))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_site3():
+    if config.dev.mock_tests:
+        del_sites = [
+            {
+                "id": 1104,
+                "name": "cencli_test_site3",
+                "address": "123 Main St.",
+                "city": "Gallatin",
+                "state": "Tennessee",
+                "zip": "37066",
+                "country": "United States",
+                "lat": "36.3882547",
+                "lon": "-86.4453126",
+                "devices": 0,
+            },
+        ]
+        missing = [site["id"] for site in del_sites if site["id"] not in cache.sites_by_id]
+        if missing:
+            assert asyncio.run(cache.update_site_db(data=del_sites))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_site4():
+    if config.dev.mock_tests:
+        del_sites = [
+            {
+                "id": 1105,
+                "name": "cencli_test_site4",
+                "address": "",
+                "city": "",
+                "state": "",
+                "zip": "",
+                "country": "",
+                "lat": "36.378545",
+                "lon": "-86.360740",
+                "devices": 0,
+            }
+        ]
+        missing = [site["id"] for site in del_sites if site["id"] not in cache.sites_by_id]
+        if missing:
+            assert asyncio.run(cache.update_site_db(data=del_sites))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_label1():
+    if config.dev.mock_tests and "cencli_test_label1" not in cache.labels_by_name:
+        asyncio.run(cache.update_db(cache.LabelDB, data={"id": 1106, "name": "cencli_test_label1", "devices": 0}, truncate=False))
+    yield
+
+    if config.dev.mock_tests and "cencli_test_label1" in cache.labels_by_name:
+        doc_id = cache.labels_by_name["cencli_test_label1"].doc_id
+        asyncio.run(cache.update_db(cache.LabelDB, doc_ids=[doc_id]))
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_del_label2_label3():
+    if config.dev.mock_tests:
+        batch_del_labels = [
+            {"id":1107,"name":"cencli_test_label2","devices":0},
+            {"id":1108,"name":"cencli_test_label3","devices":0},
+        ]
+        missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
+        if missing:
+            assert asyncio.run(cache.update_label_db(data=batch_del_labels))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group_cloned():
+    if config.dev.mock_tests:
+        groups = [
+            {
+                "name": "cencli_test_cloned",
+                "allowed_types": ["gw"],
+                "gw_role": "vpnc",
+                "aos10": True,
+                "microbranch": False,
+                "wlan_tg": False,
+                "wired_tg": False,
+                "monitor_only_sw": False,
+                "monitor_only_cx": False,
+                "cnx": None
+            }
+        ]
+        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
+        if missing:
+            assert asyncio.run(cache.update_group_db(data=groups))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_add_do_del_ap():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": "CN63HH906Z",
+                "mac": "F0:5C:19:CE:7A:86",
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_batch_del_devices():
+    if config.dev.mock_tests:
+        devices = common._get_import_file(test_device_file, import_type="devices")
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            resp = common.batch_add_devices(data=devices, yes=True)
+            assert any([r.ok for r in resp])
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_batch_del_groups():
+    if config.dev.mock_tests:
+        groups = common._get_import_file(test_group_file, import_type="groups")
+        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
+        if missing:
+            resp = common.batch_add_groups(data=groups, yes=True)
+            assert any([r.ok for r in resp])
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_batch_del_sites():
+    if config.dev.mock_tests:
+        yield from ensure_cache_site1
+        yield from ensure_cache_site2
+    else:
+        yield
+        # batch_del_sites = [
+        #     {"address":"123 test ave","city":"Nashville","country":"United States","latitude":"36.1626638","longitude":"-86.7816016","site_id":1109,"site_name":"cencli_test_site1","state":"Tennessee","zipcode":""},
+        #     {"address":"","city":"","country":"","latitude":"40.251300","longitude":"-86.592030","site_id":1110,"site_name":"cencli_test_site2","state":"","zipcode":""}
+        # ]
+        # missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
+        # if missing:
+        #     assert asyncio.run(cache.update_site_db(data=batch_del_sites))
+    # yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_guest1():
+    if config.dev.mock_tests:
+        batch_del_guests = [
+            {
+            "portal_id": "e5538808-0e05-4ecd-986f-4bdce8bf52a4",
+            "name": "superlongemail@kabrew.com",
+            "id": "7c9eb0df-b211-4225-94a6-437df0dfca59",
+            "email": "superlongemail@kabrew.com",
+            "phone": "+6155551212",
+            "company": "central-api-cli test company",
+            "enabled": True,
+            "status": "Active",
+            "created": 1755552751,
+            "expires": 1755811951
+            }
+        ]
+        missing = [guest["id"] for guest in batch_del_guests if guest["id"] not in cache.guests_by_id]
+        if missing:
+            assert asyncio.run(cache.update_guest_db(data=batch_del_guests))
     yield

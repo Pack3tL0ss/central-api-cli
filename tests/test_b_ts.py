@@ -10,6 +10,7 @@ runner = CliRunner()
 # show testing relies on a troubleshooting session having occured for the test switch "show ts results..."
 def test_ts_inventory():
     result = runner.invoke(app, ["ts", "inventory", test_data["gateway"]["serial"]])
+    capture_logs(result, "test_ts_inventory")
     assert result.exit_code == 0
     assert "API" in result.stdout
 

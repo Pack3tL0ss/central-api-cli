@@ -1,9 +1,6 @@
-import asyncio
-
-import pytest
 from typer.testing import CliRunner
 
-from centralcli import cache, config, log
+from centralcli import log
 from centralcli.cli import app
 from centralcli.exceptions import ConfigNotFoundException
 
@@ -11,29 +8,6 @@ from . import test_data
 from ._test_data import gw_group_config_file
 
 runner = CliRunner()
-
-
-@pytest.fixture(scope="function")
-def ensure_cache_group_cloned():
-    if config.dev.mock_tests:
-        groups = [
-            {
-                "name": "cencli_test_cloned",
-                "allowed_types": ["gw"],
-                "gw_role": "vpnc",
-                "aos10": True,
-                "microbranch": False,
-                "wlan_tg": False,
-                "wired_tg": False,
-                "monitor_only_sw": False,
-                "monitor_only_cx": False,
-                "cnx": None
-            }
-        ]
-        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=groups))
-    yield
 
 
 def test_update_gw_group_config(ensure_cache_group_cloned):
