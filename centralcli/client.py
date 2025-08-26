@@ -7,7 +7,7 @@ import time
 from functools import cached_property, wraps
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from aiohttp.client import ClientResponse, ClientSession
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
@@ -21,13 +21,10 @@ from yarl import URL
 from . import cleaner, config, log, utils
 from .cnx.base import NewCentralBase
 from .constants import STRIP_KEYS, lib_to_api
+from .exceptions import InvalidConfigException
 from .render import Spinner
 from .response import Response
 from .typedefs import Method, StrOrURL
-
-if TYPE_CHECKING:
-    from .exceptions import InvalidConfigException
-
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
