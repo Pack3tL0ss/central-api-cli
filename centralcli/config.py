@@ -37,7 +37,7 @@ EXAMPLE_LINK = "https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/mas
 BYPASS_FIRST_RUN_FLAGS = [
     "--install-completion",
     "--show-completion",
-    "restore-config",
+    "dev",
     "-V",
     "-v",
     "--help",

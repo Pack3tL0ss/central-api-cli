@@ -123,17 +123,20 @@ def new_config(
         common.exit(f"{config.file} appears to be a v2 config.")
     if not v2_bak_file.exists():
         common.exit(f"{v2_bak_file} not found.")
-    if not overwrite and v1_bak_file.exists():
+    if not overwrite and v1_bak_file.exists() and config.file.exists():
         common.exit(f"{v1_bak_file.name} exists.  Use [cyan]--overwrite[/]|[cyan]-o[/] to overwrite.")
 
-    conf_msg = [
+    conf_msg = [] if not config.file.exists() else [
         f"Stash{'' if not yes else 'ing'} existing config [cyan]{config.file.name}[/] to [dark_olive_green2]{v1_bak_file.name}[/]",
+    ]
+    conf_msg += [
         f"Restor{'e' if not yes else 'ing'} v2 config [cyan]{v2_bak_file.name}[/] to [dark_olive_green2]{config.file.name}[/]",
     ]
 
     render.econsole.print("\n".join(conf_msg))
     render.confirm(yes)
-    shutil.copy(config.file, v1_bak_file)
+    if config.file.exists():
+        shutil.copy(config.file, v1_bak_file)
     shutil.copy(v2_bak_file, config.file)
 
 
@@ -157,17 +160,20 @@ def old_config(
         common.exit(f"{config.file} appears to be a v1 config.")
     if not v1_bak_file.exists():
         common.exit(f"{v1_bak_file} not found.")
-    if not overwrite and v2_bak_file.exists():
+    if not overwrite and v2_bak_file.exists() and config.file.exists():
         common.exit(f"{v2_bak_file.name} exists.  Use [cyan]--overwrite[/]|[cyan]-o[/] to overwrite.")
 
-    conf_msg = [
+    conf_msg = [] if not config.file.exists() else [
         f"Stash{'' if not yes else 'ing'} existing config [cyan]{config.file.name}[/] to [dark_olive_green2]{v2_bak_file.name}[/]",
+    ]
+    conf_msg += [
         f"Restor{'e' if not yes else 'ing'} v1 config [cyan]{v1_bak_file.name}[/] to [dark_olive_green2]{config.file.name}[/]",
     ]
 
     render.econsole.print("\n".join(conf_msg))
     render.confirm(yes)
-    shutil.copy(config.file, v2_bak_file)
+    if config.file.exists():
+        shutil.copy(config.file, v2_bak_file)
     shutil.copy(v1_bak_file, config.file)
 
 
