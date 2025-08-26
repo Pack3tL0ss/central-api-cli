@@ -16,7 +16,7 @@ app = typer.Typer()
 @app.command()
 def subscriptions(
     import_file: Path = common.arguments.import_file,
-    _tags: list[str] = typer.Argument(hidden=True),  # HACK because list[str] does not work for typer.Option
+    _tags: list[str] = typer.Argument(None, hidden=True),  # HACK because list[str] does not work for typer.Option
     tags: list[str] = typer.Option(None, "-t", "--tags", help="tags to be assigned to all imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]"),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
