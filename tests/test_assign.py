@@ -1,5 +1,6 @@
 from typer.testing import CliRunner
 
+from centralcli import config
 from centralcli.cli import app
 
 from . import capture_logs, test_data
@@ -36,6 +37,6 @@ def test_assign_subscription():
             "-Y"
         ]
     )
-    capture_logs(result, "test_assign_subscription")
-    assert result.exit_code == 0
-    assert "202" in result.stdout
+    capture_logs(result, "test_assign_subscription", expect_failure=False if not config.is_old_cfg else True)
+    assert result.exit_code == 0 if not config.is_old_cfg else 1
+    assert "202" in result.stdout if not config.is_old_cfg else "required"

@@ -278,10 +278,9 @@ def ensure_dev_cache_test_ap():
     yield
 
 
-@pytest.fixture(scope="function")
-def ensure_cache_site1():
+def _ensure_cache_site1():
     if config.dev.mock_tests:
-        batch_del_sites = [
+        sites = [
             {
                 "id": 1109,
                 "name": "cencli_test_site1",
@@ -295,16 +294,20 @@ def ensure_cache_site1():
                 "devices": 0,
             },
         ]
-        missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
+        missing = [site["name"] for site in sites if site["name"] not in cache.sites_by_name]
         if missing:
-            assert asyncio.run(cache.update_site_db(data=batch_del_sites))
-    yield
+            assert asyncio.run(cache.update_site_db(data=sites))
 
 
 @pytest.fixture(scope="function")
-def ensure_cache_site2():
+def ensure_cache_site1():
+    _ensure_cache_site1()
+    yield
+
+
+def _ensure_cache_site2():
     if config.dev.mock_tests:
-        batch_del_sites = [
+        sites = [
             {
                 "id": 1110,
                 "name": "cencli_test_site2",
@@ -318,16 +321,21 @@ def ensure_cache_site2():
                 "devices": 0
             }
         ]
-        missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
+        missing = [site["name"] for site in sites if site["name"] not in cache.sites_by_name]
         if missing:
-            assert asyncio.run(cache.update_site_db(data=batch_del_sites))
-    yield
+            assert asyncio.run(cache.update_site_db(data=sites))
 
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_site2():
+    _ensure_cache_site2()
+    yield
 
 @pytest.fixture(scope="function")
 def ensure_cache_site3():
     if config.dev.mock_tests:
-        del_sites = [
+        sites = [
             {
                 "id": 1104,
                 "name": "cencli_test_site3",
@@ -341,16 +349,16 @@ def ensure_cache_site3():
                 "devices": 0,
             },
         ]
-        missing = [site["id"] for site in del_sites if site["id"] not in cache.sites_by_id]
+        missing = [site["id"] for site in sites if site["id"] not in cache.sites_by_id]
         if missing:
-            assert asyncio.run(cache.update_site_db(data=del_sites))
+            assert asyncio.run(cache.update_site_db(data=sites))
     yield
 
 
 @pytest.fixture(scope="function")
 def ensure_cache_site4():
     if config.dev.mock_tests:
-        del_sites = [
+        sites = [
             {
                 "id": 1105,
                 "name": "cencli_test_site4",
@@ -364,9 +372,9 @@ def ensure_cache_site4():
                 "devices": 0,
             }
         ]
-        missing = [site["id"] for site in del_sites if site["id"] not in cache.sites_by_id]
+        missing = [site["id"] for site in sites if site["id"] not in cache.sites_by_id]
         if missing:
-            assert asyncio.run(cache.update_site_db(data=del_sites))
+            assert asyncio.run(cache.update_site_db(data=sites))
     yield
 
 
@@ -382,10 +390,21 @@ def ensure_cache_label1():
 
 
 @pytest.fixture(scope="function")
-def ensure_cache_del_label2_label3():
+def ensure_cache_label2():
     if config.dev.mock_tests:
         batch_del_labels = [
             {"id":1107,"name":"cencli_test_label2","devices":0},
+        ]
+        missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
+        if missing:
+            assert asyncio.run(cache.update_label_db(data=batch_del_labels))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_label3():
+    if config.dev.mock_tests:
+        batch_del_labels = [
             {"id":1108,"name":"cencli_test_label3","devices":0},
         ]
         missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
@@ -466,18 +485,9 @@ def ensure_cache_batch_del_groups():
 @pytest.fixture(scope="function")
 def ensure_cache_batch_del_sites():
     if config.dev.mock_tests:
-        yield from ensure_cache_site1
-        yield from ensure_cache_site2
-    else:
-        yield
-        # batch_del_sites = [
-        #     {"address":"123 test ave","city":"Nashville","country":"United States","latitude":"36.1626638","longitude":"-86.7816016","site_id":1109,"site_name":"cencli_test_site1","state":"Tennessee","zipcode":""},
-        #     {"address":"","city":"","country":"","latitude":"40.251300","longitude":"-86.592030","site_id":1110,"site_name":"cencli_test_site2","state":"","zipcode":""}
-        # ]
-        # missing = [site["site_name"] for site in batch_del_sites if site["site_name"] not in cache.sites_by_name]
-        # if missing:
-        #     assert asyncio.run(cache.update_site_db(data=batch_del_sites))
-    # yield
+        _ensure_cache_site1()
+        _ensure_cache_site2()
+    yield
 
 
 @pytest.fixture(scope="function")

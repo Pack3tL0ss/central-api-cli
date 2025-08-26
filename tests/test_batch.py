@@ -1,8 +1,9 @@
 from typer.testing import CliRunner
 
-from centralcli.cli import app  # type: ignore # NoQA
+from centralcli.cli import app
+from centralcli.exceptions import InvalidConfigException
 
-from . import capture_logs
+from . import capture_logs, config
 from ._test_data import test_data, test_device_file, test_group_file, test_site_file, test_sub_file
 
 runner = CliRunner()
@@ -41,6 +42,9 @@ def test_batch_add_devices():
 
 def test_batch_assign_subscriptions_with_tags():
     result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
-    capture_logs(result, "test_batch_assign_subscriptions_with_tags")
-    assert result.exit_code == 0
-    assert result.stdout.count("202") == 2
+    if config.is_old_cfg:
+        assert isinstance(result.exception, InvalidConfigException)
+    else:
+        capture_logs(result, "test_batch_assign_subscriptions_with_tags")
+        assert result.exit_code == 0
+        assert result.stdout.count("202") == 2

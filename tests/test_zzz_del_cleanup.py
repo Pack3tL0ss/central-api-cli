@@ -110,7 +110,7 @@ def test_del_label(ensure_cache_label1):
     assert "200" in result.stdout
 
 
-def test_del_label_multi(ensure_cache_del_label2_label3):
+def test_del_label_multi(ensure_cache_label2, ensure_cache_label3):
     result = runner.invoke(app, [
         "delete",
         "label",

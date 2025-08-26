@@ -69,7 +69,7 @@ def capture_logs(result: Result, test_func: str = None, expect_failure: bool = F
         if "unable to gather device" in result.stdout:
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
-    if result.exception:
+    if result.exception and result.exception is not SystemExit:
         log.exception(f"{test_func} {repr(result.exception)}", exc_info=True)
         with log.log_file.open("a") as log_file:
             traceback.print_exception(result.exception, file=log_file)
