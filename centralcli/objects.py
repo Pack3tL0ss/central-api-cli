@@ -72,14 +72,15 @@ class DateTime():
         """
         if isinstance(timestamp, str):
             if not timestamp.isdigit():
-                return pendulum.parse(timestamp).timestamp()
+                return pendulum.parse(timestamp).int_timestamp
             else:
                 timestamp = int(timestamp)
 
         if str(timestamp).isdigit() and len(str(int(timestamp))) > 10:
             timestamp = timestamp / 1000
 
-        return timestamp if not str(timestamp).endswith(".0") else int(timestamp)
+        return round(timestamp)
+#
 
     @property
     def is_expired(self) -> bool:
