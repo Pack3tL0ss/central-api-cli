@@ -10,6 +10,8 @@ env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
 
 class Env:
+    _is_pytest: bool = bool(environ.get("PYTEST_VERSION"))
+
     def __init__(self):
         self.workspace: str = environ.get(env_var.workspace) or environ.get(classic_env_var.workspace)
 
@@ -24,7 +26,18 @@ class Env:
 
     @property
     def is_pytest(self) -> bool:
-        return bool(environ.get("PYTEST_VERSION"))
+        return self._is_pytest
+
+    @is_pytest.setter
+    def is_pytest(self, value: bool) -> bool:
+        if value:
+            environ["PYTEST_VERSION"] = "MOCK_TEST"
+            self._is_pytest = True
+        else:
+            del environ["PYTEST_VERSION"]
+            self._is_pytest = False
+
+        return self._is_pytest
 
     @property
     def current_test(self) -> str | None:

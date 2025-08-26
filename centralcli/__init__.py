@@ -27,7 +27,7 @@ import click
 import typer
 
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, overload, Literal, Optional
 
 
 from rich.traceback import install
@@ -37,7 +37,54 @@ from .utils import Utils
 from .environment import env
 
 
-utils = Utils()
+utils = Utils()  # TODO make utils.py a module, strip the class
+
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[True]) -> bool: ...
+
+@overload
+def get_option_from_args(option: str) -> bool: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False]) -> str: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Optional[Literal[False]], pop: Optional[bool]) -> str: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Literal[True],  pop: Optional[bool]) -> int: ...
+
+def get_option_from_args(option: str, is_flag: bool = True, pop: bool = True, convert_int: bool = False) -> str | int | bool:
+    """Get CLI Options from sys.argv
+
+    Args:
+        option (str): The option to look for.  i.e. '--debug'
+        is_flag (bool, optional): If the option is a flag, meaning there is no value expected to follow and the return of this function will be a bool. Defaults to True.
+        pop (bool, optional): If the option should be removed from sys.argv after the value is determined. Defaults to True.
+        convert_int (bool, optional): If the value retuned should be coverted to an int. Defaults to False.
+
+    Returns:
+        str | int | bool | None: Returns a bool if is_flag=True.
+            Otherwise returns the value following the option (str unless convert_int otherwise int) or None if the option is not found.
+    """
+    assert not all([is_flag, convert_int])
+
+    if option not in sys.argv:
+        return False if is_flag else None
+
+    idx = sys.argv.index(option)
+    if pop:
+        _ = sys.argv.pop(sys.argv.index(option))
+
+    value_idx = idx if pop else idx + 1
+
+    if is_flag:
+        return True
+
+    value = sys.argv[value_idx] if not pop else sys.argv.pop(value_idx)
+
+    return value if not convert_int else int(value)
 
 
 _calling_script = Path(sys.argv[0])
@@ -68,6 +115,12 @@ from .config import Config
 if os.environ.get("TERM_PROGRAM") == "vscode":  # pragma: no cover
     from .vscodeargs import vscode_arg_handler
     vscode_arg_handler()
+
+# hidden dev option stripped from args before instantiating CLI app
+# Must be b4 config is instantiated.
+# Results in use of mock cache.  API request/responses are still real
+if get_option_from_args("--mock"):
+    env.is_pytest = True
 
 config = Config(base_dir=base_dir)
 
