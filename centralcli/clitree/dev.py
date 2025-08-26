@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+from functools import partial
 from pathlib import Path
 
 import typer
@@ -270,7 +271,12 @@ def show_raw(
     line: int = typer.Argument(None, help="Show raw capture from this line in raw_capture file", show_default=False,),
     debug: bool = common.options.debug,
 ) -> None:
-    """Adds closing ] to raw capture file"""
+    """Pretty prints active raw capture in file JSON format
+
+    [italic]Contents of the active raw capture file are not valid JSON.
+    This command makes the necessary adjustments without modifying the
+    contents of the file.[/]
+    """
     if not config.capture_file.exists():
         common.exit(f"{config.capture_file} does not exist.")
 
@@ -281,9 +287,6 @@ def show_raw(
         output = lines.splitlines()[line].rstrip(",")
         from rich import print_json
         print_json(output)
-
-
-
 
 
 @app.command()
@@ -302,19 +305,30 @@ def close_raw(
 @app.command()
 def clear_raw(
     yes: bool = common.options.yes,
+    bak: bool = typer.Option(False, "-b", "--bak", help=f"Stash active raw capture file... [italic]add [cyan].bak[/] extension[/].  {render.help_block('raw capture file is deleted')}"),
     debug: bool = common.options.debug,
 ) -> None:
-    """Delete raw capture file
+    """Delete [italic](or stash)[/] raw capture file
 
-    Typically done to allow it to be populated with new data.
+    This results in any new captures being sent to a fresh raw capture file.
     """
     if not config.capture_file.exists():
         common.exit(f"{config.capture_file} does not exist.")
 
-    render.console.print(f"Delet{'ing' if yes else 'e'} active capture file [cyan italic]{config.capture_file}[/]...", end="")
+    sfx = '...' if yes else '?'
+    bak_file = config.capture_file.parent / f"{config.capture_file.name}.bak"
+    if bak:
+        func = partial(config.capture_file.rename, bak_file)
+        render.econsole.print(f"[medium_spring_green]Stash{'ing' if yes else ''}[/] active capture file [red italic]{config.capture_file.name}[/] :arrow_right: [bright_green]{bak_file.name}[/]{sfx}")
+    else:
+        render.econsole.print(f":wastebasket:  [red]Delet{'ing' if yes else 'e'}[/] active capture file [cyan italic]{config.capture_file.name}[/]{sfx}")
+        if not yes:
+            render.econsole.print(f"  [italic][dark_orange3]:warning:[/]  This will delete the file.  Use [cyan]-b[/]|[cyan]--bak[/] option to stash (rename) the file to [cyan]{bak_file.name}[/][/italic]")
+        func = config.capture_file.unlink
+
     render.confirm(yes)
-    config.capture_file.unlink()
-    render.console.print(" [bright_green]Done[/]")
+    func()
+    render.console.print("[bright_green]Done[/]")
 
 
 @app.callback()
