@@ -339,6 +339,25 @@ def configs(
             render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
 
+@app.command(hidden=True)  # WIP not fully implemented
+def redsky_bssids(
+    group: str = common.options.get("group", help="Export device level configs for a specific Group",),
+    site: str = common.options.get("site", help="Export device level configs for a specific Site",),
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Export RedSky BSSID import Template with BSSID / building / location mapping.
+
+    Exports a csv formatted for import into redsky 911Anywhere.
+    """
+    api = ClassicAPI()
+    bssid_resp = api.session.request(api.monitoring.get_bssids)
+    render.display_results(bssid_resp)
+
 
 
 
