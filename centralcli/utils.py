@@ -576,6 +576,10 @@ class Utils:
 
     @staticmethod
     def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False) -> str:
+        if not items:
+            return ""
+
+        max = max or len(items)
         bot = int(max / 2)
         top = max - bot
         if any([bold, italic, color is not None]):
@@ -618,3 +622,9 @@ class Utils:
     def remove_time_params(params: dict[str, Any]) -> dict[str, Any]:
         time_params = ["start_time", "end_time", "from_timestamp", "to_timestamp", "from", "to"]
         return {k: v for k, v in params.items() if k not in time_params}
+
+    @staticmethod
+    def clean_validation_errors(exc) -> str:
+        """strip off the 'for further information ... part of a pydantic ValidationError"""
+        return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
+
