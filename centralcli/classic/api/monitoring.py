@@ -9,7 +9,7 @@ from ...response import CombinedResponse, Response
 from ...utils import Mac
 
 if TYPE_CHECKING:
-    from ... import Session
+    from centralcli.client import Session
 
 class MonitoringAPI:
     def __init__(self, session: Session):
@@ -535,7 +535,7 @@ class MonitoringAPI:
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
                 +swarm_id, -swarm_id. Default is '+serial'
             offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000 Defaults to 1000.
+            limit (int, optional): Pagination limit. Max is 1000 Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
