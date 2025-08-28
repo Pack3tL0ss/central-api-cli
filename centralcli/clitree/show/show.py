@@ -793,7 +793,7 @@ def stacks(
 
 @app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
 def inventory(
-    dev_type: ShowInventoryArgs = typer.Argument("all",),
+    dev_type: ShowInventoryArgs = typer.Argument(ShowInventoryArgs.all,),
     sub: bool = typer.Option(
         None,
         help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {common.help_block('show all')}",
@@ -813,21 +813,8 @@ def inventory(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    if hasattr(dev_type, "value"):
-        dev_type = dev_type.value
-
-    if dev_type == "all":
-        title = "Devices in Inventory"
-    elif dev_type in ["cx", "sw", "switch"]:
-        title = "Switches in Inventory"
-    elif dev_type == "gw":
-        title = "Gateways in Inventory"
-    elif dev_type == "ap":
-        title = "APs in Inventory"
-    elif dev_type == "vgw":
-        title = "Virtual Gateways in Inventory"
-    else:
-        title = "Inventory"
+    dev_type = dev_type.value
+    title = f"{what_to_pretty(dev_type)} in Inventory"
 
     include_inventory = False
     if verbose:
@@ -846,6 +833,7 @@ def inventory(
     _api = glp_api or api
     resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
     # caption = None if glp_api else _build_device_caption(resp, inventory=True)
+    # captions are added to Resonse Object in refresh_inv_db
 
     render.display_results(
         resp,

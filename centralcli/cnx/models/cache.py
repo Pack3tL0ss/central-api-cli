@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from typing import Any, List, Dict, Optional, Literal
-
-from pydantic import BaseModel, Field, AliasChoices, field_validator, model_validator
-import pendulum
 from functools import cached_property
+from typing import Any, Dict, List, Literal, Optional
+
+import pendulum
+from pydantic import AliasChoices, BaseModel, Field, field_validator, model_validator
+from rich.text import Text
+
+from centralcli import log, utils
 from centralcli.render import unstyle
-from centralcli import utils, log
+
 
 class Subscription(BaseModel):
     id: str
@@ -202,17 +205,27 @@ class InventoryDevice(BaseModel):
 
 
 class InvCounts:
-    __slots__ = ["total", "expired", "expiring_soon", "subscribed", "no_subscription", "archived", "assigned"]
+    __slots__ = ["total", "expired", "expiring_soon", "subscribed", "no_subscription", "archived", "assigned", "cx", "sw", "ap", "gw", "bridge", "sdwan", "_by_type_strs"]
 
     def __init__(self, devs: list[InventoryDevice]):
         self.total = len(devs)
+        self.cx = self.sw = self.ap = self.gw = self.bridge = self.sdwan = 0
+        self._by_type_strs = ["cx", "sw", "ap", "gw", "bridge", "sdwan"]
+        for attr in self._by_type_strs:
+            setattr(self, attr, sum([1 for d in devs if d.type and d.type == attr]))
         self.subscribed = len([d for d in devs if d.subscribed])
         self.no_subscription = self.total - self.subscribed
         self.archived = len([d for d in devs if d.archived])
         self.assigned = len([d for d in devs if d.assigned])
 
-    def __rich__(self):
-        ret = f"[magenta]Inventory counts[/] Total: [cyan]{self.total}[/], [green]Subscription Assigned[/]: [cyan]{self.subscribed}[/]"
+    @property
+    def text(self) -> Text:
+        ret = f"[magenta]Inventory counts[/] Total: [cyan]{self.total}[/], "
+        for type_str in self._by_type_strs:
+            attr = getattr(self, type_str)
+            if attr > 0:
+                ret += f"[medium_spring_green]{type_str}[/]: [cyan]{attr}[/], "
+        ret += f"[green]Subscription Assigned[/]: [cyan]{self.subscribed}[/]"
         if self.no_subscription:
             ret += f", [yellow]No Subscription Assigned[/]: [cyan]{self.no_subscription}[/]"
         if self.assigned:
@@ -220,10 +233,13 @@ class InvCounts:
         if self.archived:
             ret += f", [dim][red]Archived[/]: [cyan]{self.archived}[/][/dim]"
 
-        return ret
+        return Text.from_markup(ret)
 
-    def __str__(self):
-        return unstyle(self.__rich__())
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich__(self) -> str:
+        return self.text.markup
 
 
 class Inventory(BaseModel):
