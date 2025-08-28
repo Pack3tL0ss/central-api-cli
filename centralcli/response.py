@@ -143,7 +143,7 @@ class Response:
             raw (Any, optional): raw response payload. Defaults to {}.
             status_code (int, optional): Response http status code. Defaults to None.
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
-            data_key: (str, optional): The dict key where the actual data is held in the response.
+            data_key: (str, optional): The key where the actual data is held in the response, typically a list[dict].
             caption: (str | list[str], optional): Optional captions to be displayed with the response.
         """
         self.rl = RateLimit(response)

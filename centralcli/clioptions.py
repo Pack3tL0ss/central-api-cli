@@ -19,7 +19,7 @@ ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "wha
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "sort_by", "default", "workspace", "verbose",
-    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past"
+    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription"
 ]
 
 class CLIArgs:
@@ -252,6 +252,7 @@ class CLIOptions:
         )
         self.in_: OptionInfo = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [dim]{escape('[default: Now]')}[/]", show_default=False,)
         self.reboot: OptionInfo = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device after firmware download [dim]{escape('[default: No reboot if not AP')} [green](APs will reboot regardless)[/green]{escape(']')}[/]")
+        self.subscription: OptionInfo = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False)
 
     @property
     def start(self) -> OptionInfo:

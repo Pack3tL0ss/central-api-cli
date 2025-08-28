@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from copy import deepcopy
 from enum import Enum
 from functools import lru_cache, partial
@@ -381,7 +381,6 @@ class CacheDevice(CentralObject):
         render.display_results(resp, exit_on_fail=True)
 
 
-
 class CacheInvMonDevice(CentralObject):
     def __init__(self, inventory: CacheInvDevice, monitoring: CacheDevice = None):
         if inventory and monitoring and inventory.serial != monitoring.serial:
@@ -403,7 +402,7 @@ class CacheInvMonDevice(CentralObject):
         self.services: str | None = inventory.data["services"]
         self.subscription_key: str = inventory.data.get("subscription_key")
         self.subscription_expires: int | float = inventory.data.get("subscription_expires")
-        self.assigned: bool = inventory.data.get("assigned")  # glp only
+        self._assigned: bool = inventory.data.get("assigned")  # glp only
         self.archived: bool = inventory.data.get("archived")  # glp only
         # monitoring
         self.name: str = None if monitoring is None else monitoring.data["name"]
@@ -437,16 +436,26 @@ class CacheInvMonDevice(CentralObject):
         return f'[bright_green]{self.type}[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
     @property
-    def rich_help_text(self) -> str:
-        _status = f"[reset][{'bright_green' if self.status.lower() == 'up' else 'red1'}]{self.status}[/]"
+    def assigned(self) -> bool:
+        return bool(self._assigned)
+
+    def get_help_text_parts(self) -> Generator[str, None, None]:
+        _status = render.get_pretty_status(self.status)
         mon_parts = [p for p in [self.name, self.type, _status, self.serial, self.mac, self.ip, self.model] if p]
         inv_parts = [] if not self.sku else [self.sku]
         parts = [*mon_parts, *inv_parts]
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
+
+        for idx, part in enumerate(parts):
+            if "[/" in part:
+                yield part
+            elif idx % 2 == 0:
+                yield f"[cyan]{part}[/]"
+            else:
+                yield f"[turquoise4]{part}[/]"
+
+    @property
+    def rich_help_text(self) -> str:
+        return "|".join(self.get_help_text_parts())
 
     @property
     def summary_text(self) -> str:
@@ -926,23 +935,29 @@ class CacheCert(CentralObject, Text):
         return render.rich_capture(self.text.markup)
 
 
+class SubscriptionTier(str, Enum):
+    ADVANCED = "advanced"
+    FOUNDATION = "foundation"
+    OTHER = "other"
+
+
 class CacheSub(CentralObject, Text):
     db: Table | None = None
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         super().__init__("sub", data)
-        self.id = data["id"]
-        self.name = data["name"]
-        self.key = data["key"]
-        self.qty = data["qty"]
-        self.available = data["available"]
-        self.sku = data["sku"]
-        self.start_date = data["start_date"]
-        self.end_date = data["end_date"]
-        self.started = data["started"]
-        self.expired = data["expired"]
-        self.valid = data["valid"]
-        self.expire_string = DateTime(self.end_date, format="date-string")
+        self.id: str = data["id"]
+        self.name: str = data["name"]
+        self.key: str = data["key"]
+        self.qty: int = data["qty"]
+        self.available: int = data["available"]
+        self.sku: str = data["sku"]
+        self.start_date: int = data["start_date"]
+        self.end_date: int = data["end_date"]
+        self.started: bool = data["started"]
+        self.expired: bool = data["expired"]
+        self.valid: bool = data["valid"]
+        self.expire_string: DateTime = DateTime(self.end_date, format="date-string")
 
     @classmethod
     def set_db(cls, db: Table):
@@ -964,6 +979,9 @@ class CacheSub(CentralObject, Text):
     def doc_id(self, doc_id: int | None) -> int | None:
         self._doc_id = doc_id
 
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.name}|{self.available}|{render.unstyle(self.status)}) object at {hex(id(self))}>"
+
     def __eq__(self, value):
         if hasattr(value, "id"):
             return value.id == self.id
@@ -977,10 +995,20 @@ class CacheSub(CentralObject, Text):
         return self.name.replace("-", "_")
 
     @property
+    def tier(self) -> SubscriptionTier:
+        if self.name.startswith("foudation"):
+            return SubscriptionTier.FOUNDATION
+        if self.name.startswith("advance"):
+            return SubscriptionTier.ADVANCED
+        return SubscriptionTier.OTHER
+
+    @property
     def text(self) -> Text:
-        _expired_str = f"[red1]expired[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires [cyan]{self.expire_string}[/]"
+        _expired_str = f"[red1]EXPIRED[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires {self.expire_string.expiration}"
+        glp_str = "" if not config.debug else f"|[dim]glp id: {self.id}[/dim]"
+        key_str = "" if not self.key else f"|[dim cadet_blue]{self.key}[/dim cadet_blue]"
         return Text.from_markup(
-            f'[bright_green]{self.name}[/]|[dim]glp id: {self.id}[/]|{_expired_str}|[magenta]Qty Available[/][dim]:[/] [cyan]{self.available}[/]'
+            f'[bright_green]{self.name}[/]{glp_str}{key_str}|{_expired_str}|[magenta]Qty Available[/][dim]:[/dim] [cyan]{self.available}[/cyan]'
         )
 
     @property
@@ -3563,18 +3591,20 @@ class Cache:
         inv_resp, sub_resp = batch_resp  # if first call failed above it doesn't get this far.
 
         inv_data, sub_data = None, None
-        if not sub_resp.ok:  # TODO test this
+        if not sub_resp.ok:
             log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
+            inv_data = GlpInventory(**inv_resp.raw)
             _inv_by_ser = {} if not inv_resp.ok else {dev["serialNumber"]: dev for dev in inv_resp.raw["items"]}
-            combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
+            combined = {serial: {**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()}
             inv_model = models.Inventory(list(combined.values()))
         else:
             sub_data = Subscriptions(**sub_resp.raw)
             inv_data = GlpInventory(**inv_resp.raw)
             combined = await get_inventory_with_sub_data(inv_data, sub_data)
             inv_model = models.Inventory(combined)
-            if dev_type and dev_type != "all":
-                inv_model = models.Inventory([i for i in inv_model.model_dump() if i["type"] == "cx"])
+
+        if dev_type and dev_type != "all":
+            inv_model = models.Inventory([i for i in inv_model.model_dump() if i["type"] == dev_type])
 
         resp = [r for r in batch_resp if r.ok][-1]
         resp.rl = sorted([r.rl for r in batch_resp])[0]
@@ -4351,13 +4381,24 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
-        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
         swack: Optional[bool],
         conductor_only: Optional[bool],
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
-        exit_on_fail: bool
+        exit_on_fail: Literal[False]
+    ) -> list[CacheDevice | None]:
+        ...
+
+    @overload
+    def get_dev_identifier(
+        query_str: str,
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
+        retry: bool,
+        completion: bool,
+        silent: bool,
+        exit_on_fail: Literal[False]
     ) -> list[CacheDevice | None]:
         ...
 
@@ -4699,7 +4740,7 @@ class Cache:
 
             # Try Monitoring DB may be using non inventory field
             if not match and _ == 0:
-                dev = self.get_dev_identifier(query_str, dev_type=dev_type, retry=False, exit_on_fail=False)
+                dev: CacheDevice | None = self.get_dev_identifier(query_str, dev_type=dev_type, silent=True, retry=False, exit_on_fail=False)
                 if dev:
                     query_str = dev.serial
                     continue
@@ -4779,10 +4820,11 @@ class Cache:
         for idx in range(0, 2):
             inv_dev = self.get_inv_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_fail)
             if not inv_dev:
-                mon_dev = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=silent, exit_on_fail=False)
-                query_str = mon_dev.serial  # If they provide an identifier only available in DevDB we use it to get the serial for the InvDB lookup
+                mon_dev: CacheDevice | None = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=True, exit_on_fail=False)
+                if mon_dev:
+                    query_str = mon_dev.serial  # If they provide an identifier only available in DevDB we use it to get the serial for the InvDB lookup
             else:
-                mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry, completion=completion, silent=silent, exit_on_fail=False)
+                mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry, completion=completion, silent=True, exit_on_fail=False)
                 return CacheInvMonDevice(inv_dev, mon_dev)
 
     @overload

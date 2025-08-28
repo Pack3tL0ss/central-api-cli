@@ -1687,36 +1687,60 @@ class CLICommon:
         if inv_doc_ids:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
-    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, tags: dict[str, str] = None, yes: bool = False,) -> List[Response]:
-        BR = BatchRequest
+    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, tags: dict[str, str] = None, subscription: str = None, yes: bool = False,) -> List[Response]:
+        # tags = None if not tags else {k: v if v.lower() not in ["none", "null"] else None for k, v in tags.items()}
+        if subscription:
+            sub_keys = ["subscription", "license", "services"]
+            sub_key = [k for k in sub_keys if k.lower() in map(str.lower, data[0].keys())]
+            sub_key = "subscription" if not sub_key else sub_key[0]
+            _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
+            data = [{**{k: v for k, v in inner.items() if k != sub_key}, "subscription": _sub.id} for inner in data]
+
         glp_api = GreenLakeAPI()
         try:
             _data = ImportSubDevices(data)
         except ValidationError as e:
-            self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+            self.exit(utils.clean_validation_errors(e))
 
-        devs_by_sub_id = _data.serials_by_subscription_id()
-        confirm_msg, batch_reqs = [], []
+        devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
+        confirm_msg =[]
+        batch_reqs, tag_ids = [], []
         for sub_id, res in devs_by_sub_id.items():
+            if not res.devices:
+                continue
+
             csub: CacheSub = res.cache_sub
-            # confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(res.devices).lstrip()}\n"]
-            _inv_mon_devs = [self.cache.invdev_by_id[dev_id] for dev_id in res.devices]
-            _help_text_list = [d.rich_help_text for d in _inv_mon_devs]
-            confirm_msg += [f"{csub.summary_text}|[magenta]Qty being assigned[/][dim]:[/] {len(res.devices)}\n    {utils.summarize_list(_help_text_list).lstrip()}\n"]
+            confirm_msg += [res.get_confirm_msg()]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
-                confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription.\n"]
-            batch_reqs += [BR(glp_api.devices.assign_subscription_to_devices, device_ids=res.devices, subscription_ids=sub_id, tags=tags)]
+                confirm_msg += [f"\n[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
+            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
+            if tags:
+                tag_ids += res.ids
 
         if tags:
             _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in tags.items()])
-            confirm_msg += [f"\n[bright_green]The following tags will be assigned to the devices[/]:\n{_tag_msg}"]
+            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(res)}[/] [bright_green]devices [dim italic]from import[/][/bright_green]:\n{_tag_msg}"]
+            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=tag_ids, tags=tags)]
+        if _data.has_tags:
+            for _tags, _ids in _data.ids_by_tags():
+                _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in _tags.items()])
+                confirm_msg += [f"\n[bright_green]The following {'additional ' if tags else ''}tags will be assigned to[/] [cyan]{len(_ids)}[/] [bright_green]devices [dim italic]based on data defined in import[/][/bright_green]:\n{_tag_msg}"]
+                batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=_ids, tags=_tags)]
+
+        if _data.not_assigned_devs:
+            confirm_msg += [
+                "\n[dark_orange3]\u26a0[/]  Some devices have been skipped as they don't exist or are not associated with Aruba Central app in [green]GreenLake[/]",
+                _data.warning_skip_not_assigned,
+                "\n[deep_sky_blue1]\u2139[/]  Use [cyan]cencli batch add devices ...[/] to add devices to Aruba Central."
+            ]  # \u26a0 == :warning:, \u2139 = :information:
 
         if not self.cache.responses.sub:
-            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+            confirm_msg += ["\n[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
-        render.econsole.print(f"[italic deep_sky_blue1]:information:[/]  [dark_olive_green2]Mak{'e' if not yes else 'ing'} the following assignments[/]:")
         render.econsole.print("\n".join(confirm_msg), emoji=False)
+        if not batch_reqs:
+            self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
         render.confirm(yes) # aborts here if they don't confirm
         batch_res = glp_api.session.batch_request(batch_reqs)
         # assign_subscription_to_devices returns a list of Responses so need to flatten list

@@ -880,13 +880,14 @@ class WhatToPretty:
         case for display.  Normally title case.  i.e. switch --> Switches
 
         """
-        self.gateway = self.gateways = "Gateways"
+        self.gateway = self.gateways = self.gw = "Gateways"
         self.aps = self.ap = self.iap = "Access Points"
-        self.switch = self.switches = "Switches"
+        self.switch = self.switches = self.cx = self.sw = "Switches"
         self.groups = self.group = "Groups"
         self.site = self.sites = "Sites"
         self.template = self.templates = "Templates"
         self.variable = self.variables = "Variables"
+        self.vgw = "Virtual Gateways"
         self.all = "All Devices"
         self.device = self.devices = "Devices"
 

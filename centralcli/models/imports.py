@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from functools import cached_property
+from typing import Any, Dict, Generator, List, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
 
 from .. import Cache, config, utils
-from ..cache import CacheInvDevice
+from ..cache import CacheInvDevice, CacheInvMonDevice, CacheSub
 from ..constants import SiteStates, state_abbrev_to_pretty
 from .common import MpskStatus
-
-if TYPE_CHECKING:
-    from ..cache import CacheSub
-
 
 cache = Cache(config=config)
 class ImportSite(BaseModel):
@@ -164,10 +161,14 @@ class ImportDevice(BaseModel):
         return utils.is_resource_id(self.subscription)
 
 
-class BySubId:
-    def __init__(self, cache_sub: CacheSub, devices: list[str] = None):
+class BySubId():
+    def __init__(self, cache_sub: CacheSub, devices: list[ImportSubDevice] = None):
         self.cache_sub = cache_sub
         self.devices = devices or []
+
+    @property
+    def ids(self) -> list[str]:
+        return [d.inv_object.id for d in self.devices]
 
     def __add__(self, other):
         self.devices += [other] if not isinstance(other, list) else other
@@ -175,8 +176,27 @@ class BySubId:
     def append(self, other):
         self.devices += [other] if not isinstance(other, list) else other
 
+    def __repr__(self) -> str:
+        return f"<{self.__module__}.{type(self).__name__} ({self.cache_sub.name}: assigning {len(self)} of {self.cache_sub.available}|{'TOO MANY' if self.is_overrun else 'OK'}) object at {hex(id(self))}>"
+
     def __len__(self) -> int:
         return len(self.devices)
+
+    def __iter__(self) -> Generator[CacheInvMonDevice, None, None]:
+        for dev in self.devices:
+            yield dev.inv_object
+
+    @property
+    def is_overrun(self) -> bool:
+        return len(self.devices) > self.cache_sub.available
+
+    def get_confirm_msg(self, tags: bool = False, is_update: bool = True) -> str:
+        confirm_header = f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {self.cache_sub.summary_text}|[magenta]Qty being assigned[/magenta][dim]:[/dim] {len(self)}"
+        confirm_msgs = [
+            f"{dev.get_confirm_msg(tags_override=tags and dev.tags)}"
+            for dev in self.devices
+        ]
+        return "\n".join([confirm_header, *confirm_msgs])
 
 
 class ImportDevices(RootModel):
@@ -231,36 +251,123 @@ class ImportDevices(RootModel):
         return out_dict
 
 
-class ImportSubDevice(BaseModel):
-    model_config = ConfigDict(use_enum_values=True)
+class _ImportSubDevice(BaseModel):
+    model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
-    mac: Optional[str] = Field(None, alias=AliasChoices("mac", "MAC", "mac_address", "Mac Address"))
-    group: Optional[str] = Field(None, alias=AliasChoices("group", "GROUP", "group_name"))
-    site: Optional[str] = Field(None, alias=AliasChoices("site", "SITE", "site_name"))
-    subscription: Optional[str] = Field(alias=AliasChoices("subscription", "license", "services"))
+    tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAG", "TAGS"))
+    archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE"))
+    subscription: Optional[str] = Field(alias=AliasChoices("subscription", "license", "services", "SUBSCRIPTION"))
 
     @field_validator("subscription")
     @classmethod
     def _normalize_subscription(cls, v: str) -> str:
         return v.lower().replace("_", "-")
 
-    @property
-    def sub_object(self) -> CacheSub:
-        return cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _convert_csv_tags(cls, v: str | dict[str, str]) -> dict[str, str]:
+        if isinstance(v, str):
+            v = v.replace(",", " ")
+            return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
+
+        return v.lower().replace("_", "-")
+
+class ImportSubDevice(_ImportSubDevice):
+    _sub_object: CacheSub = None
+    _sub_changed: bool = False
+    _sub_fetched: bool = False
+    _orig_sub_object: CacheSub = None
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     @property
-    def inv_object(self) -> CacheInvDevice | None:
-        for _ in range(0, 2):
-            inv_dict = cache.inventory_by_serial.get(self.serial)
-            if inv_dict:
-                return CacheInvDevice(inv_dict)
-            if not cache.responses.inv:
-                asyncio.run(cache.refresh_inv_db())
+    def sub_object(self):
+        if self.subscription is None:
+            return None
+        if not self._sub_object and not self._sub_fetched:
+            self._orig_sub_object = self._sub_object = cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
+            self._sub_fetched = True
+
+        return self._sub_object
+
+    @sub_object.setter
+    def sub_object(self, sub: CacheSub):
+        if not self.exact_sub:
+            self._sub_object = sub
+            if self.sub_object and sub != self.sub_object:  # TODO prob makes sense to make CacheSub a singleton so it returns the same instance based on id.
+                self._sub_changed = True
+
+    @property
+    def exact_sub(self) -> bool:
+        if self.subscription is None:
+            return False
+        if self._orig_sub_object and self._orig_sub_object.id and self._orig_sub_object.id == self.subscription:
+            return True
+        return False
+
+    @cached_property
+    def inv_object(self) -> CacheInvMonDevice | None:
+        return cache.get_combined_inv_dev_identifier(self.serial, exit_on_fail=False)
+
+    @property
+    def assigned(self) -> bool:
+        return False if self.inv_object is None else self.inv_object.assigned
+
+    @property
+    def exists(self) -> bool:
+        return False if self.inv_object is None else True
+
+    @property
+    def override_tags_warning(self) -> str:
+        _tag_msg = "" if not self.tags else f"|[green]GreenLake[/] tags: {', '.join([f'[turquoise2]{k}[/]: [turquoise4]{v}[/]' for k, v in self.tags.items()])}"
+        return f"{self.inv_object.help_text}{_tag_msg}"
+
+    @property
+    def glp_id(self):
+        return self.inv_object.id
 
     @property
     def sub_is_id(self) -> bool:
-        return utils.is_resource_id(self.subscription)
+        return False if not self.subscription else utils.is_resource_id(self.subscription)
 
+    @property
+    def help_text(self) -> str:
+        return self.get_confirm_msg()
+
+    @property
+    def rich_help_text(self) -> str:
+        if self.inv_object is not None:
+            return f"{self.inv_object.rich_help_text}{self.warning_sub_changed}"
+        return f"[dark_orange3]\u26a0[/]  {self.serial}  Does not exist in [green]GreenLake[/]"
+
+    @property
+    def warning_sub_changed(self) -> str:
+        if not self._sub_changed:
+            return ""
+
+        _sub_msg = "|[dark_olive_green2 italic]Sub is being updated[/]: "
+        if self._orig_sub_object.tier != self.sub_object.tier:
+            _sub_msg = f"{_sub_msg} [magenta]Tier[/] changing from [red]{self._orig_sub_object.tier.value}[/]"
+        if self._orig_sub_object.expire_string != self.sub_object.expire_string:
+            _sub_msg = f"{_sub_msg} [magenta]Expiration[/] changing from [red]{self._orig_sub_object.expire_string}[/]"
+        return _sub_msg
+
+    def __rich__(self) -> str:
+        return self.get_confirm_msg()
+
+    def get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
+        if not self.tags:
+            return self.rich_help_text
+
+        _tag_msg = f"[green]GreenLake[/] tags: {', '.join([f'[turquoise2]{k}[/]: [turquoise4]{v}[/]' for k, v in self.tags.items()])}"
+        _tag_msg = f"|{_tag_msg}" if not tags_override else f"|[dark_orange3]\u26a0[/]  [bright_red]IGNORING[/] {_tag_msg}"
+        _ret = f"{self.rich_help_text}{_tag_msg}"
+        if skipped and not self.assigned:
+            _error = "Not assigned to Aruba Central app in GLP." if self.exists else "Does not exist in GLP"
+            return f"[dark_orange3]\u26a0[/]  [bright_red]SKIPPING[/] {_ret}... [dim italic]{_error}[/]"
+        else:
+            return _ret
 
 class ImportSubDevices(RootModel):
     root: list[ImportSubDevice]
@@ -277,17 +384,92 @@ class ImportSubDevices(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
+    def __rich__(self) -> str:
+        return "\n".join([dev.__rich__() for dev in self.root])
+
+    @property
+    def help_text(self) -> str:
+        return self.__rich__()
+
+    @property
+    def warning_ovverride_tags(self) -> str:
+        if not self.has_tags:
+            return ""
+        return "  [dark_orange3]\u26a0[/]  Tags found in Import file are being overriden by [cyan]--tags[/] flag:"
+
+    @property
+    def warning_skip_not_assigned(self) -> str:
+        if not self.not_assigned_devs:
+            return ""
+        return "\n".join([dev.get_confirm_msg(skipped=True) for dev in self.not_assigned_devs])
+
+    @property
+    def by_serial(self) -> dict[str, ImportSubDevice]:
+        return {dev.serial: dev for dev in self.root}
+
+    @property
+    def has_tags(self) -> bool:
+        return any([True for dev in self.root if dev.tags])
+
+    @property
+    def not_assigned_devs(self) -> list[ImportSubDevice]:
+        return [dev for dev in self.root if not dev.assigned]
+
+    @property
+    def assigned_devs(self) -> list[ImportSubDevice]:
+        return [dev for dev in self.root if dev.assigned]
+
+    def ids_by_tags(self) -> Generator[tuple[dict[str, str], list[str]], None, None]:
+        ret = {}
+        hash_to_tags  = {}
+        for dev in self.root:
+            if dev.tags:
+                tag_hash = hash(str(dev.tags))
+                utils.update_dict(ret, tag_hash, [dev.glp_id])
+                if tag_hash not in hash_to_tags:
+                    hash_to_tags[tag_hash] = dev.tags
+
+        for tag_hash, ids in ret.items():
+            yield hash_to_tags[tag_hash], ids
+
+    def get(self, serial: str, default: Any = None) -> ImportSubDevice | Any:
+        return self.by_serial.get(serial, default)
+
+    def get_confirm_msg(self, sub: CacheSub, pad: int = 4, max: int = 15, tags_override: bool = False, is_update: bool = False) -> str:
+        if tags_override:
+            devs = [*[dev for dev in self.root if dev.tags], *[dev for dev in self.root if not dev.tags]]
+        else:
+            devs = self.root
+
+        if is_update:
+            devs = [dev for dev in devs if dev.assigned]
+
+        dev_msgs = [dev.get_confirm_msg(tags_override=tags_override) for dev in devs if sub == dev.sub_object]
+        return utils.summarize_list(dev_msgs, pad=pad, max=max, color=None).lstrip()
+
     def serials_by_subscription(self) -> dict[str, list[str]]:
         subs = set(dev.subscription for dev in self.root)
         out_dict = {sub: [] for sub in subs}
         _ = [out_dict[dev.subscription].append(dev.serial) for dev in self.root]
         return out_dict
 
-    def serials_by_subscription_id(self) -> dict[str, BySubId]:
+    def update_subs(self, sub: CacheSub, serials: list[str]) -> None:
+        for s in serials:
+            self.get(s).sub_object = sub
+
+    def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
         subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
-        _ = [out_dict[dev.sub_object.id].append(dev.inv_object.id) for dev in self.root if dev.inv_object is not None and dev.inv_object.id is not None]
-        # skipped = [dev for dev in self.root if dev.inv_object is None or dev.inv_object.id is None]
+
+        for dev in self.root:
+            if dev.inv_object is None or dev.inv_object.id is None:
+                continue
+            if assigned and dev.inv_object.assigned:
+                out_dict[dev.sub_object.id].append(dev)
+            elif assigned is False and not dev.inv_object.assigned:
+                out_dict[dev.sub_object.id].append(dev)
+            else:  # assigned is None / All devices
+                out_dict[dev.sub_object.id].append(dev)
 
         # This logic distributes devices to subscriptions based on available qty
         _additional_subs = {}
@@ -295,18 +477,21 @@ class ImportSubDevices(RootModel):
             if len(out_dict[sub_id].devices) > out_dict[sub_id].cache_sub.available:
                 this_subs: list[CacheSub] = cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
                 if len(utils.listify(this_subs)) > 1:
-                    dev_ids = out_dict[sub_id].devices
-                    out_dict[sub_id].devices = dev_ids[0:out_dict[sub_id].cache_sub.available]
-                    _start = out_dict[sub_id].cache_sub.available
+                    devs = out_dict[sub_id].devices
+                    exact_matches = [devs.pop(devs.index(d)) for d in devs if d.exact_sub]
+                    out_dict[sub_id].devices = exact_matches or devs
+                    if not devs:  # They have specified more subs than it appears they have available, but they are exact matches by sub id so just send it
+                        continue
+                    if out_dict[sub_id].cache_sub.available > len(exact_matches):
+                        _slice = slice(0, out_dict[sub_id].cache_sub.available - len(exact_matches))
+                        out_dict[sub_id].devices += [devs.pop(devs.index(d)) for d in devs[_slice]]
+                    if not devs:
+                        continue
                     for csub in this_subs[1:]:
-                        _slice = slice(_start, _start + csub.available)
-                        _dev_ids = dev_ids[_slice]
-                        _start += csub.available
-                        if not dev_ids:
-                            break
-                        _additional_subs[csub.id] = BySubId(csub, devices=_dev_ids)
-                    if dev_ids[_start:]:  # devices remain after assigning to all available subs, dump remainder i best_match
-                        out_dict[sub_id].devices += dev_ids[_start:]
+                        _additional_subs[csub.id] = BySubId(csub, devices=[devs.pop(devs.index(d)) for d in devs[0:csub.available]])
+                        self.update_subs(csub, serials=[d.inv_object.serial for d in devs[0:csub.available]])
+                    if devs:  # devices remain after assigning to all available subs, dump remainder... best_match
+                        out_dict[sub_id].devices += devs
 
 
         out_dict = {**out_dict, **_additional_subs}
