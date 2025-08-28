@@ -242,11 +242,8 @@ class ConfigData(BaseModel):
         if data["central_info"].get(tok_key, {}).get(wh_tok_key):
             wh_token = data["central_info"][tok_key][wh_tok_key]
             del data["central_info"][tok_key][wh_tok_key]
-            data["central_info"]["webhook"] = utils.update_dict(data["central_info"]["webhook"], key="token", value=wh_token)
-            # if "webhook" in data["central_info"]:
-            #     data["central_info"]["webhook"]["token"] = wh_token
-            # else:
-            #     data["central_info"]["webhook"] = {"token": wh_token}
+            if "webhook" in data["central_info"]:
+                data["central_info"]["webhook"] = utils.update_dict(data["central_info"]["webhook"], key="token", value=wh_token)
 
         return data
 
