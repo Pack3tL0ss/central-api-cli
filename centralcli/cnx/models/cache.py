@@ -81,7 +81,7 @@ class Subscription(BaseModel):
 
 
 class SubCounts:
-    __slots__ = ["total", "expired", "valid", "expiring_soon", "not_started"]
+    __slots__ = ["total", "expired", "valid", "expiring_soon", "not_started", "filters"]
 
     def __init__(self, subs: List[Subscription]):
         self.total = len(subs)
@@ -89,9 +89,17 @@ class SubCounts:
         self.valid = len([s for s in subs if s.valid])
         self.expiring_soon = len([s for s in subs if s.expiring_soon])
         self.not_started = len([s for s in subs if not s.started])
+        filters = []
+        sub_names = list(set([s.name for s in subs]))
+        sub_types = list(map(str.lower, set([s.type for s in subs])))
+        if len(sub_names) == 1:
+            filters += sub_names
+        if len(sub_types) == 1:
+            filters += sub_types
+        self.filters = None if not filters else " & ".join(filters)
 
     def __rich__(self):
-        ret = f"[magenta]Subscription counts[/] Total: [cyan]{self.total}[/], [green]Valid[/]: [cyan]{self.valid}[/], [red]Expired[/]: [cyan]{self.expired}[/]"
+        ret = f"[magenta]Subscription counts{'' if not self.filters else f' [dim italic cyan]({self.filters})[/dim italic cyan]'}[/] Total: [cyan]{self.total}[/], [green]Valid[/]: [cyan]{self.valid}[/], [red]Expired[/]: [cyan]{self.expired}[/]"
         if self.not_started:
             ret += f", [yellow]Not Started[/]: [cyan]{self.not_started}[/]"
         if self.expiring_soon:

@@ -308,7 +308,7 @@ class PlatformAPI:
 
     async def get_subscriptions(
         self,
-        license_type: str = None,
+        sub_type: str = None,
         device_type: constants.GenericDeviceTypes = None,
         offset: int = 0,
         limit: int = 1000,  # Doesn't appear to have max, allowed 10k limit in swagger
@@ -316,7 +316,7 @@ class PlatformAPI:
         """Get user subscription keys.
 
         Args:
-            license_type (str, optional): Supports Basic, Service Token and Multi Tier licensing types as well
+            suib_type (str, optional): Subscription type.  Supports Basic, Service Token and Multi Tier licensing types as well
             device_type (str, optional): Filter by device type ('ap', 'gw', or 'switch')
             offset (int, optional): offset or page number Defaults to 0.
             limit (int, optional): Number of subscriptions to get Defaults to 1000.
@@ -328,13 +328,13 @@ class PlatformAPI:
         if device_type:
             device_type = constants.lib_to_api(device_type, "licensing")
             device_type = device_type if not hasattr(device_type, "value") else device_type.value
-        if license_type:
-            if hasattr(license_type, "value"):
-                license_type = license_type.value
-            license_type = license_type.replace("-", " ").replace(" ", "_").upper()
+        if sub_type:
+            if hasattr(sub_type, "value"):
+                sub_type = sub_type.value
+            sub_type = sub_type.replace("-", " ").replace(" ", "_").upper()
 
         params = {
-            'license_type': license_type,
+            'license_type': sub_type,
             'device_type': device_type,
             'offset': offset,
             'limit': limit

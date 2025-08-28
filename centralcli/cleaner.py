@@ -1371,7 +1371,7 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
 
     return data
 
-def get_subscriptions(data: list[dict], default_sort: bool = True, dev_type: GenericDeviceTypes = None) -> list[dict]:
+def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]:
     field_order = [
         "id",
         "name",
@@ -1397,10 +1397,6 @@ def get_subscriptions(data: list[dict], default_sort: bool = True, dev_type: Gen
     data = [
         dict(short_value(k, d[k]) for k in field_order if k in d) for d in data
     ]
-    if dev_type:
-        data = [
-            item for item in data if item["type"] == dev_type.value
-        ]
 
     return data
 

@@ -3466,22 +3466,26 @@ class Cache:
 
         return resp
 
-    async def refresh_sub_db(self, license_type: str = None, dev_type: str = None) -> Response:
+    async def refresh_sub_db(self, sub_type: str = None, dev_type: str = None) -> Response:
         """Refresh Subscriptions Database (local cache).
 
         Returns:
             Response: CentralAPI Response object
         """
-        if not glp_api:  # We only started caching subscription data with glp addition, classic only does not cache subscriptions
-            return await api.platform.get_subscriptions(license_type=license_type, device_type=dev_type)
+        if not glp_api:  # We only started caching subscription data with glp addition, classic does not cache subscriptions
+            return await api.platform.get_subscriptions(sub_type=sub_type, device_type=dev_type)
 
-        resp = await glp_api.subscriptions.get_subscriptions()
+        resp: Response = await glp_api.subscriptions.get_subscriptions(sub_type=sub_type, dev_type=dev_type)
         if resp.ok:
             self.responses.sub = resp
             sub_data = Subscriptions(**resp.raw)
             resp.output = sub_data.output()
             resp.caption = sub_data.counts
-            _ = asyncio.create_task(self.update_db(self.SubDB, data=sub_data.cache_dump(), truncate=True))
+            if not any([sub_type, dev_type]):
+                cache_data = sub_data.cache_dump()
+            else:
+                cache_data = list({**self.subscriptions_by_id, **{sub["id"]: sub for sub in sub_data.cache_dump()}}.values())
+            _ = asyncio.create_task(self.update_db(self.SubDB, data=cache_data, truncate=True))
 
         return resp
 
@@ -4592,7 +4596,7 @@ class Cache:
                     ...  # self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
                     if not match:
-                        _msg = "[bright_red]No Match found[/] in Inventory or Device (monitoring) Cache"
+                        _msg = f"[bright_red]No Match found[/] in Inventory{' or Device (monitoring)' if include_inventory else ''} Cache"
                     else:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
@@ -4811,20 +4815,31 @@ class Cache:
         self,
         query_str: str | Iterable[str],
         dev_type: constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes] = None,
-        retry: bool = True,
+        retry_inv: bool = True,
+        retry_dev: bool = True,
         completion: bool = False,
         silent: bool = False,
-        exit_on_fail: bool = True,
+        exit_on_fail: bool = None,
+        exit_on_inv_fail: bool = None,
+        exit_on_dev_fail: bool = None,
     ) -> CacheInvMonDevice | list[CacheInvMonDevice]:
         """Searches both Inv Cache and Dev (Monitoring Cache) and returns a CacheInvMonDevice with attributes from both."""
+        exit_vars = [exit_on_inv_fail, exit_on_dev_fail]
+        if exit_on_fail is not None:
+            if any([item is not exit_on_fail for item in exit_vars if item is not None]):
+                raise ValueError("exit_on_fail is for both inv and dev. exit_on_inv_fail and exit_on_dev_fail should not conflict")
+            exit_on_inv_fail = exit_on_dev_fail = exit_on_fail
+        elif exit_vars.count(None) == 2:
+            exit_on_inv_fail = exit_on_dev_fail = True
+
         for idx in range(0, 2):
-            inv_dev = self.get_inv_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_fail)
+            inv_dev = self.get_inv_identifier(query_str, dev_type=dev_type, retry=retry_inv, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_inv_fail)
             if not inv_dev:
-                mon_dev: CacheDevice | None = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry, completion=completion, silent=True, exit_on_fail=False)
+                mon_dev: CacheDevice | None = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry_dev, completion=completion, silent=True, exit_on_fail=exit_on_dev_fail)
                 if mon_dev:
                     query_str = mon_dev.serial  # If they provide an identifier only available in DevDB we use it to get the serial for the InvDB lookup
             else:
-                mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry, completion=completion, silent=True, exit_on_fail=False)
+                mon_dev = self.get_dev_identifier(inv_dev.serial, dev_type=dev_type, retry=retry_dev, completion=completion, silent=True, exit_on_fail=exit_on_dev_fail)
                 return CacheInvMonDevice(inv_dev, mon_dev)
 
     @overload

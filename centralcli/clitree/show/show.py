@@ -855,7 +855,7 @@ def inventory(
 def subscriptions(
     what: SubscriptionArgs = typer.Argument("details"),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
-    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", show_default=False),
+    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", autocompletion=cache.sub_completion, show_default=False),
     sort_by: SortSubscriptionOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -879,11 +879,10 @@ def subscriptions(
     caption = None
     _api = glp_api or api
     if what is None or what == "details":
-        resp = _api.session.request(cache.refresh_sub_db, license_type=service, dev_type=dev_type)
+        resp = _api.session.request(cache.refresh_sub_db, sub_type=service, dev_type=dev_type)
         title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
         if resp.ok:
             _cleaner = cleaner.get_subscriptions
-            _cleaner_kwargs = {"dev_type": dev_type}
             set_width_cols = {"name": {"min": 39}}
             if sort_by:
                 _cleaner_kwargs["default_sort"] = False
