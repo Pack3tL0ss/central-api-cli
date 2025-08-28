@@ -14972,9 +14972,9 @@ class AllCalls:
         macaddr: str = None,
         cluster_id: str = None,
         calculate_total: bool = None,
+        sort: str = None,
         offset: int = None,
         limit: int = None,
-        sort: str = None,
     ) -> Response:
         """List BSSIDs.
 
@@ -14987,10 +14987,10 @@ class AllCalls:
             macaddr (str, optional): Filter by AP MAC address
             cluster_id (str, optional): Filter by Mobility Controller serial number
             calculate_total (bool, optional): Whether to calculate total APs
-            offset (int, optional): Pagination offset
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
                 +swarm_id, -swarm_id.Default is '+serial'
+            offset (int, optional): Pagination offset
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000
 
         Returns:
             Response: CentralAPI Response object
@@ -14998,11 +14998,17 @@ class AllCalls:
         url = "/monitoring/v2/bssids"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'serial': serial,
             'macaddr': macaddr,
             'cluster_id': cluster_id,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
         return await self.session.get(url, params=params)
