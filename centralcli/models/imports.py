@@ -308,7 +308,7 @@ class ImportSubDevice(_ImportSubDevice):
 
     @cached_property
     def inv_object(self) -> CacheInvMonDevice | None:
-        return cache.get_combined_inv_dev_identifier(self.serial, exit_on_fail=False)
+        return cache.get_combined_inv_dev_identifier(self.serial, retry_dev=False, exit_on_fail=False)
 
     @property
     def assigned(self) -> bool:
