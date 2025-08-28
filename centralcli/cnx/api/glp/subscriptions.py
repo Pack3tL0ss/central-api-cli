@@ -11,7 +11,12 @@ class GreenLakeSubscriptionsAPI:
     def __init__(self, session: Session):
         self.session = session
 
-    async def get_subscriptions(self) -> Response:
+    async def get_subscriptions(self, offset: int = 0, limit: int = 200) -> Response:
         url = "/subscriptions/v1/subscriptions"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit
+        }
+
+        return await self.session.get(url, params=params)

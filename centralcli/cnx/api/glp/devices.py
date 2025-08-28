@@ -14,40 +14,36 @@ class GreenLakeDevicesAPI:
     def __init__(self, session: Session):
         self.session = session
 
-    async def get_glp_devices(self) -> Response:
+    async def get_glp_devices(
+            self,
+            sort_by: str | list[str] = None,
+            reverse: bool = None,
+            offset: int = 0,
+            limit: int = 2000
+        ) -> Response:
+        """Retrieve a list of devices managed in a workspace
+
+        Args:
+            offset (int, optional): Specifies the zero-based resource offset to start the response from. Defaults to 0.
+            limit (int, optional): Specifies the number of results to be returned. Max 2000, Defaults to 2000.
+
+        Returns:
+            Response: centralcli.response.Response object
+        """
         url = "/devices/v1/devices"
 
-        return await self.session.get(url)
-
-    async def assign_subscription_to_devices(
-            self,
-            device_ids: list[str] | str,
-            subscription_ids: list[str] | str,
-            tags: dict[str, str] = None
-        ) -> list[Response]:
-        url = "/devices/v2beta1/devices"
-        header = {"Content-Type": "application/merge-patch+json"}
-        device_ids = utils.listify(device_ids)
-        subscription_ids = utils.listify(subscription_ids)
-
-        payload = {
-            "subscription": [
-                {
-                "id": sub
-                } for sub in subscription_ids
-            ]
+        params = {
+            "offset": offset,
+            "limit": limit
         }
 
-        batch_reqs = []
-        for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
-            # API-FLAW This is a horrible design. ?id=...&id=...&id=...  Should just be devices=<array>
-            query_str = "&".join([f"id={dev}" for dev in chunk])
-            url = f"{url}?{query_str}"
-            batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
-            if tags:  # Needs to be separate call... "description: Subscription and device update operations should not be together."
-                batch_reqs += [BatchRequest(self.session.patch, url, json_data={"tags": tags}, headers=header)]
+        if sort_by:
+            sort_by = ",".join(utils.listify(sort_by))
+            if reverse:
+                sort_by = f"{sort_by} desc"
+            params["sort"] = sort_by
 
-        return await self.session._batch_request(batch_reqs)
+        return await self.session.get(url, params=params)
 
     async def update_devices(
             self,
@@ -56,34 +52,29 @@ class GreenLakeDevicesAPI:
             tags: dict[str, str] | None = None,
             application_id: str | None = UNSET,
             archive: bool = None,
-            unarchive: bool = None,
         ) -> Response:
         url = "/devices/v2beta1/devices"
         header = {"Content-Type": "application/merge-patch+json"}
         device_ids = utils.listify(device_ids)
         subscription_ids = utils.listify(subscription_ids)
 
-        if archive and unarchive:
-            raise ValueError("Specifying archive and unarchive both is invalid.")
-        payload = {}
+        # Same endpoint but operations need to be done via separate calls.
+        payloads = []
         if subscription_ids:
-            payload["subscription"] = [
-                {
-                "id": sub
-                } for sub in subscription_ids
-            ]
+            payloads += [{"subscription": [{"id": sub} for sub in subscription_ids]}]
         if tags:
-            payload["tags"] = tags
-        if archive or unarchive:
-            payload["archived"] = True if archive else False
+            payloads += [{"tags": tags}]
+        if archive is not None:
+            payloads += [{"archived": archive}]
         if application_id is not UNSET:
-            payload["application"] = {"id": application_id}
+            payloads += {"application": {"id": application_id}}
 
         batch_reqs = []
-        for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
-            query_str = "&".join([f"id={dev}" for dev in chunk])
-            url = f"{url}?{query_str}"
-            batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
+        for payload in payloads:
+            for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
+                query_str = "&".join([f"id={dev}" for dev in chunk])
+                url = f"{url}?{query_str}"
+                batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
 
         return await self.session._batch_request(batch_reqs)
 
