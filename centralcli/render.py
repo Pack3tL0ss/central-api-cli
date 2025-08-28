@@ -765,7 +765,7 @@ def unstyle(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     kwargs = {**kwargs, "force_terminal": False}
     console = Console(emoji=emoji, **kwargs)
     with console.capture() as cap:
-        console.print(text)
+        console.print(text, end="")
     return cap.get()
 
 def help_block(default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
@@ -1140,3 +1140,11 @@ def display_results(
             cleaner=cleaner,
             **cleaner_kwargs
         )
+
+def get_pretty_status(status: str | None) -> str:
+    if status is None:
+        return status
+    if status.lower() == "up":
+        return f"[bright_green]{status}[/bright_green]"
+    if status.lower() == "down":
+        return f"[red1]{status}[/red1]"
