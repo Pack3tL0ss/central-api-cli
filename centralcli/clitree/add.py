@@ -98,7 +98,7 @@ def device(
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=common.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    subscription: List[common.cache.LicenseTypes] = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False),  # type: ignore
+    subscription: List[common.cache.LicenseTypes] = common.options.subscription,  # type: ignore
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
