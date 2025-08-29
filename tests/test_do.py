@@ -171,3 +171,33 @@ if config.dev.mock_tests:  # pragma: no cover
         capture_logs(result, "test_disable_auto_sub")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    def test_upgrade_ap():
+        result = runner.invoke(app, ["upgrade",  "device", test_data["ap"]["serial"], "10.7.2.1_93286", "-y"])
+        capture_logs(result, "test_upgrade_ap")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_upgrade_group():
+        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.2.1_93286", "-y"])
+        capture_logs(result, "test_upgrade_group")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_cancel_upgrade_group():
+        result = runner.invoke(app, ["cancel", "upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "-y"])
+        capture_logs(result, "test_cancel_upgrade_group")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_assign_subscription_by_key():
+        result = runner.invoke(app, ["assign", "subscription", test_data["subscription"]["key"], test_data["subscription"]["assign_to_device"]["serial"], "-y"])
+        capture_logs(result, "test_assign_subscription_by_key")
+        assert result.exit_code == 0
+        assert "202" in result.stdout
+
+

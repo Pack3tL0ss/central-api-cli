@@ -16,11 +16,17 @@ def get_test_data():
 def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -> Path:
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
 
-    if isinstance(test_data["batch"][import_type], str):  # pragma: no cover
-        seed_file = Path(test_data["batch"][import_type])
+    data = test_data["batch"]
+    keys = import_type.split(":")
+    import_type = keys[0]
+    for k in keys:
+        data = data[k]
+
+    if isinstance(data, str):  # pragma: no cover
+        seed_file = Path(data)
         data = common._get_import_file(seed_file, import_type=import_type)
     else:
-        data = test_data["batch"][import_type]
+        data = data
 
     res = test_batch_file.write_text(
         json.dumps(data)
@@ -34,6 +40,7 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -
 test_data: dict[str, Any] = get_test_data()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
-test_sub_file: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions")
+test_sub_file_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:yaml")
+test_sub_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:csv")
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"

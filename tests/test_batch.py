@@ -4,7 +4,7 @@ from centralcli.cli import app
 from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_site_file, test_sub_file
+from ._test_data import test_data, test_device_file, test_group_file, test_site_file, test_sub_file_csv, test_sub_file_yaml
 
 runner = CliRunner()
 
@@ -40,11 +40,21 @@ def test_batch_add_devices():
     assert "201" in result.stdout  # /configuration/v1/preassign
 
 
-def test_batch_assign_subscriptions_with_tags():
-    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
+def test_batch_assign_subscriptions_with_tags_yaml():
+    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
     if config.is_old_cfg:
         assert isinstance(result.exception, InvalidConfigException)
     else:
-        capture_logs(result, "test_batch_assign_subscriptions_with_tags")
+        capture_logs(result, "test_batch_assign_subscriptions_with_tags_yaml")
         assert result.exit_code == 0
-        assert result.stdout.count("202") == 2
+        assert result.stdout.count("code: 202") == 2
+
+
+def test_batch_assign_subscriptions_csv():
+    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
+    if config.is_old_cfg:
+        assert isinstance(result.exception, InvalidConfigException)
+    else:
+        capture_logs(result, "test_batch_assign_subscriptions_csv")
+        assert result.exit_code == 0
+        assert result.stdout.count("code: 202") == 3
