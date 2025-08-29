@@ -241,7 +241,6 @@ if "--again" in sys.argv:
 
 
 from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
-from .clicommon import CLICommon
 cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
@@ -255,6 +254,8 @@ if config.valid:
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
+
+from .clicommon import CLICommon
 common = CLICommon(config.workspace, cache, raw_out=raw_out)
 
 from . import cleaner, render
