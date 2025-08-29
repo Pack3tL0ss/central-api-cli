@@ -18,7 +18,7 @@ from rich.markup import escape
 
 from centralcli import log, utils
 
-from .constants import STRIP_KEYS, GenericDeviceTypes, LLDPCapabilityTypes, PoEDetectionStatus, SwitchRolesShort
+from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, SwitchRolesShort
 from .models.cache import Sites
 from .models.formatter import CloudAuthUploadResponse
 from .objects import DateTime, ShowInterfaceFilters
