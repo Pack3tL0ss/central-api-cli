@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from datetime import datetime
-from typing import List
 
 import typer
 
@@ -26,7 +25,7 @@ app = typer.Typer()
 @app.command(deprecated=True)
 def license(
     license: common.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
-    devices: List[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
+    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -113,7 +112,7 @@ def label_(
 @app.command(hidden=not glp_api)
 def subscription(
     sub_name_or_id: str = typer.Argument(..., help="subscription_id from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
-    devices: List[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
+    devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
     end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -141,7 +140,7 @@ def subscription(
     _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
     render.econsole.print(_msg)
     if render.confirm(yes):
-        resp = glp_api.session.request(glp_api.devices.assign_subscription_to_devices, res_ids, subscription_ids=sub.id)
+        resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=sub.id)
         render.display_results(resp, tablefmt="action")
 
 

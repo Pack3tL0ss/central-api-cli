@@ -1698,7 +1698,7 @@ class CLICommon:
 
         glp_api = GreenLakeAPI()
         try:
-            _data = ImportSubDevices(data)
+            _data = ImportSubDevices(self.cache, data)
         except ValidationError as e:
             self.exit(utils.clean_validation_errors(e))
 
