@@ -9,7 +9,7 @@ import time
 from collections.abc import Generator, Iterator
 from copy import deepcopy
 from enum import Enum
-from functools import lru_cache, partial
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
@@ -127,6 +127,8 @@ class CentralObject:
 
         if hasattr(self, "data") and hasattr(self.data, name):
             return getattr(self.data, name)
+
+        raise AttributeError(f"'{self.__module__}.{type(self).__name__}' object has no attribute '{name}'")
 
     def get(self, item: str, default = None):
         return self.data.get(item, default)
@@ -1247,7 +1249,7 @@ class Cache:
         self.config = config
         self.responses = CacheResponses()
         # self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
-        self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
+        # self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
         # self.get_portal_identifier: CachePortal | list[CachePortal] = partial(self.get_name_id_identifier, "portal")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
@@ -5610,6 +5612,123 @@ class Cache:
             if not completion:
                 log.error(
                     f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
+                )
+
+
+    @lru_cache
+    def get_sub_identifier(
+        self,
+        query_str: str,
+        retry: bool = True,
+        completion: bool = False,
+        silent: bool = False,
+        end_date: dt.datetime = None,
+        best_match: bool = False,
+        all_match: bool = False,
+    ) -> CacheSub | list[CacheSub] | None:
+        """Fetch items from subscription cache based on query
+
+        Args:
+            query_str (str): The query string used to search the cache for a match
+            retry (bool, optional): Refresh the cache via API and retry if no match is found. Defaults to True.
+            completion (bool, optional): Indicates function is being called for CLI completion... effectively the equiv of retry=False, Silent=True. Defaults to False.
+            silent (bool, optional): Set to True to squelch out all messaging normmaly displayed when no match is found, and retry is initiated. Defaults to False.
+            end_date (dt.datetime, optional): Specific to 'sub' cache.  Provide End Date to further narrow search in the event of multiple subscription matches. Defaults to None.
+            best_match (bool, optional): Specific to 'sub' cache.  Set True to return the best match in the event of multiple matches.
+                Best match is the valid match with the most time remaining on the subscription. Defaults to False (user is prompted to select one of the matches).
+            all_match (bool, optional): Sepcific to 'sub' cache.  Return all matches in the event of multiple matches. Defaults to False.
+
+        Raises:
+            typer.Exit: Terminates program if no match is found.
+
+        Returns:
+            CachePortal | List[CachePortal] | CacheLabel | List[CacheLabel] | CacheSub | List[CacheSub]: The Cache object associated with the provided cache_name.
+        """
+        cache_updated = False
+        retry = False if completion else retry
+        db: Table = self.SubDB
+
+        if isinstance(query_str, (list, tuple)):
+            query_str = " ".join(query_str)
+        elif not isinstance(query_str, str):
+            query_str = str(query_str)
+
+        for _ in range(0, 2):
+            if query_str == "":
+                match = db.all()
+            else:
+                match = db.search(
+                    (self.Q.name == query_str)
+                    | (self.Q.key == query_str)
+                    | (self.Q.id == query_str)
+                )
+
+            # case insensitive
+            if not match:
+                match = db.search(
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
+                )
+
+            # case insensitive startswith
+            if not match:
+                match = db.search(
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
+                )
+
+            # case insensitive ignore -_
+            if not match:
+                if "_" in query_str or "-" in query_str:
+                    match = db.search(
+                        self.Q.name.test(
+                            lambda v: v.lower().replace("_", "-") == query_str.lower().replace("_", "-")
+                        )
+                    )
+
+            # case insensitive startswith search for id
+            if not match:
+                match = db.search(
+                    self.Q.id.test(
+                        lambda v: str(v).lower().startswith(query_str.lower())
+                    )
+                )
+
+            if not match and retry and not cache_updated:
+                econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
+                if FUZZ and db.all() and not silent:
+                    match = self.fuzz_lookup(query_str, db=db)
+                if not match:
+                    econsole.print(":arrows_clockwise: Updating [cyan]Subscription[/] Cache")
+                    api.session.request(self.refresh_sub_db)
+                    cache_updated = True
+                _ += 1
+            if match:
+                match = [CacheSub(m) for m in match]
+                break
+
+        if completion:
+            return match or []
+
+        if match:
+            if len(match) > 1:
+                match = self._handle_sub_multi_match(match, end_date=end_date, best_match=best_match, all_match=all_match)
+                if all_match:
+                    return match
+
+            if len(match) > 1:
+                match = self.handle_multi_match(match, query_str=query_str, query_type="sub",)
+
+            return match[0]
+
+        elif retry:
+            log.error(f"Central API CLI Cache unable to gather Subscription data from provided identifier {query_str}", show=True)
+            valid = "\n".join([f'[cyan]{m["name"]}[/]' for m in db.all()])
+            econsole.print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
+            econsole.print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
+            raise typer.Exit(1)
+        else:
+            if not completion:
+                log.error(
+                    f"Central API CLI Cache unable to gather Subscription data from provided identifier {query_str}", show=not silent
                 )
 
     @overload
