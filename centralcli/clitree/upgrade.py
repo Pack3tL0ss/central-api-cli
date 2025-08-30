@@ -75,10 +75,9 @@ def device(
     else:
         ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
-    if len(devs) > 1:
-        ver_msg = f"{ver_msg}{utils.summarize_list([dev.rich_help_text for dev in devs], max=9)}"
-
     render.econsole.print(ver_msg)
+    if len(devs) > 1:
+        render.econsole.print(utils.summarize_list([dev.rich_help_text for dev in devs], max=9, color=None).removeprefix("\n"), emoji=False)
     render.confirm(yes)  # aborts here if they don't confirm
     batch_resp = api.session.batch_request(batch_reqs)
 
