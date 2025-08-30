@@ -768,7 +768,7 @@ class LibToAPI:
         self.switches = self.switch = "switch"
         self.SW = self.sw = self.HPPC = self.HP = "sw"
         self.CX = self.cx = "cx"
-        self.method_iden = None,
+        self.method_iden = None
 
         # from CentralApi consistent value to Random API endpoint value
         self.monitoring_to_api = {
