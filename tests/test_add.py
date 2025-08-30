@@ -1,11 +1,24 @@
+import asyncio
+
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
 
-from . import capture_logs, test_data
+from . import cache, capture_logs, config, test_data
 from ._test_data import test_cert_file
 
 runner = CliRunner()
+
+
+
+@pytest.fixture(scope="module", autouse=True)
+def ensure_not_cache_b4_adds():
+    if config.dev.mock_tests:
+        dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
+        doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
+        assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
+    yield
 
 
 def test_add_cert():
