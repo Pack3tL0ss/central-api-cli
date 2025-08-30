@@ -721,9 +721,9 @@ class Session():
                 **api_calls[0].kwargs
                 )
             if (not resp and not continue_on_fail) or len(api_calls) == 1:
-                return [resp]
+                return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
 
-            m_resp: List[Response] = [resp]
+            m_resp: List[Response] = utils.listify(resp)
             chunked_calls = utils.chunker(api_calls[1:], MAX_CALLS_PER_CHUNK)
 
         # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
@@ -744,6 +744,7 @@ class Session():
             # await self.pause(_start)  # pause to next second
 
         # strip out the pause/limiter (asyncio.sleep) responses (None)
+        m_resp = utils.listify(m_resp, flatten=True)
         m_resp = utils.strip_none(m_resp)
 
         log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")

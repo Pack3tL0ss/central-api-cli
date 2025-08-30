@@ -1563,7 +1563,7 @@ class CLICommon:
 
         try:
             serials_in = [dev["serial"] for dev in data]
-        except KeyError:
+        except KeyError:  # pragma: no cover
             self.exit("Missing required field: [cyan]serial[/].")
 
         # cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for idx, d in enumerate(serials_in)]  # returns None if device not found in cache after update
@@ -1743,8 +1743,8 @@ class CLICommon:
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
         render.confirm(yes) # aborts here if they don't confirm
         batch_res = glp_api.session.batch_request(batch_reqs)
-        # assign_subscription_to_devices returns a list of Responses so need to flatten list
-        return [r for res_list in batch_res for r in res_list]
+
+        return batch_res
 
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
