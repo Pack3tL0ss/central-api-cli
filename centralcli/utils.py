@@ -191,10 +191,20 @@ class Utils:
     @overload
     def listify(self, var: None) -> None: ...
 
-    def listify(self, var: str | Sequence[str] | int | Sequence[int] | tuple | list | dict | Sequence[dict] | PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes] | None) -> Sequence | None:
-        if isinstance(var, tuple):
-            return list(var)
-        return var if isinstance(var, list) or var is None else [var]
+    def listify(self, var: str | Sequence[str] | int | Sequence[int] | tuple | list | dict | Sequence[dict] | PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes] | None, flatten: bool = False) -> Sequence | None:
+        if var is None:
+            return var
+
+        _var = var if not isinstance(var, tuple | set) else list(var)
+        _var = _var if isinstance(_var, list) else [_var]
+        if flatten:
+            flat = []
+            for inner in _var:
+                flat += inner if isinstance(inner, list) else [inner]
+            return flat
+
+        return _var
+
 
     @staticmethod
     def unlistify(data: Any, replace_underscores: bool = True):
@@ -627,4 +637,16 @@ class Utils:
     def clean_validation_errors(exc) -> str:
         """strip off the 'for further information ... part of a pydantic ValidationError"""
         return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
+
+if __name__ == "__main__":
+    utils = Utils()
+    x = ["[dark_orange2]:warning:[/] This is a test.", "[bright_green]:recycle:[/]This is also a test"]
+    from centralcli import cache
+    from centralcli.cache import CacheDevice
+    cache_devs = [CacheDevice(d) for d in cache.devices]
+    y = [*x, *[d.rich_help_text for d in cache_devs]]
+    console = Console()
+
+    console.print(f"{utils.summarize_list(y, color=None, max=40, emoji=False)}")
+    ...
 
