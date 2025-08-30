@@ -47,7 +47,7 @@ class DeviceManagementAPI:
             "config_sync",
         ],
         duration: int = None,
-    ) -> Response:
+    ) -> list[Response]:
         """Generic commands for device.
 
         Supported Commands (str):
