@@ -801,13 +801,33 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
 
     return data
 
+class FilterRows:
+    _version: str = None
 
-def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int = 0, output_format: TableFormat = None) -> list[dict] | dict:
+    def __init__(self, version: str = None):
+        self._version = version
+
+    @classmethod
+    def set_filters(cls, version: str = None):  # TODO look for design pattern for this.  Could take tuples (key: str, filter: str, fuzzy: bool, inverse: bool)
+        cls._version = version
+
+    def __call__(self, data: dict[str, Any]) -> bool:
+        if self._version is None:
+            return True
+        if self._version.startswith("-"):
+            return True if self._version.lstrip("-") not in data["firmware_version"] else False
+        else:
+            return True if self._version in data["firmware_version"] else False
+
+
+def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int = 0, output_format: TableFormat = None, version: str = None) -> list[dict] | dict:
     """Clean device output from Central API (Monitoring)
 
     Args:
         data (list[dict[str, Any]] | dict[str, Any]): Response data from Central API
         verbose (bool, optional): Not Used yet. Defaults to True.
+        version (str, optional): Filters output based on (firmware) version (fuzzy match)
+            or when prefixed by '-', Show all devices other than devices matching the version provided. Defaults to None.
 
     Returns:
         list[dict[str, Any]] | dict[str, Any]: The cleaned data with consistent field heading, and human readable values.
@@ -849,8 +869,13 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
             _ = verbosity_keys[0].pop(verbosity_keys[0].index("client_count"))
 
     data = sort_result_keys(data)
+    filter_rows = FilterRows(version=version)
 
-    data = [{k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)} for inner in data]
+    data = [
+        {k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)}
+        for inner in data
+        if filter_rows(inner)
+    ]
 
     _short_key["subscription_key"] = "subscription key"
     data = simple_kv_formatter(data)
@@ -1762,7 +1787,7 @@ def get_wlans(data: list[dict]) ->  list[dict]:
     return simple_kv_formatter(data)
 
 
-def get_switch_stacks(data: list[dict[str, str]], status: StatusOptions = None, stack_ids: list[str] = None):
+def get_switch_stacks(data: list[dict[str, str]], status: StatusOptions = None, stack_ids: list[str] = None, version: str = None):
     simple_types = {"ArubaCX": "cx"}
     data = [{"name": d.get("name"), **d, "switch_type": simple_types.get(d.get("switch_type", ""), d.get("switch_type"))} for d in data]
     before = len(data)
@@ -1770,6 +1795,10 @@ def get_switch_stacks(data: list[dict[str, str]], status: StatusOptions = None, 
         data = [d for d in data if d.get("status").lower() == status.value.lower()]
     if stack_ids:  # Filter Stack IDs
         data = [d for d in data if d.get("id") in stack_ids]
+
+    # TODO single facncy filtering design pattern / callable class.  Instantiated with the filters then called...
+    matches_filter = FilterRows(version=version)
+    data = [d for d in data if matches_filter(d)]
 
     if before and not data:
         data = "\nNo stacks matched provided filters"

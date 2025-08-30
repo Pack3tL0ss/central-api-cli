@@ -19,7 +19,7 @@ ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "wha
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "sort_by", "default", "workspace", "verbose",
-    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription"
+    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version"
 ]
 
 class CLIArgs:
@@ -197,6 +197,13 @@ class CLIOptions:
             help="Bypass confirmation prompts - Assume Yes, this command has potential for multiple confirmation prompts -yy to bypass all",
             rich_help_panel="Common Options",
             show_default=False,
+        )
+        self.version: OptionInfo = typer.Option(
+            None,
+            "-V",
+            "--version",
+            help="Filter by version (fuzzy match).  Prepend [cyan]-[/] to show devices not matching the version. [dim italic]i.e. -10.7.2.1[/]",
+            show_default=False
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)

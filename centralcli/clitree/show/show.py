@@ -21,7 +21,7 @@ from rich.markup import escape
 try:
     import psutil
     hook_enabled = True
-except (ImportError, ModuleNotFoundError):
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
 from centralcli import caas, cache, cleaner, common, config, log, render, utils
@@ -349,6 +349,7 @@ def show_devices(
     label: str = None,
     status: DeviceStatus = None,
     state: str = None,
+    version: str = None,
     pub_ip: str = None,
     do_clients: bool = True,
     do_stats: bool = False,
@@ -388,7 +389,6 @@ def show_devices(
     elif dev_type != "all":
         dev_type = lib_to_api(dev_type)
 
-    # verbosity = verbosity if not any([devices, include_inventory, include_subscription]) else verbosity or 99
     default_tablefmt = "rich" if not verbosity else "yaml"
 
     if devices:  # cencli show devices <device iden>
@@ -432,6 +432,7 @@ def show_devices(
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
         output_format=tablefmt,
+        version=version
     )
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
@@ -461,6 +462,7 @@ def all_(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
@@ -476,23 +478,22 @@ def all_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ):
-    """Show details for All devices [dim italic](that have checked in with Central).[/]
-    """
+    """Show details for All devices [dim italic](that have checked in with Central)[/]."""
     if down:
         status = "Down"
     elif up:
         status = "Up"
 
     show_devices(
-        dev_type='all', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, status=status, state=state,
-        label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse, pager=pager,
+        dev_type="all", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, status=status, state=state,
+        version=version, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse, pager=pager,
         do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
 
 
 @app.command()
 def devices(
-    devices: List[str] = typer.Argument(
+    devices: list[str] = typer.Argument(
         None,
         metavar=iden_meta.dev_many.replace("]", "|'all']"),
         hidden=False,
@@ -511,6 +512,7 @@ def devices(
     pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
@@ -543,8 +545,8 @@ def devices(
 
     show_devices(
         devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, group=group,
-        site=site, status=status, state=state, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+        site=site, status=status, state=state, version=version, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by,
+        reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
     )
 
 
@@ -562,6 +564,7 @@ def aps(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -607,7 +610,7 @@ def aps(
     else:
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label, status=status,
-            state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
+            state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
 
@@ -622,6 +625,7 @@ def switches_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include switches in Inventory that have yet to connect", show_default=False,),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
@@ -646,7 +650,7 @@ def switches_(
 
     show_devices(
         switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
+        status=status, state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
 
@@ -662,6 +666,7 @@ def gateways_(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
+    version: str = common.options.version,
     with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
@@ -686,51 +691,9 @@ def gateways_(
 
     show_devices(
         gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True,
+        status=status, state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True,
         sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
         do_table=do_table)
-
-
-@app.command("controllers", hidden=True)
-def controllers_(
-    controllers: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
-    group: str = common.options.group,
-    site: str = common.options.site,
-    label: str = common.options.label,
-    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
-    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
-    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
-    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
-    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False, hidden=True,),  # hidden as not tested with this type
-    verbose: int = common.options.verbose,
-    sort_by: SortDevOptions = common.options.sort_by,
-    reverse: bool = common.options.reverse,
-    do_json: bool = common.options.do_json,
-    do_yaml: bool = common.options.do_yaml,
-    do_csv: bool = common.options.do_csv,
-    do_table: bool = common.options.do_table,
-    raw: bool = common.options.raw,
-    outfile: Path = common.options.outfile,
-    pager: bool = common.options.pager,
-    debug: bool = common.options.debug,
-    default: bool = common.options.default,
-    workspace: str = common.options.workspace,
-):
-    """Show details for controllers
-
-    Hidden as it is the same as show gateways
-    """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
-
-    show_devices(
-        controllers, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
-        status=status, state=state, pub_ip=pub_ip, do_clients=True, do_stats=True, sort_by=sort_by, reverse=reverse,
-        pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
-
 
 
 @app.command()
@@ -741,6 +704,7 @@ def stacks(
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
     verbose: int = common.options.verbose,
     sort_by: SortStackOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -765,7 +729,7 @@ def stacks(
     if group:
         group: CacheGroup = common.cache.get_group_identifier(group)
 
-    cleaner_kwargs = {"status": status}
+    cleaner_kwargs = {"status": status, "version": version}
     args = ()
     kwargs = {}
     func = api.monitoring.get_switch_stacks
