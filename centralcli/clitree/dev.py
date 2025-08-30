@@ -256,6 +256,7 @@ def colors(
 def emoji(
     debug: bool = common.options.debug,
     filter: str = typer.Option(None, "-e", "--emoji", help="Display only emoji with this value in the name", show_default=False,),
+    unicode: bool = typer.Option(False, "-u", help="show unicode characters"),
 ) -> None:
     """Show emojis available in the rich library."""
     from rich.columns import Columns
@@ -264,10 +265,17 @@ def emoji(
 
     console = Console(record=True)
 
-    columns = Columns(
-        (f":{name}: {name}" for name in sorted(EMOJI.keys()) if "\u200D" not in name and (not filter or filter in name)),
-        column_first=True,
-    )
+    if not unicode:
+        columns = Columns(
+            (f":{name}: {name}" for name in sorted(EMOJI.keys()) if "\u200D" not in name and (not filter or filter in name)),
+            column_first=True,
+        )
+    else:
+        columns = Columns(
+            (f":{name}: {value!a} {name}" for name, value in sorted(EMOJI.items()) if "\u200D" not in name and (not filter or filter in name)),
+            column_first=True,
+        )
+
 
     console.print(columns)
 
