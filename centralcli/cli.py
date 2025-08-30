@@ -254,7 +254,7 @@ def reboot(
 
     confirm_msgs_str = "\n  ".join(confirm_msgs)
     # \u267b = ♻ :recycle: use unicode chars here as confirm message could have mac looks like emoji markup :cd:
-    render.console.print(f'\u267b  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)
+    render.console.print(f'[bright_green]\u267b[/]  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)
     if len(batch_reqs) > 1:
         render.econsole.print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
