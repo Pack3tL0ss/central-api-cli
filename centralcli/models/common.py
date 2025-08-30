@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-
-from typing import List, Optional, Annotated
-from pydantic import BaseModel, RootModel, BeforeValidator, ConfigDict, AliasChoices, Field, model_validator
-from typing_extensions import Self
 from enum import Enum
-from .. import utils
-from ..constants import RadioBandOptions, DynamicAntMode
+from typing import Annotated, List, Optional
+
+from pydantic import AliasChoices, BaseModel, BeforeValidator, ConfigDict, Field, RootModel, model_validator
 from rich.console import Console
+from typing_extensions import Self
+
+from .. import utils
+from ..constants import DynamicAntMode, RadioBandOptions
+
 
 class MpskStatus(str, Enum):
     enabled = "enabled"
@@ -66,6 +68,7 @@ class APUpdate(BaseModel):
     dynamic_ant_mode: Optional[DynamicAntMode] = Field(None, alias=AliasChoices("antenna_width", "dynamic_ant_mode"))
     uplink_vlan: Optional[int] = Field(None, alias=AliasChoices("uplink_vlan", "tagged_uplink_vlan"))
     gps_altitude: Optional[float] = None
+    boot_partition: Annotated[int, {"min": 0, "max": 1}] = None
 
     def __str__(self):
         console = Console(force_terminal=False, emoji=False)

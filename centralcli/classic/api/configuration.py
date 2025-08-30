@@ -1577,6 +1577,7 @@ class ConfigAPI:
         zone: str = None,
         dynamic_ant_mode: DynamicAntenna = None,
         flex_dual_exclude: RadioType = None,
+        boot_partition: int = None,
     ) -> List[BatchRequest]:
         url = f"/configuration/v1/ap_settings_cli/{serial}"
 
@@ -1620,7 +1621,8 @@ class ConfigAPI:
             "zonename": zone,
             "uplink-vlan": uplink_vlan,
             "dynamic-ant": dynamic_ant_mode,
-            "flex-dual-band": flex_dual
+            "flex-dual-band": flex_dual,
+            "os_partition": boot_partition
         }
         if all([v is None for v in cli_items.values()]):
             return Response(error="No Values provided to update")
