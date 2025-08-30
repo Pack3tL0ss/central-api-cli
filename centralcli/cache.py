@@ -69,6 +69,8 @@ TinyDB.default_table_name = "devices"
 CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
 class CentralObject:
+    _doc_id = None
+
     def __init__(
         self,
         db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
@@ -118,17 +120,20 @@ class CentralObject:
     def __getitem__(self, key):
         return self.data[key]
 
-    def __getattr__(self, name: str) -> Any:
-        # import sys
-        # print("CentralObject __getattr__", name, file=sys.stderr)
-        if hasattr(self, "data") and self.data:
-            if name in self.data:
-                return self.data[name]
+    # def __getattr__(self, name: str) -> Any:
+    #     # import sys
+    #     # print("CentralObject __getattr__", name, file=sys.stderr)
+    #     if name == "data":
+    #         return self.data
 
-        if hasattr(self, "data") and hasattr(self.data, name):
-            return getattr(self.data, name)
+    #     if hasattr(self, "data") and self.data:
+    #         if name in self.data:
+    #             return self.data[name]
 
-        raise AttributeError(f"'{self.__module__}.{type(self).__name__}' object has no attribute '{name}'")
+    #     if hasattr(self, "data") and hasattr(self.data, name):
+    #         return getattr(self.data, name)
+
+    #     raise AttributeError(f"'{self.__module__}.{type(self).__name__}' object has no attribute '{name}'")
 
     def get(self, item: str, default = None):
         return self.data.get(item, default)
@@ -263,7 +268,7 @@ class CacheInvDevice(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
     def __eq__(self, value: CacheInvDevice | str):
@@ -341,7 +346,7 @@ class CacheDevice(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
@@ -500,7 +505,7 @@ class CacheGroup(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
@@ -542,7 +547,7 @@ class CacheSite(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
 
@@ -588,7 +593,7 @@ class CacheLabel(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
@@ -777,7 +782,7 @@ class CacheClient(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
     def get_group(self) -> CacheGroup:
@@ -829,7 +834,7 @@ class CacheMpskNetwork(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
@@ -878,14 +883,14 @@ class CacheMpsk(CentralObject):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
     def __rich__(self) -> str:
         return f'[bright_green]MPSK[/]:[cyan]{self.name}[/]|[green_yellow]{self.id})[/]'
 
 
-class CacheCert(CentralObject, Text):
+class CacheCert(CentralObject):  #, Text):
     db: Table | None = None
 
     def __init__(self, name: str, type: CertType, expired: bool, expiration: int | float | DateTime | str, md5_checksum: str, **kwargs):
@@ -898,6 +903,22 @@ class CacheCert(CentralObject, Text):
     @classmethod
     def set_db(cls, db: Table):
         cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        Q = Query()
+        match: List[Document] = self.db.search(Q.md5_checksum == self.md5_checksum)
+        if match and len(match) == 1:
+            self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None):
+        self._doc_id = doc_id
 
     @property
     def text(self) -> Text:
@@ -978,7 +999,7 @@ class CacheSub(CentralObject, Text):
         return self._doc_id
 
     @doc_id.setter
-    def doc_id(self, doc_id: int | None) -> int | None:
+    def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
     def __repr__(self):
@@ -1337,7 +1358,7 @@ class Cache:
             yield table
 
     @property
-    def devices(self) -> list:
+    def devices(self) -> list[Document]:
         return self.DevDB.all()
 
     @property
@@ -2155,11 +2176,7 @@ class Cache:
             if retry and not match and self.responses.cert is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.certs and not silent:
-                    match = self.fuzz_lookup(query_str, self.GuestDB)
-                    # fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.certs], limit=1)[0]  # <-- IndexError occurs here if list is empty
-                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                    #     match = self.GuestDB.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_lookup(query_str, self.CertDB)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating certificate Cache")
                     api.session.request(self.refresh_cert_db)

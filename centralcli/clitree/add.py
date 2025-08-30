@@ -316,11 +316,11 @@ def wlan(
         "bw_limit_user_down": "bandwidth_limit_peruser_down",
         "portal_profile": "captive_profile_name",
     }
-    kwargs = {_to_name.get(kw[0], kw[0]): kw[1] for kw in kwarg_list}
+    kwargs = {_to_name.get(kw[0].value, kw[0].value): kw[1] for kw in kwarg_list if kw[1]}
     if hidden:
         kwargs["hide_ssid"] = True
 
-    if not kwargs["wpa_passphrase"]:
+    if "wpa_passphrase" not in kwargs:
         common.exit("psk/passphrase is currently required for this command")
 
     econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
@@ -495,6 +495,12 @@ def cert(
     if render.confirm(yes):
         resp = api.session.request(api.configuration.upload_certificate, **kwargs)
         render.display_results(resp, tablefmt="action")
+        if resp.ok:
+            try:
+                data = {"name": cert_name, "type": resp.output["cert_type"].upper(), "md5_checksum": resp.output["cert_md5_checksum"], "expired": False, "expiration": None}
+                api.session.request(common.cache.update_db, common.cache.CertDB, data=data, truncate=False)
+            except Exception as e:
+                log.exception(f"Exception during attempt to update CertDB {repr(e)}", show=True)
 
 
 @app.command(help="Add a WebHook")

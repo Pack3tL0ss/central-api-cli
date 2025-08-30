@@ -7,7 +7,7 @@ import typer
 from rich import print
 
 from centralcli import common, config, render, utils
-from centralcli.cache import CacheLabel, CacheSite, api
+from centralcli.cache import CacheCert, CacheLabel, CacheSite, api
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
 from centralcli.response import Response
@@ -31,13 +31,13 @@ def cert(
     workspace: str = common.options.workspace,
 ) -> None:
     """Delete a certificate."""
-    cert = common.cache.get_cert_identifier(name)
+    cert: CacheCert = common.cache.get_cert_identifier(name)
     render.econsole.print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] certificate [cyan]{cert.name}[/]")
 
     render.confirm(yes)
     resp = api.session.request(api.configuration.delete_certificate, cert.name)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    api.session.request(common.cache.update_cert_db(cert.doc_id, remove=True))
+    api.session.request(common.cache.update_cert_db, cert.doc_id, remove=True)
 
 
 @app.command(short_help="Delete sites")
