@@ -240,11 +240,12 @@ if "--again" in sys.argv:
     sys.argv = [sys.argv[0], "show", "last", *args]
 
 
-from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
+from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk, CacheCert
 cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
     CacheInvDevice.set_db(cache.InvDB)
+    CacheCert.set_db(cache.CertDB)
     CacheGroup.set_db(cache.GroupDB)
     CacheSite.set_db(cache.SiteDB)
     CacheClient.set_db(cache.ClientDB, cache=cache)
