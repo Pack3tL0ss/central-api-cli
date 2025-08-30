@@ -3,8 +3,16 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 
 from . import capture_logs, test_data
+from ._test_data import test_cert_file
 
 runner = CliRunner()
+
+
+def test_add_cert():
+    result = runner.invoke(app, ["-d", "add", "cert",  "cencli_test", str(test_cert_file), "--pem", "--svr", "-Y"])
+    capture_logs(result, "test_add_cert")
+    assert result.exit_code == 0
+    assert "201" in result.stdout
 
 
 def test_add_group1():
@@ -36,10 +44,23 @@ def test_add_group3_wlan_tg():
 
 def test_add_group4_aos10_gw_wlan():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "-Y"])
+    capture_logs(result, "test_add_group4_aos10_gw_wlan")
     assert True in [
         result.exit_code == 0 and "Created" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout
     ]
+
+
+def test_add_group_invalid_combination_of_dev_types():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group_fail", "--cx", "--sdwan", "-Y"])
+    capture_logs(result, "test_add_group_invalid_combination_of_dev_types", expect_failure=True)
+    result.exit_code == 1
+
+
+def test_add_group_invalid_mb_options():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group_fail", "--ap", "--mb", "-Y"])
+    capture_logs(result, "test_add_group_invalid_mb_options", expect_failure=True)
+    result.exit_code == 1
 
 
 def test_add_site_by_address():
@@ -65,6 +86,12 @@ def test_add_label():
         result.exit_code == 0 and "test_label" in result.stdout,
         result.exit_code == 1 and "already exist" in result.stdout
     ]
+
+
+def test_add_label_duplicate_name():
+    result = runner.invoke(app, ["-d", "add", "label",  "delme", "-Y"])
+    capture_logs(result, "test_add_label_duplicate_name", expect_failure=True)
+    assert result.exit_code == 1 and "already exist" in result.stdout
 
 
 def test_add_label_multi():
@@ -97,3 +124,9 @@ def test_add_wlan(ensure_cache_group1):
     result = runner.invoke(app, ["-d", "add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "psk", "C3ncliR0cks!", "--hidden", "--yes"])
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+def test_add_wlan_no_psk(ensure_cache_group1):
+    result = runner.invoke(app, ["-d", "add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
+    capture_logs(result, "test_add_wlan_no_psk", expect_failure=True)
+    assert result.exit_code == 1

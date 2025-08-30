@@ -139,22 +139,43 @@ def test_kick_all_missing_argument():
 
 def test_save():
     result = runner.invoke(app, ["save",  test_data["switch"]["serial"]])
-    capture_logs(result, "test_reboot_save")
+    capture_logs(result, "test_save")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_sync_gw():
     result = runner.invoke(app, ["sync",  test_data["gateway"]["name"]])
-    capture_logs(result, "test_reboot_save")
+    capture_logs(result, "test_sync_gw")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
-if config.dev.mock_tests:  # pragma: no cover
+if config.dev.mock_tests:
+    def test_nuke_wrong_ap():
+        result = runner.invoke(app, ["nuke", test_data["ap"]["serial"], "-y"])
+        capture_logs(result, "test_nuke_wrong_ap", expect_failure=True)
+        assert result.exit_code == 1
+        assert "valid" in result.stdout
+
+
+    def test_nuke_swarm():
+        result = runner.invoke(app, ["nuke", test_data["aos8_ap"]["name"], "-sy"])
+        capture_logs(result, "test_nuke_swarm")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
     def test_reboot_swarm():
         result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["name"], "-sy"])
         capture_logs(result, "test_reboot_swarm")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_reboot_device():
+        result = runner.invoke(app, ["reboot",  test_data["ap"]["name"], "-sy"])  # -s is ignored as it doesn't apply to AOS10
+        capture_logs(result, "test_reboot_device")
         assert result.exit_code == 0
         assert "200" in result.stdout
 

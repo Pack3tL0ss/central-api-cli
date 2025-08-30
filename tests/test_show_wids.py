@@ -73,6 +73,6 @@ def test_show_wids_wrong_swarm_version():
             test_data["ap"]["mac"]
         ]
     )
-    capture_logs(result, "test_show_wids_wrong_swarm_version")
+    capture_logs(result, "test_show_wids_wrong_swarm_version", expect_failure=True)
     assert result.exit_code != 0
     assert "AOS8" in result.stdout

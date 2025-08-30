@@ -9,6 +9,13 @@ from ._test_data import test_data, test_device_file, test_group_file, test_site_
 runner = CliRunner()
 
 
+def test_del_cert():  # we don't need to ensure it's in the cache as it will just refresh the cache if not and use the response from mocked show certs call
+    result = runner.invoke(app, ["delete", "cert",  "cencli_test", "-Y"])
+    capture_logs(result, "test_del_cert")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_del_wlan(ensure_cache_group1):
     result = runner.invoke(app, ["-d", "delete", "wlan",  "cencli_test_group1",  "delme", "--yes"])
     capture_logs(result, "test_del_wlan")

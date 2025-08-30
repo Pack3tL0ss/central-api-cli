@@ -64,12 +64,12 @@ class NonDefaultWorkspaceException(CentralCliException): ...
 
 def capture_logs(result: Result, test_func: str = None, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
-    if result.exit_code != 0 if not expect_failure else 1:
+    if result.exit_code != (0 if not expect_failure else 1):
         log.error(f"{test_func} returned error:\n{result.stdout}", show=True)
         if "unable to gather device" in result.stdout:
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
-    if result.exception and result.exception is not SystemExit:
+    if result.exception and not isinstance(result.exception, SystemExit):
         log.exception(f"{test_func} {repr(result.exception)}", exc_info=True)
         with log.log_file.open("a") as log_file:
             traceback.print_exception(result.exception, file=log_file)
@@ -89,7 +89,6 @@ def monkeypatch_terminal_size():
         return (190, 55)
     pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
     pytest.MonkeyPatch().setattr("shutil.get_terminal_size", get_terminal_size)
-
 
 
 aiosleep_mock = mock.AsyncMock()
@@ -116,4 +115,3 @@ if __name__ in ["tests", "__main__"]:
     ensure_default_account()
     if "--collect-only" not in sys.argv:
         log.info(f"{' Test Run START ':{'-'}^{150}}")
-

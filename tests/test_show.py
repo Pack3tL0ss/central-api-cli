@@ -106,6 +106,13 @@ def test_show_all():
     assert "serial" in result.stdout
 
 
+def test_show_inventory():
+    result = runner.invoke(app, ["show", "inventory"],)
+    capture_logs(result, "test_show_inventory")
+    assert result.exit_code == 0
+    assert "mac" in result.stdout
+
+
 def test_show_radios():
     result = runner.invoke(app, ["show", "radios", test_data["ap"]["name"]],)
     capture_logs(result, "test_show_radios")
@@ -810,6 +817,19 @@ def test_show_token():
     assert result.exit_code == 0
     assert "refresh" in result.stdout.lower()  # Attempting to Refresh Tokens
     assert "access" in result.stdout.lower()   # Access Token: ...
+
+
+def test_show_upgrade_multi():
+    result = runner.invoke(app, [
+            "show",
+            "upgrade",
+            test_data["ap"]["name"],
+            test_data["gateway"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_upgrade_multi")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_uplinks():
