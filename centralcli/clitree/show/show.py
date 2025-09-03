@@ -3156,10 +3156,8 @@ def portals(
     """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
     path = Path.cwd()
     if portal:
-        if len(portal) > 2:
-            common.exit("Too many Arguments")
-        elif len(portal) > 1:
-            if not logo:
+        if len(portal) > 1:
+            if not logo or len(portal) > 2:
                 common.exit("Too many Arguments")
             path = Path(portal[-1])
             if not path.is_dir() and not path.parent.is_dir():
