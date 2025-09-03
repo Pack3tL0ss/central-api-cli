@@ -41,7 +41,7 @@ def group(
         groups = common.cache.groups_by_name
 
         # API-FLAW clone and upgrade to aos10 does not work via the API
-        new_data = {**groups[clone_group], "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
+        new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
         if groups:
             api.session.request(common.cache.update_group_db, new_data)
 
