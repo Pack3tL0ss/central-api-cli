@@ -370,7 +370,7 @@ class ImportSubDevices(RootModel):
         return out_dict
 
 
-    def serials_by_subscription_id(self, assigned: bool = None) -> tuple[dict[str, BySubId], bool]:
+    def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
         subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
 
