@@ -1894,7 +1894,7 @@ class CLICommon:
         style = "dim" if help_type == "default" else "dim red"
         return f"[{style}]{escape(f'[{help_type}: {default_txt}]')}[/{style}]"
 
-    def ws_follow_tail(self, title: str = None, log_type: LogType = "event") -> None:
+    def ws_follow_tail(self, title: str = None, log_type: LogType = "event") -> None:  # pragma: no cover
         title = title or "device event Logs"
         render.econsole.print(f"Following tail on {title} (Streaming API).  Use CTRL-C to stop.")
         if ("audit" not in sys.argv and len(sys.argv[1:]) > 3) or len(sys.argv[1:]) > 4:
@@ -1928,7 +1928,7 @@ class CLICommon:
                 get_next = False
 
         if len(vars) != len(vals):
-            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
+            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")  # pragma: no cover
 
         return {k: v for k, v in zip(vars, vals)}
 

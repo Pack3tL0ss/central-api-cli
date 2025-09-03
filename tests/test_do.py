@@ -9,11 +9,25 @@ from . import capture_logs, config, test_data
 runner = CliRunner()
 
 
+def test_add_device_missing_mac():
+    result = runner.invoke(app, ["add", "device", "serial", test_data["switch"]["serial"], "group", test_data["switch"]["group"], "--sub", "advanced-switch-6100", "-y"])
+    capture_logs(result, "test_add_device_missing_mac", expect_failure=True)
+    assert result.exit_code == 1
+    assert "required" in result.stdout
+
+
 def test_archive(ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["archive", test_data["test_add_do_del_ap"]["mac"], "-y"])
     capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
+
+
+def test_convert_template():
+    result = runner.invoke(app, ["convert", "template", test_data["j2_template"]])
+    capture_logs(result, "test_convert_template")
+    assert result.exit_code == 0
+    assert "hash" in result.stdout
 
 
 def test_unarchive(ensure_inv_cache_test_ap):
