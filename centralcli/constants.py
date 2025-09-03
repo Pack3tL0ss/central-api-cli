@@ -705,6 +705,9 @@ class ArgToWhat:
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"
 
+    def _init_convert(self):
+        self.template = self.templates = "template"
+
     def _init_tshoot(self):
         self.ap = self.aps = self.iap = "ap"
         self.gateway = self.gateways = self.gw = "gateway"
