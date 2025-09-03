@@ -106,7 +106,6 @@ exclude_lines = [
     "if __name__ == '__main__':",
     "if TYPE_CHECKING:",
     "# pragma: no cover",
-    "update_log(result.stdout)",
     "if show_example:",
     "if not import_file:",
     "if result.exit_code != 0",
