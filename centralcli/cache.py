@@ -5689,6 +5689,9 @@ class Cache:
                     self.Q.id.test(
                         lambda v: str(v).lower().startswith(query_str.lower())
                     )
+                    | self.Q.key.test(
+                        lambda v: str(v).lower().startswith(query_str.lower())
+                    )
                 )
 
             if not match and retry and not cache_updated:
