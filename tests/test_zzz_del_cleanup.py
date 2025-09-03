@@ -9,7 +9,7 @@ from ._test_data import test_data, test_device_file, test_group_file, test_site_
 runner = CliRunner()
 
 
-def test_del_cert():  # we don't need to ensure it's in the cache as it will just refresh the cache if not and use the response from mocked show certs call
+def test_del_cert(ensure_cache_cert):  # we don't need to ensure it's in the cache as it will just refresh the cache if not and use the response from mocked show certs call
     result = runner.invoke(app, ["delete", "cert",  "cencli_test", "-Y"])
     capture_logs(result, "test_del_cert")
     assert result.exit_code == 0

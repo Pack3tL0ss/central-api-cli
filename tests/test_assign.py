@@ -8,7 +8,7 @@ from . import capture_logs, test_data
 runner = CliRunner()
 
 
-def test_assign_label():
+def test_assign_label(ensure_cache_label1):
     """Relies on label created in test_add.test_add_label"""
     result = runner.invoke(
         app,

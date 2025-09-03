@@ -656,6 +656,32 @@ def test_show_portals():
     assert "name" in result.stdout or "Empty Response" in result.stdout
 
 
+def test_show_portal_by_name():
+    result = runner.invoke(app, [
+            "show",
+            "portals",
+            test_data["portal"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_portal_by_name")
+    assert result.exit_code == 0
+    assert test_data["portal"]["name"] in result.stdout
+
+
+def test_show_portal_too_many_args():
+    result = runner.invoke(app, [
+            "show",
+            "portals",
+            test_data["portal"]["name"],
+            "fake1",
+            "fake2"
+        ]
+    )
+    capture_logs(result, "test_show_portal_too_many_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "too many" in result.stdout.lower()
+
+
 def test_show_guests():
     result = runner.invoke(app, [
             "show",

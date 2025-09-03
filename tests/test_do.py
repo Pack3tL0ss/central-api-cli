@@ -23,11 +23,33 @@ def test_unarchive(ensure_inv_cache_test_ap):
     assert "succeeded" in result.stdout
 
 
-def test_move_pre_provision(ensure_cache_group3, ensure_inv_cache_test_ap):
-    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "-y"])
+def test_move_pre_provision(ensure_cache_group1, ensure_inv_cache_test_ap):
+    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")
     assert result.exit_code == 0
     assert "201" in result.stdout
+
+
+def test_move_group_and_site(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
+    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "site", "cencli_test_site3", "--reset-group", "-y"])
+    capture_logs(result, "test_move_group_and_site")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+    assert "ignored" in result.stdout  # reset group is ignored
+
+
+def test_move_reset_group(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
+    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "--reset-group", "-y"])
+    capture_logs(result, "test_move_reset_group")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_move_missing_args():
+    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"]])
+    capture_logs(result, "test_move_missing_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "issing" in result.stdout
 
 
 def test_remove_test_ap_from_site(ensure_inv_cache_test_ap, ensure_dev_cache_test_ap, ensure_cache_site1):

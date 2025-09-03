@@ -41,6 +41,12 @@ def restore_cache_file():  # pragma: no cover
 
         return config.cache_file.exists()
 
+def _cleanup_mock_cache():
+    dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
+    doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
+    assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
+    return
+
 
 def _cleanup_test_groups():  # pragma: no cover
     del_groups = [g for g in cache.groups_by_name if g.startswith("cencli_test_")]
@@ -110,7 +116,7 @@ def setup():
 def teardown():
     cleanup_import_files()
     if config.dev.mock_tests:
-        return do_nothing()
+        return _cleanup_mock_cache()
         # return restore_cache_file()
     else:
         return cleanup_test_items()  # pragma: no cover
@@ -135,6 +141,17 @@ def clear_lru_caches():
         db.clear_cache()
     cache.responses.clear()
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_cert():
+    if config.dev.mock_tests and "cencli-test" not in cache.certs_by_name:
+        asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test", "type": "SERVER_CERT", "md5_checksum": "781b9320972dc571d9f3055c081e8a11", "expired": False, "expiration": 2071936577}, truncate=False))
+    yield
+
+    if config.dev.mock_tests and "cencli-test" in cache.certs_by_name:
+        doc_id = cache.certs_by_name["cencli-test"].doc_id
+        asyncio.run(cache.update_db(cache.CertDB, doc_ids=[doc_id]))
 
 
 @pytest.fixture(scope="function")
@@ -256,8 +273,7 @@ def ensure_inv_cache_test_ap():
 @pytest.fixture(scope="function")
 def ensure_dev_cache_test_ap():
     if config.dev.mock_tests:
-        devices = [
-            {
+        test_ap = {
                 "name": "cencli-test-ap",
                 "status": "Down",
                 "type": "ap",
@@ -265,17 +281,20 @@ def ensure_dev_cache_test_ap():
                 "ip": "10.0.31.99",
                 "mac": test_data["test_add_do_del_ap"]["mac"],
                 "serial": test_data["test_add_do_del_ap"]["serial"],
-                "group": "cencli_test_group3",
+                "group": "cencli_test_group1",
                 "site": "cencli_test_site1",
                 "version": "10.7.2.0_92876",
                 "swack_id": test_data["test_add_do_del_ap"]["serial"],
                 "switch_role": None
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.devices_by_serial]
-        if missing:
-            assert asyncio.run(cache.update_dev_db(data=devices))
+        }
+        if test_data["test_add_do_del_ap"]["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
     yield
+
+    if test_data["test_add_do_del_ap"]["serial"] in cache.devices_by_serial:
+        serial = test_data["test_add_do_del_ap"]["serial"]
+        assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    return
 
 
 def _ensure_cache_site1():

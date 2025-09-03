@@ -35,7 +35,7 @@ def test_show_wids_rogues_by_site():
     assert "ogue" in result.stdout
 
 
-def test_show_wids_neighbors_by_label():
+def test_show_wids_neighbors_by_label(ensure_cache_label1):
     result = runner.invoke(app, [
             "show",
             "wids",
