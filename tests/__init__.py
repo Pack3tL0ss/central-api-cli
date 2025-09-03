@@ -80,7 +80,7 @@ def ensure_default_account():
         return  # pragma: no cover
 
     if config.workspace != config.default_workspace:  # pragma: no cover
-        raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.", show=True)
+        raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.")
 
 
 def monkeypatch_terminal_size():
