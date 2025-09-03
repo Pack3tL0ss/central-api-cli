@@ -11,7 +11,6 @@ import pendulum
 import typer
 import yaml
 from rich.console import Console
-from rich.markup import escape
 
 from centralcli import common, config, log, render, utils
 from centralcli.client import BatchRequest
@@ -87,9 +86,9 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
 # TOGLP
 @app.command()
 def device(
-    kw1: AddGroupArgs = typer.Argument(..., hidden=True, metavar="", show_default=False,),
+    kw1: AddGroupArgs = typer.Argument(None, hidden=True, metavar="", show_default=False,),
     serial: str = typer.Argument(..., metavar="serial <SERIAL NUM>", hidden=False, autocompletion=common.cache.smg_kw_completion, show_default=False,),
-    kw2: str = typer.Argument(..., hidden=True, metavar="", autocompletion=common.cache.smg_kw_completion, show_default=False,),
+    kw2: str = typer.Argument(None, hidden=True, metavar="", autocompletion=common.cache.smg_kw_completion, show_default=False,),
     mac: str = typer.Argument(..., metavar="mac <MAC ADDRESS>", hidden=False, autocompletion=common.cache.smg_kw_completion, show_default=False,),
     kw3: str = typer.Argument(None, metavar="", hidden=True, autocompletion=common.cache.smg_kw_completion, show_default=False,),
     group: str = typer.Argument(None, metavar="[group GROUP]", help="pre-assign device to group", autocompletion=common.cache.smg_kw_completion, show_default=False,),
@@ -166,8 +165,8 @@ def group(
     group: str = common.arguments.group,
     wired_tg: bool = typer.Option(False, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(False, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help=f"Configure Gateway Role [grey42]{escape('[default: vpnc if --sdwan branch if not]')}[/]", show_default=False,),
-    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help=f"Create AOS10 Group [grey42]{escape('[default: AOS8 IAP]')}[/]", show_default=False),
+    gw_role: GatewayRole = typer.Option(None, help=f"Configure Gateway Role {render.help_block('vpnc if --sdwan branch if not')}", show_default=False,),
+    aos10: bool = typer.Option(None, "--aos10", is_flag=True, help=f"Create AOS10 Group {render.help_block('AOS8 IAP')}", show_default=False),
     microbranch: bool = typer.Option(
         None,
         "--mb",
@@ -206,7 +205,7 @@ def group(
         _arch = "SD_WAN_Gateway"
         allowed_types = ["sdwan"]
         if gw_role and gw_role != "vpnc":
-            render.econsole.print(f":warning:  Ignoring Gateway Role: {gw_role}.  Gateway Role the group is configured for [cyan]--sdwan[/] must be [bright_green]vpnc[/]")
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring Gateway Role: [red]{gw_role}[/].  As the group is configured for [cyan]--sdwan[/], Gateway role [bright_green]vpnc[/] is implied.")
         gw_role = "vpnc"
 
     # -- // Error on combinations that are not allowed by API \\ --
