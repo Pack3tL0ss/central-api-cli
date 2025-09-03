@@ -1398,9 +1398,9 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
 
 def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]:
     field_order = [
-        "id",
         "name",
         "license_type",
+        "key",
         "type",
         "sku",
         "status",
