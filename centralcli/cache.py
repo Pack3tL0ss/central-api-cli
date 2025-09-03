@@ -139,7 +139,8 @@ class CentralObject:
         return self.data.get(item, default)
 
     def __iter__(self):
-        return self.data.__iter__
+        for k, v in self.data.items():
+            yield k, v
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -3262,25 +3263,6 @@ class Cache:
 
         return raw_data
 
-    async def format_dev_response_for_cache(self, resp: Response):
-        if not resp.ok:
-            return
-
-        try:
-            resp = CombinedResponse.flatten_resp([resp])
-            _start_time = time.perf_counter()
-            with console.status(f"Preparing {len(resp)} records from dev response data for cache update"):
-                raw_data = await self.format_raw_devices_for_cache(resp)
-                devices = [models.Device(**inner) for k in raw_data for inner in raw_data[k]]
-
-                _ret = [d.model_dump() for d in devices]
-                log.debug(f"{len(resp)} records from dev response prepared for cache update in {round(time.perf_counter() - _start_time, 2)}s")
-        except Exception as e:
-            log.error(f"Exception while formatting device data from {resp.url.path} for cache {e.__class__.__name__}")
-            log.exception(e)
-            _ret = None
-
-        return _ret
 
     async def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
         # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
@@ -4358,7 +4340,7 @@ class Cache:
                 elif q == "template":
                     kwargs["group"] = group
                 this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
-                match = [*match, *utils.listify(this_match)]
+                match = [*match, *[m for m in utils.listify(this_match) if m not in match]]
 
                 if match and not completion:
                     # user selects which device if multiple matches returned
