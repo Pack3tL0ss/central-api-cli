@@ -57,7 +57,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
         try:
             license = utils.unlistify(license)
             license: str = license.lower().replace("_", "-").replace(" ", "-"),
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.exception(f"{e.__class__.__name__} Exception in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
 
     inv_data = {
@@ -75,7 +75,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
                 return
             try:
                 inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 log.warning(f"Unable to extract sku after inventory update ({e.__class__.__name__}), value will be omitted from inv cache.\n{e}")
 
     api.session.request(common.cache.update_inv_db, data=inv_data)
@@ -455,7 +455,7 @@ def cert(
     cert_format = None
 
     if not any([server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]):
-        common.exit("[red1]Error[/]: Certificate Type must be provided using one of the options i.e. -svr")
+        common.exit("[red1]Error[/]: Certificate Type must be provided using one of the options i.e. [cyan]--svr[/]")
     elif not any(cert_format_params) and cert_file is None:
         common.exit(f"[red1]Error[/]: Cert format must be provided use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
     else:
@@ -476,7 +476,7 @@ def cert(
 
     kwargs = {k: v for k, v in kwargs.items() if v}
 
-    if not cert_file:
+    if not cert_file:  # pragma: no cover
         econsole.print("[bright_green]No Cert file specified[/]")
         if not crl:
             econsole.print("Provide certificate content encoded in base64 format.")
@@ -491,7 +491,7 @@ def cert(
     _ = [
         econsole.print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
         if k not in  ["passphrase", "cert_data"]
-        ]
+    ]
     if render.confirm(yes):
         resp = api.session.request(api.configuration.upload_certificate, **kwargs)
         render.display_results(resp, tablefmt="action")
@@ -499,7 +499,7 @@ def cert(
             try:
                 data = {"name": cert_name, "type": resp.output["cert_type"].upper(), "md5_checksum": resp.output["cert_md5_checksum"], "expired": False, "expiration": None}
                 api.session.request(common.cache.update_db, common.cache.CertDB, data=data, truncate=False)
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 log.exception(f"Exception during attempt to update CertDB {repr(e)}", show=True)
 
 
