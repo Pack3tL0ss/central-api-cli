@@ -195,10 +195,7 @@ def remove(
     if render.confirm(yes):
         devs_by_type = {}
         for d in devices:
-            if d.generic_type not in devs_by_type:
-                devs_by_type[d.generic_type] = [d.serial]
-            else:
-                devs_by_type[d.generic_type] += [d.serial]
+            devs_by_type = utils.update_dict(devs_by_type, key=d.generic_type, value=[d.serial])
         reqs = [
             BatchRequest(
                 api.central.remove_devices_from_site,
