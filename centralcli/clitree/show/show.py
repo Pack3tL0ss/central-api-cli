@@ -2737,12 +2737,12 @@ def logs(
     """Show device event logs (last 30m by default) or show cencli logs."""
     title="Device event Logs"
     pytest = pytest or (event_id and event_id == "pytest")
-    if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):
+    if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):  # pragma: no cover
         from centralcli import log
         log.print_file(pytest, show_all=_all, unused_mocks=unused_mocks) if not tail else log.follow(pytest)
         common.exit(code=0)
 
-    if tail:
+    if tail:  # pragma: no cover
         if not config.wss:
             common.exit(
                 "Missing all or part of required configuration for this command.\n"

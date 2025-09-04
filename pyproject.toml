@@ -112,7 +112,8 @@ exclude_lines = [
     "if result.exception:",
     "if missing:",
     "if ctx.resilient_parsing:",
-    "if not config.valid:"
+    "if not config.valid:",
+    "if config.is_old_cfg:"
 ]
 exclude_also = [
     # 1. Exclude an except clause of a specific form:

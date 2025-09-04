@@ -905,6 +905,18 @@ def test_show_subscriptions_auto():
     assert result.exit_code == 0
 
 
+def test_show_tunnels():
+    result = runner.invoke(app, [
+            "show",
+            "tunnels",
+            test_data["gateway"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_tunnels")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_subscriptions_details():  # glp
     result = runner.invoke(app, [
             "show",
