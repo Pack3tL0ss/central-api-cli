@@ -42,10 +42,14 @@ def test_dev_site_completion(incomplete: str = "barn"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+def test_dev_gw_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
+    result = [c for c in cache.dev_gw_switch_completion(ctx, incomplete, ("show", "firmware", "device"))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 def test_dev_gw_switch_site_completion(incomplete: str = "barn"):
     result = [c for c in cache.dev_gw_switch_site_completion(incomplete, ("show", "vlans",))]
     assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):

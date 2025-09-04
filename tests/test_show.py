@@ -30,6 +30,19 @@ def test_show_aps():
     assert "status" in result.stdout
 
 
+def test_show_aps_dirty():
+    result = runner.invoke(app, ["show", "aps", "--dirty", "--group", test_data["ap"]["group"]],)
+    capture_logs(result, "test_show_aps_dirty")
+    assert result.exit_code == 0
+
+
+def test_show_aps_dirty_missing_group():
+    result = runner.invoke(app, ["show", "aps", "--dirty"])
+    capture_logs(result, "test_show_aps_dirty_missing_group", expect_failure=True)
+    assert result.exit_code == 1
+    assert "group" in result.stdout.lower()
+
+
 def test_show_archived():
     result = runner.invoke(app, ["show", "archived"],)
     capture_logs(result, "test_show_archived")
