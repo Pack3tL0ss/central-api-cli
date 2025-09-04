@@ -46,7 +46,7 @@ def results(
 
     resp = api.session.request(api.tshooting.get_ts_output, dev.serial, session_id=session_id)
     if not resp or resp.output.get("status", "") != "COMPLETED":
-        render.display_results(resp, title=title, tablefmt="rich",)
+        render.display_results(resp, title=title, tablefmt="rich",)  # pragma: no cover
     else:
         if "output" in resp.output:
             _output = resp.output["output"]

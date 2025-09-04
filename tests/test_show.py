@@ -347,7 +347,7 @@ def test_show_template_by_name():
 
 
 def test_show_ts_commands():
-    result = runner.invoke(app, ["show", "ts", "commands", "cx"])
+    result = runner.invoke(app, ["show", "ts", "commands", "cx", "--sort", "id"])
     capture_logs(result, "test_show_ts_commands")
     assert result.exit_code == 0
     assert "API" in result.stdout
@@ -395,6 +395,11 @@ def test_show_certs():
     result = runner.invoke(app, ["show", "certs", "--yaml"],)
     assert result.exit_code == 0
     assert "expired" in result.stdout
+
+
+def test_show_last():
+    result = runner.invoke(app, ["show", "last"],)
+    assert result.exit_code == 0
 
 
 def test_show_audit_logs_past():
@@ -452,8 +457,15 @@ def test_show_mpsk_networks():
 
 
 def test_show_mpsk_named():
-    result = runner.invoke(app, ["show", "mpsk", "named", test_data["mpsk_ssid"]],)
+    result = runner.invoke(app, ["show", "mpsk", "named"],)
     capture_logs(result, "test_show_mpsk_named")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_mpsk_named_for_ssid():
+    result = runner.invoke(app, ["show", "mpsk", "named", test_data["mpsk_ssid"]],)
+    capture_logs(result, "test_show_mpsk_named_for_ssid")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -699,10 +711,21 @@ def test_show_guests():
     result = runner.invoke(app, [
             "show",
             "guests",
-            test_data["portal"]["name"]
         ]
     )
     capture_logs(result, "test_show_guests")
+    assert result.exit_code == 0
+    assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
+
+
+def test_show_guests_for_portal():
+    result = runner.invoke(app, [
+            "show",
+            "guests",
+            test_data["portal"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_guests_for_portal")
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
 
@@ -938,3 +961,14 @@ def test_show_webhooks():
     capture_logs(result, "test_show_webhooks")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+def test_show_cron():
+    result = runner.invoke(app, [
+            "show",
+            "cron",
+        ]
+    )
+    capture_logs(result, "test_show_cron")
+    assert result.exit_code == 0
+    assert "cron.weekly" in result.stdout

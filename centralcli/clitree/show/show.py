@@ -2769,7 +2769,7 @@ def logs(
     dev_id = None
     swarm_id = None
     if device:
-        device = common.cache.get_dev_identifier(device)
+        device: CacheDevice = common.cache.get_dev_identifier(device)
         if swarm:
             if device.type != "ap":
                 log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
@@ -2975,7 +2975,7 @@ def notifications(
     )
 
 
-@app.command(short_help="Re-display output from Last command.", help="Re-display output from Last command.  (No API Calls)")
+@app.command()
 def last(
     sort_by: str = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -2990,6 +2990,7 @@ def last(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Re-display output from Last command.  (No API Calls)"""
     if not config.last_command_file.exists():
         common.exit("Unable to find cache for last command.")
 
@@ -3263,7 +3264,7 @@ def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
                 f"6Ghz: [cyan]{six_cnt}[/] ([bright_green]{six_cnt}[/], [red]{six_cnt - six_up_cnt}[/])",
             ]
         )
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         log.error(f"Unable to build caption for show radios due to {e.__class__.__name__}")
         return
 
@@ -3481,7 +3482,7 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
 
     dev_options = config.dev.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
-    if dev_options:
+    if dev_options:  # pragma: no cover
         out = {**out, "dev_options": dev_options}
 
     if all_workspaces:
