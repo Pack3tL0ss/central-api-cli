@@ -22,19 +22,17 @@ HomePage: https://github.com/Pack3tL0ss/central-api-cli
 # flake8: noqa
 import os
 import sys
+from pathlib import Path
+from typing import Iterable, List, Literal, Optional, overload
 
 import click
 import typer
-
-from pathlib import Path
-from typing import Iterable, List, overload, Literal, Optional
-
-
 from rich.traceback import install
-install(show_locals=True, suppress=[click])
 
-from .utils import Utils
 from .environment import env
+from .utils import Utils
+
+install(show_locals=True, suppress=[click])
 
 
 utils = Utils()  # TODO make utils.py a module, strip the class
@@ -108,9 +106,9 @@ else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
-from .logger import MyLogger
 from . import constants
 from .config import Config
+from .logger import MyLogger
 
 if os.environ.get("TERM_PROGRAM") == "vscode":  # pragma: no cover
     from .vscodeargs import vscode_arg_handler
@@ -162,8 +160,8 @@ if os.name == "nt":  # pragma: no cover
 
         :meta private:
         """
-        from glob import glob
         import re
+        from glob import glob
 
         out = []
 
@@ -240,7 +238,8 @@ if "--again" in sys.argv:
     sys.argv = [sys.argv[0], "show", "last", *args]
 
 
-from .cache import Cache, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk, CacheCert
+from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate
+
 cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
@@ -257,6 +256,7 @@ if config.valid:
     CacheMpsk.set_db(cache.MpskDB)
 
 from .clicommon import CLICommon
+
 common = CLICommon(config.workspace, cache, raw_out=raw_out)
 
 from . import cleaner, render
