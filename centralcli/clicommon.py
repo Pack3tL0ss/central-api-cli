@@ -1710,10 +1710,11 @@ class CLICommon:
                 continue
 
             csub: CacheSub = res.cache_sub
-            confirm_msg += [res.get_confirm_msg()]
+            # confirm_msg += [res.get_confirm_msg()]
+            confirm_msg += [f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
-                confirm_msg += [f"\n[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
+                confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
             batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
             if tags:
                 tag_ids += res.ids
@@ -1726,7 +1727,8 @@ class CLICommon:
             for _tags, _ids in _data.ids_by_tags():
                 _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in _tags.items()])
                 confirm_msg += [f"\n[bright_green]The following {'additional ' if tags else ''}tags will be assigned to[/] [cyan]{len(_ids)}[/] [bright_green]devices [dim italic]based on data defined in import[/][/bright_green]:\n{_tag_msg}"]
-                batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=_ids, tags=_tags)]
+                for chunk in utils.chunker(_ids, 25):
+                    batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=chunk, tags=_tags)]
 
         if _data.not_assigned_devs:
             confirm_msg += [

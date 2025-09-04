@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from functools import cached_property
-from typing import Any, Dict, Generator, List, Optional
+import asyncio
+import time
+from typing import Any, Coroutine, Dict, Generator, List, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
 
 from centralcli import cache, utils
+from centralcli.render import Spinner
 
-from ..cache import Cache, CacheInvMonDevice, CacheSub
+from ..cache import Cache, CacheInvDevice, CacheInvMonDevice, CacheSub
 from ..constants import SiteStates, state_abbrev_to_pretty
 from .common import MpskStatus
 
@@ -136,7 +138,7 @@ class BySubId():
 
     @property
     def ids(self) -> list[str]:
-        return [d.inv_object.id for d in self.devices]
+        return [d.inv.id for d in self.devices]
 
     def __add__(self, other):
         self.devices += [other] if not isinstance(other, list) else other
@@ -152,19 +154,22 @@ class BySubId():
 
     def __iter__(self) -> Generator[CacheInvMonDevice, None, None]:
         for dev in self.devices:
-            yield dev.inv_object
+            yield dev.inv
 
     @property
     def is_overrun(self) -> bool:
         return len(self.devices) > self.cache_sub.available
 
-    def get_confirm_msg(self, tags: bool = False, is_update: bool = True) -> str:
-        confirm_header = f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {self.cache_sub.summary_text}|[magenta]Qty being assigned[/magenta][dim]:[/dim] {len(self)}"
-        confirm_msgs = [
-            f"{dev.get_confirm_msg(tags_override=tags and dev.tags)}"
-            for dev in self.devices
+    async def _get_confirm_msgs(self, tags: bool = False, is_update: bool = True) -> list[Coroutine]:
+        tasks = [
+            asyncio.create_task(dev._get_confirm_msg(tags_override=tags and dev.tags)) for dev in self.devices
         ]
-        return "\n".join([confirm_header, *confirm_msgs])
+        return await asyncio.gather(*tasks)
+
+    def get_confirm_msg(self, tags: bool = False, max: int = 12) -> str:
+        confirm_header = f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {self.cache_sub.summary_text}|[magenta]Qty being assigned[/magenta][dim]:[/dim] {len(self)}"
+        confirm_msgs = asyncio.run(self._get_confirm_msgs(tags=tags))
+        return "\n".join([confirm_header, utils.summarize_list(confirm_msgs, color=None, max=max)])
 
 
 class _ImportSubDevice(BaseModel):
@@ -189,59 +194,60 @@ class _ImportSubDevice(BaseModel):
         return v.lower().replace("_", "-")
 
 class ImportSubDevice(_ImportSubDevice):
-    _sub_object: CacheSub = None
-    _sub_changed: bool = False
+    _sub_object: CacheSub | None = None
     _sub_fetched: bool = False
-    _orig_sub_object: CacheSub = None
+    _inv_object: CacheInvDevice | None = None
+    _inv_fetched: bool = False
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     @property
-    def sub_object(self):
+    def sub(self):
         if self.subscription is None:
             return None
-        if not self._sub_object and not self._sub_fetched:
-            self._orig_sub_object = self._sub_object = cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
+        if not self._sub_object:
+            self._sub_object = cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
             self._sub_fetched = True
 
         return self._sub_object
 
-    @sub_object.setter
-    def sub_object(self, sub: CacheSub):
-        if not self.exact_sub:
-            self._sub_object = sub
-            if self.sub_object and sub != self.sub_object:  # TODO prob makes sense to make CacheSub a singleton so it returns the same instance based on id.
-                self._sub_changed = True
-
     @property
     def exact_sub(self) -> bool:
-        if self.subscription is None:
+        if self.subscription is None or self.sub is None:
             return False
-        if self._orig_sub_object and self._orig_sub_object.id and self._orig_sub_object.id == self.subscription:
-            return True
-        return False
+        return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
-    @cached_property
-    def inv_object(self) -> CacheInvMonDevice | None:
-        return cache.get_combined_inv_dev_identifier(self.serial, retry_dev=False, exit_on_fail=False)
+    async def _get_inv_object(self) -> CacheInvDevice | None:
+        inv_dev = cache.InvDB.search(cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
+        if inv_dev is None and cache.responses.inv is None:
+            return cache.get_inv_identifier(self.serial, exit_on_fail=False)
+        self._inv_fetched = True
+        self._inv_object = None if inv_dev is None else CacheInvDevice(inv_dev[0])
+        return self._inv_object
+
+    @property
+    def inv(self) -> CacheInvDevice | None:
+        if not self._inv_fetched:
+            self._inv_object = asyncio.run(self._get_inv_object())
+        return self._inv_object
 
     @property
     def assigned(self) -> bool:
-        return False if self.inv_object is None else self.inv_object.assigned
+        return False if self.inv is None else self.inv.assigned
 
     @property
     def exists(self) -> bool:
-        return False if self.inv_object is None else True
+        return False if self.inv is None else True
 
     @property
     def override_tags_warning(self) -> str:
         _tag_msg = "" if not self.tags else f"|[green]GreenLake[/] tags: {', '.join([f'[turquoise2]{k}[/]: [turquoise4]{v}[/]' for k, v in self.tags.items()])}"
-        return f"{self.inv_object.help_text}{_tag_msg}"
+        return f"{self.inv.help_text}{_tag_msg}"
 
     @property
     def glp_id(self):
-        return self.inv_object.id
+        return self.inv.id
 
     @property
     def sub_is_id(self) -> bool:
@@ -253,26 +259,14 @@ class ImportSubDevice(_ImportSubDevice):
 
     @property
     def rich_help_text(self) -> str:
-        if self.inv_object is not None:
-            return f"{self.inv_object.rich_help_text}{self.warning_sub_changed}"
+        if self.inv is not None:
+            return f"{self.inv.rich_help_text}"
         return f"[dark_orange3]\u26a0[/]  {self.serial}  Does not exist in [green]GreenLake[/]"
-
-    @property
-    def warning_sub_changed(self) -> str:
-        if not self._sub_changed:
-            return ""
-
-        _sub_msg = "|[dark_olive_green2 italic]Sub is being updated[/]: "
-        if self._orig_sub_object.tier != self.sub_object.tier:
-            _sub_msg = f"{_sub_msg} [magenta]Tier[/] changing from [red]{self._orig_sub_object.tier.value}[/]"
-        if self._orig_sub_object.expire_string != self.sub_object.expire_string:
-            _sub_msg = f"{_sub_msg} [magenta]Expiration[/] changing from [red]{self._orig_sub_object.expire_string}[/]"
-        return _sub_msg
 
     def __rich__(self) -> str:
         return self.get_confirm_msg()
 
-    def get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
+    async def _get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
         if not self.tags:
             return self.rich_help_text
 
@@ -284,6 +278,9 @@ class ImportSubDevice(_ImportSubDevice):
             return f"[dark_orange3]\u26a0[/]  [bright_red]SKIPPING[/] {_ret}... [dim italic]{_error}[/]"
         else:
             return _ret
+
+    def get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
+        return asyncio.run(self._get_confirm_msg(tags_override=tags_override, skipped=skipped))
 
 class ImportSubDevices(RootModel):
     root: list[ImportSubDevice]
@@ -360,7 +357,7 @@ class ImportSubDevices(RootModel):
         if is_update:
             devs = [dev for dev in devs if dev.assigned]
 
-        dev_msgs = [dev.get_confirm_msg(tags_override=tags_override) for dev in devs if sub == dev.sub_object]
+        dev_msgs = [dev.get_confirm_msg(tags_override=tags_override) for dev in devs if sub == dev.sub]
         return utils.summarize_list(dev_msgs, pad=pad, max=max, color=None).lstrip()
 
     def serials_by_subscription(self) -> dict[str, list[str]]:
@@ -369,20 +366,30 @@ class ImportSubDevices(RootModel):
         _ = [out_dict[dev.subscription].append(dev.serial) for dev in self.root]
         return out_dict
 
+    async def get_inv_objects(self) -> list[CacheInvDevice | None]:
+        # tasks = [asyncio.create_task(lambda: dev.inv) for dev in self.root]
+        tasks = [asyncio.create_task(dev._get_inv_object()) for dev in self.root]
+        # return [await t for t in tasks]
+        return await asyncio.gather(*tasks)
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
         subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
+        start = time.perf_counter()
+        with Spinner(f"gathering [green]GreenLake[/] device_ids from cache for [cyan]{len(self)}[/] devices found in import") as spinner:
+            inv_devs = asyncio.run(self.get_inv_objects())
+        duration = round(time.perf_counter() - start, 3)
+        spinner.succeed(f"[cyan]{len(self)}[/] device_ids fetched in {duration}s.  Avg: {round(duration / len(self), 3)}")
 
-        for dev in self.root:
-            if dev.inv_object is None or dev.inv_object.id is None:
+        for inv_dev, dev in zip(inv_devs, self.root):
+            if inv_dev is None or inv_dev.id is None:
                 continue
-            if assigned and dev.inv_object.assigned:
-                out_dict[dev.sub_object.id].append(dev)
-            elif assigned is False and not dev.inv_object.assigned:
-                out_dict[dev.sub_object.id].append(dev)
+            if assigned and inv_dev.assigned:
+                out_dict[dev.sub.id].append(dev)
+            elif assigned is False and not inv_dev.assigned:
+                out_dict[dev.sub.id].append(dev)
             else:  # assigned is None / All devices
-                out_dict[dev.sub_object.id].append(dev)
+                out_dict[dev.sub.id].append(dev)
 
         # This logic distributes devices to subscriptions based on available qty
         _additional_subs = {}

@@ -286,6 +286,10 @@ class CacheInvDevice(CentralObject):
         return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
     @property
+    def rich_help_text(self) -> str:
+        return self.summary_text
+
+    @property
     def summary_text(self) -> str:
         id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
         parts = [p for p in [self.serial, self.mac, self.type, self.sku, id_str] if p]
@@ -392,7 +396,7 @@ class CacheDevice(CentralObject):
 class CacheInvMonDevice(CentralObject):
     def __init__(self, inventory: CacheInvDevice, monitoring: CacheDevice = None):
         if inventory and monitoring and inventory.serial != monitoring.serial:
-            raise ValueError(f"Device serial from inventory data ({inventory.serial}) does not match device serial ({monitoring.serial}) from monitoring data.  Data for 2 diffferent devices seems to have been provided")
+            raise ValueError(f"Device serial from inventory data ({inventory.serial}) does not match device serial ({monitoring.serial}) from monitoring data.  Data for 2 diffferent devices seems to have been provided")  # pragma: no cover
 
         self.inv = inventory
         self.mon = monitoring
@@ -4543,11 +4547,14 @@ class Cache:
             match = self.DevDB.search(
                 (self.Q.name == query_str)
                 | (self.Q.ip.test(lambda v: v and v.split("/")[0] == query_str))
-                | (self.Q.mac == utils.Mac(query_str))
                 | (self.Q.serial == query_str)
             )
-            if match:
-                Model = CacheDevice
+
+            # Try Mac address match
+            if not match:
+                match = self.DevDB.search(
+                    (self.Q.mac == utils.Mac(query_str))
+                )
 
             # Inventory must be exact match expecting full serial numbers MAC just needs to be the same effective MAC regardless of format
             if not match and include_inventory:
