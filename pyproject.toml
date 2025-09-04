@@ -134,6 +134,7 @@ omit = [
     "centralcli/vscodeargs.py",
     "centralcli/clitree/dev.py",
     "centralcli/protobuf/*",
+    "centralcli/clitree/show/ospf.py",  # routing endpoints currently not functional
     "noxfile.py"
 ]
 
