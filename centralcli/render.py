@@ -471,7 +471,7 @@ def rich_output(
             show_lines=False,
             box=HORIZONTALS,
             row_styles=['none', 'dark_sea_green'],
-            min_width=min_width if min_width < tty_width else None
+            min_width=min_width if min_width is None or min_width < tty_width else None
         )
 
         fold_cols = [*fold_cols, *RICH_FOLD_COLS]
