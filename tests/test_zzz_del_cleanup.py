@@ -2,7 +2,7 @@ from typer.testing import CliRunner
 
 from centralcli.cli import app
 
-from . import capture_logs
+from . import capture_logs, config
 from ._test_data import test_data, test_device_file, test_group_file, test_site_file
 
 runner = CliRunner()
@@ -133,3 +133,10 @@ def test_del_guest(ensure_cache_guest1):
     capture_logs(result, "test_del_guest")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+if config.dev.mock_tests:
+    def test_delete_webhook():
+        result = runner.invoke(app, ["delete", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7", "-y"])
+        capture_logs(result, "test_delete_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout

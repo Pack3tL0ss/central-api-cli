@@ -398,6 +398,13 @@ def test_show_variables_by_name():
     assert "_sys_lan_mac" in result.stdout
 
 
+def test_show_vlans_site():
+    result = runner.invoke(app, ["show", "vlans", test_data["switch"]["site"], "--raw"],)
+    capture_logs(result, "test_show_vlans_site")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_templates_by_group():
     result = runner.invoke(app, ["show", "templates", "--group", test_data["template_switch"]["group"]],)
     capture_logs(result, "test_show_templates_by_group")
@@ -916,6 +923,19 @@ def test_show_run():
     capture_logs(result, "test_show_run")
     assert result.exit_code == 0
     assert "version" in result.stdout
+
+
+# There is no CLI command for this currently testing the API directly via test method command
+def test_show_sdwan_dps_compliance():
+    result = runner.invoke(app, [
+            "test",
+            "method",
+            "get_sdwan_dps_policy_compliance",
+        ]
+    )
+    capture_logs(result, "test_show_sdwan_dps_compliance")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
 
 
 def test_show_swarms():

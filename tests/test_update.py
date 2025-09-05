@@ -1,17 +1,32 @@
 from typer.testing import CliRunner
 
-from centralcli import log
 from centralcli.cli import app
 from centralcli.exceptions import ConfigNotFoundException
 
-from . import test_data
+from . import capture_logs
 from ._test_data import gw_group_config_file
 
 runner = CliRunner()
 
 
+def test_update_cloned_group(ensure_cache_group_cloned):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "group",
+            "cencli_test_cloned",
+            "--gw",
+            "-Y"
+        ]
+    )
+    capture_logs(result, "test_update_cloned_group")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+    assert "uccess" in result.stdout
+
+
 def test_update_gw_group_config(ensure_cache_group_cloned):
-    """Relies on group created in test_do.test_clone_group"""
     if not gw_group_config_file.is_file():  # pragma: no cover
         msg = f"{gw_group_config_file} Needs to be populated for this test.  Run 'cencli show config <group> --gw' for an example of GW group level config."
         raise ConfigNotFoundException(msg)
@@ -20,14 +35,13 @@ def test_update_gw_group_config(ensure_cache_group_cloned):
         [
             "update",
             "config",
-            test_data["clone"]["to_group"],
+            "cencli_test_cloned",
             str(gw_group_config_file),
             "--gw",
             "-Y"
         ]
     )
-    if result.exit_code != 0:  # pragma: no cover
-        log.error(f"Error in test_update_gw_group_config: {result.stdout}")
+    capture_logs(result, "test_update_gw_group_config")
     assert result.exit_code == 0
     assert "Global Result:" in result.stdout
     assert "[OK]" in result.stdout

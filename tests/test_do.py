@@ -156,13 +156,12 @@ def test_bounce_poe_multiport_range():
     assert "task_id:" in result.stdout
 
 
-# This group remains as it is deleted in cleanup of test_update
 def test_clone_group():
-    result = runner.invoke(app, ["-d", "clone", "group", test_data["gateway"]["group"], test_data["clone"]["to_group"], "-Y"])
+    result = runner.invoke(app, ["clone", "group", test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"])
     capture_logs(result, "test_clone_group")
-    assert result.exit_code == 0  # TODO check this we are not returning a 1 exit_code on resp.ok = False?
-    assert "201" in result.stdout or "400" in result.stdout
-    assert "Created" in result.stdout or "already exists" in result.stdout
+    assert result.exit_code == 0
+    assert "201" in result.stdout
+    assert "Created" in result.stdout
 
 
 def test_kick_client():
@@ -293,3 +292,15 @@ if config.dev.mock_tests:
         assert "202" in result.stdout
 
 
+    def test_refresh_webhook_token():
+        result = runner.invoke(app, ["refresh", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
+        capture_logs(result, "test_refresh_webhook")
+        assert result.exit_code == 0
+        assert "secure_token" in result.stdout
+
+
+    def test_test_webhook():
+        result = runner.invoke(app, ["test", "webhook", "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
+        capture_logs(result, "test_sync_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout

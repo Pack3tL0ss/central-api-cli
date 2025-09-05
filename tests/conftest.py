@@ -438,9 +438,9 @@ def ensure_cache_group_cloned():
         groups = [
             {
                 "name": "cencli_test_cloned",
-                "allowed_types": ["gw"],
-                "gw_role": "vpnc",
-                "aos10": True,
+                "allowed_types": ["ap"],
+                "gw_role": "branch",
+                "aos10": False,
                 "microbranch": False,
                 "wlan_tg": False,
                 "wired_tg": False,

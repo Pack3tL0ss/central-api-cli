@@ -168,3 +168,10 @@ def test_add_wlan_no_psk(ensure_cache_group1):
     result = runner.invoke(app, ["-d", "add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
     capture_logs(result, "test_add_wlan_no_psk", expect_failure=True)
     assert result.exit_code == 1
+
+if config.dev.mock_tests:
+    def test_add_webhook():
+        result = runner.invoke(app, ["add", "webhook",  "cencli_test_webhook", "http://fake.consolepi.com:8123/webhook", "-y"])
+        capture_logs(result, "test_add_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
