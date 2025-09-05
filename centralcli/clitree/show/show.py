@@ -924,8 +924,6 @@ def swarms(
 
     if ap:
         device = common.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
-        if not device:
-            common.exit("Device is required with [cyan]-s[/]|[cyan]--swarm[/] option.")
         if device.is_aos10:
             common.exit("This command is only valid for AOS8 APs")
         if status is not None:
@@ -1032,12 +1030,12 @@ def interfaces(
         help=f"Device to fetch interfaces from {common.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
         show_default=False,
     ),
-    slot: str = typer.Argument(None, help="Slot name of the ports to query [italic grey46](chassis only)[/]", show_default=False,),
+    slot: str = typer.Argument(None, help="Slot name of the ports to query [italic dim](chassis only)[/]", show_default=False,),
     group: str = common.options.group,
     site: str = common.options.site,
-    do_gw: bool = typer.Option(False, "--gw", help="Show interfaces for all gateways, [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
-    do_ap: bool = typer.Option(False, "--ap", help="Show interfaces for all APs [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
-    do_switch: bool = typer.Option(False, "--switch", help="Show interfaces for all switches [italic grey46](Only applies with device 'all' or when no device is provided)[/]"),
+    do_gw: bool = typer.Option(False, "--gw", help="Show interfaces for all gateways, [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
+    do_ap: bool = typer.Option(False, "--ap", help="Show interfaces for all APs [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
+    do_switch: bool = typer.Option(False, "--switch", help="Show interfaces for all switches [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
     _do_switch: bool = typer.Option(False, "--cx", "--sw", hidden=True,),  # hidden support common alternative switch flags
     # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
     # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
@@ -1149,12 +1147,14 @@ def interfaces(
     title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
 
     caption = []
+    min_width = None
     if dev_type == "switch":
         if "sw" in [d.type for d in devs] and resp.ok:
             dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
-            caption = [render.rich_capture(":information:  Native VLAN for trunk ports not shown for aos-sw as not provided by the API", emoji=True)]
+            caption = ["[deep_sky_blue1]\u2139[/]  Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]  # \u2139 = :information:
         if "cx" in [d.type for d in devs] and resp.ok:
-            caption = [render.rich_capture(":information:  L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API", emoji=True)]
+            caption = ["[deep_sky_blue1]\u2139[/]  [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
+            min_width = 106
 
     if resp:
         try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
@@ -1180,13 +1180,14 @@ def interfaces(
         reverse=reverse,
         output_by_key=None,
         group_by=None if len(batch_resp) <= 1 else "device",
+        min_width=min_width,
         cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
         verbosity=verbose,
         dev_type=dev_type,
     )
 
 
-@app.command(help="Show (switch) poe details for an interface")
+@app.command()
 def poe(
     device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=common.cache.dev_switch_completion, show_default=False,),
     port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
@@ -1206,6 +1207,10 @@ def poe(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ):
+    """Show (switch) interface poe details
+
+    [italic][deep_sky_blue1]:information:[/]  Only supported on switches[/italic]
+    """
     port = _port if _port else port
     dev = common.cache.get_dev_identifier(device, dev_type="switch")
     resp = api.session.request(api.monitoring.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
@@ -1351,7 +1356,7 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     if not reservations:
         return resp
 
-    caas = CaasAPI(api=api)
+    caas = CaasAPI()
     cfg_resp = api.session.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
     if not cfg_resp.ok:
         log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)

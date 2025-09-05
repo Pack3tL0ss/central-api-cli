@@ -252,12 +252,40 @@ def test_show_device_by_serial():
     assert "status" in result.stdout
 
 
+def test_show_dhcp_clients_gw():
+    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["serial"], "--no-res"],)
+    capture_logs(result, "test_show_dhcp_clients_gw")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_dhcp_clients_gw_verbose():
+    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["name"], "-v"],)
+    capture_logs(result, "test_show_dhcp_clients_gw_verbose")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_dhcp_pools_gw():
+    result = runner.invoke(app, ["show", "dhcp", "pools", test_data["dhcp_gateway"]["ip"]],)
+    capture_logs(result, "test_show_dhcp_pools_gw")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_interfaces_switch():
     result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--table"],)
     capture_logs(result, "test_show_interfaces_switch")
     assert result.exit_code == 0
     assert "vlan" in result.stdout
     assert "status" in result.stdout
+
+
+def test_show_interfaces_switch_slow():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--slow"],)
+    capture_logs(result, "test_show_interfaces_switch_slow")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_interfaces_site_aps():
@@ -670,6 +698,19 @@ def test_show_config_cencli_verbose():  # output is yaml
     assert "workspaces" in result.stdout
 
 
+def test_show_poe():
+    result = runner.invoke(app, [
+            "show",
+            "poe",
+            test_data["switch"]["mac"],
+            "-p"
+        ]
+    )
+    capture_logs(result, "test_show_poe")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_portals():
     result = runner.invoke(app, [
             "show",
@@ -867,6 +908,47 @@ def test_show_swarms():
     capture_logs(result, "test_show_swarms")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+def test_show_swarm_specific_ap():
+    result = runner.invoke(app, [
+            "show",
+            "swarms",
+            test_data["aos8_ap"],
+            "--down",
+            "--up",
+            "--sort",
+            "version"
+        ]  # --up and --down and --sort are ignored in this case, given a specific AP is provided. Improves coverage/hits branch
+    )
+    capture_logs(result, "test_show_swarm_specific_ap")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_swarm_config():
+    result = runner.invoke(app, [
+            "show",
+            "swarms",
+            test_data["aos8_ap"],
+            "-c"
+        ]
+    )
+    capture_logs(result, "test_show_swarm_config")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_swarm_invalid_aos10_ap():
+    result = runner.invoke(app, [
+            "show",
+            "swarms",
+            test_data["ap"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_swarm_invalid_aos10_ap", expect_failure=True)
+    assert result.exit_code == 1
+    assert "AOS8" in result.stdout
 
 
 def test_show_token():
