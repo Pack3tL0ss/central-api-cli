@@ -6,10 +6,10 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterator, KeysView, MutableMapping
 from copy import deepcopy
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
@@ -41,7 +41,7 @@ if config.glp.ok:
     from .cnx.api import GreenLakeAPI
     glp_api = GreenLakeAPI(config.glp.base_url)
 else:
-    glp_api = None
+    glp_api = None  # pragma: no cover
 
 if TYPE_CHECKING:
     from tinydb.table import Document, Table
@@ -51,13 +51,13 @@ if TYPE_CHECKING:
 
 try:
     import readline  # noqa imported for backspace support during prompt.
-except Exception:
+except Exception:  # pragma: no cover
     pass
 
 try:
     from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
-except Exception:
+except Exception:  # pragma: no cover
     FUZZ = False
 
 # Used to debug completion
@@ -68,7 +68,7 @@ TinyDB.default_table_name = "devices"
 
 CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
-class CentralObject:
+class CentralObject(MutableMapping):
     _doc_id = None
 
     def __init__(
@@ -120,6 +120,25 @@ class CentralObject:
     def __getitem__(self, key):
         return self.data[key]
 
+    def __delitem__(self, key):
+        del self.data[key]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __setitem__(self, key, value):
+        self.data[key] = value
+
+    def __iter__(self):
+        for k, v in self.data.items():
+            yield k, v
+
+    def keys(self) -> KeysView:
+        return self.data.keys()
+
+    def get(self, item: str, default = None):
+        return self.data.get(item, default)
+
     # def __getattr__(self, name: str) -> Any:
     #     # import sys
     #     # print("CentralObject __getattr__", name, file=sys.stderr)
@@ -134,13 +153,6 @@ class CentralObject:
     #         return getattr(self.data, name)
 
     #     raise AttributeError(f"'{self.__module__}.{type(self).__name__}' object has no attribute '{name}'")
-
-    def get(self, item: str, default = None):
-        return self.data.get(item, default)
-
-    def __iter__(self):
-        for k, v in self.data.items():
-            yield k, v
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -215,22 +227,10 @@ class CentralObject:
         )
 
 
-    @property
+    @property  # TODO # DEPRECATED Each object the inherits from CentralObject should have it's own summary_text property
     def summary_text(self):
-        if self.is_site:
-            parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
-        elif self.is_dev:
-            parts = [p for p in utils.unique([self.name, self.serial, self.mac, self.ip, self.site]) if p]
-            if self.site:
-                parts[-1] = f"Site:{parts[-1]}"
-        else:
-            return str(self)
+        return str(self)
 
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
 
 
 class CacheInvDevice(CentralObject):
@@ -516,6 +516,36 @@ class CacheGroup(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
 
+    def get_help_text_parts(self) -> Generator[str, None, None]:
+        _allowed_types_str = f"[magenta]allowed types[/]: {utils.color(self.allowed_types)}"
+        _mon_only = [f"[magenta]{_type}[/]: \u2705" for _type, _mon_only in zip(["sw", "cx"], [self.monitor_only_sw, self.monitor_only_cx]) if _mon_only]
+        _template_group = [f"[magenta]{_type}[/]: \u2705" for _type, _tg in zip(["wired", "wlan"], [self.wired_tg, self.wlan_tg]) if _tg]
+        _other = []
+        if "ap" in self.allowed_types:
+            _other += ["AOS10" if self.aos10 else "AOS8"]
+        if "gw" in self.allowed_types or "sdwan" in self.allowed_types:
+            _other += [f"[magenta]GW Role[/]: {self.gw_role}"]
+        if self.cnx:
+            _other += ["[magenta]New Central Managed[/]: \u2705"]
+
+
+        parts = [p for p in [self.name, _allowed_types_str, *_mon_only, *_template_group, *_other] if p]
+
+        for idx, part in enumerate(parts):
+            if "[/" in part:
+                yield part
+            elif idx % 2 == 0:
+                yield f"[cyan]{part}[/]"
+            else:
+                yield f"[turquoise4]{part}[/]"
+
+    @cached_property
+    def rich_help_text(self) -> str:
+        return "|".join(self.get_help_text_parts())
+
+    @property
+    def summary_text(self) -> str:
+        return self.rich_help_text
 
 class CacheSite(CentralObject):
     db: Table | None = None
@@ -3937,12 +3967,7 @@ class Cache:
     def update_event_db(self, log_data: List[Dict[str, Any]]) -> bool:
         return asyncio.run(self.update_db(self.EventDB, data=log_data, truncate=True))
 
-    # Currently not used
-    def update_hook_config_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
-        data = utils.listify(data)
-        return asyncio.run(self.update_db(self.HookConfigDB, data=data, truncate=True))
-
-    async def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:
+    async def update_hook_data_db(self, data: List[Dict[str, Any]]) -> bool:  # pragma: no cover  ... used by hook proxy
         data = utils.listify(data)
         rem_data = []
         add_data = []
