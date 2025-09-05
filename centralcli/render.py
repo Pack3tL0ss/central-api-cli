@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 '''
-This will replace the Output class and output func currently living in utils.py
-
-cleaner.py still normalizes the responses from the API
-render.py (this file) takes the normalized data, and displays it (various formats)
+cleaner.py normalizes the responses from the API
+render.py (this module) takes the normalized data, and displays it (various formats)
 '''
 from __future__ import annotations
 
@@ -48,7 +45,7 @@ if TYPE_CHECKING:
 
 try:  # uniplot depends on numpy which throws an error on rpi
     from uniplot import plot
-except ImportError:
+except ImportError:  # pragma: no cover
     plot = None
 
 
@@ -198,7 +195,7 @@ class Output():
     def __contains__(self, item) -> bool:
         return item in self.file
 
-    def sanitize_strings(self, strings: str, config=None) -> str:
+    def sanitize_strings(self, strings: str, config=None) -> str:  # pragma: no cover
         """Sanitize Output for demos
 
         Args:
@@ -257,7 +254,7 @@ class Output():
         except TypeError:
             return self._file
 
-def _batch_invalid_msg(usage: str, provide: str = None) -> str:
+def _batch_invalid_msg(usage: str, provide: str = None) -> str:  # referenced in the batch cli modules
         usage = escape(usage)
         provide = provide or "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]"
         _msg = [
@@ -685,7 +682,7 @@ def ask(
     show_default: bool = True,
     show_choices: bool = True,
     default: Any = ...,
-) -> str:
+) -> str:  # pragma: no cover Can't test this with automated runs given it requires user input from tty
     """wrapper function for rich.Prompt().ask()
 
     Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
@@ -719,7 +716,7 @@ def ask(
 def confirm(yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True,) -> bool:
     _confirm = Confirm(prompt=prompt, console=econsole,)
     result = yes or _confirm()
-    if not result and abort:
+    if not result and abort:  # pragma: no cover
         econsole.print("[red]Aborted[/]")
         raise typer.Exit(0)
     elif yes:  # The default prompt has a newline before the prompt, this is so -y without prompt still gets a newline to avoid jamming the response text with the confirmation msg.
@@ -727,7 +724,7 @@ def confirm(yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True
 
     return result
 
-def pause(prompt: str = "Press Enter to Continue", *, rich_console: Console = None) -> None:
+def pause(prompt: str = "Press Enter to Continue", *, rich_console: Console = None) -> None:  # pragma: no cover
     rich_console = rich_console or econsole
     ask = Prompt(prompt, console=rich_console, password=True, show_default=False, show_choices=False)
     _ = ask()
@@ -950,7 +947,7 @@ def _display_results(
     if caption and outdata.tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
         econsole.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))
 
-    if config.is_old_cfg and " ".join(sys.argv[1:]) != "convert config":
+    if config.is_old_cfg and " ".join(sys.argv[1:]) != "convert config":  # pragma: no cover
         econsole.print(
             ":sparkles: [bright_green]There is a new format for the cencli config[/] [dim italic](config.yaml)[/] file with support for [green]GreenLake[/] and New Central!\n"
             f"   Use [cyan]cencli convert config[/] to convert the existing config @ [turquoise2]{config.file}[/] to the new format."
@@ -1070,9 +1067,9 @@ def display_results(
                     else:
                         print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         plain_console = Console(color_system=None, emoji=False)
-                        if config.dev.sanitize:
+                        if config.dev.sanitize:  # pragma: no cover
                             r.raw = json.loads(Output().sanitize_strings(json.dumps(r.raw), config=config))
-                        if pager:
+                        if pager:  # pragma: no cover
                             with plain_console.pager:
                                 plain_console.print(r.raw)
                         else:

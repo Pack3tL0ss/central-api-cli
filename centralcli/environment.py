@@ -29,7 +29,7 @@ class Env:
         return self._is_pytest
 
     @is_pytest.setter
-    def is_pytest(self, value: bool) -> bool:
+    def is_pytest(self, value: bool) -> bool:  # pragma: no cover  This only hits outside of pytest runs with --mock flag
         if value:
             environ["PYTEST_VERSION"] = "MOCK_TEST"
             self._is_pytest = True

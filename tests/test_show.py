@@ -162,6 +162,19 @@ def test_show_insights_by_client():
     assert "API" in result.stdout
 
 
+def test_show_insights_low_severity():
+    result = runner.invoke(app, [
+            "show",
+            "insights",
+            "--severity",
+            "low"
+        ]
+    )
+    capture_logs(result, "test_show_insights_low_severity")
+    assert result.exit_code == 0
+    assert "API Rate Limit" in result.stdout
+
+
 def test_show_inventory():
     result = runner.invoke(app, ["show", "inventory"],)
     capture_logs(result, "test_show_inventory")
@@ -812,43 +825,6 @@ def test_show_guests_for_portal():
     capture_logs(result, "test_show_guests_for_portal")
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
-
-
-def test_show_insights():
-    result = runner.invoke(app, [
-            "show",
-            "insights",
-        ]
-    )
-    capture_logs(result, "test_show_insights")
-    assert result.exit_code == 0
-    assert "API Rate Limit" in result.stdout
-
-
-def test_show_insights_low_severity():
-    result = runner.invoke(app, [
-            "show",
-            "insights",
-            "--severity",
-            "low"
-        ]
-    )
-    capture_logs(result, "test_show_insights_low_severity")
-    assert result.exit_code == 0
-    assert "API Rate Limit" in result.stdout
-
-
-def test_show_insights_site():
-    result = runner.invoke(app, [
-            "show",
-            "insights",
-            "--site",
-            test_data["ap"]["site"]
-        ]
-    )
-    capture_logs(result, "test_show_insights_site")
-    assert result.exit_code == 0
-    assert "API Rate Limit" in result.stdout
 
 
 def test_show_notifications():

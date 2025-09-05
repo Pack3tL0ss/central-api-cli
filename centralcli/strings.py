@@ -733,7 +733,7 @@ class ImportExamples:
         self.assign_subscriptions = clibatch_assign_subscriptions
 
     def __getattr__(self, key: str):
-        if key not in self.__dict__.keys():
+        if key not in self.__dict__.keys():  # pragma: no cover
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
 

@@ -148,6 +148,14 @@ def test_bounce_poe_multiport():
     assert "task_id:" in result.stdout
 
 
+def test_bounce_poe_multiport_range():
+    result = runner.invoke(app, ["bounce", "poe", test_data["switch"]["name"].lower(), "-".join(test_data["switch"]["test_ports"]), "-Y", "--debug"])
+    capture_logs(result, "test_bounce_poe_multiport")
+    assert result.exit_code == 0
+    assert "state:" in result.stdout
+    assert "task_id:" in result.stdout
+
+
 # This group remains as it is deleted in cleanup of test_update
 def test_clone_group():
     result = runner.invoke(app, ["-d", "clone", "group", test_data["gateway"]["group"], test_data["clone"]["to_group"], "-Y"])
@@ -253,6 +261,13 @@ if config.dev.mock_tests:
     def test_upgrade_ap():
         result = runner.invoke(app, ["upgrade",  "device", test_data["ap"]["serial"], "10.7.2.1_93286", "-y"])
         capture_logs(result, "test_upgrade_ap")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_upgrade_switch():
+        result = runner.invoke(app, ["upgrade",  "device", test_data["switch"]["serial"], "10.16.1006", "-Ry"])
+        capture_logs(result, "test_upgrade_switch")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
