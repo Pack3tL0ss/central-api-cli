@@ -48,7 +48,7 @@ def method(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
     update_cache: bool = common.options.update_cache,
-) -> None:
+) -> None:  # pragma: no cover
     """Dev testing commands to run CentralApi methods from command line.
 
     :warning:  This is a development aid.  Every API endpoint in Aruba Central
@@ -204,7 +204,7 @@ def command(
     workspace: str = common.options.workspace,
     debugv: bool = common.options.debugv,
     update_cache = common.options.update_cache,
-) -> None:
+) -> None:  # pragma: no cover
     """This is a hidden test command used for automated testing.
 
     This command should not be used.

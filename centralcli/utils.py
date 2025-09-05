@@ -233,7 +233,7 @@ class Utils:
         return_type: Literal["str", "dict", "list"] = "str",
         abort_str: str = "EXIT",
         **kwargs
-    ) -> List[str] | dict | str:
+    ) -> List[str] | dict | str:  # pragma: no cover
         console = Console(emoji=True)
         exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
         exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]{abort_str}[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
