@@ -514,10 +514,7 @@ def webhook(
     econsole.print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
     if render.confirm(yes):
         resp = api.session.request(api.central.add_webhook, name, urls)
-
-        render.display_results(resp, tablefmt="action")
-        if not resp:
-            raise typer.Exit(1)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
 # TODO ?? add support for converting j2 template to central template
