@@ -375,37 +375,46 @@ class ConfigAPI:
         if cur_group_props["AOSVersion"] == "AOS_10X" and aos10 is False:
             return Response(
                 error=f"{group} is currently an AOS10 group.  Upgrading to AOS10 is supported, reverting back is not.",
-                rl_str=resp.rl,
             )
         if aos10 is True:
             if "AccessPoints" in cur_group_props["AllowedDevTypes"] or \
                 "Gateways" in cur_group_props["AllowedDevTypes"]:
-                return Response(
-                    error=f"{utils.color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
-                          f"\n{utils.color(group)} can be cloned with option to upgrade during clone.",
-                    rl_str=resp.rl,
-                )
+                resp.output = f"This call fetched current properties for group {group}"
+                return [
+                    resp,
+                    Response(
+                        error=f"{utils.color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
+                        f"\n{utils.color(group)} can be cloned with option to upgrade during clone.",
+                    )
+                ]
 
         if "AccessPoints" in cur_group_props["AllowedDevTypes"]:
             if microbranch is not None:
-                return Response(
-                    error=f"{group} already allows APs.  Microbranch/Standard AP can only be set "
-                          "when initially adding APs to allowed_types of group",
-                    rl_str=resp.rl,
-                )
+                resp.output = f"This call fetched current properties for group {group}"
+                return [
+                    resp,
+                    Response(
+                        error=f"{group} already allows APs.  Microbranch/Standard AP can only be set "
+                        "when initially adding APs to allowed_types of group",
+                    )
+                ]
         if monitor_only_sw is False and "AOS_S" in cur_group_props["AllowedSwitchTypes"]:
-            return Response(
-                error=f"{group} already allows AOS-SW.  Monitor Only can only be set "
-                      "when initially adding AOS-SW to allowed_types of group",
-                rl_str=resp.rl,
-            )
+            resp.output = f"This call fetched current properties for group {group}"
+            return [
+                resp,
+                Response(
+                    error=f"{group} already allows AOS-SW.  Monitor Only can only be set "
+                    "when initially adding AOS-SW to allowed_types of group",
+                )
+            ]
         if monitor_only_cx is False and "AOS_CX" in cur_group_props["AllowedSwitchTypes"]:
-            return Response(
-                error=f"{group} already allows AOS-CX.  Monitor Only can only be set "
-                      "when initially adding AOS-CX to allowed_types of group",
-                rl_str=resp.rl,
-            )
-
+            resp.output = f"This call fetched current properties for group {group}"
+            return [
+                Response(
+                    error=f"{group} already allows AOS-CX.  Monitor Only can only be set "
+                    "when initially adding AOS-CX to allowed_types of group",
+                )
+            ]
         allowed_types = allowed_types or []
         allowed_switch_types = []
         if allowed_types:
