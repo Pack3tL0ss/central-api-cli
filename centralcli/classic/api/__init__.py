@@ -3,6 +3,8 @@ from __future__ import annotations
 from functools import cached_property
 from typing import TYPE_CHECKING
 
+from centralcli.classic.api.visualrf import VisualRFAPI
+
 from ... import config
 from ...client import Session
 from .aiops import AiOpsAPI
@@ -93,6 +95,10 @@ class ClassicAPI:
     @cached_property
     def aiops(self) -> AiOpsAPI:
         return AiOpsAPI(self.session)
+
+    @cached_property
+    def visualrf(self) -> VisualRFAPI:
+        return VisualRFAPI(self.session)
 
     @cached_property
     def kms(self) -> KmsAPI:

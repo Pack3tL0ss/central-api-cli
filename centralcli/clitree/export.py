@@ -10,9 +10,11 @@ from rich import print
 from rich.console import Console
 
 from centralcli import caas, common, config, log, render
-from centralcli.cache import CacheDevice
+from centralcli.cache import CacheDevice, api
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
+from centralcli.render import Spinner
+from centralcli.response import Response
 
 if TYPE_CHECKING:
     from ..cache import CacheDevice, CacheGroup, CacheSite
@@ -338,6 +340,36 @@ def configs(
             _config_header("[bold]Combined Variables file[reset]")
             render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
+def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
+    # TODO abort on failure
+    campus_resp: Response = api.session.request(api.visualrf.get_all_campuses)
+    campuses = [c["campus_id"] for c in campus_resp.raw["campus"]]
+
+    bldg_reqs = [BatchRequest(api.visualrf.get_buildings_for_campus, campus) for campus in campuses]
+    bldg_resp = api.session.batch_request(bldg_reqs)
+    buildings = {
+        bldg["building_id"]: {"name": bldg["building_name"], "lat": bldg["latitude"], "lon": bldg["longitude"]} for resp in bldg_resp for bldg in resp.raw["buildings"]
+    }
+
+    floor_reqs = [BatchRequest(api.visualrf.get_floors_for_building, bldg) for bldg in buildings]
+    floor_resp = api.session.batch_request(floor_reqs)
+    floors = {
+        floor["floor_id"]: {"name": floor["floor_name"], "level": floor["floor_level"], "building_id": floor["building_id"]} for resp in floor_resp for floor in resp.raw.get("floors", [])
+    }
+
+    ap_loc_reqs = [BatchRequest(api.visualrf.get_aps_for_floor, floor) for floor in floors]
+    ap_loc_resp = api.session.batch_request(ap_loc_reqs)
+    ap_data = {
+        ap["serial_number"]: {
+            "id": ap["ap_id"],
+            "serial": ap["serial_number"],
+            "building": buildings[floors[ap["floor_id"]]["building_id"]]["name"],
+            "floor": floors[ap["floor_id"]]["level"]
+        } for resp in ap_loc_resp for ap in resp.raw["access_points"]
+    }
+
+    return ap_data
+
 
 @app.command(hidden=True)  # WIP not fully implemented
 def redsky_bssids(
@@ -356,6 +388,12 @@ def redsky_bssids(
     """
     api = ClassicAPI()
     bssid_resp = api.session.request(api.monitoring.get_bssids)
+    if bssid_resp.ok:
+        # bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in [*[b for b in bssid["bssids"] or [] if b], {"macaddr": bssid["macaddr"]}] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
+        bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in bssid["bssids"] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
+        with Spinner("Fetching AP locations from VisualRF"):
+            location_data = get_location_for_all_aps()
+        bssid_resp.output = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items()]
     render.display_results(bssid_resp)
 
 
