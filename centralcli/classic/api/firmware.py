@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime as dt
 from typing import TYPE_CHECKING, Literal
 
 from ... import constants
@@ -81,7 +82,7 @@ class FirmwareAPI:
     # payload: {"reboot":true,"firmware_version":"10.5.0.0-beta_87046","devices":[],"clusters":[72],"when":0,"timezone":"+00:00","partition":"primary"}
     async def upgrade_firmware(
         self,
-        scheduled_at: int = None,
+        scheduled_at: int | dt = None,
         swarm_id: str = None,
         serial: str = None,
         group: str = None,
@@ -98,7 +99,7 @@ class FirmwareAPI:
         // Used by upgrade [device|group|swarm] //
 
         Args:
-            scheduled_at (int, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
+            scheduled_at (int | datetime, optional): When to schedule upgrade (epoch seconds). Defaults to None (Now).
             swarm_id (str, optional): Upgrade a specific swarm by id. Defaults to None.
             serial (str, optional): Upgrade a specific device by serial. Defaults to None.
             group (str, optional): Upgrade devices belonging to group. Defaults to None.
@@ -113,6 +114,8 @@ class FirmwareAPI:
             Response: CentralAPI Response object
         """
         url = "/firmware/v1/upgrade"
+        if isinstance(scheduled_at, dt):
+            scheduled_at = int(scheduled_at.timestamp())
 
         json_data = {
             'firmware_scheduled_at': scheduled_at,
