@@ -3402,7 +3402,7 @@ def insights(
         resp = api.session.request(api.aiops.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
         title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
         render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
-        common.exit(0)
+        common.exit(code=0 if resp.ok else 1)
 
     site_id, serial, dev_type, client_mac = None, None, None, None
     if device:
