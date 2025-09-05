@@ -3357,6 +3357,7 @@ def radios(
 
     render.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
 
+# TODO # FIXME --past 6h returns empty payload despite default of 3h returning insights  --past 1d seems to work fine.
 @app.command()
 def insights(
     insight_id: int = typer.Argument(
