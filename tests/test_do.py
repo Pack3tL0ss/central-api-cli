@@ -1,10 +1,12 @@
 from typer.testing import CliRunner
 
+from centralcli import common
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.exceptions import MissingRequiredArgumentException
 
 from . import capture_logs, config, test_data
+from ._test_data import test_device_file
 
 runner = CliRunner()
 
@@ -23,6 +25,15 @@ def test_archive(ensure_inv_cache_test_ap):
     assert "succeeded" in result.stdout
 
 
+def test_archive_multi(ensure_cache_batch_devices):
+    devices = common._get_import_file(test_device_file, import_type="devices")
+    serials = [dev["serial"] for dev in devices[::-1]][0:2]
+    result = runner.invoke(app, ["archive", *serials, "-y"])
+    capture_logs(result, "test_archive_multi")
+    assert result.exit_code == 0
+    assert "succeeded" in result.stdout
+
+
 def test_convert_template():
     result = runner.invoke(app, ["convert", "template", test_data["j2_template"]])
     capture_logs(result, "test_convert_template")
@@ -33,6 +44,15 @@ def test_convert_template():
 def test_unarchive(ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["unarchive", test_data["test_add_do_del_ap"]["serial"]])
     capture_logs(result, "test_unarchive")
+    assert result.exit_code == 0
+    assert "succeeded" in result.stdout
+
+
+def test_unarchive_multi(ensure_cache_batch_devices):
+    devices = common._get_import_file(test_device_file, import_type="devices")
+    serials = [dev["serial"] for dev in devices[::-1]][0:2]
+    result = runner.invoke(app, ["unarchive", *serials])
+    capture_logs(result, "test_unarchive_multi")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 

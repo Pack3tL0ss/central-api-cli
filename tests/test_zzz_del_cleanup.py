@@ -1,6 +1,5 @@
 from typer.testing import CliRunner
 
-from centralcli import cache
 from centralcli.cli import app
 
 from . import capture_logs
@@ -30,7 +29,7 @@ def test_del_device(ensure_inv_cache_add_do_del_ap):
     assert "200" in result.stdout
 
 
-def test_batch_del_devices(ensure_cache_batch_del_devices):
+def test_batch_del_devices(ensure_cache_batch_devices):
     result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_device_file)}', "-Y"])
     capture_logs(result, "test_batch_del_devices")
     assert result.exit_code == 0
@@ -39,7 +38,6 @@ def test_batch_del_devices(ensure_cache_batch_del_devices):
 
 
 def test_batch_del_groups(ensure_cache_batch_del_groups):
-    cache.responses.group = None  # Necessary as pytest treats all this as one session, so it thinks cache has been refreshed already
     result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
     capture_logs(result, "test_batch_del_groups")
     assert result.exit_code == 0

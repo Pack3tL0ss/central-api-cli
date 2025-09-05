@@ -41,6 +41,7 @@ def test_show_aps_dirty():
     result = runner.invoke(app, ["show", "aps", "--dirty", "--group", test_data["ap"]["group"]],)
     capture_logs(result, "test_show_aps_dirty")
     assert result.exit_code == 0
+    assert "dirty" in result.stdout
 
 
 def test_show_aps_dirty_missing_group():
@@ -124,6 +125,41 @@ def test_show_all():
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "serial" in result.stdout
+
+
+def test_show_insights():
+    result = runner.invoke(app, ["show", "insights", "--past", "32d"],)
+    capture_logs(result, "test_show_insights")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_insights_by_id():
+    result = runner.invoke(app, ["show", "insights", "609"],)
+    capture_logs(result, "test_show_insights_by_id")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_insights_by_site():
+    result = runner.invoke(app, ["show", "insights", "--site", test_data["ap"]["site"]],)
+    capture_logs(result, "test_show_insights_by_site")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_insights_by_device():
+    result = runner.invoke(app, ["show", "insights", "--dev", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_insights_by_device")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_insights_by_client():
+    result = runner.invoke(app, ["show", "insights", "--client", test_data["client"]["wireless"]["name"]],)
+    capture_logs(result, "test_show_insights_by_client")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_inventory():
@@ -921,13 +957,13 @@ def test_show_swarm_specific_ap():
     result = runner.invoke(app, [
             "show",
             "swarms",
-            test_data["aos8_ap"],
+            test_data["aos8_ap"]["name"],
             "--down",
             "--up",
             "--sort",
             "version"
-        ]  # --up and --down and --sort are ignored in this case, given a specific AP is provided. Improves coverage/hits branch
-    )
+        ]
+    )  # --up and --down and --sort are ignored in this case, given a specific AP is provided. Improves coverage/hits branch
     capture_logs(result, "test_show_swarm_specific_ap")
     assert result.exit_code == 0
     assert "API" in result.stdout
@@ -937,7 +973,7 @@ def test_show_swarm_config():
     result = runner.invoke(app, [
             "show",
             "swarms",
-            test_data["aos8_ap"],
+            test_data["aos8_ap"]["name"],
             "-c"
         ]
     )
