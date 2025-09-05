@@ -80,7 +80,7 @@ class MoveData:
             for k, v_list in mv_msgs.items():
                 dev_word = "devices" if len(v_list) > 1 else "device"
                 action_words = f"[bright_green]{action_word}[/] to" if action_word != "removed" else f"[red]{action_word}[/] from"
-                confirm_msg = f'\u2139  [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'  # \u2139 = :information:
+                confirm_msg = f'[deep_sky_blue1]\u2139[/]  [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'  # \u2139 = :information:
                 if retain_config:
                     confirm_msg = f"{confirm_msg} [italic dark_olive_green2]CX config will be preserved[/]."
                 confirm_msgs += [confirm_msg]
