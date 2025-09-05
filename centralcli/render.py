@@ -433,6 +433,7 @@ def rich_output(
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
+    min_width: int = 40  # this is the length of the RateLimit string.
 ) -> tuple:
     """Render string formatted with rich/table
 
@@ -445,6 +446,7 @@ def rich_output(
         set_width_cols (dict, optional): cols that need to be rendered with a specific width. Defaults to None.
         full_cols (Union[List[str], str], optional): cols that should not be truncated. Defaults to [].
         fold_cols (Union[List[str], str], optional): cols that can be folded (wrapped). Defaults to [].
+        min_width (int, optional): Minimum table width. Defaults to 40.
 
     Returns:
         tuple: raw_data, table_data
@@ -461,6 +463,7 @@ def rich_output(
         customer_name = outdata[0].get("customer_name", "")
         outdata = [{k: v for k, v in d.items() if k not in CUST_KEYS} for d in outdata]
 
+        tty_width, _ = console.size
         table = Table(
             show_header=True,
             title=title,
@@ -468,7 +471,7 @@ def rich_output(
             show_lines=False,
             box=HORIZONTALS,
             row_styles=['none', 'dark_sea_green'],
-            min_width=40  # this is the length of the RateLimit string.
+            min_width=min_width if min_width < tty_width else None
         )
 
         fold_cols = [*fold_cols, *RICH_FOLD_COLS]
@@ -569,6 +572,7 @@ def output(
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
+    min_width: int = 40
 ) -> Output:
     output_by_key = utils.listify(output_by_key)
     raw_data = outdata
@@ -635,7 +639,7 @@ def output(
         table_data = rich_capture(table_data)
 
     elif tablefmt == "rich":
-        raw_data, table_data = rich_output(outdata, title=title, caption=caption, workspace=workspace, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by)
+        raw_data, table_data = rich_output(outdata, title=title, caption=caption, workspace=workspace, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by, min_width=min_width)
 
     elif tablefmt == "tabulate":
         raw_data, table_data = tabulate_output(outdata)
@@ -856,7 +860,7 @@ def _update_captions(caption: List[str] | str, resp: Response | List[Response] =
     resp_captions = [] if resp is None else [str(cap) if not hasattr(cap, "__rich__") else getattr(cap, "__rich__")() for r in resp if r.caption for cap in utils.listify(r.caption)]
     caption = utils.listify(caption) or []
     caption = [*caption, *resp_captions]
-    caption = "\n".join(caption)
+    caption = "\n ".join(caption)
 
     caption = "" if not caption else f"{caption}\n"
     if log.caption:  # rich table is printed with emoji=False need to manually swap the emoji # TODO see if table has option to only do emoji in caption
@@ -897,6 +901,7 @@ def _display_results(
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
+    min_width: int = 40,
     cleaner: callable = None,
     **cleaner_kwargs,
 ):
@@ -930,6 +935,7 @@ def _display_results(
         "set_width_cols": set_width_cols,
         "full_cols": full_cols,
         "fold_cols": fold_cols,
+        "min_width": min_width
     }
     with Spinner("Rendering Output..."):
         outdata = output(**kwargs)  # tablefmt may be updated use outdata.tablefmt for final format based on payload.
@@ -974,6 +980,7 @@ def display_results(
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
+    min_width: int = 40,
     cleaner: callable = None,
     **cleaner_kwargs,
 ) -> None:
@@ -1012,6 +1019,7 @@ def display_results(
             example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}.  Applies to tablefmt=rich.
         full_cols (list): columns to ensure are displayed at full length (no wrap no truncate). Applies to tablfmt=rich. Defaults to [].
         fold_cols (Union[List[str], str], optional): columns that will be folded (wrapped within the same column). Applies to tablfmt=rich. Defaults to [].
+        min_width (int, optional): Minimum table width for rich table.  Defaults to 40.
         cleaner (callable, optional): The Cleaner function to use.
     """
     caption, rl_str = _update_captions(caption, resp=resp, suppress_rl=suppress_rl)
@@ -1112,6 +1120,7 @@ def display_results(
                     set_width_cols=set_width_cols,
                     full_cols=full_cols,
                     fold_cols=fold_cols,
+                    min_width=min_width,
                     cleaner=cleaner,
                     **cleaner_kwargs
                 )
@@ -1137,6 +1146,7 @@ def display_results(
             set_width_cols=set_width_cols,
             full_cols=full_cols,
             fold_cols=fold_cols,
+            min_width=min_width,
             cleaner=cleaner,
             **cleaner_kwargs
         )
