@@ -8,10 +8,12 @@ import tablib
 import yaml
 from yarl import URL
 
-from ... import constants, log, utils
+from ... import log, utils
 from ...client import Response
 
 if TYPE_CHECKING:
+    from centralcli.typedefs import CloudAuthUploadTypes
+
     from ...client import Session
 
 class CloudAuthAPI:
@@ -58,7 +60,7 @@ class CloudAuthAPI:
 
     async def cloudauth_upload_fixme(  # pragma: no cover
         self,
-        upload_type: constants.CloudAuthUploadTypes,
+        upload_type: CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -95,7 +97,7 @@ class CloudAuthAPI:
 
     async def cloudauth_upload(
         self,
-        upload_type: constants.CloudAuthUploadTypes,
+        upload_type: CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
     ) -> Response:
@@ -148,7 +150,7 @@ class CloudAuthAPI:
 
     async def cloudauth_upload_status(
         self,
-        upload_type: constants.CloudAuthUploadTypes,
+        upload_type: CloudAuthUploadTypes,
         ssid: str = None,
     ) -> Response:
         """Read upload status of last file upload.
