@@ -8,7 +8,7 @@ import typer
 from rich.markup import escape
 
 from centralcli import cache, common, config, log, render, utils
-from centralcli.cache import CacheDevice, CacheSite, CentralObject, api
+from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
 from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade
 from centralcli.clitree import dev as clidev
@@ -535,7 +535,7 @@ def archive(
     _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
     serials = []
-    cache_devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    cache_devs: list[CacheDevice| CacheInvDevice] = [common.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
     for dev_in, cache_dev in zip(devices, cache_devs):
         if cache_dev:
             _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
@@ -547,7 +547,7 @@ def archive(
             serials += [dev_in]
 
 
-    render.console.print(_msg, _emsg, sep="\n", emoji=False)
+    render.econsole.print(_msg, _emsg, sep="\n", emoji=False)
     if render.confirm(yes):
         resp = api.session.request(api.platform.archive_devices, serials)
         render.display_results(resp, tablefmt="action")
@@ -581,7 +581,7 @@ def unarchive(
     else:
         _dev_msg = '\n    '.join(serials)
         _msg = f"{_msg}\n    {_dev_msg}\n"
-    render.console.print(_msg, emoji=False)
+    render.econsole.print(_msg, emoji=False)
 
     resp = api.session.request(api.platform.unarchive_devices, serials)
     render.display_results(resp, tablefmt="action")
