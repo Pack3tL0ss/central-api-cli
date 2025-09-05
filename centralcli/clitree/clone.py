@@ -29,7 +29,7 @@ def group(
     if aos10:
         render.econsole.print(f"    Upgrade cloned group to AOS10: {color(True)}")
         render.econsole.print(
-            "\n    [dark_orange3]:warning:[/dark_orange]  [italic]Upgrade doesn't always work despite "
+            "\n    [dark_orange3]:warning:[/dark_orange3]  [italic]Upgrade doesn't always work despite "
             f"returning {color('success')},\n    Group is cloned if {color('success')} is returned "
             "but upgrade to AOS10 may not occur.\n    API method appears to have some caveats."
             "\n    Use [cyan]cencli show groups[/] after clone to verify."
