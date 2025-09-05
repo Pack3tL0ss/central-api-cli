@@ -15,6 +15,13 @@ def clean_mac(mac: str) -> str:
 
 # tty size is MonkeyPatched to 190, 55 the end result during pytest runs is 156, 31
 # Not sure why but it's larger than the 80, 24 fallback which it was using.
+def test_check_fw_available():
+    result = runner.invoke(app, ["check", "firmware-available", "ap", "10.7.2.1_93286"],)
+    capture_logs(result, "test_check_fw_available")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_show_alerts():
     result = runner.invoke(app, ["-d", "show", "alerts", "--debug"],)
     capture_logs(result, "test_show_alerts")
