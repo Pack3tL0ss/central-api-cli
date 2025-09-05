@@ -64,6 +64,13 @@ def test_add_group4_aos10_gw_wlan():
     ]
 
 
+def test_add_group5_mb_mon_only_cx_sw():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx", "-Y"])
+    capture_logs(result, "test_add_group5_mb_mon_only_cx_sw")
+    assert result.exit_code == 0
+    assert "Created" in result.stdout
+
+
 def test_add_group_invalid_combination_of_dev_types():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group_fail", "--cx", "--sdwan", "--gw-role", "branch", "-Y"])
     capture_logs(result, "test_add_group_invalid_combination_of_dev_types", expect_failure=True)
