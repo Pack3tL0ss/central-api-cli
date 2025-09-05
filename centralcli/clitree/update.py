@@ -137,7 +137,7 @@ def group(
     group: str = common.arguments.group,
     wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(None, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help="Gateway Role", show_default=False,),
+    gw_role: GatewayRole = typer.Option(None, help=f"Gateway Role {render.help_block('branch')}", show_default=True,),
     aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default AOS8/IAP)", show_default=False),
     mb: bool = typer.Option(None, "--mb", help="Configure Group for MicroBranch APs (AOS10 only"),
     ap: bool = typer.Option(None, "--ap", help="Allow APs in group"),
@@ -197,6 +197,9 @@ def group(
         _msg = f"{_msg}\n    [cyan]WLAN Template Group[/cyan]: [bright_green]{wlan_tg is True}[/bright_green]"
     if gw_role is not None:
         _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role or 'branch'}[/bright_green]"
+    elif gw:
+        gw_role = GatewayRole.branch
+        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan] [red1]not specified[/]: Assigning default role [bright_green]branch[/bright_green]"
     if mb is not None:
         _msg = f"{_msg}\n    [cyan]MicroBranch[/cyan]: [bright_green]{mb is True}[/bright_green]"
     if mo_sw is not None:
