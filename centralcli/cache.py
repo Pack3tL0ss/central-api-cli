@@ -4084,7 +4084,7 @@ class Cache:
 
             return resp
 
-    async def update_guest_db(self, data: List[Dict[str, Any]] | List[int], portal_id: str = None, remove: bool = True) -> bool:
+    async def update_guest_db(self, data: List[Dict[str, Any]] | List[int], portal_id: str = None, remove: bool = False) -> bool:
         if remove:
             return await self.update_db(self.GuestDB, doc_ids=data)
 

@@ -131,7 +131,7 @@ def test_del_label_multi(ensure_cache_label2, ensure_cache_label3):
 
 
 def test_del_guest(ensure_cache_guest1):
-    result = runner.invoke(app, ["-d", "delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
+    result = runner.invoke(app, ["delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
     capture_logs(result, "test_del_guest")
     assert result.exit_code == 0
     assert "200" in result.stdout
