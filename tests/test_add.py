@@ -76,6 +76,12 @@ def test_add_group_invalid_combination_mon_only_cx():
     result.exit_code == 1
 
 
+def test_add_group_invalid_combination_mon_only_tg():
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--cx", "--mon-only-cx", "--wired-tg", "-Y"])
+    capture_logs(result, "test_add_group_invalid_combination_mon_only_tg", expect_failure=True)
+    result.exit_code == 1
+
+
 def test_add_group_invalid_gw_role():
     result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--gw", "--gw-role", "wlan", "-Y"])
     capture_logs(result, "test_add_group_invalid_gw_role", expect_failure=True)

@@ -214,7 +214,7 @@ def group(
     if not aos10 and microbranch:
         common.exit("[cyan]Microbranch[/] is only valid if group is configured as AOS10 group via [cyan]--aos10[/] option.")
     if (mon_only_sw or mon_only_cx) and wired_tg:
-        common.exit("[cyanMonitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
+        common.exit("[cyan]Monitor only[/] [bright_red]is not valid[/] for [cyan]template[/] group.")
     if mon_only_sw and "sw" not in allowed_types or mon_only_cx and "cx" not in allowed_types:
         common.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
@@ -236,9 +236,9 @@ def group(
     if microbranch:
         _msg = f"{_msg}\n    [cyan]AP Role[/cyan]: [bright_green]Microbranch[/bright_green]"
     if mon_only_sw:
-        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]True[/bright_green]"
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW[/cyan]: [bright_green]:white_check_mark:[/bright_green]"
     if mon_only_cx:
-        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]True[/bright_green]"
+        _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX[/cyan]: [bright_green]:white_check_mark:[/bright_green]"
     if cnx:
         _msg = f"{_msg}\n\n    [yellow]:information:[/]  [italic]Group will be configured as [bright_green]CNX[/] enabled.  All configuration must be done in CNX ([bright_green]C[/]entral [bright_green]N[/]ext Generation E[bright_green]x[/]perience)"
         _msg = f"{_msg}\n    [dark_orange3]:warning:[/]  [italic]CNX configuration is currently Select Availability, contant your HPE Aruba Networking Account Team for details.[/italic]"
