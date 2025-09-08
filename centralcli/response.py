@@ -202,11 +202,17 @@ class Response:
                     if not config.capture_file.exists():
                         config.capture_file.write_text("[\n")
                     with config.capture_file.open("a") as f:
-                        f.write(self.dump())
+                        written = f.write(self.dump())
+                        log.info(f"raw capture wrote {written} to capture file", caption=True)
         except Exception as e:
             log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}", log=True, caption=True)
 
     def dump(self) -> str:
+        def _get_body(res):
+            if hasattr(res, "_body"):
+                return self._response._body.decode("utf-8")
+            return res.content.decode("utf-8")
+
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         key = f"{self.method}_{_url.path_qs}"
         out = {
@@ -216,7 +222,7 @@ class Response:
                     "method": self.method,
                     # "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
                     "status": self.status,
-                    "content_type": "application/json" if not self._response else self._response.content_type,
+                    "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
                     "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-")},
                     "body": '',
                     "payload": {}
@@ -227,10 +233,10 @@ class Response:
                 _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
                 out[key]["payload"] = self.raw
             elif self._response:
-                out[key]["body"] = self._response._body.decode("utf-8")
+                out[key]["body"] = _get_body(self._response)
         except json.JSONDecodeError as e:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
-            out[key]["body"] = self._response._body.decode("utf-8")
+            out[key]["body"] = _get_body(self._response)
 
         return f"{json.dumps(out)},\n"
 
