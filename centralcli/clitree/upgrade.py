@@ -73,7 +73,7 @@ def device(
     if len(dev_types) > 1 and not reboot:  # This can only happen with ap and gw in the list of devices
         ver_msg = f"{ver_msg}.  :recycle:  APs will reboot [dim italic]always the case for APs[/] Gateways will not as '-R' not specified. [italic bright_red]Gateways will not be rebooted[/]!!"
     else:
-        ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
+        ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot or "ap" in dev_types else f"{ver_msg} ('-R' not specified, [italic bright_red]device will not be rebooted[/])"
 
     render.econsole.print(ver_msg)
     if len(devs) > 1:
