@@ -9,8 +9,14 @@ class EnvVar:
 env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
 
+
+def _get_current_test() -> str | None:
+    cur_test = environ.get("PYTEST_CURRENT_TEST")
+    if cur_test:
+        return cur_test.split("::")[1].split()[0]
 class Env:
     _is_pytest: bool = bool(environ.get("PYTEST_VERSION"))
+    _cur_test: str | None = _get_current_test
 
     def __init__(self):
         self.workspace: str = environ.get(env_var.workspace) or environ.get(classic_env_var.workspace)
@@ -41,9 +47,14 @@ class Env:
 
     @property
     def current_test(self) -> str | None:
-        cur_test = environ.get("PYTEST_CURRENT_TEST")
-        if cur_test:
-            return cur_test.split("::")[1].split()[0]
+        return self._cur_test
 
+    @current_test.setter
+    def current_test(self, value: str | None) -> str | None:  # pragma: no cover  This only hits outside of pytest used with --test <name of test> which implies --capture-raw to capture response for use in automated testing.
+        value = value if value.startswith("test_") else f"test_{value}"
+        environ["PYTEST_CURRENT_TEST"] = value
+        self._cur_test = value
+
+        return self._is_pytest
 
 env = Env()
