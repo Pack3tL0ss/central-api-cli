@@ -134,6 +134,12 @@ def test_del_guest(ensure_cache_guest1):
     assert result.exit_code == 0
     assert "200" in result.stdout
 
+def test_delete_template(ensure_cache_template):
+    result = runner.invoke(app, ["delete", "template",  "cencli_test_template", "--group", "cencli_test_group2", "-Y"])
+    capture_logs(result, "test_delete_template")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
 if config.dev.mock_tests:
     def test_delete_webhook():
         result = runner.invoke(app, ["delete", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7", "-y"])

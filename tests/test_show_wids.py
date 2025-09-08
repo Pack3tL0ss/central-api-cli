@@ -64,6 +64,18 @@ def test_show_wids_interfering():
     assert "Interfering" in result.stdout
 
 
+def test_show_wids_suspect():
+    result = runner.invoke(app, [
+            "show",
+            "wids",
+            "suspect"
+        ]
+    )
+    capture_logs(result, "test_show_wids_suspect")
+    assert result.exit_code == 0
+    assert "Suspect" in result.stdout
+
+
 def test_show_wids_wrong_swarm_version():
     result = runner.invoke(app, [
             "show",

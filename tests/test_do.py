@@ -264,8 +264,8 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_upgrade_switch():
-        result = runner.invoke(app, ["upgrade",  "device", test_data["switch"]["serial"], "10.16.1006", "-Ry"])
+    def test_upgrade_switch_scheduled():
+        result = runner.invoke(app, ["upgrade",  "device", test_data["switch"]["serial"], "10.16.1006", "--at", "9/6/2025-05:00", "-Ry"])
         capture_logs(result, "test_upgrade_switch")
         assert result.exit_code == 0
         assert "200" in result.stdout

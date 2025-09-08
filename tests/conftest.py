@@ -530,3 +530,35 @@ def ensure_cache_guest1():
         if missing:
             assert asyncio.run(cache.update_guest_db(data=batch_del_guests))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_template():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "cencli_test_template",
+            "device_type": "sw",
+            "group": "cencli_test_group2",
+            "model": "ALL",
+            "version": "ALL",
+            "template_hash": "0976d6fef0f24e2d7cd38886f608757a"
+        }
+        if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
+            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_template_by_name():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "2930F-8",
+            "device_type": "sw",
+            "group": "Branch1",
+            "model": "JL258A",
+            "version": "ALL",
+            "template_hash": "0ba83fe0cc6e363891d80b8cba8223a8"
+        }
+        if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
+            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data))
+    yield

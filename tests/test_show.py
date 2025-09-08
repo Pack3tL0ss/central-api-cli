@@ -429,7 +429,7 @@ def test_show_template_by_dev_serial():
     assert "%_sys_hostname%" in result.stdout
 
 
-def test_show_template_by_name():
+def test_show_template_by_name(ensure_cache_template_by_name):
     result = runner.invoke(app, ["show", "templates", test_data["template"]["name"].lower(), "--group", test_data["template"]["group"].upper()])
     capture_logs(result, "test_show_template_by_name")
     assert result.exit_code == 0

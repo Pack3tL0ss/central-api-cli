@@ -63,7 +63,7 @@ def test_mpsk_completion_partial_name(ctx=ctx, incomplete: str = test_data["mpsk
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_template_completion_partial_name(incomplete: str = test_data["template"]["name"].capitalize()[0:-2]):
+def test_dev_template_completion_partial_name(ensure_cache_template_by_name, incomplete: str = test_data["template"]["name"].capitalize()[0:-2]):
     result = list(cache.dev_template_completion(incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])

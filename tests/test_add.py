@@ -112,14 +112,23 @@ def test_add_site_by_address():
 
 def test_add_site_by_geo():
     result = runner.invoke(app, ["-d", "add", "site",  "cencli_test_site4", "--lat", "36.378545", "--lon", "-86.360740", "-Y"])
+    capture_logs(result, "test_add_site_by_geo")
     assert True in [
         result.exit_code == 0 and "36.37" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout
     ]
 
 
+# def test_add_template(ensure_cache_group2):
+#     result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["add"], "--dev-type", "sw", "-Y"])
+#     capture_logs(result, "test_add_template")
+#     assert result.exit_code == 0
+#     assert "201" in result.stdout
+
+
 def test_add_label():
     result = runner.invoke(app, ["-d", "add", "label",  "cencli_test_label1", "-Y"])
+    capture_logs(result, "test_add_label")
     assert True in [
         result.exit_code == 0 and "test_label" in result.stdout,
         result.exit_code == 1 and "already exist" in result.stdout
