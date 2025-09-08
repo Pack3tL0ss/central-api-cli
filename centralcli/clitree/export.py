@@ -371,10 +371,30 @@ def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
     return ap_data
 
 
+def generate_redsky_csv(ap_data: list[dict[str, str]]) -> list[dict[str, str]]:
+    redsky_out = []
+    for ap in ap_data:
+        for bssid in ap["bssids"]:
+            redsky_out += [
+                {
+                    "BSSID": bssid,
+                    "Building Name": ap["building"],
+                    "Location Name": ap["floor"],
+                    "Description": None,
+                    "Masking": None
+                }
+            ]
+    return redsky_out
+
+
 @app.command(hidden=True)  # WIP not fully implemented
 def redsky_bssids(
-    group: str = common.options.get("group", help="Export device level configs for a specific Group",),
-    site: str = common.options.get("site", help="Export device level configs for a specific Site",),
+    group: str = common.options.get("group", help="Export device level configs for a specific Group", hidden=True),  # TODO implement and unhide
+    site: str = common.options.get("site", help="Export device level configs for a specific Site", hidden=True),     # TODO sort/reverse options
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
     raw: bool = common.options.raw,
     outfile: Path = common.options.outfile,
     pager: bool = common.options.pager,
@@ -388,13 +408,26 @@ def redsky_bssids(
     """
     api = ClassicAPI()
     bssid_resp = api.session.request(api.monitoring.get_bssids)
+    no_loc_aps = []
     if bssid_resp.ok:
         # bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in [*[b for b in bssid["bssids"] or [] if b], {"macaddr": bssid["macaddr"]}] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
         bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in bssid["bssids"] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
         with Spinner("Fetching AP locations from VisualRF"):
             location_data = get_location_for_all_aps()
-        bssid_resp.output = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items()]
-    render.display_results(bssid_resp)
+        ap_data = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items() if location_data.get(k)]
+        no_loc_aps = [{"serial": k, **v} for k, v in bssids_by_serial.items() if not location_data.get(k)]
+        bssid_resp.output = ap_data if not do_csv else generate_redsky_csv(ap_data)
+
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="csv")
+
+    render.display_results(bssid_resp, tablefmt=tablefmt, title="AP / BSSID Location info", caption = None if tablefmt == "csv" else "Use default format (csv) for redsky formatted output.", outfile=outfile, pager=pager, exit_on_fail=False)
+
+    if no_loc_aps:
+        render.econsole.print(f"\n[dark_orange3]:warning:[/]  The following [cyan]{len(no_loc_aps)}[/] APs do not appear to be placed on a floor plan.  They are not included in the BSSID location mapping output:")
+        render.econsole.print("\n".join([f"{ap['name']}: {ap['serial']}" for ap in no_loc_aps]))
+
+    common.exit(code = 0 if bssid_resp.ok else 1)
+
 
 
 
