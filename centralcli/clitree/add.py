@@ -14,7 +14,7 @@ from rich.console import Console
 
 from centralcli import common, config, log, render, utils
 from centralcli.client import BatchRequest
-from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, lib_to_api, state_abbrev_to_pretty
+from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, state_abbrev_to_pretty
 from centralcli.render import console, econsole
 from centralcli.response import Response
 
@@ -554,17 +554,44 @@ def template(
 
     render.display_results(resp, tablefmt="action")
     if resp.ok:
+        api_to_cli_dev_type = {
+            "ArubaSwitch": "sw",
+            "CX": "cx",
+            "IAP": "ap",
+            "MobilityController": "gw"
+        }
         _ = api.session.request(
             common.cache.update_template_db, data={
-                "device_type": lib_to_api(dev_type, "template"),
+                "name": name,
+                "device_type": api_to_cli_dev_type.get(dev_type, dev_type.lower()),
                 "group": group.name,
                 "model": model,
-                "name": name,
-                "template_hash": template_hash,
                 "version": version,
+                "template_hash": template_hash,
             },
             add=True
         )
+
+def _get_variable_file(var_file: Path) -> dict[str, dict[str, str]]:
+    var_data = config.get_file_data(var_file)
+
+    invalid = None
+    try:
+        if isinstance(var_data, list):
+            var_data = {dev_vars["_sys_serial"]: dev_vars for dev_vars in var_data}
+        elif "_sys_serial" in var_data:
+            var_data = {var_data["_sys_serial"]: var_data}
+    except KeyError as e:
+        log.exception(f"{repr(e)} While attempting to parse variables from {var_file.name}", caption=True)
+        invalid = True
+
+    if not all("_sys_serial" in vars and "_sys_lan_mac" in vars for vars in var_data.values()):
+        invalid = True
+
+    if invalid:
+        common.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
+
+    return var_data
 
 
 @app.command()
@@ -577,24 +604,19 @@ def variables(
 ) -> None:
     """Upload variables for a device from file
 
+    Use this command to add/define variables for a device that does not have variables yet.
+    [deep_sky_blue3]:information:[/] Use [cyan]cencli update variables[/] to update variables for a device with existing variables.
+
     Variables: _sys_serial, and _sys_lan_mac are required.
     """
-    var_dict = config.get_file_data(variable_file)
-    serial = var_dict.get("_sys_serial")
-    mac = var_dict.get("_sys_lan_mac")
-    if any([var is None for var in [serial, mac]]):
-        common.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
+    var_data = _get_variable_file(variable_file)
 
-    econsole.print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] the following variables for device with serial [cyan]{serial}[/]")
-    _ = [render.console.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.configuration.create_device_template_variables,
-            serial,
-            mac,
-            var_dict=var_dict
-        )
-        render.display_results(resp, tablefmt="action")
+    econsole.print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] variables for {len(var_data)} device with variables defined in [cyan]{variable_file.name}[/]")
+    render.confirm(yes)
+
+    batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, serial, dev_data["_sys_lan_mac"], var_dict=dev_data) for serial, dev_data in var_data.items()]
+    batch_res = api.session.batch_request(batch_reqs)
+    render.display_results(batch_res, tablefmt="action")
 
 
 # TODO config option for different random pass formats
