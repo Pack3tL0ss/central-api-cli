@@ -96,7 +96,7 @@ omit = [
     "centralcli/setup.py",
     "centralcli/webhook.py",
     "centralcli/snow.py",
-    "boilerplate/*",
+    "centralcli/boilerplate/*",
     "protobuf/*"
 ]
 
