@@ -208,10 +208,17 @@ def test_save():
 
 
 def test_sync_gw():
-    result = runner.invoke(app, ["sync",  test_data["gateway"]["name"]])
+    result = runner.invoke(app, ["sync", test_data["gateway"]["name"]])
     capture_logs(result, "test_sync_gw")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+def test_ts_mesh():
+    result = runner.invoke(app, ["ts", "mesh", test_data["mesh_ap"]["name"]])
+    capture_logs(result, "test_ts_mesh")
+    assert result.exit_code == 0
+    assert "COMMAND" in result.stdout
 
 
 if config.dev.mock_tests:

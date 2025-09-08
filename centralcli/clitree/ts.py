@@ -261,6 +261,33 @@ def ssid(
 
 
 @app.command()
+def mesh(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show output of commands to help troubleshoot Mesh/Bridge links (APs Only)
+
+    [cyan]Returns the output of the following commands.[/]
+
+    [cyan]-[/] show ap mesh link
+    [cyan]-[/] show ap mesh neighbours
+    [cyan]-[/] show ap mesh counters
+    [cyan]-[/] show ap mesh cluster active
+    [cyan]-[/] show ap mesh cluster configuration
+    [cyan]-[/] show ap mesh cluster topology
+    [cyan]-[/] show ap mesh cluster status
+    [cyan]-[/] show ap mesh debug status
+    """
+    dev: CacheDevice = common.cache.get_dev_identifier(device, dev_type=("ap"))
+    commands = [87, 88, 86, 468, 469, 470, 471, 472]
+    send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
+
+
+@app.command()
 def show_tech(
     device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
     outfile: Path = common.options.outfile,
