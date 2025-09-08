@@ -1703,8 +1703,8 @@ class CLICommon:
             self.exit(utils.clean_validation_errors(e))
 
         devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
-        confirm_msg =[]
-        batch_reqs, tag_ids = [], []
+        confirm_msg = []
+        batch_reqs = []
         for sub_id, res in devs_by_sub_id.items():
             if not res.devices:
                 continue
@@ -1715,20 +1715,17 @@ class CLICommon:
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
                 confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
-            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
-            if tags:
-                tag_ids += res.ids
+            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id, tags=tags)]
 
         if tags:
             _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in tags.items()])
-            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(res)}[/] [bright_green]devices [dim italic]from import[/][/bright_green]:\n{_tag_msg}"]
-            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=tag_ids, tags=tags)]
+            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(_data)}[/] [bright_green]devices [dim italic]from import[/][/bright_green]:\n{_tag_msg}"]
+
         if _data.has_tags:
             for _tags, _ids in _data.ids_by_tags():
                 _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in _tags.items()])
                 confirm_msg += [f"\n[bright_green]The following {'additional ' if tags else ''}tags will be assigned to[/] [cyan]{len(_ids)}[/] [bright_green]devices [dim italic]based on data defined in import[/][/bright_green]:\n{_tag_msg}"]
-                for chunk in utils.chunker(_ids, 25):
-                    batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=chunk, tags=_tags)]
+                batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=_ids, tags=_tags)]
 
         if _data.not_assigned_devs:
             confirm_msg += [

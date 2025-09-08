@@ -70,11 +70,11 @@ class GreenLakeDevicesAPI:
             payloads += {"application": {"id": application_id}}
 
         batch_reqs = []
-        for payload in payloads:
-            for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
-                query_str = "&".join([f"id={dev}" for dev in chunk])
-                url = f"{url}?{query_str}"
-                batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
+        for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
+            query_str = "&".join([f"id={dev}" for dev in chunk])
+            for payload in payloads:
+                _url = f"{url}?{query_str}"
+                batch_reqs += [BatchRequest(self.session.patch, _url, json_data=payload, headers=header)]
 
         return await self.session._batch_request(batch_reqs)
 
