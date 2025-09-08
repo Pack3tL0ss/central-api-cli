@@ -23,7 +23,7 @@ HomePage: https://github.com/Pack3tL0ss/central-api-cli
 import os
 import sys
 from pathlib import Path
-from typing import Iterable, List, Literal, Optional, overload
+from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
 
 import click
 import typer
@@ -195,16 +195,35 @@ if os.name == "nt":  # pragma: no cover
 # if not os.environ.get("LESS"):
 os.environ["LESS"] = "-RX +G"
 
+def _get_value_from_argv(flag: str, *, is_flag: bool = False, transformer: Callable = None, strip_from_argv: bool = True) -> tuple[Sequence, str | int | bool]:
+    if flag not in sys.argv:
+        return sys.argv, None if not is_flag else False
+
+    idx = sys.argv.index(flag)
+    if is_flag:
+        value = True
+    else:
+        value = sys.argv[idx + 1]  # want to fail fast here so not checking len of sys.argv
+
+    value = value if not transformer else transformer(value)
+    if strip_from_argv:
+        _ = [sys.argv.pop(idx) for _ in range(idx, idx + (1 if is_flag else 2))]
+
+    return sys.argv, value
+
+
+
+
 # Most of these are global hidden flags/args that are stripped before sending to cli
 # We do it this way, as we then don't need to include them in each CLI command
 # Most would be hidden flags anyway.
-raw_out = False
-if "--raw" in sys.argv:
-    raw_out = True
-    _ = sys.argv.pop(sys.argv.index("--raw"))
+sys.argv, raw_out = _get_value_from_argv("--raw", is_flag=True)
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
     config.dev.capture_raw = True
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
+if "--test" in sys.argv:
+    config.dev.capture_raw = True
+    sys.argv, env.current_test = _get_value_from_argv("--test")
 if "--debug-limit" in sys.argv:
     _idx = sys.argv.index("--debug-limit")
     _ = sys.argv.pop(sys.argv.index("--debug-limit"))
