@@ -51,7 +51,7 @@ class AddGroupArgs(str, Enum):
 err_console = Console(stderr=True)
 
 
-def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, group: str = None, license: str | List[str] = None) -> None:
+def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, license: str | List[str] = None) -> None:
     if license:
         try:
             license = utils.unlistify(license)
@@ -152,13 +152,12 @@ def device(
         ]
         kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
 
-    console.print("".join(_msg), emoji=False)
+    render.econsole.print("".join(_msg), emoji=False)
 
     if render.confirm(yes):
         resp = api.session.request(api.platform.add_devices, **kwargs)
-        render.display_results(resp, tablefmt="action")
-        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, group=group, license=subscription)
-
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, license=subscription)
 
 @app.command()
 def group(
