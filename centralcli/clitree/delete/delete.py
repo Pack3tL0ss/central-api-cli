@@ -85,7 +85,7 @@ def label_(
 
 @app.command()
 def portal(
-    portals: List[str] = typer.Argument(..., metavar=iden_meta.label_many, autocompletion=common.cache.portal_completion, show_default=False,),
+    portals: list[str] = common.arguments.portals,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -95,14 +95,12 @@ def portal(
 
     Delete Guest Portal Profile(s)/Splash Page(s)
     """
-    cache_portals: List[CachePortal] = [common.cache.get_name_id_identifier('portal', portal) for portal in portals]
+    cache_portals: list[CachePortal] = [common.cache.get_name_id_identifier('portal', portal) for portal in portals]
     reqs = [BatchRequest(api.guest.delete_portal_profile, p.id) for p in cache_portals]
 
     portal_names = utils.summarize_list([p.name for p in cache_portals])
-    if len(portals) == 1:
-        render.econsole.print(f'[red]Deleting[/] portal profile: {portal_names.strip()}.')
-    else:
-        render.econsole.print(f'[red]Deleting[/] {len(cache_portals)} portal profiles:\n{portal_names}')
+    _sfx = "portal profile:" if len(portals) == 1 else f"{len(cache_portals)} portal profiles:"
+    render.econsole.print(f'[red]Delet{"e" if not yes else "ing"}[/] {_sfx} {portal_names}')
 
     if render.confirm(yes):
         batch_resp = api.session.batch_request(reqs)
@@ -205,13 +203,32 @@ def template(
 
     template: CacheTemplate = common.cache.get_template_identifier(template, group=group)
 
-    print(
-        f"[bright_red]{'Delete' if not yes else 'Deleting'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
+    render.econsole.print(
+        f"[bright_red]Delet{'e' if not yes else 'ing'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
     )
     if render.confirm(yes):
         resp = api.session.request(api.configuration.delete_template, template.group, template.name)
         render.display_results(resp, tablefmt="action", exit_on_fail=True)
         _ = api.session.request(common.cache.update_template_db, doc_ids=template.doc_id)
+
+
+@app.command(no_args_is_help=True)
+def variables(
+    device: str = common.arguments.get("device", autocompletion=common.cache.dev_switch_ap_completion),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Delete all variables associated with a device."""
+    dev = common.cache.get_inv_identifier(device, dev_type=("ap", "cx", "sw"))
+
+    render.econsole.print(
+        f"[bright_red]Delet{'e' if not yes else 'ing'}[/] All template variables associated with device [cyan]{dev.summary_text}[/]"
+    )
+    if render.confirm(yes):
+        resp = api.session.request(api.configuration.delete_device_template_variables, dev.serial)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
 # TOGLP
