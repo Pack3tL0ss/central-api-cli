@@ -27,8 +27,15 @@ class VisualRFAPI:
         """
         url = "/visualrf_api/v1/campus"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+        }
 
+        return await self.session.get(url, params=params)
+
+    # API-FLAW: offset does not work the way stated in swagger, it works the way it does everywhere else i.e. offset 50 will return items 50 on, not the 50th page (as swagger indicates)
+    # Response does not indicate total # of buildings, so there is no way to know how many calls are necessary when campus has > 100 buildings
     async def get_buildings_for_campus(
         self,
         campus_id: str,
@@ -48,7 +55,25 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/campus/{campus_id}"
 
-        return await self.session.get(url)
+        buildings = []
+        while True:
+            params = {
+                "offset": offset,
+                "limit": limit,
+            }
+            resp = await self.session.get(url, params=params)
+
+            if not resp.ok:
+                break
+
+            buildings += resp.raw.get("buildings", [])
+            if resp.raw.get("building_count", 9999) < limit:
+                resp.output = resp.raw = {**resp.raw, "buildings": buildings, "building_count": len(buildings)}
+                break
+
+            offset = offset + limit
+
+        return resp
 
     async def get_floors_for_building(
         self,
@@ -72,7 +97,13 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/building/{building_id}"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+            "units": units
+        }
+
+        return await self.session.get(url, params=params)
 
     async def get_floor_details(
         self,
@@ -97,7 +128,13 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/floor/{floor_id}"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+            "units": units
+        }
+
+        return await self.session.get(url, params=params)
 
     async def get_aps_for_floor(
         self,
@@ -120,7 +157,13 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/access_point_location"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+            "units": units
+        }
+
+        return await self.session.get(url, params=params)
 
     async def get_ap_location(
         self,
@@ -146,7 +189,13 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/access_point_location/{ap_id}"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+            "units": units
+        }
+
+        return await self.session.get(url, params=params)
 
     async def get_client_location(
         self,
@@ -199,4 +248,10 @@ class VisualRFAPI:
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/client_location"
 
-        return await self.session.get(url)
+        params = {
+            "offset": offset,
+            "limit": limit,
+            "units": units
+        }
+
+        return await self.session.get(url, params=params)

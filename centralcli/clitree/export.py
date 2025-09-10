@@ -354,7 +354,7 @@ def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
     floor_reqs = [BatchRequest(api.visualrf.get_floors_for_building, bldg) for bldg in buildings]
     floor_resp = api.session.batch_request(floor_reqs)
     floors = {
-        floor["floor_id"]: {"name": floor["floor_name"], "level": floor["floor_level"], "building_id": floor["building_id"]} for resp in floor_resp for floor in resp.raw.get("floors", [])
+        floor["floor_id"]: {"name": floor["floor_name"], "level": floor["floor_level"] if not floor["floor_level"].is_integer() else int(floor["floor_level"]), "building_id": floor["building_id"]} for resp in floor_resp for floor in resp.raw.get("floors", [])
     }
 
     ap_loc_reqs = [BatchRequest(api.visualrf.get_aps_for_floor, floor) for floor in floors]
@@ -367,8 +367,9 @@ def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
             "floor": floors[ap["floor_id"]]["level"]
         } for resp in ap_loc_resp for ap in resp.raw["access_points"]
     }
+    last_call = sorted(ap_loc_resp, key=lambda res: res.rl)[0]
 
-    return ap_data
+    return ap_data, last_call.rl
 
 
 def generate_redsky_csv(ap_data: list[dict[str, str]]) -> list[dict[str, str]]:
@@ -408,17 +409,18 @@ def redsky_bssids(
     """
     api = ClassicAPI()
     bssid_resp = api.session.request(api.monitoring.get_bssids)
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="csv")
     no_loc_aps = []
     if bssid_resp.ok:
         # bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in [*[b for b in bssid["bssids"] or [] if b], {"macaddr": bssid["macaddr"]}] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
         bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in bssid["bssids"] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
         with Spinner("Fetching AP locations from VisualRF"):
-            location_data = get_location_for_all_aps()
+            location_data, last_rl = get_location_for_all_aps()
+        bssid_resp.rl = last_rl
         ap_data = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items() if location_data.get(k)]
         no_loc_aps = [{"serial": k, **v} for k, v in bssids_by_serial.items() if not location_data.get(k)]
-        bssid_resp.output = ap_data if not do_csv else generate_redsky_csv(ap_data)
+        bssid_resp.output = ap_data if tablefmt != "csv" else generate_redsky_csv(ap_data)
 
-    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="csv")
 
     render.display_results(bssid_resp, tablefmt=tablefmt, title="AP / BSSID Location info", caption = None if tablefmt == "csv" else "Use default format (csv) for redsky formatted output.", outfile=outfile, pager=pager, exit_on_fail=False)
 
