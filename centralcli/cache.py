@@ -4039,7 +4039,8 @@ class Cache:
                     for inner in resp.output
                 ]
             combined_output = [inner for r in batch_resp for inner in r.output if r.ok]
-            resp = sorted([r for r in batch_resp if r.ok], key=lambda r: r.rl)[-1] or batch_resp[-1]  # the or comes into play if all have failed.
+            last_resp = sorted([r for r in batch_resp if r.ok], key=lambda r: r.rl)[0] or batch_resp[-1]  # the or comes into play if all have failed.
+            resp.rl = last_resp.rl
             if resp.ok:
                 resp.output = combined_output
         else:
@@ -4408,8 +4409,7 @@ class Cache:
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
-    ) -> list[CacheDevice]:
-        ...
+    ) -> list[CacheDevice]: ...
 
     @overload
     def get_dev_identifier(
@@ -4422,8 +4422,7 @@ class Cache:
         completion: bool,
         silent: Optional[bool],
         exit_on_fail: Literal[False]
-    ) -> list[CacheDevice | None]:
-        ...
+    ) -> list[CacheDevice | None]: ...
 
     @overload
     def get_dev_identifier(
@@ -4433,8 +4432,7 @@ class Cache:
         completion: bool,
         silent: bool,
         exit_on_fail: Literal[False]
-    ) -> list[CacheDevice | None]:
-        ...
+    ) -> list[CacheDevice | None]: ...
 
     @overload
     def get_dev_identifier(
@@ -4448,9 +4446,7 @@ class Cache:
         silent: Optional[bool],
         include_inventory: bool,
         exit_on_fail: bool
-    ) -> list[CacheDevice | CacheInvDevice | None]:
-        ...
-    # def get_dev_identifier(self, query_str: str | Iterable[str], completion: bool, dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,) -> list[CacheDevice]: ...
+    ) -> list[CacheDevice | CacheInvDevice | None]: ...
 
     @overload
     def get_dev_identifier(
@@ -4637,17 +4633,6 @@ class Cache:
                     # fuzz_match = None
                     if FUZZ and self.devices and not silent:
                         match = self.fuzz_lookup(query_str, db=self.DevDB, dev_type=dev_type)
-                        # if dev_type:
-                        #     fuzzy_match = process.extract(query_str, [d["name"] for d in self.devices if "name" in d and d["type"] in dev_type], limit=1)
-                        #     if fuzzy_match:
-                        #         fuzz_match, fuzz_confidence = fuzzy_match[0]
-                        # else:
-                        #     fuzz_match, fuzz_confidence = process.extract(query_str, [d["name"] for d in self.devices if "name" in d], limit=1)[0]
-
-                        # if fuzz_match:
-                        #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        #     if fuzz_confidence >= 70 and render.confirm(prompt=confirm_str, abort=False):
-                        #         match = self.DevDB.search(self.Q.name == fuzz_match)
 
                     # If there is an inventory only match we still update monitoring cache (to see if device came online since it was added. Otherwise commands like move will reject due to only being in Inventory)
                     if not match or Model == CacheInvDevice:
