@@ -1240,6 +1240,7 @@ class IdenMetaVars:
         self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
+        self.portal_many = "[PORTAL_NAME] ... (multiple allowed)"
         self.guest = "[name|email|phone|id]"
         self.ip_dhcp = "[IP_ADDRESS|'dhcp']"
 
