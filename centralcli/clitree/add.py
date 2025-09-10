@@ -15,7 +15,7 @@ from rich.console import Console
 from centralcli import common, config, log, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, state_abbrev_to_pretty
-from centralcli.render import console, econsole
+from centralcli.render import econsole
 from centralcli.response import Response
 
 if TYPE_CHECKING:
