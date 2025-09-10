@@ -113,7 +113,8 @@ exclude_lines = [
     "if missing:",
     "if ctx.resilient_parsing:",
     "if not config.valid:",
-    "if config.is_old_cfg:"
+    "if config.is_old_cfg:",
+    "if match and not completion:",  # cache get_..._identifier methods multi-match requires tty
 ]
 exclude_also = [
     # 1. Exclude an except clause of a specific form:

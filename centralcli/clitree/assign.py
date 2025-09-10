@@ -4,13 +4,12 @@ from datetime import datetime
 
 import typer
 
+from centralcli import common, log, render, utils
 from centralcli.cache import CacheDevice, CacheLabel, CacheSub
+from centralcli.clicommon import APIClients
+from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
-
-from .. import common, log, render, utils
-from ..clicommon import APIClients
-from ..client import BatchRequest
-from ..objects import DateTime
+from centralcli.objects import DateTime
 
 api_clients = APIClients()
 api = api_clients.classic
@@ -30,7 +29,7 @@ def license(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover
     """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
 
     :warning:  This command is deprecated, and will be replaced by `assign subscription` which is available now if Greenlake (glp)

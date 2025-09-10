@@ -88,7 +88,7 @@ def add_vlan(
     default: bool = common.options.default,
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover  hidden
     caasapi = caas.CaasAPI()
     cmds = []
     cmds += [f"vlan {pvid}", "!"]
@@ -156,7 +156,7 @@ def caas_batch(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover  Not used by any CLI command
     """Run Supported caas commands providing parameters via stored-tasks file
 
     :warning:  [bright_red]Use Caution[/]  This command is not tested often, as other options are available to accomplish similar tasks.

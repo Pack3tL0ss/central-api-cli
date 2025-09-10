@@ -1157,6 +1157,24 @@ class ConfigAPI:
         # return await self.session.patch(url, headers=headers, data=data)
         return await self.session.patch(url, json_data=json_data)
 
+
+    async def delete_device_template_variables(
+        self,
+        serial: str,
+    ) -> Response:
+        """Delete all of the template variables for a device.
+
+        Args:
+            serial (str): Serial number of the device.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/configuration/v1/devices/{serial}/template_variables"
+
+        return await self.session.delete(url)
+
+
     # >>>> CERTIFICATES <<<<
 
     async def get_certificates(

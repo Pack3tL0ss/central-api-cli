@@ -128,17 +128,39 @@ def test_del_label_multi(ensure_cache_label2, ensure_cache_label3):
     assert "200" in result.stdout
 
 
+def test_del_portal(ensure_cache_test_portal):
+    result = runner.invoke(app, [
+        "delete",
+        "portal",
+        "cencli_test_portal",
+        "-Y"
+        ])
+    capture_logs(result, "test_del_portal")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_del_guest(ensure_cache_guest1):
     result = runner.invoke(app, ["delete", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--yes"])
     capture_logs(result, "test_del_guest")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
-def test_delete_template(ensure_cache_template):
-    result = runner.invoke(app, ["delete", "template",  "cencli_test_template", "--group", "cencli_test_group2", "-Y"])
+
+def test_delete_template(ensure_cache_template, ensure_cache_group2):
+    result = runner.invoke(app, ["delete", "template",  "cencli_test_template", "cencli_test_group2", "-Y"])
     capture_logs(result, "test_delete_template")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+# This endpoint only works for devices that have checked in with Central, despite the fact you can pre-provision the variables
+def test_delete_variables(ensure_inv_cache_test_switch):
+    result = runner.invoke(app, ["delete", "variables",  test_data["test_devices"]["switch"]["serial"], "-Y"])
+    capture_logs(result, "test_delete_variables")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
 
 if config.dev.mock_tests:
     def test_delete_webhook():

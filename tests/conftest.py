@@ -187,7 +187,7 @@ def ensure_cache_group2():
                 "gw_role": "branch",
                 "aos10": False,
                 "microbranch": False,
-                "wlan_tg": False,
+                "wlan_tg": True,
                 "wired_tg": True,
                 "monitor_only_sw": False,
                 "monitor_only_cx": False,
@@ -252,8 +252,8 @@ def ensure_inv_cache_test_ap():
         devices = [
             {
                 "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
-                "serial": test_data["test_add_do_del_ap"]["serial"],
-                "mac": test_data["test_add_do_del_ap"]["mac"],
+                "serial": test_data["test_devices"]["ap"]["serial"],
+                "mac": test_data["test_devices"]["ap"]["mac"],
                 "type": "ap",
                 "model": "IAP-205-US",
                 "sku": "JL185A",
@@ -271,6 +271,27 @@ def ensure_inv_cache_test_ap():
 
 
 @pytest.fixture(scope="function")
+def ensure_inv_cache_test_switch():
+    if config.dev.mock_tests:
+        test_switch = {
+            "id": "5a3c4c8a-5756-5302-a036-2f04180b0dcf",
+            "serial": test_data["test_devices"]["switch"]["serial"],
+            "mac": test_data["test_devices"]["switch"]["mac"],
+            "type": "sw",
+            "model": "2530",
+            "sku": "J9774A",
+            "services": None,
+            "subscription_key": None,
+            "subscription_expires": None,
+            "assigned": True,
+            "archived": False
+        }
+        if test_switch["serial"] not in cache.inventory_by_serial:
+            assert asyncio.run(cache.update_inv_db(data=test_switch))
+    yield
+
+
+@pytest.fixture(scope="function")
 def ensure_dev_cache_test_ap():
     if config.dev.mock_tests:
         test_ap = {
@@ -279,22 +300,43 @@ def ensure_dev_cache_test_ap():
                 "type": "ap",
                 "model": "205",
                 "ip": "10.0.31.99",
-                "mac": test_data["test_add_do_del_ap"]["mac"],
-                "serial": test_data["test_add_do_del_ap"]["serial"],
+                "mac": test_data["test_devices"]["ap"]["mac"],
+                "serial": test_data["test_devices"]["ap"]["serial"],
                 "group": "cencli_test_group1",
                 "site": "cencli_test_site1",
                 "version": "10.7.2.0_92876",
-                "swack_id": test_data["test_add_do_del_ap"]["serial"],
+                "swack_id": test_data["test_devices"]["ap"]["serial"],
                 "switch_role": None
         }
-        if test_data["test_add_do_del_ap"]["serial"] not in cache.devices_by_serial:
+        if test_data["test_devices"]["ap"]["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
     yield
 
-    if test_data["test_add_do_del_ap"]["serial"] in cache.devices_by_serial:
-        serial = test_data["test_add_do_del_ap"]["serial"]
+    if test_data["test_devices"]["ap"]["serial"] in cache.devices_by_serial:
+        serial = test_data["test_devices"]["ap"]["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
     return
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_test_portal():
+    if config.dev.mock_tests:
+        test_portal = {
+            "name": "cencli_test_portal",
+            "id": "e2725c47-09e5-406a-b431-d503d02657ef",
+            "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/cencli_test_portal/capture",
+            "auth_type": "Anonymous",
+            "is_aruba_cert": False,
+            "is_default": False,
+            "is_editable": True,
+            "is_shared": True,
+            "reg_by_email": False,
+            "reg_by_phone": False
+        }
+
+        if test_portal["id"] not in cache.portals_by_id:
+            assert asyncio.run(cache.update_portal_db(data=[test_portal]))
+    yield
 
 
 def _ensure_cache_site1():

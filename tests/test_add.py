@@ -11,7 +11,6 @@ from ._test_data import test_cert_file
 runner = CliRunner()
 
 
-
 @pytest.fixture(scope="module", autouse=True)
 def ensure_not_cache_b4_adds():
     if config.dev.mock_tests:
@@ -37,8 +36,9 @@ def test_add_group1():
     ]
 
 
-def test_add_group2_wired_tg():
-    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group2", "--sw", "--wired-tg", "-Y"])
+def test_add_group2_tg():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group2", "--sw", "--ap", "--wired-tg", "--wlan-tg", "-Y"])
+    capture_logs(result, "test_add_group2_tg")
     assert any(
         [
             result.exit_code == 0 and "Created" in result.stdout,
@@ -120,10 +120,17 @@ def test_add_site_by_geo():
 
 
 # def test_add_template(ensure_cache_group2):
-#     result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["add"], "--dev-type", "sw", "-Y"])
+#     result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["template_file"], "--dev-type", "sw", "-Y"])
 #     capture_logs(result, "test_add_template")
 #     assert result.exit_code == 0
 #     assert "201" in result.stdout
+
+
+def test_add_variables(ensure_cache_group2):
+    result = runner.invoke(app, ["add", "variables",  test_data["test_devices"]["switch"]["variable_file"], "-Y"])
+    capture_logs(result, "test_add_variables")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
 
 
 def test_add_label():
@@ -158,11 +165,11 @@ def test_add_guest():
     assert "xception" not in result.stdout
 
 
-def test_add_device():
-    result = runner.invoke(app, ["-d", "add", "device",  "serial", "CN63HH906Z", "mac", "F0:5C:19:CE:7A:86", "group", "atm-local", "-s", "foundation-ap", "--yes"])
-    assert True in [
-        result.exit_code == 0 and "200" in result.stdout,
-    ]
+def test_add_device(ensure_cache_group2):
+    result = runner.invoke(app, ["-d", "add", "device",  "serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap", "--yes"])
+    capture_logs(result, "test_add_device")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
     assert "cache update ERROR" not in result.stdout
     assert "xception" not in result.stdout
 

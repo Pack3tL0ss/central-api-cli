@@ -55,7 +55,7 @@ def config_(
     yes: bool = common.options.yes,
     pager: bool = common.options.pager,
     debug: bool = common.options.debug,
-) -> None:
+) -> None:  # pragma: no cover
     """Convert Existing cencli config file to [dark_olive_green2]CFG_VERSION: 2[/]. Required to add support for [bright_green]GLP[/] and [dark_orange3]New Central[/].
 
     This command will parse the legacy cencli config [cyan]config.yaml[/] and convert it to [dark_olive_green2]CFG_VERSION: 2[/].

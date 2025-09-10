@@ -19,7 +19,7 @@ def test_add_device_missing_mac():
 
 
 def test_archive(ensure_inv_cache_test_ap):
-    result = runner.invoke(app, ["archive", test_data["test_add_do_del_ap"]["mac"], "-y"])
+    result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "-y"])
     capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
@@ -42,7 +42,7 @@ def test_convert_template():
 
 
 def test_unarchive(ensure_inv_cache_test_ap):
-    result = runner.invoke(app, ["unarchive", test_data["test_add_do_del_ap"]["serial"]])
+    result = runner.invoke(app, ["unarchive", test_data["test_devices"]["ap"]["serial"]])
     capture_logs(result, "test_unarchive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
@@ -58,14 +58,14 @@ def test_unarchive_multi(ensure_cache_batch_devices):
 
 
 def test_move_pre_provision(ensure_cache_group1, ensure_inv_cache_test_ap):
-    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group1", "-y"])
+    result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
 def test_move_group_and_site(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
-    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "group", "cencli_test_group3", "site", "cencli_test_site3", "--reset-group", "-y"])
+    result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group3", "site", "cencli_test_site3", "--reset-group", "-y"])
     capture_logs(result, "test_move_group_and_site")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -73,21 +73,21 @@ def test_move_group_and_site(ensure_cache_group3, ensure_cache_group1, ensure_ca
 
 
 def test_move_reset_group(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
-    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"], "--reset-group", "-y"])
+    result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "--reset-group", "-y"])
     capture_logs(result, "test_move_reset_group")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_move_missing_args():
-    result = runner.invoke(app, ["move", test_data["test_add_do_del_ap"]["serial"]])
+    result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"]])
     capture_logs(result, "test_move_missing_args", expect_failure=True)
     assert result.exit_code == 1
     assert "issing" in result.stdout
 
 
 def test_remove_test_ap_from_site(ensure_inv_cache_test_ap, ensure_dev_cache_test_ap, ensure_cache_site1):
-    result = runner.invoke(app, ["remove", test_data["test_add_do_del_ap"]["serial"], "site", "cencli_test_site1", "-y"])
+    result = runner.invoke(app, ["remove", test_data["test_devices"]["ap"]["serial"], "site", "cencli_test_site1", "-y"])
     capture_logs(result, "test_remove_test_ap_from_site")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -285,11 +285,39 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
+    def test_cancel_upgrade_ap():
+        result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["ap"]["serial"], "-y"])
+        capture_logs(result, "test_cancel_upgrade_ap")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_cancel_upgrade_switch():
+        result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["switch"]["serial"], "-y"])
+        capture_logs(result, "test_upgrade_switch")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_cancel_upgrade_swarm():
+        result = runner.invoke(app, ["cancel", "upgrade",  "swarm", test_data["aos8_ap"]["serial"], "-y"])
+        capture_logs(result, "test_cancel_upgrade_swarm")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
     def test_cancel_upgrade_group():
         result = runner.invoke(app, ["cancel", "upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "-y"])
         capture_logs(result, "test_cancel_upgrade_group")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    def test_cancel_upgrade_group_no_dev_type():
+        result = runner.invoke(app, ["cancel", "upgrade",  "group", test_data["upgrade_group"], "-y"])
+        capture_logs(result, "test_cancel_upgrade_group_no_dev_type", expect_failure=True)
+        assert result.exit_code == 1
+        assert "dev-type" in result.stdout
 
 
     def test_assign_subscription_by_key():
