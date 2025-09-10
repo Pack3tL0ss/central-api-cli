@@ -1,5 +1,5 @@
-# -*- coding: utf-8 -*-
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import getpass
@@ -25,7 +25,9 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
 from centralcli import caas, cache, cleaner, common, config, log, render, utils
-from centralcli.cache import CentralObject
+from centralcli.caas import CaasAPI
+from centralcli.cache import CacheDevice, CentralObject
+from centralcli.clicommon import APIClients
 from centralcli.client import BatchRequest
 from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
@@ -74,15 +76,11 @@ from centralcli.constants import (
     lib_to_gen_plural,
     what_to_pretty,
 )
-from centralcli.response import Response
+from centralcli.models.cache import Device
+from centralcli.objects import DateTime, ShowInterfaceFilters
+from centralcli.response import CombinedResponse, Response
+from centralcli.strings import cron_weekly
 
-from ...caas import CaasAPI
-from ...cache import CacheDevice
-from ...clicommon import APIClients
-from ...models.cache import Device
-from ...objects import DateTime, ShowInterfaceFilters
-from ...response import CombinedResponse
-from ...strings import cron_weekly
 from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
 
 if TYPE_CHECKING:
@@ -1796,7 +1794,7 @@ def templates(
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
 
 
-@app.command(short_help="Show Variables for all or specific device")
+@app.command()
 def variables(
     device: str = typer.Argument(
         None,
@@ -1819,8 +1817,9 @@ def variables(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ):
+    """Show Variables for all or a specific device"""
     if device and device != "all":
-        device = common.cache.get_dev_identifier(device, conductor_only=True)
+        device = common.cache.get_dev_identifier(device, include_inventory=True, conductor_only=True)
 
     resp = api.session.request(api.configuration.get_variables, serial=None if not device else device.serial,)
     if resp.ok and device:
@@ -1836,7 +1835,7 @@ def variables(
     render.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Variables" if not device else f"{device.name} Variables",
+        title="Variables" if not device else f"{device.summary_text} Variables",
         pager=pager,
         outfile=outfile,
     )
