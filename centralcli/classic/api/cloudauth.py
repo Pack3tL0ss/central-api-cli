@@ -132,7 +132,7 @@ class CloudAuthAPI:
         for _ in range(2):
             _resp: RequestsResponse = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
             _log = log.info if _resp.ok else log.error
-            _log(f"[PATCH] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
+            _log(f"[POST] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
             try:
                 output = _resp.json()
             except Exception:
