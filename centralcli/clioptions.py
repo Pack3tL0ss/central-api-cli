@@ -18,8 +18,8 @@ from .environment import env_var
 ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
-    "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "sort_by", "default", "workspace", "verbose",
-    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version"
+    "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
+    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band"
 ]
 
 class CLIArgs:
@@ -188,6 +188,7 @@ class CLIOptions:
         self.reverse: OptionInfo = typer.Option(False, "-r", help="Reverse output order", show_default=False, rich_help_panel="Formatting",)
         self.pager: OptionInfo = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
         self.ssid: OptionInfo = typer.Option(None, help="Filter/Apply command to a specific SSID", show_default=False)
+        self.band: OptionInfo = typer.Option(None, help=f"Show Bandwidth for a specific band [dim]{escape('[ap must be provided]')}[/]", show_default=False)
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,
@@ -210,6 +211,7 @@ class CLIOptions:
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.swarm_device: OptionInfo = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
+        self.swarm: OptionInfo = typer.Option(False, "-s", "--swarm", help="Filter by the swarm associated with the ap specified. [dim italic](device/AP Argument must be provided)[/]", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.sort_by: OptionInfo = typer.Option(
             None,
             "--sort",
