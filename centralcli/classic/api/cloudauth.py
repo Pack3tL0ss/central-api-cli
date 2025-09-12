@@ -58,12 +58,12 @@ class CloudAuthAPI:
 
         return resp
 
-    async def cloudauth_upload_fixme(  # pragma: no cover
+    async def cloudauth_upload_fixme(
         self,
         upload_type: CloudAuthUploadTypes,
         file: Path | str,
         ssid: str = None,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover
         """Upload file.
 
         This doesn't work still sorting the format of FormData
@@ -128,6 +128,7 @@ class CloudAuthAPI:
             "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
             'Accept': 'application/json'
         }
+        # TODO make like Add Template use requests to generate proper form_data and send with aiohttp
 
         for _ in range(2):
             _resp: RequestsResponse = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
@@ -302,7 +303,7 @@ class CloudAuthAPI:
         else:
             status = "disabled" if enabled is False else None
 
-        params = {} if not reset else {'resetMPSK': reset}
+        params = {} if not reset else {'resetMPSK': "true"}
 
         json_data = {
             'id': named_mpsk_id,
