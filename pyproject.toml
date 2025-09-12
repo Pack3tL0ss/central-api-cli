@@ -33,6 +33,7 @@ dependencies = [
     "colorama;platform_system == 'Windows'",
     "oauthlib>=3.2.2",
     "requests_oauthlib>=2.0.0",
+    "stringenum;python_version<'3.11'",
 ]
 
 keywords = [

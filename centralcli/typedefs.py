@@ -73,3 +73,9 @@ try:
     from typing import Self  # noqa
 except ImportError:
     ...
+
+
+try:
+    from enum import StrEnum
+except ImportError:
+    from stringenum import StrEnum as StrEnum  # backport StrEnum functionality pre 3.11
