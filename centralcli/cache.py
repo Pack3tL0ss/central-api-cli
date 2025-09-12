@@ -4683,7 +4683,8 @@ class Cache:
         elif retry:
             log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
             if all_match:
-                all_match_msg = f"{', '.join(m.get('name', m.get('serial')) for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
+                _all_match_summary = [m.get('name', m.get('serial')) for m in all_match[0:5]]
+                all_match_msg = f"{utils.color(_all_match_summary)}{', ...' if len(all_match) > 5 else ''}"
                 _dev_type_str = escape(str(utils.unlistify(dev_type)))
                 log.error(
                     f"The Following devices matched {all_match_msg} excluded as device type != {_dev_type_str}",
@@ -4824,7 +4825,8 @@ class Cache:
         elif retry:
             log.error(f"Unable to gather inventory info from provided identifier {query_str}", show=not silent)
             if all_match:
-                all_match_msg = f"{', '.join(m.get('type', m.get('serial')) for m in all_match[0:5])}{', ...' if len(all_match) > 5 else ''}"
+                _all_match_summary = [m.get('type', m.get('serial')) for m in all_match[0:5]]
+                all_match_msg = f"{utils.color(_all_match_summary)}{', ...' if len(all_match) > 5 else ''}"
                 _dev_type_str = escape(str(utils.unlistify(dev_type)))
                 log.error(
                     f"The Following devices matched {all_match_msg} excluded as device type != {_dev_type_str}",
