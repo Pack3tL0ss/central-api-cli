@@ -1518,6 +1518,10 @@ class Cache:
         return self.MpskDB.all()
 
     @property
+    def mpsk_by_id(self) -> dict[str, CacheMpsk]:
+        return {m["id"]: CacheMpsk(m) for m in self.mpsk}
+
+    @property
     def portals(self) -> list:
         return self.PortalDB.all()
 
@@ -3995,7 +3999,7 @@ class Cache:
             return self.HookDataDB.insert_multiple(data)
 
     # Not tested or used yet, until we have commands that add/del MPSK networks
-    async def update_mpsk_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
+    async def update_mpsk_net_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
         if remove:
             return await self.update_db(self.MpskNetDB, doc_ids=data)
 
