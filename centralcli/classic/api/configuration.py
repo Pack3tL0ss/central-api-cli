@@ -907,6 +907,7 @@ class ConfigAPI:
 
             files = {'template': ('template.txt', template.read_bytes())}
 
+
         device_type = device_type if not hasattr(device_type, "value") else device_type.value
         device_type = constants.lib_to_api(device_type, "template")
 
@@ -917,26 +918,12 @@ class ConfigAPI:
             'model': model
         }
 
-        # HACK This works but prefer to get aiohttp sorted for consistency
+        # HACK using requests to prepare payload, as have not sorted how that's done with aiohttp TODO FIXME
         import requests
-        from requests import Response as RequestsResponse
-        headers = {
-            "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
-            'Accept': 'application/json'
-        }
-        url=f"{self.session.base_url or ''}{url}"
-        for _ in range(2):
-            req_resp: RequestsResponse = requests.request("POST", url=url, params=params, files=files, headers=headers)
-            if "[\n" in req_resp.text and "\n]" in req_resp.text:
-                output = "\n".join(json.loads(req_resp.text))
-            else:
-                output = req_resp.text.strip('"\n')
-            resp = Response(req_resp, output=output, elapsed=round(req_resp.elapsed.total_seconds(), 2))
-            if "invalid_token" in resp.output:
-                self.session.refresh_token()
-            else:
-                break
-        return resp
+        req_url = f"{self.session.base_url or ''}{url}"
+        req = requests.Request("POST", url=req_url, params=params, files=files)
+        prepared = req.prepare()
+        return await self.session.post(url, params=params, payload=prepared.body, headers=prepared.headers)
 
     async def update_existing_template(
         self,
