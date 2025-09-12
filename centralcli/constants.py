@@ -562,6 +562,16 @@ class SortLabelOptions(str, Enum):
     name = "name"
 
 
+class SortBSSIDOptions(str, Enum):
+    ap = "ap"
+    name = "name"
+    serial = "serial"
+    mac = "mac"
+    band = "band"
+    ssid = "ssid"
+    bssid = "bssid"
+
+
 class LicenseTypes(str, Enum):
     advance_70xx = "advance-70xx"
     advance_72xx = "advance-72xx"
@@ -645,6 +655,7 @@ class ArgToWhat:
         self.guests = self.guest = "guests"
         self.swarms = self.swarm = "swarms"
         self.certs = self.cert = self.certificates = self.certificate = "certs"
+        self.bssids = self.bssid = "bssids"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"

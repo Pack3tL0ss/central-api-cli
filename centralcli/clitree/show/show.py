@@ -50,6 +50,7 @@ from centralcli.constants import (
     ShowInventoryArgs,
     SortAlertOptions,
     SortArchivedOptions,
+    SortBSSIDOptions,
     SortCertOptions,
     SortClientOptions,
     SortDevOptions,
@@ -3298,8 +3299,7 @@ def radios(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Show details for Radios
-    """
+    """Show details for Radios."""
     if not status:
         if up and down:
             ...  # They used both flags.  ignore
@@ -3355,6 +3355,78 @@ def radios(
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
     render.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+
+
+@app.command()
+def bssids(
+    device: str = common.arguments.get("device", default=None, help=f"Show BSSIDs for a speciffic AP {render.help_block('All APs')}", autocompletion=common.cache.dev_ap_completion,),
+    swarm: bool = common.options.swarm,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    band: RadioBandOptions = common.options.get("band", help="Filter by radio band/frequency"),
+    sort_by: SortBSSIDOptions = common.options.get("sort_by", default=SortBSSIDOptions.ap, show_default=True,),
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show BSSIDs."""
+    caption = []
+    sort_by = sort_by if sort_by is None or sort_by != "ap" else None  # AP is default sort, reset to None to retain group_by functionality
+    group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
+    site: CacheSite = None if not site else common.cache.get_site_identifier(site)
+    label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
+    dev = None if not device else cache.get_dev_identifier(device)
+
+    kwargs = {
+        "group": None if not group else group.name,
+        "site": None if not site else site.name,
+        "label": None if not label else label.name,
+    }
+    title_sfx = [f"{k} {v}" for k, v in kwargs.items() if v]
+
+    if dev:
+        key = "serial" if not swarm else "swarm_id"
+        title_sfx += [f"{'' if not swarm else 'Swarm associated with '}AP {dev.summary_text}"]
+        kwargs[key] = dev.serial if not swarm else dev.swack_id
+    elif swarm:
+        caption += ["[dark_orange3]\u26a0[/] Ignoring [cyan]-s[/]|[cyan]--swarm[/] as no device was provided as argument."]
+
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    if len(kwargs) > 1:
+        common.exit(f"You can only specify one of [cyan]device [dim italic]Argument[/][/], or :triangular_flag: {utils.color(['--group', '--site', '--label'], color_str='cyan')} :triangular_flag:")
+
+    resp = api.session.request(api.monitoring.get_bssids, **kwargs)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+    title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"BSSIDs{title_sfx}",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        output_by_key=None,
+        group_by="ap" if not sort_by else None,
+        outfile=outfile,
+        pager=pager,
+        min_width=85,
+        cleaner=cleaner.get_bssids,
+        output_format=tablefmt,
+        band=band
+    )
+
+
 
 # TODO # FIXME --past 6h returns empty payload despite default of 3h returning insights  --past 1d seems to work fine.
 @app.command()

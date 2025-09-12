@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
 """
-Collection of functions used to clean output from Aruba Central API into a consistent structure.
+Collection of functions used to format/clean output from Aruba Central API.
 """
 from __future__ import annotations
 
@@ -18,7 +17,7 @@ from rich.markup import escape
 
 from centralcli import log, utils
 
-from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, SwitchRolesShort
+from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, RadioBandOptions, SwitchRolesShort
 from .models.cache import Sites
 from .models.formatter import CloudAuthUploadResponse
 from .objects import DateTime, ShowInterfaceFilters
@@ -2019,6 +2018,32 @@ def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
     data = simple_kv_formatter(data, key_order=key_order)
 
     return data
+
+
+def get_bssids(data: list[dict[str, str | int]], output_format: TableFormat = "rich", band: RadioBandOptions | None = None) -> list[dict[str, str | int]]:
+    key_order = ["name", "serial", "macaddr", "radio_bssids"]  # "swarm_id",
+    pretty_band = {0: "5Ghz", 1: "2.4Ghz", 2: "6Ghz"}
+    data = simple_kv_formatter(data, key_order=key_order)
+
+    data_out = []
+    for ap in data:
+        ap_data = []
+        for radio in ap["radio bssids"]:
+            bssids = radio["bssids"] or [{"essid": None, "macaddr": radio["macaddr"]}]
+            if output_format == "rich":
+                ap_data += [
+                    {"ap": f'{ap["name"]} [dim]({ap["serial"]})[/dim]', "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
+                    for r in bssids if band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band
+                ]
+            else:
+                ap_data += [
+                    {**{k: v for k, v in ap.items() if "bssid" not in k}, "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
+                    for r in bssids if band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band
+                ]
+        data_out += sorted(ap_data, key=lambda r: r["band"])
+
+    return data_out
+
 
 def get_guests(data: list[dict[str, Any]], output_format: TableFormat = "yaml") -> list[dict[str, Any]]:
     def calc_remaining_expiration(expire_ts: int) -> DateTime:
