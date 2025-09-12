@@ -103,6 +103,20 @@ def test_del_site4(ensure_cache_site4):
     assert "uccess" in result.stdout
 
 
+def test_del_template(ensure_cache_template):
+    result = runner.invoke(app, [
+        "delete",
+        "template",
+        "cencli_test_template",
+        "--group",
+        "cencli_test_group2",
+        "-Y"
+        ])
+    capture_logs(result, "test_del_template")
+    assert result.exit_code == 0
+    assert "uccess" in result.stdout
+
+
 def test_del_label(ensure_cache_label1):
     result = runner.invoke(app, [
         "delete",

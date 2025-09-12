@@ -119,11 +119,11 @@ def test_add_site_by_geo():
     ]
 
 
-# def test_add_template(ensure_cache_group2):
-#     result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["template_file"], "--dev-type", "sw", "-Y"])
-#     capture_logs(result, "test_add_template")
-#     assert result.exit_code == 0
-#     assert "201" in result.stdout
+def test_add_template(ensure_cache_group2):
+    result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["template_file"], "--dev-type", "sw", "-Y"])
+    capture_logs(result, "test_add_template")
+    assert result.exit_code == 0
+    assert "201" in result.stdout
 
 
 def test_add_variables(ensure_cache_group2):
