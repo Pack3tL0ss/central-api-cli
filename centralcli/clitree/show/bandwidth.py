@@ -43,13 +43,13 @@ def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", 
 
 @app.command()
 def ap(
-    ap: str = typer.Argument(None, help=f"Show Bandwidth details for a specific AP {render.help_block('All APs')}", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, case_sensitive=False, show_default=False,),
+    ap: str = common.arguments.get("device", default=None, help=f"Show Bandwidth details for a specific AP {render.help_block('All APs')}", autocompletion=common.cache.dev_ap_completion,),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
-    swarm: bool = typer.Option(False, "-s", "--swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [dim]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]", show_default=False),
-    band: RadioBandOptions = typer.Option(None, help=f"Show Bandwidth for a specific band [dim]{escape('[ap must be provided]')}[/]", autocompletion=common.cache.group_completion, show_default=False),
-    ssid: str = typer.Option(None, help=f"Show Bandwidth for a specifc ssid [dim]{escape('[ap must be provided]')}[/]", show_default=False),
+    swarm: bool = common.options.get("swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [dim]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]"),
+    band: RadioBandOptions = common.options.band,
+    ssid: str = common.options.get("ssid", help=f"Show Bandwidth for a specifc ssid [dim]{escape('[ap must be provided]')}[/]",),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
     start: datetime = common.options.start,
     end: datetime = common.options.end,
@@ -131,7 +131,7 @@ def ap(
 
 @app.command()
 def switch(
-    switch: str = typer.Argument(..., help="Switch to show Bandwidth details for", metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, case_sensitive=False, show_default=False,),
+    switch: str = common.arguments.get("device", help="Switch to show Bandwidth details for", autocompletion=common.cache.dev_switch_completion,),
     port: str = typer.Argument("All Ports", help="Show bandwidth for a specific port",),
     uplink: bool = typer.Option(False, "--uplink", help="Show Bandwidth usage for the uplink", show_default=False,),
     start: datetime = common.options.start,
@@ -270,7 +270,7 @@ def client(
 
 @app.command()
 def uplink(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_gw_completion, show_default=False,),
+    device: str = common.arguments.get("device", autocompletion=common.cache.dev_switch_gw_completion,),
     uplink_name: UplinkNames = typer.Argument("uplink101", help="[Applies to Gateway] Name of the uplink.  Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names.", show_default=True,),
     interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="[Applies to Gateway] One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
     start: datetime = common.options.start,
