@@ -1566,11 +1566,15 @@ class CLICommon:
         except KeyError:  # pragma: no cover
             self.exit("Missing required field: [cyan]serial[/].")
 
-        # cache_devs: List[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only) for idx, d in enumerate(serials_in)]  # returns None if device not found in cache after update
         cache_devs: List[CacheDevice | CacheInvDevice | None] = []
+        # cache_devs: List[CacheInvMonDevice | None] = []
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
             this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only,)  # dev_type=dev_type)
+            # TODO implement this logic as it won't update dev cache once we add timestamp to cache update.  Logic will be to assume mon/dev cache is current if updated within last x hours, updated it otherwise to ensure mon deletion is not necessary.
+            # This would be for scenario where device is found in inv cache but not in dev cache.  commented cache_mon_devs/cache_inv_devs also part of this logic.
+            # For now given dev cache could be stale sticking with existing logci that will update dev cache proactively if found in inv but not dev to ensure dev is current.
+            # this_dev = self.cache.get_combined_inv_dev_identifier(d, silent=True, retry_dev=False, exit_on_fail=False,)  # retry_inv=not cop_inv_only,)  # dev_type=dev_type)
             if this_dev is not None:
                 serial_updates[idx] = this_dev.serial
             cache_devs += [this_dev]
@@ -1583,6 +1587,8 @@ class CLICommon:
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
         cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
         cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
+        # cache_mon_devs: List[CacheDevice] = [d.mon for d in cache_found_devs if d.mon is not None]
+        # cache_inv_devs: List[CacheInvDevice] = [d.inv for d in cache_found_devs if d.mon is None and d.inv is not None]
 
         serials_in = [s.upper() if idx not in serial_updates else serial_updates[idx] for idx, s in enumerate(serials_in)]
         invalid_serials = [s for s in serials_in if not utils.is_serial(s)]
