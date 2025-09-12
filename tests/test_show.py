@@ -86,6 +86,34 @@ def test_show_branch_health_wan_down():
     assert "API" in result.stdout
 
 
+def test_show_bssids():
+    result = runner.invoke(app, ["show", "bssids", "-s"],)  # also test warning for ignored -s without dev
+    capture_logs(result, "test_show_bssids")
+    assert result.exit_code == 0
+    assert "Ignoring" in result.stdout
+
+
+def test_show_bssids_yaml():
+    result = runner.invoke(app, ["show", "bssids", "--yaml"],)  # also test warning for ignored -s without dev
+    capture_logs(result, "test_show_bssids")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_bssids_by_ap():
+    result = runner.invoke(app, ["show", "bssids", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_bssids_by_ap")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_bssids_too_many_filters():
+    result = runner.invoke(app, ["show", "bssids", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
+    capture_logs(result, "test_show_bssids_too_many_filters", expect_failure=True)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout
+
+
 # Output here will not be the same during mocked test run as it is outside of tests
 # API returns csv, the Response.output attribute is converted in cloudauth.get_registered_macs()
 # to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
