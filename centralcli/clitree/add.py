@@ -678,7 +678,7 @@ def guest(
             expires = created.add(days=3)
             cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
             _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
             render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
@@ -702,14 +702,14 @@ def mpsk(
     render.econsole.print(f"  Associate with MPSK SSID: [cyan]{ssid.name}[/]")
     render.econsole.print(f"  Assign Role: [cyan]{role}[/]")
     if psk:
-        render.econsole.print("  [dim italic]Configure PSK as specified, not shown[/]")
+        render.econsole.print("  [dim italic]Configure PSK as specified, not shown[/]", "[dark_orange3]:warning:[/] [dim italic][cyan]--psk[/] [red]is hidden because the option has no impact, The API will always randomly generate the psk[/]")
     if disable:
         render.econsole.print("  Create MPSK, but set as [red]disabled[/]")
 
     render.confirm(yes)  # exits here if they don't confirm
     resp = api.session.request(api.cloudauth.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
     render.display_results(resp, tablefmt="action")
-    # TODO cache update
+    # CACHE update
 
 
 @app.callback()
