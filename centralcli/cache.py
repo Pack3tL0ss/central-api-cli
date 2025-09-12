@@ -4476,6 +4476,13 @@ class Cache:
         query_str: str,
     ) -> CacheDevice: ...
 
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str,
+        silent: Literal[True],
+        exit_on_fail: Literal[False]
+    ) -> CacheDevice | None: ...
 
     @overload
     def get_dev_identifier(
