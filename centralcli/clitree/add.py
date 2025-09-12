@@ -123,8 +123,8 @@ def device(
     }
 
     for name, value in zip(kwd_vars, vals):
-        if name and name not in kwargs:
-            kwargs[name] = value
+        if name is not None:
+            kwargs[name if not hasattr(name, "value") else name.value] = value
 
     kwargs["group"] = kwargs["group"] or _group
 
