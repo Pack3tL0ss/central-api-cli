@@ -105,7 +105,7 @@ def device(
 ) -> None:
     """Add a Device to Aruba Central
 
-    Serial Number and MAC are required, group is opional.
+    Serial Number and MAC are required, group is optional.
 
     [italic cyan]serial[/], [italic cyan]mac[/], and [italic cyan]group[/] can be provided in any order.
 
@@ -124,13 +124,6 @@ def device(
 
     for name, value in zip(kwd_vars, vals):
         if name and name not in kwargs:
-            dev = common.cache.get_dev_identifier(name, silent=True, exit_on_fail=False)
-            if dev:  # allow user to put dev name for rare case where dev is in cache but not in inventory  # TESTME
-                kwargs["serial"] = dev.serial
-                kwargs["mac"] = dev.mac
-            else:
-                common.exit(f"[bright_red]Error[/]: {name} is invalid")
-        elif name is not None:
             kwargs[name] = value
 
     kwargs["group"] = kwargs["group"] or _group
@@ -141,7 +134,7 @@ def device(
 
     _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if "group" in kwargs and kwargs["group"]:
-        _group = common.cache.get_group_identifier(kwargs["group"])
+        _group: CacheGroup = common.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
     if "license" in kwargs and kwargs["license"]:
@@ -531,7 +524,7 @@ def template(
     workspace: str = common.options.workspace,
 ) -> None:
     group: CacheGroup = common.cache.get_group_identifier(group)
-    if not template:
+    if not template:  # pragma: no cover
         econsole.print("[bright_green]No Template file provided[/].  Template content is required.")
         econsole.print("Provide Template Content:")
         template = utils.get_multiline_input()
