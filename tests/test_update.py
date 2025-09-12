@@ -46,6 +46,7 @@ def test_update_gw_group_config(ensure_cache_group_cloned):
     assert "Global Result:" in result.stdout
     assert "[OK]" in result.stdout
 
+
 def test_update_site(ensure_cache_site4):
     result = runner.invoke(
         app,
@@ -63,3 +64,22 @@ def test_update_site(ensure_cache_site4):
     capture_logs(result, "test_update_site")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+# TODO need cencli update command
+def test_update_mpsk(ensure_cache_mpsk):
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "method",
+            "cloudauth_update_namedmpsk",
+            "1EBTWK86LPQ86S0B",
+            "4e650830-d4d6-4a19-b9af-e0f776c69d24",
+            "enabled=True",
+            "reset=True"
+        ]
+    )
+    capture_logs(result, "test_update_mpsk")
+    assert result.exit_code == 0
+    assert "204" in result.stdout

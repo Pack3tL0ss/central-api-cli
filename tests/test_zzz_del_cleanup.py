@@ -142,6 +142,22 @@ def test_del_label_multi(ensure_cache_label2, ensure_cache_label3):
     assert "200" in result.stdout
 
 
+def test_del_mpsk(ensure_cache_mpsk):  # TODO need command for this
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "method",
+            "cloudauth_delete_namedmpsk",
+            "1EBTWK86LPQ86S0B",
+            "4e650830-d4d6-4a19-b9af-e0f776c69d24"
+        ]
+    )
+    capture_logs(result, "test_del_mpsk")
+    assert result.exit_code == 0
+    assert "204" in result.stdout
+
+
 def test_del_portal(ensure_cache_test_portal):
     result = runner.invoke(app, [
         "delete",

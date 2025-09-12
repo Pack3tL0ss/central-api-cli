@@ -150,19 +150,60 @@ def test_add_label_duplicate_name():
 
 def test_add_label_multi():
     result = runner.invoke(app, ["-d", "add", "label",  "cencli_test_label2", "cencli_test_label3", "-Y"])
+    capture_logs(result, "test_add_label_multi")
     assert True in [
         result.exit_code == 0 and "test_label" in result.stdout,
         result.exit_code == 1 and "already exist" in result.stdout
     ]
 
 
+def test_add_named_mpsk():
+    result = runner.invoke(app, ["add", "mpsk",  test_data["mpsk_ssid"], "test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing", "-D", "-Y"])
+    capture_logs(result, "test_add_named_mpsk")
+    assert result.exit_code == 0
+    assert "201" in result.stdout
+
+
 def test_add_guest():
-    result = runner.invoke(app, ["-d", "add", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--email", test_data["portal"]["guest"]["email"], "--company", "central-api-cli test company", "--yes"])
-    assert True in [
-        result.exit_code == 0 and "200" in result.stdout,
-    ]
+    result = runner.invoke(
+        app,
+        [
+            "add",
+            "guest",
+            test_data["portal"]["name"],
+            test_data["portal"]["guest"]["name"],
+            "--email",
+            test_data["portal"]["guest"]["email"],
+            "--company",
+            "central-api-cli test company",
+            "--password",
+            "cencli so awesome",
+            "--notify-to",
+            "email",
+            "--phone",
+            "615.555.1212",
+            "--yes"
+        ]
+    )
+    capture_logs(result, "test_add_guest")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
     assert "cache update ERROR" not in result.stdout
     assert "xception" not in result.stdout
+
+
+def test_add_guest_invalid_notify():
+    result = runner.invoke(app, ["add", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--email", test_data["portal"]["guest"]["email"], "--company", "central-api-cli test company", "--notify-to", "email", "--yes"])
+    capture_logs(result, "test_add_guest_invalid_notify", expect_failure=True)
+    assert result.exit_code == 1
+    assert "--password" in result.stdout
+
+
+def test_add_guest_invalid_phone():
+    result = runner.invoke(app, ["add", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--phone", "615555121", "--yes"])
+    capture_logs(result, "test_add_guest_invalid_notify", expect_failure=True)
+    assert result.exit_code == 1
+    assert "invalid" in result.stdout
 
 
 def test_add_device(ensure_cache_group2):

@@ -339,6 +339,22 @@ def ensure_cache_test_portal():
     yield
 
 
+@pytest.fixture(scope="function")
+def ensure_cache_mpsk():
+    if config.dev.mock_tests:
+        cache_data = {
+            "id": "4e650830-d4d6-4a19-b9af-e0f776c69d24",
+            "name": "test@cencli.wtf",
+            "role": "authenticated",
+            "status": "enabled",
+            "ssid": test_data["mpsk_ssid"]
+        }
+
+        if cache_data["id"] not in cache.mpsk_by_id:
+            assert asyncio.run(cache.update_db(cache.MpskDB, data=cache_data, truncate=False))
+    yield
+
+
 def _ensure_cache_site1():
     if config.dev.mock_tests:
         sites = [
