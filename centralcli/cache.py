@@ -5167,7 +5167,7 @@ class Cache:
         """Allows case insensitive template match by template name"""
         retry = False if completion else retry
         if not query_str and completion:
-            return [CentralObject("template", data=t) for t in self.templates]
+            return [CacheTemplate(t) for t in self.templates]
 
         match, all_match = None, None
         for _ in range(0, 2 if retry else 1):
@@ -5201,10 +5201,6 @@ class Cache:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and not silent:
                     match = self.fuzz_lookup(query_str, self.TemplateDB, group=group)
-                    # fuzz_match, fuzz_confidence = process.extract(query_str, [t["name"] for t in self.templates if group is None or t["group"] == group], limit=1)[0]
-                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                    #     match = self.TemplateDB.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating template Cache")
                     self.check_fresh(refresh=True, template_db=True)
