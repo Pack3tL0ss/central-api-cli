@@ -79,8 +79,8 @@ class DateTime():
         if str(timestamp).isdigit() and len(str(int(timestamp))) > 10:
             timestamp = timestamp / 1000
 
-        return round(timestamp)
-#
+        return None if timestamp is None else round(timestamp)
+
 
     @property
     def is_expired(self) -> bool:
