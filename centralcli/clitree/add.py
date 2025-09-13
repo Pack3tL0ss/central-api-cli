@@ -440,7 +440,6 @@ def cert(
 ) -> None:
     """Add/Upload a Certificate to Aruba Central
     """
-    passphrase = "" if passphrase is None else passphrase
     cert_format_params = [pem, der, pkcs12]
     cert_formats = ["PEM", "DER", "PKCS12"]
     cert_format = None
@@ -453,7 +452,7 @@ def cert(
         cert_format = cert_formats[cert_format_params.index(True)]
 
     kwargs = {
-        "passphrase": passphrase,
+        "passphrase": passphrase or "",
         "cert_name": cert_name,
         "cert_format": cert_format,
         "server_cert": server_cert,
