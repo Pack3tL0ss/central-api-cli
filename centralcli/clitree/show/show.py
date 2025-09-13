@@ -3310,6 +3310,9 @@ def radios(
     group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
     site: CacheSite = None if not site else common.cache.get_site_identifier(site)
     label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
+    title="Radio Details"
+    for filter_, filter_name in zip((group, site, label), ("group", "site", "label")):
+        title = f"{title}{'' if not filter_ else f' for APs in {filter_name} [cyan]{filter_.name}[/]'}"
 
     params = {
         "group": None if not group else group.name,
@@ -3354,7 +3357,7 @@ def radios(
         if status:
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
-    render.display_results(resp, tablefmt=tablefmt, title="Radio Details", reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+    render.display_results(resp, tablefmt=tablefmt, title=title, reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
 
 
 @app.command()
