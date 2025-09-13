@@ -203,6 +203,35 @@ def test_show_insights_low_severity():
     assert "API Rate Limit" in result.stdout
 
 
+def test_show_insights_no_dev_type():
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "method",
+            "get_aiops_insights",
+            f"serial={test_data['ap']['serial']}"
+        ]
+    )
+    assert result.exit_code == 1
+    assert isinstance(result.exception, ValueError)
+
+
+def test_show_insights_too_many_filters():
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "method",
+            "get_aiops_insights",
+            f"serial={test_data['ap']['serial']}",
+            "site_id=7"
+        ]
+    )
+    assert result.exit_code == 1
+    assert isinstance(result.exception, ValueError)
+
+
 def test_show_inventory():
     result = runner.invoke(app, ["show", "inventory"],)
     capture_logs(result, "test_show_inventory")
