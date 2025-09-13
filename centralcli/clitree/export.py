@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING, List
 import typer
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
-from centralcli import caas, common, config, log, render
+from centralcli import caas, cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, api
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
@@ -340,25 +341,44 @@ def configs(
             _config_header("[bold]Combined Variables file[reset]")
             render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
 
+class EvalLocationResponse:
+    _responses: list[Response] = []
+
+    def __call__(self, resp: Response | list[Response]) -> None:
+        resp = utils.listify(resp)
+        self._responses += resp
+        passed = [r for r in self._responses if r.ok]
+        failed = [r for r in self._responses if not r.ok]
+        if failed:
+            resp = [*passed, *failed]
+            log.warning(f"[red]Command Aborted[/] due to Failures. [cyan]{len(failed)}[/] API calls failed during attempt to get location from floor plan APIs for all APs.", caption=True, log=True)
+            render.display_results(resp, tablefmt="action", exit_on_fail=True)
+
+eval_location_response = EvalLocationResponse()
+
+
 def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
-    # TODO abort on failure
     campus_resp: Response = api.session.request(api.visualrf.get_all_campuses)
+    eval_location_response(campus_resp)
     campuses = [c["campus_id"] for c in campus_resp.raw["campus"]]
 
     bldg_reqs = [BatchRequest(api.visualrf.get_buildings_for_campus, campus) for campus in campuses]
     bldg_resp = api.session.batch_request(bldg_reqs)
+    eval_location_response(bldg_resp)
     buildings = {
         bldg["building_id"]: {"name": bldg["building_name"], "lat": bldg["latitude"], "lon": bldg["longitude"]} for resp in bldg_resp for bldg in resp.raw["buildings"]
     }
 
     floor_reqs = [BatchRequest(api.visualrf.get_floors_for_building, bldg) for bldg in buildings]
     floor_resp = api.session.batch_request(floor_reqs)
+    eval_location_response(floor_resp)
     floors = {
         floor["floor_id"]: {"name": floor["floor_name"], "level": floor["floor_level"] if not floor["floor_level"].is_integer() else int(floor["floor_level"]), "building_id": floor["building_id"]} for resp in floor_resp for floor in resp.raw.get("floors", [])
     }
 
     ap_loc_reqs = [BatchRequest(api.visualrf.get_aps_for_floor, floor) for floor in floors]
     ap_loc_resp = api.session.batch_request(ap_loc_reqs)
+    eval_location_response(ap_loc_resp)
     ap_data = {
         ap["serial_number"]: {
             "id": ap["ap_id"],
@@ -372,55 +392,107 @@ def get_location_for_all_aps() -> dict[str, dict[str, str | dict[str, str]]]:
     return ap_data, last_call.rl
 
 
-def generate_redsky_csv(ap_data: list[dict[str, str]]) -> list[dict[str, str]]:
+def generate_redsky_csv(ap_data: list[dict[str, str]], *, mask: bool = True, pnc: bool = False) -> list[dict[str, str]]:
     redsky_out = []
     for ap in ap_data:
         for bssid in ap["bssids"]:
+            building = ap["building"] if not pnc else ap["building"].replace(" - ", " ")
+            floor = ap["floor"] if not pnc else f"{building} {ap['floor']}"
+
             redsky_out += [
                 {
                     "BSSID": bssid,
-                    "Building Name": ap["building"],
-                    "Location Name": ap["floor"],
+                    "Building Name": building,
+                    "Location Name": floor,
                     "Description": None,
-                    "Masking": None
+                    "Masking": mask
                 }
             ]
     return redsky_out
 
 
-@app.command(hidden=True)  # WIP not fully implemented
+@app.command()
 def redsky_bssids(
-    group: str = common.options.get("group", help="Export device level configs for a specific Group", hidden=True),  # TODO implement and unhide
-    site: str = common.options.get("site", help="Export device level configs for a specific Site", hidden=True),     # TODO sort/reverse options
-    do_json: bool = common.options.do_json,
-    do_yaml: bool = common.options.do_yaml,
-    do_csv: bool = common.options.do_csv,
-    do_table: bool = common.options.do_table,
+    group: str = common.options.get("group", help="Gather BSSID / Location data for APs in a specific group",),
+    site: str = common.options.get("site", help="Gather BSSID / Location data for APs in a specific site",),
+    label: str = common.options.get("label", help="Gather BSSID / Location data for APs with a specific label"),
+    no_mask: bool = typer.Option(False, "--no-mask", help=f"Masking will export the base BSSID MAC only, redsky will treat the least significant digit as a wild-card, disable to turn masking off and export each BSSID {render.help_block('mask')}", ),
+    pnc: bool = typer.Option(False, hidden=True),
+    do_json: bool = common.options.get("do_json", help=f"Output in JSON {render.help_block('csv')}"),
+    do_yaml: bool = common.options.get("do_yaml", help=f"Output in YAML {render.help_block('csv')}"),
+    do_csv: bool = common.options.get("do_csv", help=f"Output in CSV {escape('[default output format]')}", hidden=True),  # hidden as it's the default
+    do_table: bool = common.options.get("do_table", help=f"Output in Rich Table Format {render.help_block('csv')}"),
     raw: bool = common.options.raw,
     outfile: Path = common.options.outfile,
     pager: bool = common.options.pager,
+    yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Export RedSky BSSID import Template with BSSID / building / location mapping.
+    """Build/Export a BSSID/location csv formatted for import into RedSky 911Anywhere
 
-    Exports a csv formatted for import into redsky 911Anywhere.
+    Exports BSSID import Template with BSSID / building / location mapping.
+    APs must be placed on a floor plan for this command to determine APs location.
+
+    [cyan]cencli show aps[/] will tell you what site they are in, this command provides the building and floor, provided they are placed on a floor plan.
+
+    [deep_sky_blue3]:information:[/]  Output for [cyan]--table[/], [cyan]--yaml[/], and [cyan]--json[/] includes additional information [italic](not in a RedSky 911Anywhere compatible format)[/].  [dim italic]default output is csv[/]
     """
     api = ClassicAPI()
-    bssid_resp = api.session.request(api.monitoring.get_bssids)
-    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="csv")
-    no_loc_aps = []
-    if bssid_resp.ok:
-        # bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in [*[b for b in bssid["bssids"] or [] if b], {"macaddr": bssid["macaddr"]}] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
-        bssids_by_serial = {ap["serial"]: {"name": ap["name"], "bssids": [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in bssid["bssids"] or [{"macaddr": bssid["macaddr"]}]]} for ap in bssid_resp.raw["aps"]}
-        with Spinner("Fetching AP locations from VisualRF"):
-            location_data, last_rl = get_location_for_all_aps()
-        bssid_resp.rl = last_rl
-        ap_data = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items() if location_data.get(k)]
-        no_loc_aps = [{"serial": k, **v} for k, v in bssids_by_serial.items() if not location_data.get(k)]
-        bssid_resp.output = ap_data if tablefmt != "csv" else generate_redsky_csv(ap_data)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="csv")
+    _group = None if not group else cache.get_group_identifier(group, dev_type="ap")
+    _site = None if not site else cache.get_site_identifier(site)
+    _label = None if not label else cache.get_label_identifier(label)
+    if len([flag for flag in [group, site, label] if flag is not None]) > 1:
+        common.exit(f"You can only specify one of :triangular_flag: {utils.color(['--group', '--site', '--label'], color_str='cyan')} :triangular_flag:")
 
+    confirm_msg = [
+        "[dark_orange3]:warning:[/]  [magenta]This is an API call heavy process.[/]",
+        "  - 1 call to fetch all BSSIDs",
+        "  - 1 call to fetch the campus",
+        "  - 1 call to fetch the buildings in a campus",
+        "  - 1 call [bright_green]per building[/] to fetch the floors in each building",
+        "  - 1 call [bright_green]per floor[/] to fetch the APs on that floor",
+        "  - Per call record limits [dim italic]([cyan]1000[/] for BSSIDs [cyan]100[/] for floor plan calls)[/], can also result in multiple calls to the same endpoint if the number of records exceeds the per call limit.",
+        "",
+        "[deep_sky_blue3]:information:[/]  As with all commands that return data, the command can be repeated without doing any API calls using [cyan]cencli show last[/]"
+    ]
+
+    if len(cache.sites) > 5:
+        render.econsole.print("\n".join(confirm_msg))
+        render.confirm(yes)
+
+    kwargs = {
+        "group": _group if _group is None else _group.name,
+        "label": _label if _label is None else _label.name,
+        "site": _site if _site is None else _site.name
+    }
+    bssid_resp = api.session.request(api.monitoring.get_bssids, **kwargs)
+    if not bssid_resp.ok:
+        render.display_results(bssid_resp, tablefmt="action", exit_on_fail=True)
+
+    def masked(bssids: list[str]) -> list[str]:
+        return map(lambda bssid: bssid[0:-1], bssids)
+
+    bssids_by_serial = {}
+    for ap in bssid_resp.raw["aps"]:
+        _bssids = [bssid_dict["macaddr"] for bssid in ap["radio_bssids"] for bssid_dict in bssid["bssids"] or [{"macaddr": bssid["macaddr"]}]]
+        _radio_macs = [bssid["macaddr"] for bssid in ap["radio_bssids"]]
+        if not no_mask:
+            bssids = [*_radio_macs, *[bssid for bssid, _masked in zip(_bssids, masked(_bssids)) if _masked not in masked(_radio_macs)]]
+        else:
+            bssids = list(set([*_radio_macs, *_bssids]))
+        bssids_by_serial[ap["serial"]] = {"name": ap["name"], "bssids": bssids}
+
+    with Spinner("Fetching AP locations from VisualRF"):
+        location_data, last_rl = get_location_for_all_aps()
+        bssid_resp.rl = last_rl
+
+    no_loc_aps = []
+    ap_data = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items() if location_data.get(k)]
+    no_loc_aps = [{"serial": k, **v} for k, v in bssids_by_serial.items() if not location_data.get(k)]
+    bssid_resp.output = ap_data if tablefmt != "csv" else generate_redsky_csv(ap_data, mask=not no_mask, pnc=pnc)
 
     render.display_results(bssid_resp, tablefmt=tablefmt, title="AP / BSSID Location info", caption = None if tablefmt == "csv" else "Use default format (csv) for redsky formatted output.", outfile=outfile, pager=pager, exit_on_fail=False)
 
@@ -428,7 +500,7 @@ def redsky_bssids(
         render.econsole.print(f"\n[dark_orange3]:warning:[/]  The following [cyan]{len(no_loc_aps)}[/] APs do not appear to be placed on a floor plan.  They are not included in the BSSID location mapping output:")
         render.econsole.print("\n".join([f"{ap['name']}: {ap['serial']}" for ap in no_loc_aps]))
 
-    common.exit(code = 0 if bssid_resp.ok else 1)
+    common.exit(code = 0 if bssid_resp.ok else 1)  # any visualrf response failures will lead to exit (eval_location_response)
 
 
 
