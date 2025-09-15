@@ -3056,7 +3056,6 @@ class Cache:
                 if str(log["id"]).startswith(incomplete):
                     yield log["id"]
 
-    # TODO add support for zip code city state etc.
     def site_completion(
         self,
         ctx: typer.Context,
@@ -4431,6 +4430,12 @@ class Cache:
     @overload
     def get_dev_identifier(
         query_str: str,
+        completion: Literal[True]
+    ) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        query_str: str,
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
         retry: bool,
         completion: bool,
@@ -4888,8 +4893,14 @@ class Cache:
     def get_site_identifier(
         self,
         query_str: str | Sequence[str],
-    ) -> CacheSite:
-        ...
+        completion: Literal[True]
+    ) -> list[CacheSite]: ...
+
+    @overload
+    def get_site_identifier(
+        self,
+        query_str: str | Sequence[str],
+    ) -> CacheSite: ...
 
     @overload
     def get_site_identifier(
@@ -4920,9 +4931,8 @@ class Cache:
         if completion and query_str == "":
             return [CacheSite(s) for s in self.sites]
 
-        match = None
+        match = []
         for _ in range(0, 2 if retry else 1):
-            match = []
             # Exact match
             if query_str == "":
                 match = self.sites
