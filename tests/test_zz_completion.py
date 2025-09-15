@@ -12,6 +12,7 @@ ctx.params={'what': 'overlay', 'device': None, 'yes': None, 'debug': None, 'defa
 
 
 # TODO most are hard-coded need to grab from test_data or dynamically from cache
+# TODO most need to be tested with a value and an empty string, parameritize decorator...
 def test_dev_completion(incomplete: str = "bsmt"):
     result = [c for c in cache.dev_completion(incomplete)]
     assert len(result) > 0
@@ -34,6 +35,36 @@ def test_group_completion(incomplete: str = ""):
 
 def test_group_completion_case_insensitive(incomplete: str = "w"):
     result = [c for c in cache.group_completion(incomplete)]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_site_completion(incomplete: str = "barn"):
+    result = [c for c in cache.site_completion(ctx, incomplete, ("show", "site",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_site_completion_empty_string(incomplete: str = ""):
+    result = [c for c in cache.site_completion(ctx, incomplete, ("show", "site",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_template_completion(ensure_cache_template, incomplete: str = "cencli"):
+    result = [c for c in cache.template_completion(incomplete, ("show", "templates",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_template_completion_empty_string(ensure_cache_template, incomplete: str = ""):
+    result = [c for c in cache.template_completion(incomplete, ("show", "templates",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_template_completion(ensure_cache_group2, ensure_cache_template, incomplete: str = "cencl"):
+    result = [c for c in cache.dev_template_completion(incomplete, ("show", "templates",))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_template_completion_empty_string(ensure_cache_group2, ensure_cache_template, incomplete: str = ""):
+    result = [c for c in cache.dev_template_completion(incomplete, ("show", "templates",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
@@ -88,3 +119,18 @@ def test_event_log_completion_pytest(incomplete: str = "pyte"):
     result = list(cache.event_log_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_event_log_completion_empty_string(incomplete: str = ""):
+    result = list(cache.event_log_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_audit_log_completion(incomplete: str = "1"):
+    result = list(cache.audit_log_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([str(m).lower().startswith(incomplete.lower()) for m in list(map(str, result))])
+
+def test_audit_log_completion_empty_string(incomplete: str = ""):
+    result = list(cache.audit_log_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([str(m).lower().startswith(incomplete.lower()) for m in list(map(str, result))])
