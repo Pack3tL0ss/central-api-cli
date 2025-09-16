@@ -446,7 +446,8 @@ def cert(
 
     if not any([server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]):
         common.exit("[red1]Error[/]: Certificate Type must be provided using one of the options i.e. [cyan]--svr[/]")
-    elif not any(cert_format_params) and cert_file is None:
+    # elif cert_file is None:   # TODO determine cert format from file
+    elif not any(cert_format_params):
         common.exit(f"[red1]Error[/]: Cert format must be provided use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
     else:
         cert_format = cert_formats[cert_format_params.index(True)]
