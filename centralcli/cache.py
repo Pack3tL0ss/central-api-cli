@@ -3796,7 +3796,7 @@ class Cache:
             return self.responses.group
 
         resp = await api.configuration.get_all_groups()
-        if resp.ok:
+        if hasattr(resp, "ok") and resp.ok:  # resp can be a list of responses if failures occured
             groups = models.Groups(resp.output)
             resp.output = groups.model_dump()
 
