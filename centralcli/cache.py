@@ -4949,7 +4949,7 @@ class Cache:
                     | (self.Q.address == query_str)
                     | (self.Q.city == query_str)
                     | (self.Q.state == query_str)
-                    | (self.Q.state.test(lambda v: constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
+                    | (self.Q.state.test(lambda v: v is not None and constants.state_abbrev_to_pretty.get(query_str.upper(), query_str).title() == v.title()))
                 )
 
             # try case insensitive name
@@ -4960,7 +4960,7 @@ class Cache:
             # try case insensitve address match
             if not match or completion:
                 match += self.SiteDB.search(
-                    self.Q.address.test(lambda v: v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
+                    self.Q.address.test(lambda v: v is not None and v.lower().replace(" ", "") == query_str.lower().replace(" ", ""))
                 )
 
             # try case insensitive name swapping _ and -
@@ -4979,11 +4979,11 @@ class Cache:
             # Last Chance try other fields case insensitive startswith provided value
             if not match or completion:
                 match += self.SiteDB.search(
-                    self.Q.zip.test(lambda v: v.startswith(query_str))
-                    | self.Q.city.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.state.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.address.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.address.test(lambda v: " ".join(v.split(" ")[1:]).lower().startswith(query_str.lower()))
+                    self.Q.zip.test(lambda v: v is not None and v.startswith(query_str))
+                    | self.Q.city.test(lambda v: v is not None and v.lower().startswith(query_str.lower()))
+                    | self.Q.state.test(lambda v: v is not None and v.lower().startswith(query_str.lower()))
+                    | self.Q.address.test(lambda v: v is not None and v.lower().startswith(query_str.lower()))
+                    | self.Q.address.test(lambda v: v is not None and " ".join(v.split(" ")[1:]).lower().startswith(query_str.lower()))
                 )
 
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
