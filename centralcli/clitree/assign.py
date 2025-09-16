@@ -84,12 +84,7 @@ def label_(
     devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev) for dev in devices]
 
     _msg = f"Assign [bright_green]{label.name}[/bright_green] to"
-    if len(devices) > 1:
-        _dev_msg = '\n    '.join([f'{dev.rich_help_text}' for dev in devices])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = devices[0]
-        _msg = f"{_msg} {dev.rich_help_text}"
+    _msg = f"{_msg} {utils.summarize_list([dev.summary_text for dev in devices], color=None)}"
     render.econsole.print(_msg, emoji=False)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]
@@ -123,7 +118,7 @@ def subscription(
     Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
     Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription in one command.
     """
-    if not glp_api:
+    if not glp_api:  # pragma: no cover
         common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
 
     sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
