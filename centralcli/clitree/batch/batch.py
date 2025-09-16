@@ -666,7 +666,7 @@ def rename(
     conf_msg = ""
     if import_file:
         data = common._get_import_file(import_file)
-        conf_msg = "\n[bright_green]Names gathered from import[/]:"
+        conf_msg = f"[bright_green]Gathered [medium_spring_green]{len(data)}[/] APs/Names from import[/]:"
     elif lldp:
         kwargs = {}
         if group:
@@ -698,7 +698,7 @@ def rename(
         per_ap_conf_msg += [f"{ap}: [cyan]{data[ap]['hostname']}[/]"]
         calls.append(BatchRequest(api.configuration.update_ap_settings, ap, **data[ap]))
 
-    render.econsole.print(f"{conf_msg}{utils.summarize_list(per_ap_conf_msg, pad=2)}", emoji=False)
+    render.econsole.print(f"{conf_msg}{utils.summarize_list(per_ap_conf_msg, pad=2, max=12)}", emoji=False)
 
     # We only spot check the last serial.  If first call in a batch_request fails the process stops.
     if ap not in common.cache.devices_by_serial:
@@ -755,16 +755,17 @@ def move(
         print(examples.move_devices)
         return
 
+    import_file = [f for f in import_file if not str(f).startswith("device")] # allow unnecessary 'devices' sub-command
+
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch move [OPTIONS] [IMPORT_FILE]"))
-    elif len(import_file) > 2:
+    elif len(import_file) > 1:
         common.exit("Too many arguments.  Use [cyan]cencli batch move --help[/] for help.")
-    else:
-        import_file: Path = [f for f in import_file if not str(f).startswith("device")][0]  # allow unnecessary 'devices' sub-command
-        if not import_file.exists():
-            common.exit(f"Invalid value for '[IMPORT_FILE]': Path '[cyan]{str(import_file)}[/]' does not exist.")
-        resp = common.batch_move_devices(import_file, yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain)
-        render.display_results(resp, tablefmt="action")
+    elif not import_file[0].exists():
+        common.exit(f"Invalid value for '[IMPORT_FILE]': Path '[cyan]{str(import_file[0])}[/]' does not exist.")
+
+    resp = common.batch_move_devices(import_file[0], yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -795,9 +796,10 @@ def archive(
         elif all(isinstance(x, str) for x in data):
             serials = data if not data[0].lower().startswith("serial") else data[1:]
     else:
-        print(f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}")
-        print("Use [cyan]cencli batch archive --example[/] to see expected format.")
-        raise typer.Exit(1)
+        common.exit(
+            f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}\n"
+            "Use [cyan]cencli batch archive --example[/] to see expected format."
+        )
 
     res = api.session.request(api.platform.archive_devices, serials)
     if res:
