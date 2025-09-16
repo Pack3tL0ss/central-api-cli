@@ -35,7 +35,7 @@ def subscriptions(
     [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
     """
     if show_example:
-        render.console.print(examples.assign_subscriptions, emoji=False)
+        render.console.print(examples.assign_subscriptions, emoji=True)
         return
 
     if not import_file:
