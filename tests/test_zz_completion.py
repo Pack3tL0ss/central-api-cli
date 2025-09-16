@@ -38,6 +38,19 @@ def test_group_completion_case_insensitive(incomplete: str = "w"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
+def test_group_ap_completion(incomplete: str = test_data["ap"]["group"]):
+    result = [c for c in cache.group_ap_completion(incomplete)]
+    assert len(result) > 0
+    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
+
+
+def test_group_ap_completion_empty_string(incomplete: str = ""):
+    result = [c for c in cache.group_ap_completion(incomplete)]
+    assert len(result) > 0
+    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
+
+
 def test_site_completion(incomplete: str = "barn"):
     result = [c for c in cache.site_completion(ctx, incomplete, ("show", "site",))]
     assert len(result) > 0
@@ -134,3 +147,18 @@ def test_audit_log_completion_empty_string(incomplete: str = ""):
     result = list(cache.audit_log_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([str(m).lower().startswith(incomplete.lower()) for m in list(map(str, result))])
+
+def test_portal_completion(incomplete: str = test_data["portal"]["name"]):
+    result = list(cache.portal_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_portal_completion_empty_string(incomplete: str = ""):
+    result = list(cache.portal_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_label_completion(ensure_cache_label1, incomplete: str = "cencli-test_label1"):
+    result = list(cache.label_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
