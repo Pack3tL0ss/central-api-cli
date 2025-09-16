@@ -318,6 +318,38 @@ def ensure_dev_cache_test_ap():
     return
 
 
+# Ensures subscription has 0 available for certain tests
+@pytest.fixture(scope="function")
+def ensure_cache_subscription():
+    if config.dev.mock_tests:
+        test_sub = {
+            "id": "7658e672-2af5-5646-aa37-406af19c6d41",
+            "name": "advanced-ap",
+            "type": "AP",
+            "key": "ENCYHFWQLJNQCWDU",
+            "qty": 1000,
+            "available": 985,
+            "is_eval": True,
+            "sku": "Q9Y63-EVALS",
+            "start_date": 1611532800,
+            "end_date": 1924905600,
+            "started": True,
+            "expired": False,
+            "valid": True
+        }
+        if test_sub["id"] not in cache.subscriptions_by_id:
+            update_data = {**test_sub, "available": 0}
+            assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=False))
+        else:
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": 0}]
+            assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
+    yield
+
+    update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], test_sub]
+    assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
+    return
+
+
 @pytest.fixture(scope="function")
 def ensure_cache_test_portal():
     if config.dev.mock_tests:

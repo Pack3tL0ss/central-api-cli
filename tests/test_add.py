@@ -27,6 +27,20 @@ def test_add_cert():
     assert "201" in result.stdout
 
 
+def test_add_cert_no_type():
+    result = runner.invoke(app, ["-d", "add", "cert",  "cencli_test", str(test_cert_file), "--pem",])
+    capture_logs(result, "test_add_cert_no_type", expect_failure=True)
+    assert result.exit_code == 1
+    assert "must be provided" in result.stdout
+
+
+def test_add_cert_no_format():
+    result = runner.invoke(app, ["-d", "add", "cert",  "cencli_test", str(test_cert_file), "--svr",])
+    capture_logs(result, "test_add_cert_no_format", expect_failure=True)
+    assert result.exit_code == 1
+    assert "must be provided" in result.stdout
+
+
 def test_add_group1():
     result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group1", "-Y"])
     capture_logs(result, "test_add_group1")

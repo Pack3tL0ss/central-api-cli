@@ -26,7 +26,7 @@ def test_assign_label(ensure_cache_label1):
     assert test_data["ap"]["serial"].upper() in result.stdout
 
 
-def test_assign_subscription():
+def test_assign_subscription(ensure_cache_subscription):  # ensure cache sub... ensures the sub is there but with 0 remaining, forces it to hit a branch that log/shows a warning
     result = runner.invoke(
         app,
         [

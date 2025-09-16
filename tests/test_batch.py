@@ -4,7 +4,7 @@ from centralcli.cli import app
 from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_site_file, test_sub_file_csv, test_sub_file_yaml
+from ._test_data import test_data, test_device_file, test_group_file, test_rename_aps_file, test_site_file, test_sub_file_csv, test_sub_file_yaml
 
 runner = CliRunner()
 
@@ -58,3 +58,24 @@ def test_batch_assign_subscriptions_csv():
         capture_logs(result, "test_batch_assign_subscriptions_csv")
         assert result.exit_code == 0
         assert result.stdout.count("code: 202") >= 2
+
+
+def test_batch_move_no_import_file():
+    result = runner.invoke(app, ["batch", "move",  "devices",])
+    capture_logs(result, "test_batch_move_too_many_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_batch_move_too_many_args():
+    result = runner.invoke(app, ["batch", "move",  "devices", f'{str(test_device_file)}', f'{str(test_rename_aps_file)}', "--label"])
+    capture_logs(result, "test_batch_move_too_many_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "oo many" in result.stdout
+
+
+def test_batch_rename_aps():
+    result = runner.invoke(app, ["batch", "rename",  "aps", f'{str(test_rename_aps_file)}', "-Y"])
+    capture_logs(result, "test_batch_rename_aps")
+    assert result.exit_code == 0
+    assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required

@@ -101,7 +101,7 @@ def sites(
     if resp.ok:
         try:
             resp.output = cleaner.sites(resp.output)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.error(f"Error cleaning output of batch site addition {repr(e)}", caption=True, log=True)
 
     render.display_results(resp, title="Batch Add Sites",)
@@ -183,8 +183,6 @@ def labels(
         common.exit(render._batch_invalid_msg("cencli batch add labels [OPTIONS] [IMPORT_FILE]"))
 
     resp = common.batch_add_labels(import_file, yes=yes)
-
-
     render.display_results(resp, tablefmt="action", title="Batch Add Labels",)
 
 
@@ -216,7 +214,7 @@ def macs(
     if resp.ok:
         try:
             resp.output = cleaner.cloudauth_upload_status(resp.output)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}", caption=True, log=True)
 
     render.display_results(resp, tablefmt="action", title="Batch Add MACs (cloud-auth)", caption=caption)
