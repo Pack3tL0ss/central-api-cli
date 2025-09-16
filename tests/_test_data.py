@@ -51,6 +51,7 @@ test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type
 test_sub_file_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:yaml")
 test_sub_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:csv")
 test_rename_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="rename_aps")
+test_verify_file: Path = setup_batch_import_file(test_data=test_data, import_type="verify")
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"])
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"

@@ -4,7 +4,7 @@ from centralcli.cli import app
 from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_rename_aps_file, test_site_file, test_sub_file_csv, test_sub_file_yaml
+from ._test_data import test_data, test_device_file, test_group_file, test_rename_aps_file, test_site_file, test_sub_file_csv, test_sub_file_yaml, test_verify_file
 
 runner = CliRunner()
 
@@ -79,3 +79,17 @@ def test_batch_rename_aps():
     capture_logs(result, "test_batch_rename_aps")
     assert result.exit_code == 0
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
+
+
+def test_batch_rename_aps_no_args():
+    result = runner.invoke(app, ["batch", "rename",  "aps",])
+    capture_logs(result, "test_batch_rename_aps_no_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_batch_verify():
+    result = runner.invoke(app, ["batch", "verify", f'{str(test_verify_file)}'])
+    capture_logs(result, "test_batch_verify")
+    assert result.exit_code == 0
+    assert "validation" in result.stdout

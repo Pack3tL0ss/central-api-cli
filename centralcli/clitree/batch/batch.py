@@ -314,7 +314,7 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
 # TODO finish extraction of uplink commands from commands sent to gw
 # so they can be sent in 2nd request as gw always errors interface doesn't
 # exist yet.
-def _extract_uplink_commands(commands: list[str]) -> tuple[list[str], list[str]]:
+def _extract_uplink_commands(commands: list[str]) -> tuple[list[str], list[str]]:  # pragma: no cover
     _start=None
     uplk_cmds = []
     for idx, c in enumerate(commands):
@@ -383,7 +383,7 @@ def verify(
     }
     central_by_serial = {
         d.serial: {
-            k: v if k != "services" else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
+            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
         }
         for d in central_devs
     }
@@ -494,7 +494,7 @@ def deploy(
 
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
-def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[dict], list[dict], list[BatchRequest]]:
+def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[dict], list[dict], list[BatchRequest]]:  # pragma: no cover non GLP API
     if "'license': " in str(devices):
         devices = [{**d, "services": d["license"]} for d in devices]
     elif "'subscription': " in str(devices):
@@ -535,7 +535,7 @@ def subscribe(
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover non GLP API
     """Batch subscribe devices
 
     Assign subscription license to devices specified in import file.
@@ -571,7 +571,7 @@ def unsubscribe(
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover non GLP API
     """Batch Unsubscribe devices
 
     Unsubscribe devices specified in import file or all devices in the inventory that
@@ -651,7 +651,7 @@ def rename(
         print(getattr(examples, f"rename_{what.value}"))
         return
 
-    if str(import_file).lower() == "lldp":
+    if str(import_file).lower() == "lldp":  # pragma: no cover Requires tty
         lldp = True
         import_file = None
 
@@ -667,7 +667,7 @@ def rename(
     if import_file:
         data = common._get_import_file(import_file)
         conf_msg = f"[bright_green]Gathered [medium_spring_green]{len(data)}[/] APs/Names from import[/]:"
-    elif lldp:
+    elif lldp:  # pragma: no cover Requires tty
         kwargs = {}
         if group:
             kwargs["group"] = common.cache.get_group_identifier(group).name
@@ -709,7 +709,7 @@ def rename(
 
 
     render.display_results(resp, tablefmt="action")
-    # cache update
+    # update dev cache
     if import_file:
         cache_data = [common.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
         cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
@@ -834,15 +834,11 @@ def unarchive(
         print(examples.unarchive)
         return
 
-    elif not import_file:
+    if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch unarchive [OPTIONS] [IMPORT_FILE]"))
-    else:
-        data = common._get_import_file(import_file, import_type="devices", text_ok=True)
 
-    if not data:
-        common.exit("No data extracted from import file")
-    else:
-        serials = [dev["serial"] for dev in data]
+    data = common._get_import_file(import_file, import_type="devices", text_ok=True)
+    serials = [dev["serial"] for dev in data]
 
     res = api.session.request(api.platform.unarchive_devices, serials)
     if res:
