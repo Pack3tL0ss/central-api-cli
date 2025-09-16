@@ -589,7 +589,7 @@ class Utils:
         if not items:
             return ""
 
-        max = max or len(items)
+        max = max if max and max + 1 != len(items) else len(items)  # if max is 1 less than the items sent we display all as we'd just be swapping one item for ... anyway.
         bot = int(max / 2)
         top = max - bot
         if any([bold, italic, color is not None]):
