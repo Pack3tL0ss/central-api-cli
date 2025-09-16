@@ -1595,7 +1595,7 @@ class Cache:
     async def get_hooks_by_serial(self, serial):
         return self.HookDataDB.get(self.Q.device_id == serial)
 
-    def fuzz_lookup(self, query_str: str, db: Table, field: str = "name", group: str = None, portal_id: str = None, dev_type: list[constants.LibAllDevTypes] = None) -> list[Document] | None:
+    def fuzz_lookup(self, query_str: str, db: Table, field: str = "name", group: str = None, portal_id: str = None, dev_type: list[constants.LibAllDevTypes] = None) -> list[Document] | None:  # pragma: no cover  Requires tty
         if not render.console.is_terminal or not db.all():
             return
 
@@ -2915,19 +2915,15 @@ class Cache:
         if match:
             match = [m for m in match if m.name not in args and str(m.id) not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.lower().startswith(incomplete.lower()):
+                if str(m.id).startswith(incomplete):
+                    out += [(str(m.id), m.help_text)]
+                else:
                     if not pfx:
                         out += [(m.name if " " not in m.name else f"'{m.name}'", m.help_text)]
                     elif pfx == '"':
                         out += [(f'"{m.name}"', m.help_text)]
                     elif pfx == "'":
                         out += [(f"'{m.name}'", m.help_text)]
-                elif str(m.id).startswith(incomplete):
-                    out += [(str(m.id), m.help_text)]
-
-
-                elif str(m.id).startswith(incomplete):
-                    out += [(m.id, m.help_text)]
 
         for m in out:
             yield m
@@ -5005,7 +5001,7 @@ class Cache:
             return match
 
         if match:
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover  Requires tty
                 match = self.handle_multi_match(match, query_str=query_str, query_type="site",)
 
             return match[0]
@@ -5023,8 +5019,7 @@ class Cache:
         query_str: str,
         dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes],
         completion: bool,
-    ) -> list[CacheGroup]:
-        ...
+    ) -> list[CacheGroup]: ...
 
     @overload
     def get_group_identifier(
@@ -5033,8 +5028,7 @@ class Cache:
         dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes] = None,
         retry: Optional[bool] = True,
         silent: Optional[bool] = False,
-    ) -> CacheGroup:
-        ...
+    ) -> CacheGroup: ...
 
     @overload
     def get_group_identifier(
@@ -5044,8 +5038,7 @@ class Cache:
         retry: Optional[bool],
         silent: Optional[bool],
         exit_on_fail: bool,
-    ) -> CacheGroup | None:
-        ...
+    ) -> CacheGroup | None: ...
 
     def get_group_identifier(
         self,
@@ -5076,32 +5069,36 @@ class Cache:
 
             # case insensitive
             if not match or completion:
-                match += self.GroupDB.search(
+                this_match = self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower() == query_str.lower())  # type: ignore
                 )
+                match = [*match, *[m for m in this_match if m not in match]]
 
             # case insensitive startswith
             if not match or completion:
-                match += self.GroupDB.search(
+                this_match = self.GroupDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))  # type: ignore
                 )
+                match = [*match, *[m for m in this_match if m not in match]]
 
             # case insensitive ignore -_
             if not match or completion:
                 if "_" in query_str or "-" in query_str:
-                    match += self.GroupDB.search(
+                    this_match = self.GroupDB.search(
                         self.Q.name.test(
                             lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")  # type: ignore
                         )
                     )
+                    match = [*match, *[m for m in this_match if m not in match]]
 
             # case insensitive startswith ignore - _
             if not match or completion:
-                match += self.GroupDB.search(
+                this_match = self.GroupDB.search(
                     self.Q.name.test(
                         lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))  # type: ignore
                     )
                 )
+                match = [*match, *[m for m in this_match if m not in match]]
 
             if match and dev_type:
                 all_match: List[Document] = match.copy()
@@ -5110,7 +5107,7 @@ class Cache:
             if not match and retry and api.configuration.get_all_groups not in self.updated:  # TODO self.responses.group is None
                 dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
-                if FUZZ and self.groups and not silent:
+                if FUZZ and self.groups and not silent:    # pragma: no cover  Requires tty
                     if dev_type:
                         fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups if "name" in g and bool([t for t in g["allowed_types"] if t in dev_type])], limit=1)[0]
                     else:
@@ -5130,7 +5127,7 @@ class Cache:
             return match or []
 
         if match:
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover  Requires tty
                 match = self.handle_multi_match(match, query_str=query_str, query_type="group",)
 
             return match[0]
@@ -5159,12 +5156,7 @@ class Cache:
                 )
 
     @overload
-    def get_template_identifier(
-        self,
-        query_str: str,
-        completion: bool,
-    ) -> list[CacheTemplate]:
-        ...
+    def get_template_identifier(self, query_str: str, completion: Literal[True]) -> list[CacheTemplate]: ...
 
     def get_template_identifier(
         self,
@@ -5209,7 +5201,7 @@ class Cache:
 
             if retry and not match and self.responses.template is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and not silent:
+                if FUZZ and not silent:  # pragma: no cover  Requires tty
                     match = self.fuzz_lookup(query_str, self.TemplateDB, group=group)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating template Cache")
@@ -5222,7 +5214,7 @@ class Cache:
             if completion:
                 return match
 
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover  Requires tty
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
@@ -5246,20 +5238,10 @@ class Cache:
                 log.warning(f"Unable to gather template from provided identifier {query_str}", show=False)
 
     @overload
-    def get_client_identifier(
-        self,
-        query_str: str,
-        completion: bool = Literal[False],
-    ) -> CacheClient:
-        ...
+    def get_client_identifier(self, query_str: str, completion: Literal[False]) -> CacheClient: ...
 
     @overload
-    def get_client_identifier(
-        self,
-        query_str: str,
-        exit_on_fail: bool = Literal[True],
-    ) -> CacheClient:
-        ...
+    def get_client_identifier(self, query_str: str, exit_on_fail: bool = Literal[True]) -> CacheClient: ...
 
     def get_client_identifier(
         self,
@@ -5334,7 +5316,7 @@ class Cache:
             return match or []
 
         if match:
-            if len(match) > 1:  # user selects which device if multiple matches returned
+            if len(match) > 1:  # pragma: no cover  Requires tty # user selects which device if multiple matches returned
                 match = self.handle_multi_match(match, query_str=query_str, query_type="client")
 
             return match[0]
@@ -5400,8 +5382,7 @@ class Cache:
         retry: bool = True,
         completion: bool = True,
         silent: bool = False,
-    ) -> list[CacheMpskNetwork]:
-        ...
+    ) -> list[CacheMpskNetwork]: ...
 
     @overload
     def get_mpsk_network_identifier(
@@ -5410,8 +5391,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheMpskNetwork:
-        ...
+    ) -> CacheMpskNetwork: ...
 
     def get_mpsk_network_identifier(
         self,
@@ -5460,13 +5440,7 @@ class Cache:
             if not match and retry and self.responses.mpsk_network is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and self.mpsk_networks and not silent:
-                    match = self.fuzz_match(query_str, self.MpskNetDB)
-                    # fuzz_resp = process.extract(query_str, [net["name"] for net in self.mpsk_networks], limit=1)
-                    # if fuzz_resp:
-                    #     fuzz_match, fuzz_confidence = fuzz_resp[0]
-                    #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    #     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                    #         match = self.MpskNetDB.search(self.Q.name == fuzz_match)
+                    match = self.fuzz_lookup(query_str, self.MpskNetDB)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
                     api.session.request(self.refresh_mpsk_networks_db)
@@ -5608,12 +5582,6 @@ class Cache:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                 if FUZZ and db_all and not silent:
                     match = self.fuzz_lookup(query_str, db=db)
-                    # fuzz_resp = process.extract(query_str, [item["name"] for item in db_all], limit=1)
-                    # if fuzz_resp:
-                    #     fuzz_match, fuzz_confidence = fuzz_resp[0]
-                    #     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    #     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                    #         match = db.search(self.Q.name == fuzz_match)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
                     api.session.request(this.cache_update_func)
