@@ -9,7 +9,7 @@ import time
 from collections.abc import Generator, Iterator, KeysView, MutableMapping
 from copy import deepcopy
 from enum import Enum
-from functools import cached_property, lru_cache
+from functools import cached_property, lru_cache, wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
@@ -67,6 +67,19 @@ TinyDB.default_table_name = "devices"
 
 
 CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
+
+
+def ensure_config(func):
+    """Prevents exception during completion when config missing or invalid."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not config.valid:
+            econsole.print(":warning:  Invalid or missing config", end="")
+            return []
+        return func(*args, **kwargs)
+
+    return wrapper
+
 
 class CentralObject(MutableMapping):
     _doc_id = None
@@ -392,6 +405,21 @@ class CacheDevice(CentralObject):
 
         render.display_results(resp, exit_on_fail=True)
 
+    def get_completion(self, incomplete: str, args: list[str] = None) -> tuple[str, str]:
+        args = args or []
+        idens = [self.name, self.serial, self.mac, self.ip]
+        if any([i in args for i in idens]):
+            return
+        if self.name.replace("_", "-").lower().startswith(incomplete.replace("_", "-").lower()):
+            return self.name, self.help_text
+        if self.serial.lower().startswith(incomplete.lower()):
+            return self.serial, self.help_text
+        if self.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
+            return self.mac, self.help_text
+        if self.ip.startswith(incomplete):
+            return self.ip, self.help_text
+        return self.name, self.help_text  # pragma: no cover  Fall through / catch all
+
 
 class CacheInvMonDevice(CentralObject):
     def __init__(self, inventory: CacheInvDevice, monitoring: CacheDevice = None):
@@ -634,6 +662,10 @@ class CacheLabel(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
 
+    def get_completion(self, pfx: str = "'") -> tuple[str, str]:
+        quoted = f"'{self.name}'" if pfx == "'" else f'"{self.name}"'
+        return (self.name if " " not in self.name else quoted, self.help_text)
+
 
 class CachePortal(CentralObject):
     db: Table | None = None
@@ -821,14 +853,10 @@ class CacheClient(CentralObject):
         self._doc_id = doc_id
 
     def get_group(self) -> CacheGroup:
-        if self.cache is None:
-            return None
-        return self.cache.get_group_identifier(self.group)
+        return None if self.cache is None else self.cache.get_group_identifier(self.group)
 
     def get_site(self) -> CacheSite:
-        if self.cache is None:
-            return None
-        return self.cache.get_site_identifier(self.site)
+        return None if self.cache is None else self.cache.get_site_identifier(self.site)
 
     def __rich__(self) -> str:
         return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s:[green_yellow]{self.site})[/]'
@@ -1040,7 +1068,7 @@ class CacheSub(CentralObject, Text):
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.name}|{self.available}|{render.unstyle(self.status)}) object at {hex(id(self))}>"
 
-    def __eq__(self, value):
+    def __eq__(self, value: CacheSub | str):
         if hasattr(value, "id"):
             return value.id == self.id
         return value == self.id
@@ -1284,6 +1312,18 @@ class CacheResponses:
         self._guest = None
         self._cert = None
         self._device_type = None
+
+def _handle_multi_word_incomplete(incomplete: str) -> tuple[str, str]:
+    if incomplete.startswith("'"):
+        pfx = "'"
+    elif incomplete.startswith('"'):
+        pfx = '"'
+    else:
+        pfx = ""
+    if pfx:
+        incomplete = incomplete.lstrip(pfx)
+
+    return incomplete, pfx
 
 
 # TODO Verify, but the set_config class method should be able to be removed as ordering
@@ -1643,7 +1683,7 @@ class Cache:
         if update_ok:
             log.info(f'{db_str} cache update SUCCESS: {msg}{elapsed_msg}')
             return True
-        else:
+        else:  # pragma: no cover
             log.error(f'{db_str} cache update ERROR:  Attempt to {msg} appears to have failed.  Expecting {expected} doc_ids TinyDB returned {resp_cnt}', show=True, caption=True, log=True)
             log.error(f'{db_str} update response: {response}{elapsed_msg}')
             return False
@@ -1712,17 +1752,13 @@ class Cache:
         return resp
 
     @staticmethod
-    def workspace_completion(ctx: typer.Context, args: List[str], incomplete: str):
+    def workspace_completion(incomplete: str):
         for ws in config.defined_workspaces:
             if ws.lower().startswith(incomplete.lower()):
-                yield ws  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
+                yield ws, config.data["workspaces"][ws].get("cluster") or ""  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
 
+    @ensure_config
     def method_test_completion(self, incomplete: str, args: List[str] = []):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         methods = list(set(
             [d for svc in api.__dir__() if not svc.startswith("_") for d in getattr(api, svc).__dir__() if not d.startswith("_")]
         ))
@@ -1744,17 +1780,13 @@ class Cache:
             if m.startswith(incomplete):
                 yield m
 
+    @ensure_config
     def smg_kw_completion(self, ctx: typer.Context, incomplete: str, args: List[str] = []):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         kwds = ["group", "mac", "serial"]
         out = []
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
-            args = [v for k, v in ctx.params.items() if v and k != "account"]  # TODO ensure k is last item when v = incomplete
+            args = [v for k, v in ctx.params.items() if v and k != "workspace"]  # TODO ensure k is last item when v = incomplete
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
@@ -1775,22 +1807,18 @@ class Cache:
                 if kw not in args and kw.lower().startswith(incomplete):
                     yield kw
 
-    def null_completion(self, incomplete: str, args: List[str] = None):
+    def null_completion(self, incomplete: str):
         incomplete = "NULL_COMPLETION"
         _ = incomplete
         for m in ["|", "<cr>"]:
             yield m
 
+    @ensure_config
     def dev_completion(
         self,
         incomplete: str,
         args: List[str] = None
     ):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         dev_type = None
         if args:
             if "dev_type" in args and len(args) > 1:
@@ -1810,23 +1838,13 @@ class Cache:
         out = []
         args = args or []
         if match:
-            # remove devices that are already on the command line
-            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete):
-                    out += [tuple([m.name, m.help_text])]
-                elif m.serial.startswith(incomplete):
-                    out += [tuple([m.serial, m.help_text])]
-                elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
-                    out += [tuple([m.mac, m.help_text])]
-                elif m.ip.startswith(incomplete):
-                    out += [tuple([m.ip, m.help_text])]
-                else:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+                out += [m.get_completion(incomplete, args=args)]
 
         for m in out:
             yield m
 
+    @ensure_config
     def dev_switch_completion(
         self,
         incomplete: str,
@@ -1842,19 +1860,9 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_dev_identifier(incomplete, dev_type="switch", completion=True)
 
-        out = []
-        if match:
-            out = [
-                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
-                if m.name not in args
-                ]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
@@ -1875,41 +1883,33 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_dev_identifier(incomplete, dev_type=[dev_type], completion=True)
 
-        out = []
-        if match:
-            out = [
-                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
-                if m.name not in args
-                ]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
+    @ensure_config
     def dev_cx_completion(
             self,
             incomplete: str,
             args: List[str] = [],
     ) -> Iterator[Tuple[str, str]]:
-        for match in self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx"):
-            yield match
+        yield from self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="cx")
 
+    @ensure_config
     def dev_sw_completion(
             self,
             incomplete: str,
             args: List[str] = [],
     ) -> Iterator[Tuple[str, str]]:
-        for match in self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw"):
-            yield match
+        yield from self._dev_switch_by_type_completion(incomplete=incomplete, args=args, dev_type="sw")
 
+    @ensure_config
     def dev_ap_gw_sw_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = [],
     ) -> Iterator[Tuple[str, str]]:
@@ -1923,34 +1923,16 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        yield from self.dev_ap_gw_completion(ctx, incomplete, args=args)
+        yield from self.dev_sw_completion(incomplete, args=args)
 
-        match = self.get_dev_identifier(incomplete, dev_type=["ap", "gw", "sw"], completion=True)
-
-        out = []
-        if match:
-            out = [
-                tuple([m.name, m.help_text]) for m in sorted(match, key=lambda i: i.name)
-                if m.name not in args
-                ]
-
-        for m in out:
-            yield m
-
+    @ensure_config
     def mpsk_network_completion(
         self,
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_mpsk_network_identifier(
             incomplete,
             completion=True,
@@ -1968,30 +1950,25 @@ class Cache:
                 elif str(m.id).startswith(incomplete):
                     out += [tuple([m.id, m.name])]
                 else:
-                    out += [tuple([m.name, f"{m.help_text} FS match".lstrip()])]  # failsafe, shouldn't hit
+                    out += [tuple([m.name, f"{m.help_text} Fail Safe match".lstrip()])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m
 
-    # TODO one common completion that is referenced by multiple xx_completions passing in ctx and the get__identifier func/args
+    @ensure_config
     def portal_completion(
         self,
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match: list[CachePortal] = self.get_portal_identifier(
             incomplete,
             completion=True,
         )
-        out = []
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
+        out = []
         if match:
             # remove items that are already on the command line
             match = [m for m in match if m.name not in args]
@@ -2011,8 +1988,7 @@ class Cache:
         self,
         query_str: str,
         completion: bool = True,
-    ) -> list[CacheGuest]:
-        ...
+    ) -> list[CacheGuest]: ...
 
     @overload
     def get_guest_identifier(
@@ -2022,8 +1998,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheGuest:
-        ...
+    ) -> CacheGuest: ...
 
     def get_guest_identifier(
         self,
@@ -2063,14 +2038,19 @@ class Cache:
                 elif "-" in query_str:
                     match = self.GuestDB.search(self.Q.name.test(lambda v: v.lower() == query_str.lower().replace("-", "_")))
 
-            # startswith - phone has all non digit characters stripped
+            # startswith
             if not match:
                 match = self.GuestDB.search(
                     self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                     | self.Q.email.test(lambda v: v and v.lower().startswith(query_str.lower()))
                     | self.Q.id.test(lambda v: v.lower().startswith(query_str.lower()))
-                    | self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()]).startswith("".join([d for d in query_str if d.isdigit()])))
                 )
+
+            # test phone match if digits in query_str (all non digit characters stripped)
+            if not match:
+                _phone = "".join([d for d in query_str if d.isdigit()])
+                if _phone:
+                    self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()]).startswith(_phone))
 
             # phone with only last 10 digits (strip country code)
             if not match:
@@ -2151,9 +2131,9 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete) and m.name not in args:
                     out += [tuple([m.name, m.help_text])]
-                elif m.email.startswith(incomplete) and m.email not in args:
+                elif m.email and m.email.startswith(incomplete) and m.email not in args:
                     out += [tuple([m.email, m.help_text])]
-                elif m.phone.startswith(incomplete) and m.phone not in args:
+                elif m.phone and m.phone.startswith(incomplete) and m.phone not in args:
                     out += [tuple([m.phone, m.help_text])]
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
@@ -2275,25 +2255,21 @@ class Cache:
         for m in out:
             yield m
 
+    @ensure_config
     def sub_completion(
         self,
         ctx: typer.Context,
         incomplete: str = None,
         args: List[str] = None,
     ):
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         incomplete = incomplete or ""
         match: list[CacheSub] = self.get_sub_identifier(
             incomplete,
             completion=True,
         )
-        out = []
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
+        out = []
         if match:
             # remove items that are already on the command line
             # match = [m for m in match if m.name not in args]
@@ -2308,7 +2284,7 @@ class Cache:
         for m in out:
             yield m
 
-
+    @ensure_config
     def dev_kwarg_completion(
         self,
         ctx: typer.Context,
@@ -2328,37 +2304,18 @@ class Cache:
             Iterator[Tuple[str, str]]: Matching completion string, help text, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         if not args:  # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
             args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
             args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
 
         if args and args[-1].lower() == "group":
-            out = [m for m in self.group_completion(incomplete, args)]
-            for m in out:
-                yield m
+            yield from self.group_completion(incomplete, args)
 
         elif args and args[-1].lower() == "site":
-            out = [m for m in self.site_completion(ctx, incomplete, args)]
-            for m in out:
-                ##  This was required for completion to work in click 8.x when case doesn't match
-                ##  i.e. site: WadeLab incomplete: wade in click 7 completes wade -> WadeLab
-                ##  in click 8 it returns nothing.
-                ##  pinned click back to 7.1.2 until this and the other 2 issues are sorted upstream.
-                # if m[0].lower().startswith(incomplete):
-                #     # console.print(m[0].lower())
-                #     yield m[0].lower(), m[1]
-                # else:
-                yield m
+            yield from self.site_completion(ctx, incomplete, args)
 
         elif args and args[-1].lower() == "ap":
-            out = [m for m in self.dev_completion(incomplete, args)]
-            for m in out:
-                yield m
+            yield from self.dev_completion(incomplete, args)
 
         else:
             out = []
@@ -2379,6 +2336,7 @@ class Cache:
             for m in out:
                 yield m if isinstance(m, tuple) else (m, f"{ctx.info_name} ... {m}")
 
+    @ensure_config
     def dev_ap_completion(
         self,
         # ctx: typer.Context,
@@ -2395,35 +2353,15 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        match: List[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=["ap"], completion=True)
 
-        dev_types = ["ap"]
-        match: List[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
-
-        # TODO this completion complete using the type of iden they start, and omits any idens already on the command line regardless of iden type
-        # so they could put serial then auto-complete name and the name of the device whos serial is already on the cli would not appear.
-        # Make others like this.
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                idens = [m.name, m.serial, m.mac, m.ip]
-                if all([i not in args for i in idens]):
-                    if m.name.startswith(incomplete):
-                        out += [tuple([m.name, m.help_text])]
-                    elif m.serial.startswith(incomplete):
-                        out += [tuple([m.serial, m.help_text])]
-                    elif m.mac.strip(":.-").lower().startswith(incomplete.strip(":.-").lower()):
-                        out += [tuple([m.mac, m.help_text])]
-                    elif m.ip.startswith(incomplete):
-                        out += [tuple([m.ip, m.help_text])]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
     # TODO put client names with spaces in quotes
+    @ensure_config
     def dev_client_completion(
         self,
         ctx: typer.Context,
@@ -2444,23 +2382,16 @@ class Cache:
             Iterator[Tuple[str, str]]: Tuple with completion and help text, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
-
         if ctx.params.get("wireless"):
             gen = self.dev_ap_completion
         elif ctx.params.get("wired"):
             gen = self.dev_switch_completion
         else:
             gen = self.dev_switch_ap_completion
-            # return
 
-        for m in [dev for dev in gen(incomplete, args)]:
-            yield m
+        yield from gen(incomplete, args)
 
+    @ensure_config
     def dev_switch_ap_completion(
         self,
         incomplete: str,
@@ -2476,23 +2407,14 @@ class Cache:
             Iterator[Tuple[str, str]]: Yields Tuple with completion and help text, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        match: list[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
 
-        match: List[CacheDevice] = self.get_dev_identifier(incomplete, dev_type=["switch", "ap"], completion=True)
-
-        # TODO fancy map to ensure dev.name, dev.mac, dev.serial, dev.ip are all not in args
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                if m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
+    @ensure_config
     def dev_ap_gw_completion(
         self,
         ctx: typer.Context,
@@ -2509,33 +2431,14 @@ class Cache:
             Iterator[Tuple[str, str]]: Yields Tuple with completion and help text, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         # Prevents device completion for cencli show config cencli
         if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") == "cencli":
             return
 
-        dev_types = ["ap", "gw"]
-        _match = self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True)
+        yield from self.dev_ap_completion(incomplete, args=args)
+        yield from self.dev_gw_completion(incomplete, args=args)
 
-        match = []
-        for m in _match:
-            if m.name in args or m.serial in args or m.mac in args:
-                continue
-            else:
-                match += [m]
-
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
-
-        for m in out:
-            yield m[0], m[1]
-
+    @ensure_config
     def dev_switch_gw_completion(
         self,
         incomplete: str,
@@ -2551,23 +2454,14 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        match = self.get_dev_identifier(incomplete, dev_type=["switch", "gw"], completion=True)
 
-        dev_types = ["switch", "gw"]
-        match = [m for m in self.get_dev_identifier(incomplete, dev_type=dev_types, completion=True) if m.generic_type in dev_types]
-
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                if match not in args:
-                    out += [tuple([m.name, m.help_text])]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
+    @ensure_config
     def dev_gw_completion(
         self,
         incomplete: str,
@@ -2583,20 +2477,12 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_dev_identifier(incomplete, dev_type="gw", completion=True)
 
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
-            yield m[0], m[1]
+            yield m
 
     # FIXME not completing partial serial number is zsh get_dev_completion appears to return as expected
     # works in BASH and powershell
@@ -2622,44 +2508,38 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         # Add cencli as option to show and update config commands (update not implememnted yet)
         utils.listify(dev_type)
+        args = args or []
         out = []
+        word = "self" if "self".startswith(incomplete) else "cencli"
         if args:
-            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
-                out += [("cencli", "show cencli configuration")]
-            elif " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
-                out += [("cencli", "update cencli configuration")]
+            if " ".join(args).lower() == "show config" and word.startswith(incomplete):
+                out += [(word, "show cencli configuration")]
+            elif " ".join(args).lower() == "update config" and word.startswith(incomplete):
+                out += [(word, "update cencli configuration")]
         elif ctx is not None:
             args = [a for a in ctx.params.values() if a is not None]
             if ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
-                if "cencli".lower().startswith(incomplete):
-                    out += [("cencli", "show cencli configuration")]
+                if word.startswith(incomplete):
+                    out += [(word, "show cencli configuration")]
             elif ctx.command_path == "cencli update config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
-                if "cencli".lower().startswith(incomplete):
-                    out += [("cencli", "update cencli configuration")]
-        else:
-            args = []
+                if word.startswith(incomplete):
+                    out += [(word, "update cencli configuration")]
 
         group_out = self.group_completion(incomplete=incomplete, args=args)
         if group_out:
             out += list(group_out)
 
-
-        if not bool([t for t in out if t[0] == incomplete]):  # exact match
-            _args = args if not dev_type else [*args, "dev_type", *dev_type]  # TODO not tested yet
-            dev_out = self.dev_completion(incomplete, args=_args)
-            if dev_out:
-                out += list(dev_out)
+        if not bool([t for t in out if t[0] == incomplete]):  # group had exact match no need for dev
+            match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
+            if match:
+                out += [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
+    @ensure_config
     def group_dev_completion(
         self,
         ctx: typer.Context,
@@ -2677,13 +2557,9 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        yield from self._group_dev_completion(incomplete, ctx=ctx, args=args)
 
-        return self._group_dev_completion(incomplete, ctx=ctx, args=args)
-
+    @ensure_config
     def group_dev_ap_gw_completion(
         self,
         ctx: typer.Context,
@@ -2700,11 +2576,6 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         dev_types = ["ap", "gw"]
         match: list[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
 
@@ -2843,7 +2714,42 @@ class Cache:
         for m in out:
             yield m
 
-    def group_ap_completion(
+    def template_group_completion(
+        self,
+        incomplete: str,
+        args: List[str] = [],
+    ) -> Iterator[Tuple[str, str]]:
+        """Completion for template groups (by name).
+
+        Args:
+            incomplete (str): The last partial or full command before completion invoked.
+            args (List[str], optional): The previous arguments/commands on CLI. Defaults to [].
+
+        Yields:
+            Iterator[Tuple[str, str]]: Name and help_text for the group, or
+                Returns None if config is invalid
+        """
+        # Prevents exception during completion when config missing or invalid
+        if not config.valid:
+            econsole.print(":warning:  Invalid config")
+            return
+
+        all_match = self.get_group_identifier(
+            incomplete,
+            completion=True,
+        )
+        match = [m for m in all_match if m.wired_tg or m.wlan_tg]
+        out = []
+        if match:
+            for m in sorted(match, key=lambda i: i.name):
+                if m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
+
+        for m in out:
+            yield m
+
+    @ensure_config
+    def ap_group_completion(
         self,
         incomplete: str,
         args: List[str] = [],
@@ -2869,13 +2775,12 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name not in args:
                     out += [tuple([m.name, m.help_text])]
-                    # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])] # FIXME case insensitive and group completion now broken used to work
-                    # FIXME zsh is displaying "name name name --help-text"  (name x 3 the help text on each line)
 
         for m in out:
             yield m
 
 
+    @ensure_config
     def label_completion(
         self,
         ctx: typer.Context,
@@ -2892,19 +2797,7 @@ class Cache:
             Iterator[Tuple[str, str]]:  Name and help_text for the label, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
-        if incomplete.startswith("'"):
-            pfx = "'"
-        elif incomplete.startswith('"'):
-            pfx = '"'
-        else:
-            pfx = ""
-        if pfx:
-            incomplete = incomplete.lstrip(pfx)
+        incomplete, pfx = _handle_multi_word_incomplete(incomplete)
         match: List[CacheLabel] = self.get_label_identifier(
             incomplete,
             completion=True,
@@ -2918,16 +2811,12 @@ class Cache:
                 if str(m.id).startswith(incomplete):
                     out += [(str(m.id), m.help_text)]
                 else:
-                    if not pfx:
-                        out += [(m.name if " " not in m.name else f"'{m.name}'", m.help_text)]
-                    elif pfx == '"':
-                        out += [(f'"{m.name}"', m.help_text)]
-                    elif pfx == "'":
-                        out += [(f"'{m.name}'", m.help_text)]
+                    out += [m.get_completion(pfx=pfx)]  # TODO do this for others
 
         for m in out:
             yield m
 
+    @ensure_config
     def client_completion(
         self,
         incomplete: str,
@@ -2943,20 +2832,7 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the client, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
-        # econsole.print(f"{incomplete = }", end="")
-        if incomplete.startswith("'"):
-            pfx = "'"
-        elif incomplete.startswith('"'):
-            pfx = '"'
-        else:
-            pfx = ""
-        if pfx:
-            incomplete = incomplete.lstrip(pfx)
+        incomplete, pfx = _handle_multi_word_incomplete(incomplete)
         match = self.get_client_identifier(
             incomplete,
             completion=True,
@@ -2964,7 +2840,6 @@ class Cache:
         out = []
         args = args or []
         if match:
-            # econsole.print(match, end="")
             # remove clients that are already on the command line
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
@@ -2981,12 +2856,12 @@ class Cache:
                 elif c.ip.startswith(incomplete):
                     out += [(c.ip, c.help_text)]
                 else:
-                    # failsafe, shouldn't hit
-                    out += [(c.name, f'{c.help_text} FailSafe Match')]
+                    out += [(c.name, f'{c.help_text} FailSafe Match')]  # failsafe, shouldn't hit
 
         for c in out:
             yield c[0].replace(":", "-"), c[1]  # TODO completion behavior has changed.  This works-around issue bash doesn't complete past 00: and zsh treats each octet as a dev name when : is used.
 
+    @ensure_config
     def event_log_completion(
         self,
         incomplete: str,
@@ -3002,11 +2877,6 @@ class Cache:
             Iterator[Tuple[str, str]]: Value and help_text for the event, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         _completion: list[tuple[str, str]] = [
             ("cencli", "Show cencli logs (alias for self)"),
             ("self", "Show cencli logs"),
@@ -3024,6 +2894,7 @@ class Cache:
                 if m[0].startswith(incomplete) and m[0] not in args:
                     yield m
 
+    @ensure_config
     def audit_log_completion(
         self,
         incomplete: str,
@@ -3039,11 +2910,6 @@ class Cache:
             Iterator[Tuple[str, str]]: Value and help_text for the event, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         if incomplete == "":
             for m in self.logs:
                 yield m["id"]
@@ -3052,6 +2918,7 @@ class Cache:
                 if str(log["id"]).startswith(incomplete):
                     yield log["id"]
 
+    @ensure_config
     def site_completion(
         self,
         ctx: typer.Context,
@@ -3068,11 +2935,6 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the site, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
         match = self.get_site_identifier(
@@ -3093,16 +2955,12 @@ class Cache:
         for m in out:
             yield m
 
+    @ensure_config
     def template_completion(
         self,
         incomplete: str,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_template_identifier(
             incomplete,
             completion=True,
@@ -3116,16 +2974,12 @@ class Cache:
         for m in out:
             yield m
 
+    @ensure_config
     def dev_template_completion(
         self,
         incomplete: str,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match = self.get_template_identifier(
             incomplete,
             completion=True,
@@ -3156,111 +3010,47 @@ class Cache:
         for m in out:
             yield m
 
-    def dev_site_completion(
-        self,
-        incomplete: str,
-        args: List[str] = None,
-    ) -> Iterator[Tuple[str, str]]:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
-        match = self.get_dev_identifier(
-            incomplete,
-            completion=True,
-        ) or []  # TODO update get_*_identifier methods to return empty list when no completion yields no matches
-
-        site_match = self.get_site_identifier(
-            incomplete,
-            completion=True,
-        ) or []
-        match += site_match
-
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                # TODO needs check to see if key fields already in args
-                out += [tuple([m.name, m.help_text])]
-
-        for m in out:
-            yield m
-
+    @ensure_config
     def dev_gw_switch_completion(
         self,
         ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         # typer stopped providing args pulling from ctx.params
-        if not args:
+        if not args:  # pragma: no cover
             args = [arg for p in ctx.params.values() for arg in utils.listify(p)]
 
-        match = self.get_dev_identifier(
-            incomplete,
-            dev_type=["gw", "switch"],
-            completion=True,
-        )
-        match = match or []
+        match = self.get_dev_identifier(incomplete, dev_type=["gw", "switch"], completion=True)
 
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                if all([attr not in args for attr in [m.name, m.serial, m.mac, m.ip]]):  # TODO many completions won't filter items on command line already as it's eval is m not in args but m is a CentralObject
-                    out += [tuple([m.name, m.help_text])]
+        out = [] if not match else [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
         for m in out:
             yield m
 
+
+    @ensure_config
     def dev_gw_switch_site_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
+        if config.valid:
+            yield from self.dev_gw_switch_completion(ctx, incomplete, args=args)
+            yield from self.site_completion(ctx, incomplete, args=args)
 
-        match = self.get_dev_identifier(
-            incomplete,
-            dev_type=["gw", "switch"],
-            completion=True,
-        )
-        match = match or []
-        match += self.get_site_identifier(
-            incomplete,
-            completion=True,
-        ) or []
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                if m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
 
-        for m in out:
-            yield m
-
-    # TODO wrapper function to handle if not config.valid
+    @ensure_config
     def remove_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str],
     ) -> Iterator[Tuple[str, str]]:
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         if args[-1].lower() == "site":
-            out = [m for m in self.site_completion(incomplete)]
-            for m in out:
-                yield m
+            yield from self.site_completion(ctx, incomplete)
         else:
             out = []
             if len(args) > 1:
@@ -4408,6 +4198,30 @@ class Cache:
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
+    ) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: list[constants.LibAllDevTypes],
+        completion: Literal[True],
+    ) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        completion: Literal[True],
+    ) -> list[CacheDevice]: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
+        conductor_only: Optional[bool],
+        completion: Literal[True],
     ) -> list[CacheDevice]: ...
 
     @overload
