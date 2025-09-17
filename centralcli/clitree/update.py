@@ -317,12 +317,13 @@ def cp_cert(
         autocompletion=common.cache.cert_completion,
         show_default=False,
     ),
+    _groups: list[str] = typer.Argument(None, hidden=True, autocompletion=common.cache.ap_group_completion,),  # HACK typer list[str] for typer.Option does not work
     groups: list[str] = common.options.get(
         "group_many", "-G", "--group",
         default=...,
         metavar=iden_meta.group.replace("NAME]", "NAME|all]"),
         help="The Group [dim italic](AP Group)[/] to be updated to use the Captive Portal certificate. [dark_orange3]:warning:[/]  [cyan]all[/] Will push to all AP groups",
-        autocompletion=common.cache.group_ap_completion
+        autocompletion=common.cache.ap_group_completion
     ),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -339,6 +340,7 @@ def cp_cert(
 
     :information:  Not supported on Template Groups.  [dim italic](They are filtered out if [cyan]all[/] is specified)[/]
     """
+    groups += _groups or []
     cert: CacheCert = common.cache.get_cert_identifier(certificate)
     if cert.expired:
         common.exit(f"Aborting as {cert.summary_text} - is [bright_red bold]Expired[/].")
