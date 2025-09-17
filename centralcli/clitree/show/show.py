@@ -615,7 +615,12 @@ def aps(
 
 @app.command("switches")
 def switches_(
-    switches: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    switches: List[str] = common.arguments.get(
+        "devices",
+        default=None,
+        help=f"Show [dim italic]verbose[/] details for specific switch(es) {render.help_block('All switches (summary table)')}",
+        autocompletion=common.cache.dev_switch_completion,
+    ),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
@@ -656,7 +661,7 @@ def switches_(
 
 @app.command(name="gateways")
 def gateways_(
-    gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_gw_completion, show_default=False,),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
@@ -697,7 +702,7 @@ def gateways_(
 
 @app.command()
 def stacks(
-    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_switch_completion, show_default=False,),
     group: str = common.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
@@ -718,12 +723,9 @@ def stacks(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Show details for switch stacks
-    """
-    if down:
-        status = StatusOptions("Down")
-    elif up:
-        status = StatusOptions("Up")
+    """Show details for switch stacks."""
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
 
     if group:
         group: CacheGroup = common.cache.get_group_identifier(group)
@@ -733,11 +735,11 @@ def stacks(
     kwargs = {}
     func = api.monitoring.get_switch_stacks
     if switches:
-        devs: List[CentralObject] = [common.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
-        if len(devs) == 1:  # if the specify a we use the details call
+        devs: list[CacheDevice] = [common.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
+        if len(devs) == 1:  # if they specify a single switch we use the details call
             func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
-        else: # if the specify multiple hosts we grab info for all stacks and filter in the cleaner
+        else: # if the specify multiple switches we grab info for all stacks and filter in the cleaner
             cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
             if group:
                 kwargs = {"group": group.name}
@@ -816,7 +818,7 @@ def inventory(
 # TODO break into seperate command group if we can still all show subscription without an arg to default to details
 @app.command()
 def subscriptions(
-    what: SubscriptionArgs = typer.Argument("details"),
+    what: SubscriptionArgs = typer.Argument(SubscriptionArgs.details),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
     service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", autocompletion=cache.sub_completion, show_default=False),
     sort_by: SortSubscriptionOptions = common.options.sort_by,
@@ -910,14 +912,10 @@ def swarms(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm
-    """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
-    else:
-        status = status or state
+    """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm."""
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+    status = status or state
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -1220,6 +1218,18 @@ def poe(
         if not port:
             _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
             caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+            try:
+                total_draw = round(sum(p['power_drawn_in_watts'] for p in resp.output), 1)
+                reserved = round(sum(p['reserved_power_in_watts'] for p in resp.output), 1)
+                allocated = round(sum(p['pse_allocated_power'] for p in resp.output), 1)
+                denied = len([p for p in resp.output if p.get("power_denied_count")])
+                counts_caption = [f"Total PoE [dark_olive_green2]Draw[/]: [cyan]{total_draw}[/], [dark_olive_green2]Reserved[/]: [cyan]{reserved}[/], [dark_olive_green2]Allocated[/]: [cyan]{allocated}[/]"]
+                if denied:
+                    counts_caption += [f"[dark_orange3]\u26a0[/]  {denied} interfaces have a power denied count > 0"]
+                counts_caption = '\n '.join(counts_caption)
+                caption = f"{caption}\n {counts_caption}"
+            except Exception as e:  # pragma: no cover
+                log.exception(f"{repr(e)} in show poe while gathering poe counts")
         if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
             caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
             caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
@@ -1727,7 +1737,7 @@ def templates(
         None, "--group",
         help="Get Templates for Group",
         hidden=False,
-        autocompletion=common.cache.group_completion,  # TODO add group completion specific to template_groups only
+        autocompletion=common.cache.template_group_completion,
         show_default=False,
     ),
     device_type: DevTypes = typer.Option(
@@ -1739,7 +1749,6 @@ def templates(
     model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model", show_default=False,),
     #  variablised: str = typer.Option(False, "--with-vars",
     #                                  help="[Templates] Show Template with variable place-holders and vars."),
-
     sort_by: SortTemplateOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -1786,10 +1795,7 @@ def templates(
         resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
         title = "All Templates"
-        if not common.cache.responses.template:
-            resp = api.session.request(common.cache.refresh_template_db)
-        else:
-            resp = common.cache.responses.template  # cache updated this session use response from cache update (Only occures if hidden -U flag is used.)
+        resp = api.session.request(common.cache.refresh_template_db)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
@@ -3129,7 +3135,7 @@ def archived(
     render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
 
 
-# TODO sort_by / reverse tablefmt options add verbosity 1 to cleaner
+# TODO verbosity 1 to cleaner
 @app.command()
 def portals(
     portal: List[str] = typer.Argument(
@@ -3137,7 +3143,8 @@ def portals(
         metavar="[name|id]",
         help=f"show details for a specific portal profile {common.help_block('show summary for all portals')}",
         autocompletion=common.cache.portal_completion,
-        show_default=False,),
+        show_default=False,
+    ),
     logo: bool = typer.Option(
         False,
         "-L", "--logo",
