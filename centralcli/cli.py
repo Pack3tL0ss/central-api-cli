@@ -177,10 +177,12 @@ def bounce(
         render.display_results(resp, tablefmt="action")
 
 
+# TODO Change site arg to --site option and make optional build reqs based on current site according to cache.. add -R/-U option to update cache prior if stale.
 @app.command()
 def remove(
-    devices: list[str] = common.arguments.devices,
+    devices: list[str] = common.arguments.get("devices", autocompletion=common.cache.remove_completion),
     site: str = common.arguments.get("site", metavar="[site <SITE>]", autocompletion=common.cache.remove_completion),
+    # site: str = common.arguments.get("site", default=None, metavar="[site <SITE>]", help=f"Site to remove device from {render.help_block('Remove from current site based on Cache')}", autocompletion=common.cache.remove_completion),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
