@@ -47,7 +47,7 @@ class LoggedRequests:
         self.remain_sec = None
 
     def __repr__(self):
-        return f"<{self.__module__}.{type(self).__name__} ({self.reason}) object at {hex(id(self))}>"
+        return f"<{self.__module__}.{type(self).__name__} ({self.reason or 'OK' if self.ok else '?'}) object at {hex(id(self))}>"
 
     def update(self, response: ClientResponse):
         rh = response.headers
