@@ -281,6 +281,7 @@ _short_key = {
     "part_number": "sku",
     "serial_number": "serial",
     "radio_name": "band",
+    "power_denied_count": "denied count"
 }
 
 
@@ -1631,7 +1632,8 @@ def get_switch_poe_details(data: list[dict[str, Any]], verbosity: int = 0, power
             "pse_allocated_power",
             "reserved_power_in_watts",
             "pre_standard_detect",
-            "power_class"
+            "power_class",
+            "power_denied_count"
         ]
     }
     if powered:
