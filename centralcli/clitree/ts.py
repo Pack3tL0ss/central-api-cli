@@ -417,7 +417,6 @@ def ping(
             else:
                 render.console.print(f'{ts_resp.output.get("message", "").split(".")[0]}. [cyan]Waiting...[/]')
 
-
         if not complete:
             render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{dev.name}[/]')
             render.econsole.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
@@ -425,7 +424,8 @@ def ping(
                 render.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
 
-@app.command(hidden=True)  # Currently hidden as the API is not returning a task_id
+# API-FLAW gw returns a success response with no task_id, aos8 ap returns success with task_id but call to /device_management/v1/status/{task_id} just returns success lacks the actual details
+@app.command(hidden=True)  # hidden due to above
 def speed_test(
     device: str = typer.Argument(..., metavar=iden_meta.dev, help="Aruba Central device to run speedtest from", autocompletion=common.cache.dev_ap_gw_completion),
     host: str = typer.Argument("ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org", help="speedtest host (IP of FQDN)"),
@@ -435,9 +435,8 @@ def speed_test(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-):
-    """Initiate a speedtest from a device (Gateways and AOS8 IAP).
-    """
+):  # pragma: no cover  Useless given API flaw noted above
+    """Initiate a speedtest from a device (Gateways and AOS8 IAP)."""
     dev = common.cache.get_dev_identifier(device)
     if dev.type == "ap" and dev.is_aos10:
         common.exit("This command is not supported on AOS10 APs")
