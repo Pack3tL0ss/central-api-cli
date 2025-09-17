@@ -252,7 +252,8 @@ class RapidsAPI:
                 if f in range(0, len(batch_res)):
                     log.error(f"{batch_res[f].method} {batch_res[f].url.path} Returned Error Status {batch_res[f].status}. {batch_res[f].output or batch_res[f].error}", show=True)
         raw_keys = ["interfering_aps", "neighbor_aps", "suspect_aps"]
-        resp.raw = {"rogue_aps": resp.raw.get("rogue_aps", []), "_counts": {"rogues": resp.raw.get("total")}}
+        if resp.ok:
+            resp.raw = {"rogue_aps": resp.raw.get("rogue_aps", []), "_counts": {"rogues": resp.raw.get("total")}}  # TODO need more error handling
         for idx, key in enumerate(raw_keys):
             if idx in ok_res:
                 resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
