@@ -40,13 +40,13 @@ def test_group_completion_case_insensitive(incomplete: str = "w"):
 
 
 def test_group_ap_completion(incomplete: str = test_data["ap"]["group"]):
-    result = [c for c in cache.group_ap_completion(incomplete)]
+    result = [c for c in cache.ap_group_completion(incomplete)]
     assert len(result) > 0
     assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
 
 
 def test_group_ap_completion_empty_string(incomplete: str = ""):
-    result = [c for c in cache.group_ap_completion(incomplete)]
+    result = [c for c in cache.ap_group_completion(incomplete)]
     assert len(result) > 0
     assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
 
@@ -60,6 +60,11 @@ def test_site_completion_empty_string(incomplete: str = ""):
     result = [c for c in cache.site_completion(ctx, incomplete, ("show", "site",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_template_group_completion(ensure_cache_group2, incomplete: str = "cencli"):
+    result = [c for c in cache.template_group_completion(incomplete)]
+    assert len(result) > 0
+    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
 
 def test_template_completion(ensure_cache_template, incomplete: str = "cencli"):
     result = [c for c in cache.template_completion(incomplete, ("show", "templates",))]
@@ -76,18 +81,33 @@ def test_dev_template_completion(ensure_cache_group2, ensure_cache_template, inc
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_template_completion_empty_string(ensure_cache_group2, ensure_cache_template, incomplete: str = ""):
+def test_dev_template_completion_empty_string(ensure_cache_group2, ensure_cache_template, ensure_dev_cache_test_ap, incomplete: str = ""):
     result = [c for c in cache.dev_template_completion(incomplete, ("show", "templates",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_site_completion(incomplete: str = "barn"):
-    result = [c for c in cache.dev_site_completion(incomplete, ("show", "vlans",))]
+def test_dev_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
+    result = [c for c in cache.dev_switch_completion(incomplete, ("show", "firmware", "device"))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_cx_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
+    result = [c for c in cache.dev_cx_completion(incomplete, ("show", "firmware", "device"))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_sw_completion(incomplete: str = test_data["template_switch"]["name"].swapcase()):
+    result = [c for c in cache.dev_sw_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_dev_gw_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
     result = [c for c in cache.dev_gw_switch_completion(ctx, incomplete, ("show", "firmware", "device"))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_ap_gw_sw_completion(incomplete: str = test_data["ap"]["name"].swapcase()):
+    result = [c for c in cache.dev_ap_gw_sw_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
@@ -128,6 +148,27 @@ def test_client_completion_partial_name(incomplete: str = test_data["client"]["w
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+def test_dev_client_completion(incomplete: str = test_data["ap"]["mac"]):
+    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
+    assert len(result) == 1
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_client_completion_wireless(incomplete: str = test_data["ap"]["mac"]):
+    ctx.params = {**ctx.params, "wireless": True, "wired": None}
+    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
+    assert len(result) == 1
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    del ctx.params["wired"]
+    del ctx.params["wireless"]
+
+def test_dev_client_completion_wired(incomplete: str = test_data["switch"]["serial"]):
+    ctx.params = {**ctx.params, "wireless": None, "wired": True}
+    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
+    assert len(result) == 1
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    del ctx.params["wired"]
+    del ctx.params["wireless"]
+
 def test_event_log_completion_pytest(incomplete: str = "pyte"):
     result = list(cache.event_log_completion(incomplete=incomplete))
     assert len(result) > 0
@@ -160,5 +201,40 @@ def test_portal_completion_empty_string(incomplete: str = ""):
 
 def test_label_completion(ensure_cache_label1, incomplete: str = "cencli-test_label1"):
     result = list(cache.label_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_ws_completion(incomplete=""):
+    result = list(cache.workspace_completion(incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_guest_completion(ensure_cache_guest1, incomplete="superlongemail@kabrew"):
+    result = list(cache.guest_completion(ctx, incomplete=incomplete))
+    assert len(result) == 1
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_cert_completion(ensure_cache_cert, incomplete="cencli-tes"):
+    result = list(cache.cert_completion(ctx, incomplete=incomplete))
+    assert len(result) == 1
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_sub_completion(ensure_cache_subscription, incomplete="advanced-ap"):
+    result = list(cache.sub_completion(ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_kwarg_completion_group(ensure_cache_group1, incomplete="cencli_test_group1"):
+    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("group",)))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_kwarg_completion_site(ensure_cache_site1, incomplete="cencli_test_site"):
+    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("site",)))
+    assert len(result) > 0
+    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_dev_kwarg_completion_ap(incomplete=""):
+    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("ap",)))
     assert len(result) > 0
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])

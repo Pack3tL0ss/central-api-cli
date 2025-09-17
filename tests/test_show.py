@@ -5,7 +5,7 @@ from typer.testing import CliRunner
 from centralcli import cache
 from centralcli.cli import app
 
-from . import capture_logs, test_data
+from . import capture_logs, config, test_data
 
 runner = CliRunner()
 
@@ -462,9 +462,33 @@ def test_show_vlans_site():
     assert "API" in result.stdout
 
 
+if config.dev.mock_tests:
+    def test_show_task():
+        result = runner.invoke(app, ["show", "task", "17580829600233"],)
+        capture_logs(result, "test_show_task")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+def test_show_templates_all():
+    result = runner.invoke(app, ["show", "templates"],)
+    capture_logs(result, "test_show_templates_all")
+    assert result.exit_code == 0
+    assert "group" in result.stdout
+    assert "version" in result.stdout
+
+
 def test_show_templates_by_group():
-    result = runner.invoke(app, ["show", "templates", "--group", test_data["template_switch"]["group"]],)
+    result = runner.invoke(app, ["show", "templates", "group", test_data["template_switch"]["group"]],)
     capture_logs(result, "test_show_templates_by_group")
+    assert result.exit_code == 0
+    assert "group" in result.stdout
+    assert "version" in result.stdout
+
+
+def test_show_templates_dev_type():
+    result = runner.invoke(app, ["show", "templates", "group", test_data["template_switch"]["group"], "--dev-type", "sw"],)
+    capture_logs(result, "test_show_templates_dev_type")
     assert result.exit_code == 0
     assert "group" in result.stdout
     assert "version" in result.stdout
@@ -624,6 +648,20 @@ def test_show_switch_vlans_by_name():
     assert result.exit_code == 0
     assert "name" in result.stdout
     assert "pvid" in result.stdout
+
+
+def test_show_stacks():
+    result = runner.invoke(app, ["show", "stacks", "--up", "--group", test_data["vsf_switch"]["group"]],)
+    capture_logs(result, "test_show_stacks")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_stacks_dev():
+    result = runner.invoke(app, ["show", "stacks", test_data["vsf_switch"]["mac"]],)
+    capture_logs(result, "test_show_stacks_dev")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_clients_too_many_filters():
@@ -822,7 +860,7 @@ def test_show_poe():
     result = runner.invoke(app, [
             "show",
             "poe",
-            test_data["switch"]["mac"],
+            test_data["switch"]["ip"],
             "-p"
         ]
     )

@@ -11,7 +11,7 @@ from centralcli.cli import app
 
 from . import test_data
 from ._mock_request import test_responses
-from ._test_data import test_device_file, test_group_file, test_site_file
+from ._test_data import test_device_file, test_files, test_group_file
 
 runner = CliRunner()
 
@@ -97,9 +97,7 @@ def cleanup_test_items():  # pragma: no cover
 def do_nothing():
     ...
 
-
 def cleanup_import_files():
-    test_files = [test_group_file, test_site_file, test_device_file]
     for file in test_files:
         if file.exists():
             file.unlink()
@@ -302,7 +300,7 @@ def ensure_dev_cache_test_ap():
                 "ip": "10.0.31.99",
                 "mac": test_data["test_devices"]["ap"]["mac"],
                 "serial": test_data["test_devices"]["ap"]["serial"],
-                "group": "cencli_test_group1",
+                "group": "cencli_test_group2",
                 "site": "cencli_test_site1",
                 "version": "10.7.2.0_92876",
                 "swack_id": test_data["test_devices"]["ap"]["serial"],
