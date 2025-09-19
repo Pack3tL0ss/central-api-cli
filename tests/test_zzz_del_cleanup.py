@@ -148,7 +148,7 @@ def test_del_mpsk(ensure_cache_mpsk):  # TODO need command for this
         [
             "test",
             "method",
-            "cloudauth_delete_namedmpsk",
+            "delete_named_mpsk",
             "1EBTWK86LPQ86S0B",
             "4e650830-d4d6-4a19-b9af-e0f776c69d24"
         ]

@@ -73,7 +73,7 @@ def test_update_mpsk(ensure_cache_mpsk):
         [
             "test",
             "method",
-            "cloudauth_update_namedmpsk",
+            "update_named_mpsk",
             "1EBTWK86LPQ86S0B",
             "4e650830-d4d6-4a19-b9af-e0f776c69d24",
             "enabled=True",
