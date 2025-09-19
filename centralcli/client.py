@@ -97,7 +97,7 @@ class Session():
         self.workspace_name = workspace_name  # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
         self.ssl = config.ssl_verify
-        self.req_cnt = 1
+        self.req_cnt = 0
         self.throttle: int = 0
         self.spinner = Spinner("Collecting Data...")
         self.updated_at = time.monotonic()
