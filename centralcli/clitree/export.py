@@ -16,6 +16,7 @@ from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
 from centralcli.render import Spinner
 from centralcli.response import RateLimit, Response
+from centralcli.strings import Warnings
 
 if TYPE_CHECKING:
     from ..cache import CacheDevice, CacheGroup, CacheSite
@@ -357,7 +358,7 @@ class EvalLocationResponse:
 eval_location_response = EvalLocationResponse()
 
 
-def _get_ap_location_via_api() -> dict[str, dict[str, str | dict[str, str]]]:
+def _get_ap_location_via_api() -> tuple[dict[str, str], RateLimit]:
     campus_resp: Response = api.session.request(api.visualrf.get_all_campuses)
     eval_location_response(campus_resp)
     campuses = [c["campus_id"] for c in campus_resp.raw["campus"]]
@@ -381,7 +382,7 @@ def _get_ap_location_via_api() -> dict[str, dict[str, str | dict[str, str]]]:
     ap_loc_resp = api.session.batch_request(ap_loc_reqs)
     eval_location_response(ap_loc_resp)
     _ = asyncio.run(cache.update_floor_plan_cache(ap_loc_resp, cache="floors"))
-    ap_data = {
+    ap_loc_data = {
         ap["serial_number"]: {
             "id": ap["ap_id"],
             "serial": ap["serial_number"],
@@ -391,7 +392,7 @@ def _get_ap_location_via_api() -> dict[str, dict[str, str | dict[str, str]]]:
     }
     last_call = sorted(ap_loc_resp, key=lambda res: res.rl)[0]
 
-    return ap_data, last_call.rl
+    return ap_loc_data, last_call.rl
 
 
 def get_location_for_all_aps(ap_data: dict[str, dict[str, str | list[str]]], update_cache: bool = None) -> tuple[dict[str, dict[str, str | dict[str, str]]], RateLimit | None]:
@@ -524,9 +525,10 @@ def redsky_bssids(
     ap_data = [{"serial": k, **v, "building": location_data.get(k, {"building": "UNDEFINED"})["building"], "floor": location_data.get(k, {"floor": None})["floor"]} for k, v in bssids_by_serial.items() if location_data.get(k)]
     no_loc_aps = [{"serial": k, **v} for k, v in bssids_by_serial.items() if not location_data.get(k)]
     bssid_resp.output = ap_data if tablefmt != "csv" else generate_redsky_csv(ap_data, mask=not no_mask, pnc=pnc)
-    caption = f"[cyan]{api.session.req_cnt}[/] API Requests performed.{'' if tablefmt == 'csv' else 'Use default format (csv) for redsky formatted output.'}"
+    _count_caption = '' if api.session.req_cnt > 5 else f"[cyan]{api.session.req_cnt}[/] API Requests performed.\n"
+    caption = f"{_count_caption}{'' if tablefmt == 'csv' else 'Use default format (csv) for redsky formatted output.'}"
     if not outfile and tablefmt == "csv":
-        caption = f"{caption}\n[deep_sky_blue1]\u2139[/]  [cyan]--out <FILE PATH>[/] not provided.  The command can be repeated without doing API calls with [cyan]cencli show last --out <FILE PATH>[/]"
+        caption = f"{caption}\n{Warnings.no_outfile}"
 
     render.display_results(bssid_resp, tablefmt=tablefmt, title="AP / BSSID Location info", caption=caption, outfile=outfile, pager=pager, exit_on_fail=False)
 

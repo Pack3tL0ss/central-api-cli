@@ -19,7 +19,7 @@ class CloudAuthAPI:
     def __init__(self, session: Session):
         self.session = session
 
-    async def cloudauth_get_registered_macs(
+    async def get_registered_macs(
         self,
         search: str = None,
         sort: str = None,
@@ -57,7 +57,7 @@ class CloudAuthAPI:
 
         return resp
 
-    async def cloudauth_upload_fixme(
+    async def upload_fixme(
         self,
         upload_type: CloudAuthUploadTypes,
         file: Path | str,
@@ -94,7 +94,7 @@ class CloudAuthAPI:
 
         return await self.session.post(url, headers=headers, params=params, payload=form_data)
 
-    async def cloudauth_upload(
+    async def upload(
         self,
         upload_type: CloudAuthUploadTypes,
         file: Path | str,
@@ -119,12 +119,12 @@ class CloudAuthAPI:
         form_data = utils.build_multipart_form_data(url, files=files, params=params, base_url=self.session.base_url)
         return await self.session.post(url, **form_data)
 
-    async def cloudauth_upload_status(
+    async def get_upload_status(
         self,
         upload_type: CloudAuthUploadTypes,
         ssid: str = None,
     ) -> Response:
-        """Read upload status of last file upload.
+        """Get upload status of last file upload.
 
         Args:
             upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
@@ -141,7 +141,7 @@ class CloudAuthAPI:
 
         return await self.session.get(url, params=params)
 
-    async def cloudauth_get_mpsk_networks(
+    async def get_mpsk_networks(
         self,
     ) -> Response:
         """Read all configured MPSK networks.
@@ -153,7 +153,7 @@ class CloudAuthAPI:
 
         return await self.session.get(url)
 
-    async def cloudauth_get_namedmpsk(
+    async def get_named_mpsk(
         self,
         mpsk_id: str,
         name: str = None,
@@ -163,7 +163,7 @@ class CloudAuthAPI:
         sort: str = None,
         limit: int = 100,
     ) -> Response:
-        """Read all named MPSK.
+        """Get all named MPSK.
 
         Args:
             mpsk_id (str): The MPSK configuration ID
@@ -193,7 +193,7 @@ class CloudAuthAPI:
         return await self.session.get(url, params=params)
 
     # API-FLAW you can not set the mpsk or id
-    async def cloudauth_add_namedmpsk(
+    async def add_named_mpsk(
         self,
         mpsk_id: str,
         name: str,
@@ -221,7 +221,7 @@ class CloudAuthAPI:
 
         return await self.session.post(url, json_data=json_data)
 
-    async def cloudauth_delete_namedmpsk(
+    async def delete_named_mpsk(
         self,
         mpsk_id: str,
         named_mpsk_id: str,
@@ -241,7 +241,7 @@ class CloudAuthAPI:
 
     # API-FLAW no way to update the mpsk (passphrase), even if sent in payload it has no impact
     # There is a PUT method for the below as well, don't see the point in ever using it.
-    async def cloudauth_update_namedmpsk(
+    async def update_named_mpsk(
         self,
         mpsk_id: str,
         named_mpsk_id: str,
@@ -286,7 +286,7 @@ class CloudAuthAPI:
 
         return await self.session.patch(url, json_data=json_data, params=params)
 
-    async def cloudauth_download_mpsk_csv(
+    async def download_mpsk_csv(
         self,
         ssid: str,
         filename: str = None,

@@ -37,7 +37,7 @@ def registered_macs(
         }
         sort_by = sort_full_names.get(sort_by, sort_by)
 
-    resp = api.session.request(api.cloudauth.cloudauth_get_registered_macs, search=search)
+    resp = api.session.request(api.cloudauth.get_registered_macs, search=search)
     caption = None if not resp.ok else f"[cyan]{len(resp.output)}[/] Registered MAC Addresses"
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich")
     render.display_results(
@@ -72,7 +72,7 @@ def upload(
 
     This command can be ran after [cyan]cencli batch add <macs|mpsk> to see the status of the upload.
     """
-    resp = api.session.request(api.cloudauth.cloudauth_upload_status, upload_type=what.value)
+    resp = api.session.request(api.cloudauth.get_upload_status, upload_type=what.value)
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="action")
     if resp.ok:
         try:

@@ -3978,7 +3978,7 @@ class Cache:
 
 
     async def refresh_mpsk_networks_db(self) -> Response:
-        resp = await api.cloudauth.cloudauth_get_mpsk_networks()
+        resp = await api.cloudauth.get_mpsk_networks()
         if resp.ok:
             self.responses.mpsk = resp
             if resp.output:
@@ -3997,7 +3997,7 @@ class Cache:
                 return net_resp
             mpsk_networks = {net["id"]: net["ssid"] for net in net_resp.output}
             named_reqs = [
-                BatchRequest(api.cloudauth.cloudauth_get_namedmpsk, mpsk_id, name=name, role=role, status=status)
+                BatchRequest(api.cloudauth.get_named_mpsk, mpsk_id, name=name, role=role, status=status)
                 for mpsk_id in mpsk_networks
             ]
             batch_resp = await api.session._batch_request(named_reqs)
@@ -4016,7 +4016,7 @@ class Cache:
             if resp.ok:
                 resp.output = combined_output
         else:
-            resp = await api.cloudauth.cloudauth_get_namedmpsk(mpsk_id, name=name, role=role, status=status)
+            resp = await api.cloudauth.get_named_mpsk(mpsk_id, name=name, role=role, status=status)
             if resp.ok:
                 ssid: CacheMpskNetwork = self.get_mpsk_network_identifier(mpsk_id, silent=True)
                 if ssid:
@@ -4025,7 +4025,6 @@ class Cache:
         truncate = True if not mpsk_id and not any([name, role, status]) else False
 
         if resp.ok:
-            # self.updated.append(api.cloudauth.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
             self.responses.mpsk = resp
             if resp.output:
                 _update_data = models.Mpsks(resp.output)

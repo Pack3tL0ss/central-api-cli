@@ -70,7 +70,7 @@ def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: 
         render.econsole.print(tmp_path.read_text())
 
     if render.confirm(yes):
-        resp = api.session.request(api.cloudauth.cloudauth_upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
+        resp = api.session.request(api.cloudauth.upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
         tmp_path.unlink()
         log.debug(f"CloudAuth Temp file ({tmp_path}) deleted")
 

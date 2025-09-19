@@ -707,7 +707,7 @@ def mpsk(
         render.econsole.print("  Create MPSK, but set as [red]disabled[/]")
 
     render.confirm(yes)  # exits here if they don't confirm
-    resp = api.session.request(api.cloudauth.cloudauth_add_namedmpsk, ssid.id, name=email, role=role, enabled=not disable)
+    resp = api.session.request(api.cloudauth.add_named_mpsk, ssid.id, name=email, role=role, enabled=not disable)
     render.display_results(resp, tablefmt="action")
     # CACHE update
 
