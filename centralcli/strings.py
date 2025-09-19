@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import Any, Dict, List, Literal
 
 import tablib
@@ -87,6 +88,13 @@ LEXERS = {
         "json": JsonLexer(ensurenl=False),
         "yaml": YamlLexer(ensurenl=False)
 }
+
+
+@dataclass
+class Warnings:
+    no_outfile = "[deep_sky_blue1]\u2139[/]  [cyan]--out <FILE PATH>[/] not provided.  The command can be repeated without doing API calls with [cyan]cencli show last --out <FILE PATH>[/]"
+
+
 class ExampleSegment:
     def __init__(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = "csv", example_title: str = None) -> None:
         self.original = example_text
