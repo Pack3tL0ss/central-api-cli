@@ -20,8 +20,7 @@ def test_batch_add_macs():
     result = runner.invoke(app, ["batch", "add",  "macs", test_data["cloud_auth"]["mac_file"], "-Y"])
     capture_logs(result, "test_batch_add_macs")
     assert result.exit_code == 0
-    assert "city" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
-    assert "state" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
+    assert "202" in result.stdout
 
 
 def test_batch_add_sites():
