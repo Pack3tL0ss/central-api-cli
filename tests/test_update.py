@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 from centralcli.exceptions import ConfigNotFoundException
 
-from . import capture_logs
+from . import capture_logs, test_data
 from ._test_data import gw_group_config_file
 
 runner = CliRunner()
@@ -83,3 +83,19 @@ def test_update_mpsk(ensure_cache_mpsk):
     capture_logs(result, "test_update_mpsk")
     assert result.exit_code == 0
     assert "204" in result.stdout
+
+
+def test_update_template(ensure_cache_template):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "template",
+            "cencli_test_template",
+            test_data["template"]["template_file"],
+            "--yes",
+        ]
+    )
+    capture_logs(result, "test_update_template")
+    assert result.exit_code == 0
+    assert "200" in result.stdout

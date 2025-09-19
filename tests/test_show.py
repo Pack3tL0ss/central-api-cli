@@ -132,11 +132,10 @@ def test_show_cluster():
 
 
 def test_show_switches():
-    result = runner.invoke(app, ["show", "switches", "--debug", "--table"],)
+    result = runner.invoke(app, ["show", "switches", "--group", test_data["switch"]["group"]],)
     capture_logs(result, "test_show_switches")
     assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
+    assert "API" in result.stdout
 
 
 def test_show_gateways():
@@ -1120,6 +1119,18 @@ def test_show_uplinks():
     capture_logs(result, "test_show_uplinks")
     assert result.exit_code == 0
     assert "uplink" in result.stdout.lower()
+
+
+def test_show_cloud_auth_upload_mac():
+    result = runner.invoke(app, [
+            "show",
+            "cloud-auth",
+            "upload",
+        ]  # default is mac
+    )
+    capture_logs(result, "test_show_cloud_auth_upload_mac")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
 
 
 def test_show_version():

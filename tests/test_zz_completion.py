@@ -106,13 +106,13 @@ def test_dev_gw_switch_completion(incomplete: str = test_data["switch"]["name"].
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_ap_gw_sw_completion(incomplete: str = test_data["ap"]["name"].swapcase()):
-    result = [c for c in cache.dev_ap_gw_sw_completion(incomplete, ("show", "firmware", "device"))]
+def test_dev_ap_gw_sw_completion(ensure_dev_cache_test_ap, incomplete: str = "cencli_test_ap"):  # tests underscore/hyphen logic in get_dev_identifier
+    result = [c for c in cache.dev_ap_gw_sw_completion(ctx, incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert all([m.lower().replace("_", "-").startswith(incomplete.lower().replace("_", "-")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_dev_gw_switch_site_completion(incomplete: str = "barn"):
-    result = [c for c in cache.dev_gw_switch_site_completion(incomplete, ("show", "vlans",))]
+    result = [c for c in cache.dev_gw_switch_site_completion(ctx, incomplete, ("show", "vlans",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
@@ -196,6 +196,16 @@ def test_portal_completion(incomplete: str = test_data["portal"]["name"]):
 
 def test_portal_completion_empty_string(incomplete: str = ""):
     result = list(cache.portal_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_remove_completion_site(incomplete: str = test_data["ap"]["ip"]):
+    result = list(cache.remove_completion(ctx=ctx, incomplete=incomplete, args=("remove",)))
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_remove_completion_dev(incomplete: str = test_data["ap"]["site"]):
+    result = list(cache.remove_completion(ctx=ctx, incomplete=incomplete, args=("site",)))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 

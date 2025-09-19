@@ -16,6 +16,14 @@ def test_batch_add_groups():
     assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"]) + 1  # Plus 1 as confirmation prompt includes "created"
 
 
+def test_batch_add_macs():
+    result = runner.invoke(app, ["batch", "add",  "macs", test_data["cloud_auth"]["mac_file"], "-Y"])
+    capture_logs(result, "test_batch_add_macs")
+    assert result.exit_code == 0
+    assert "city" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
+    assert "state" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
+
+
 def test_batch_add_sites():
     result = runner.invoke(app, ["batch", "add",  "sites", str(test_site_file), "-Y"])
     capture_logs(result, "test_batch_add_sites")
