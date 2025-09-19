@@ -9,6 +9,7 @@ import typer
 from centralcli import cleaner, common, log, render
 from centralcli.cache import api
 from centralcli.constants import SortNamedMpskOptions
+from centralcli.strings import Warnings
 
 if TYPE_CHECKING:
     from centralcli.cache import CacheMpsk
@@ -43,7 +44,7 @@ def named(
     role: str = typer.Option(None, help="Filter by user role associated with the MPSK (role name contains)", show_default=False, rich_help_panel="Filtering Options",),
     enabled: bool = typer.Option(None, "-E", "--enabled", help="Show enabled named MPSKs", show_default=False, rich_help_panel="Filtering Options",),
     disabled: bool = typer.Option(None, "-D", "--disabled", help="Show disabled named MPSKs", show_default=False, rich_help_panel="Filtering Options",),
-    csv_import: bool = typer.Option(False, "--import", help="Output named MPSKs using format required for import into Cloud-Auth [grey42 italic]implies --csv[/]", show_default=False, rich_help_panel="Formatting",),
+    csv_import: bool = typer.Option(False, "--import", help=f"Output named MPSKs using format required for import into Cloud-Auth [dim italic]implies --csv[/] {render.help_block('ssid', 'requires')}", show_default=False, rich_help_panel="Formatting",),
     verbose: int = common.options.verbose,
     sort_by: SortNamedMpskOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -66,6 +67,13 @@ def named(
     elif disabled:
         status = "disabled"
 
+    if csv_import and not ssid:
+        if len(common.cache.mpsk_networks) == 1:
+            ssid = common.cache.mpsk_networks[0]["name"]
+            log.warning(f"[cyan]ssid[/] argument is required when [cyan]--import[/] is used.  However cache only contains 1 MPSK SSID [bright_green]{ssid}[/].", caption=True)
+        else:
+            common.exit("[cyan]--import[/] option is only supported when MPSK ssid is provided")
+
     title="PSKs"
     if ssid:
         ssid: CacheMpsk = common.cache.get_mpsk_network_identifier(ssid)
@@ -74,24 +82,23 @@ def named(
         title = f"{title} associated with [bright_green]all[/] MPSK Networks"
 
     _cleaner = cleaner.cloudauth_get_namedmpsk
-    group_by = None
+    group_by = _mpsk_cnt = _caption = None
 
     if not ssid:
         resp = api.session.request(common.cache.refresh_mpsk_db)
         if resp.ok and len(set([r["ssid"] for r in resp.output])) > 1:  # It looks odd to do group_by if there is only 1 SSID, it's not obvious that all in the grouping are the same SSID.
             group_by = "ssid"
-
-        if csv_import:
-            log.warning("[cyan]--import[/] option is only supported when MPSK ssid is provided", caption=True)
     elif csv_import:
-        resp = api.session.request(api.cloudauth.cloudauth_download_mpsk_csv, ssid.name, name=name, filename=outfile, role=role, status=status)
+        resp = api.session.request(api.cloudauth.download_mpsk_csv, ssid.name, name=name, filename=outfile, role=role, status=status)
         _cleaner = None
+        _mpsk_cnt = len(resp.output.splitlines()) - 1
+        _caption = None if outfile else f"\n{Warnings.no_outfile}"
     else:
         resp = api.session.request(common.cache.refresh_mpsk_db, ssid.id, name=name, role=role, status=status)
 
 
     tablefmt = "csv" if csv_import and ssid else common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
-    caption = None if not resp.ok else f"{'' if tablefmt == 'rich' else '  '}Total Named MPSKs for [cyan]{'ALL SSIDs' if not ssid else ssid.name}[/]: [bright_green]{len(resp)}[/]"
+    caption = None if not resp.ok else f"{'' if tablefmt == 'rich' else '  '}Total Named MPSKs for [cyan]{'ALL SSIDs' if not ssid else ssid.name}[/]: [bright_green]{_mpsk_cnt or len(resp)}[/]{_caption or ''}"
     render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, sort_by=sort_by, group_by=group_by, reverse=reverse, pager=pager, outfile=outfile, cleaner=_cleaner, verbosity=verbose)
 
 
