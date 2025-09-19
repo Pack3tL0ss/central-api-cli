@@ -81,6 +81,8 @@ class BatchRequest:
 
 
 class Session():
+    requests: list[LoggedRequests] = []
+
     def __init__(
         self,
         base_url: StrOrURL = None,
@@ -96,7 +98,6 @@ class Session():
         self._aio_session = aio_session
         self.ssl = config.ssl_verify
         self.req_cnt = 1
-        self.requests: List[LoggedRequests] = []
         self.throttle: int = 0
         self.spinner = Spinner("Collecting Data...")
         self.updated_at = time.monotonic()
