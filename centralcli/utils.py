@@ -663,6 +663,13 @@ class Utils:
         """strip off the 'for further information ... part of a pydantic ValidationError"""
         return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
 
+    @staticmethod  # HACK # REQUESTS still using requests/prepared to build the multi-part form data, as have not been able to get it to work with aiohttp
+    def build_multipart_form_data(url: StrOrURL, method: str = "POST", *, files: dict, params: dict[str, str] = None, base_url: StrOrURL = None) -> dict[str, bytes, dict[str, str]]:
+        import requests
+        req_url = f"{base_url or ''}{url}"
+        req = requests.Request(method, url=req_url, params=params, files=files)
+        prepared = req.prepare()
+        return {"params": params, "payload": prepared.body, "headers": prepared.headers}
 
 if __name__ == "__main__":
     utils = Utils()

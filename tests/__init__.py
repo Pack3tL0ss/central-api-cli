@@ -53,7 +53,7 @@ from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
 from centralcli.exceptions import CentralCliException
 
-from ._mock_request import mock_request, mock_requests_request
+from ._mock_request import mock_request
 from ._test_data import test_data as test_data
 
 install(show_locals=True)  # rich.traceback hook
@@ -108,7 +108,6 @@ if __name__ in ["tests", "__main__"]:
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
-        pytest.MonkeyPatch().setattr("requests.request", mock_requests_request)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
         pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses

@@ -10,7 +10,6 @@ from aiohttp.client import ClientResponse, ClientSession, hdrs
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import TimerNoop
 from multidict import CIMultiDict, CIMultiDictProxy
-from requests import Response as RequestResponse
 from yarl import URL
 
 from centralcli import config, log, utils
@@ -140,6 +139,3 @@ test_responses = TestResponses()
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
     return _build_response(**test_responses.get_test_response(method, url, params=params))
-
-def mock_requests_request(method: str, url: str, params: dict[str, Any] = None, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url, params=params), response_class=RequestResponse)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union
 
 from aiohttp import ClientResponse
 from rich import print
@@ -15,9 +15,6 @@ from centralcli import config, log, utils
 from centralcli.exceptions import CentralCliException
 
 from . import render
-
-if TYPE_CHECKING:
-    from requests import Response as RequestsResponse
 
 
 class RateLimit():
@@ -114,7 +111,7 @@ class Response:
     '''
     def __init__(
         self,
-        response: ClientResponse | RequestsResponse = None,
+        response: ClientResponse = None,
         url: Union[URL, str] = "",
         ok: bool = None,
         error: str = None,

@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING
 import aiohttp
 import tablib
 import yaml
-from yarl import URL
 
 from ... import log, utils
 from ...client import Response
@@ -114,40 +113,11 @@ class CloudAuthAPI:
         """
         url = f"/cloudauth/api/v3/bulk/{upload_type}"
         file = file if isinstance(file, Path) else Path(str(file))
-        params = {
-            'ssid': ssid
-        }
+        params = {'ssid': ssid}
+        files = {"file": (file.name, file.open("rb"), "text/csv")}
 
-        # HACK need to make the above async function work
-        import requests
-        from requests import Response as RequestsResponse
-
-        files = { "file": (file.name, file.open("rb"), "text/csv") }
-        full_url=f"{self.session.base_url or ''}{url}"
-        headers = {
-            "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
-            'Accept': 'application/json'
-        }
-        # TODO make like Add Template use requests to generate proper form_data and send with aiohttp
-
-        for _ in range(2):
-            _resp: RequestsResponse = requests.request("POST", url=full_url, params=params, files=files, headers=headers)
-            _log = log.info if _resp.ok else log.error
-            _log(f"[POST] {url} | {_resp.status_code} | {'OK' if _resp.ok else 'FAILED'} | {_resp.reason}")
-            try:
-                output = _resp.json()
-            except Exception:
-                output = f"[{_resp.reason}]" + " " + _resp.text.lstrip('[\n "').rstrip('"\n]')
-
-            # Make requests Response look like aiohttp.ClientResponse
-            _resp.status, _resp.method, _resp.url = _resp.status_code, "POST", URL(_resp.url)
-            resp = Response(_resp, output=output, raw=output, error=None if _resp.ok else _resp.reason, url=URL(url), elapsed=round(_resp.elapsed.total_seconds(), 2))
-            if "invalid_token" in resp.output:
-                self.session.refresh_token()
-                headers["Authorization"] = f"Bearer {self.session.auth.central_info['token']['access_token']}"
-            else:
-                break
-        return resp
+        form_data = utils.build_multipart_form_data(url, files=files, params=params, base_url=self.session.base_url)
+        return await self.session.post(url, **form_data)
 
     async def cloudauth_upload_status(
         self,

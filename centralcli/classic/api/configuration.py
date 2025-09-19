@@ -6,8 +6,6 @@ from copy import deepcopy
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List
 
-from yarl import URL
-
 from ... import config, constants, log, utils
 from ...client import BatchRequest
 from ...exceptions import CentralCliException
@@ -918,12 +916,8 @@ class ConfigAPI:
             'model': model
         }
 
-        # HACK using requests to prepare payload, as have not sorted how that's done with aiohttp TODO FIXME
-        import requests
-        req_url = f"{self.session.base_url or ''}{url}"
-        req = requests.Request("POST", url=req_url, params=params, files=files)
-        prepared = req.prepare()
-        return await self.session.post(url, params=params, payload=prepared.body, headers=prepared.headers)
+        form_data = utils.build_multipart_form_data(url, files=files, params=params, base_url=self.session.base_url)
+        return await self.session.post(url, **form_data)
 
     async def update_existing_template(
         self,
@@ -984,32 +978,8 @@ class ConfigAPI:
 
         files = {'template': ('template.txt', template_data)}
 
-        # HACK aiohttp has issue here similar to add_template
-        import requests
-        from requests import Response as RequestsResponse
-        full_url=f"{self.session.base_url or ''}{url}"
-        for _ in range(2):
-            headers = {
-                "Authorization": f"Bearer {self.session.auth.central_info['token']['access_token']}",
-                'Accept': 'application/json'
-            }
-            req_resp: RequestsResponse = requests.request("PATCH", url=full_url, params=params, files=files, headers=headers)
-            _log = log.info if req_resp.ok else log.error
-            _log(f"[PATCH] {req_resp.url} | {req_resp.status_code} | {'OK' if req_resp.ok else 'FAILED'} | {req_resp.reason}")
-            try:
-                output = req_resp.json()
-            except json.JSONDecodeError:
-                if "[\n" in req_resp.text and "\n]" in req_resp.text:
-                    output = "\n".join(json.loads(req_resp.text))
-                else:
-                    output = req_resp.text.strip('"\n')
-            req_resp.status, req_resp.method, req_resp.url = req_resp.status_code, "PATCH", URL(req_resp.url)
-            resp = Response(req_resp, output=output, raw=output, elapsed=round(req_resp.elapsed.total_seconds(), 2))
-            if "invalid_token" in resp.output:
-                self.session.refresh_token()
-            else:
-                break
-        return resp
+        form_data = utils.build_multipart_form_data(url, "PATCH", files=files, params=params, base_url=self.session.base_url)
+        return await self.session.patch(url, **form_data)
 
     async def delete_template(
         self,
