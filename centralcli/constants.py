@@ -503,6 +503,8 @@ class CacheArgs(str, Enum):
     tables = "tables"
     guests = "guests"
     certs = "certs"
+    floor_plan_buildings = "floor_plan_buildings"
+    floor_plan_aps = "floor_plan_aps"
 
 
 class KickArgs(str, Enum):

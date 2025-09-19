@@ -19,6 +19,8 @@ from .common import MpskStatus
 if TYPE_CHECKING:
     from collections.abc import KeysView
 
+    from centralcli.response import Response
+
 
 # This is the same as DevTypes (plural in constants) other than DevTypes includes sdwan.
 # Could probably use same model for everything in here.  One or the other.
@@ -585,3 +587,127 @@ class Guests(RootModel):
 
     def __len__(self) -> int:
         return len(self.root)
+
+
+# VisualRF /visualrf_api/v1/floor/{floor_id}/access_point_location api.visualrf.get_aps_for_floor
+# commented fields below are provided in the data, but not used.
+class VisualRFUnits(str, Enum):
+    FEET = "FEET"
+    METERS = "METERS"
+
+class Campus(BaseModel):  # pragma: no cover  Not currently used or needed in the cache
+    id: str = Field(alias=AliasChoices("id", "campus_id"))
+    name: str = Field(alias=AliasChoices("name", "campus_name"))
+
+class Building(BaseModel):
+    id: str = Field(alias=AliasChoices("id", "building_id"))
+    name: str = Field(alias=AliasChoices("name", "building_name"))
+    campus_id: str
+    lat: float = Field(alias=AliasChoices("lat", "latitude"))
+    lon: float = Field(alias=AliasChoices("lon", "longitude"))
+
+
+class Buildings(BaseModel):
+    # campus: Campus
+    buildings: List[Building]
+    building_count: int
+
+    def __iter__(self):
+        return iter(self.buildings)
+
+    def __getitem__(self, item):
+        return self.buildings[item]
+
+    def __len__(self) -> int:
+        return len(self.buildings)
+
+    def cache_dump(self) -> list[dict[str, str]]:
+        return [b.model_dump() for b in self.buildings]
+
+class BuildingResponses(RootModel):
+    root: Buildings
+
+    def __init__(self, responses: list[Response]) -> None:
+        data = {"buildings": [bldg for r in responses for bldg in r.raw["buildings"]], "building_count": sum([r.raw["building_count"] for r in responses])}
+        super().__init__(Buildings(**data))
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root.buildings)
+
+    def cache_dump(self) -> list[dict[str, str]]:
+        return [b.model_dump() for b in self.root.buildings]
+
+
+class Floor(BaseModel):
+    floor_id: str
+    floor_name: str
+    building_id: str
+    floor_level: float
+    # floor_width: float
+    # floor_length: float
+    # ceiling_height: float
+    # units: VisualRFUnits
+
+
+class AccessPoint(BaseModel):
+    id: str = Field(alias=AliasChoices("id", "ap_id"))
+    name: str = Field(alias=AliasChoices("name", "ap_name"))
+    serial: str = Field(alias=AliasChoices("serial", "serial_number"))
+    mac: str = Field(alias=AliasChoices("mac", "ap_eth_mac"))
+    floor_id: str
+    building_id: Optional[str] = None
+    level: Optional[int | float] = None
+    # model: str
+    # lat: float = Field(alias=AliasChoices("lat", "latitude"))
+    # lon: float = Field(alias=AliasChoices("lon", "longitude"))
+    # x: float
+    # y: float
+    # units: VisualRFUnits
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def level_to_int(cls, level: float | int) -> int:
+        return level if not level.is_integer() else int(level)
+
+
+class VisualRFFloor(BaseModel):
+    floor: Floor
+    aps: list[AccessPoint] = Field(alias=AliasChoices("aps", "access_points"))
+    access_point_count: int = Field(alias=AliasChoices("ap_count", "access_point_count"))
+
+class Floors(RootModel):
+    root: list[VisualRFFloor]
+
+    def __init__(self, responses: list[Response]) -> None:
+        raw_data = [r.raw for r in responses]
+        data = [
+            {
+                **floor_data,
+                "access_points": [
+                    {
+                        **ap,
+                        "building_id": floor_data["floor"]["building_id"],
+                        "level": floor_data["floor"]["floor_level"]
+                    } for ap in floor_data["access_points"]
+                ]
+            } for floor_data in raw_data
+        ]
+        super().__init__([VisualRFFloor(**d) for d in data if d["access_point_count"]])  # we filter floors that have no APs
+
+    def __iter__(self):
+        return iter(self.root)
+
+    def __getitem__(self, item):
+        return self.root[item]
+
+    def __len__(self) -> int:
+        return len(self.root)
+
+    def cache_dump(self) -> list[dict[str, str]]:
+        return [ap.model_dump() for f in self.root for ap in f.aps]

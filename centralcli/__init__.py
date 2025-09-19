@@ -257,7 +257,7 @@ if "--again" in sys.argv:
     sys.argv = [sys.argv[0], "show", "last", *args]
 
 
-from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate
+from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding
 
 cache = Cache(config=config)
 if config.valid:
@@ -273,6 +273,8 @@ if config.valid:
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
+    CacheBuilding.set_db(cache.BuildingDB)
+    CacheFloorPlanAP.set_db(cache.FloorPlanAPDB, building_db=cache.BuildingDB)
 
 from .clicommon import CLICommon
 

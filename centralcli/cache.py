@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, 
 
 import pendulum
 import typer
+from pydantic import ValidationError
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -1128,6 +1129,159 @@ class CacheSub(CentralObject, Text):
         return render.rich_capture(self.text.markup)
 
 
+class CacheBuilding(CentralObject, Text):
+    db: Table | None = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.id: str = data["id"]
+        self.name: str = data["name"]
+        self.campus_id: str = data["campus_id"]
+        self.lat: int = data["lat"]
+        self.lon: int = data["lon"]
+
+    @classmethod
+    def set_db(cls, db: Table, building_db: Table = None):
+        cls.db: Table = db
+        if building_db:
+            cls.building_db = building_db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        Q = Query()
+        match: List[Document] = self.db.search(Q.id == self.id)
+        if match and len(match) == 1:
+            self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None):
+        self._doc_id = doc_id
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} (Building|{self.name}) object at {hex(id(self))}>"
+
+    def __eq__(self, value: CacheBuilding | str):
+        if hasattr(value, "id"):
+            return value.id == self.id
+        return value == self.id
+
+    def __hash__(self):
+        return hash(self.id)
+
+    @property
+    def text(self) -> Text:
+        return Text.from_markup(
+            f'Building [bright_green]{self.name}[/]'
+        )
+
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich__(self) -> str:
+        return self.text.markup
+
+    @property
+    def summary_text(self) -> str:
+        return self.text.markup
+
+    @property
+    def help_text(self):
+        return render.rich_capture(self.text.markup)
+
+
+class CacheFloorPlanAP(Text):
+    db: Table | None = None
+    building_db: Table | None = None
+    _building_object: CacheBuilding = None
+
+    def __init__(self, data: Document | Dict[str, Any]) -> None:
+        self.id: str = data["id"]
+        self.name: str = data["name"]
+        self.serial: str = data["serial"]
+        self.mac: int = data["mac"]
+        self.floor_id: int = data["floor_id"]
+        self.building_id: str = data["building_id"]
+        self.level: int | float = data["level"]
+
+    @classmethod
+    def set_db(cls, db: Table, building_db: Table = None):
+        cls.db: Table = db
+        if building_db:
+            cls.building_db = building_db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        Q = Query()
+        match: List[Document] = self.db.search(Q.id == self.id)
+        if match and len(match) == 1:
+            self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None):
+        self._doc_id = doc_id
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} (floor plan AP|{self.name}|{self.serial}) object at {hex(id(self))}>"
+
+    def __eq__(self, value: CacheFloorPlanAP | str):
+        if hasattr(value, "id"):
+            return value.id == self.id
+        return value == self.id or value == self.serial
+
+    def __hash__(self):
+        return hash(self.id)
+
+    @property
+    def text(self) -> Text:
+        return Text.from_markup(
+            f'[bright_green]{self.name}[/]|[cyan]{self.serial}[/]|[bright_green]{self.mac}[/]'
+        )
+
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich__(self) -> str:
+        return self.text.markup
+
+    @property
+    def summary_text(self) -> str:
+        return self.text.markup
+
+    @property
+    def help_text(self):
+        return render.rich_capture(self.text.markup)
+
+    @property
+    def building(self) -> CacheBuilding | None:
+        return self.get_building()
+
+    @property
+    def location(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "serial": self.serial,
+            "building": self.building.name,
+            "floor": self.level
+        }
+
+    def get_building(self) -> CacheBuilding | None:
+        if self._building_object is None:
+            query = Query()
+            match = self.building_db.search(query.id == self.building_id)
+            if not match:
+                return
+            self._building_object = CacheBuilding(match[0])
+        return self._building_object
+
 
 class CacheResponses:
     def __init__(
@@ -1366,6 +1520,8 @@ class Cache:
             self.PortalDB: Table = self.DevDB.table("portal")  # Only updated when show portals is ran or as needed
             self.GuestDB: Table = self.DevDB.table("guest")  # Only updated when show guests is ran or as needed
             self.CertDB: Table = self.DevDB.table("certs")  # Only updated when show certs is ran or as needed
+            self.FloorPlanAPDB: Table = self.DevDB.table("floor_plan_aps")
+            self.BuildingDB: Table = self.DevDB.table("floor_plan_buildings")
             if config.glp.ok:
                 self.SubDB: Table = self.DevDB.table("subscriptions")
             self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
@@ -1619,6 +1775,18 @@ class Cache:
             f'{template["name"]}_{template["group"]}': template
             for template in self.TemplateDB.all()
         }
+
+    @property
+    def floor_plan_aps(self) -> list[Document]:
+        return self.FloorPlanAPDB.all()
+
+    @property
+    def floor_plan_buildings(self) -> list[Document]:
+        return self.BuildingDB.all()
+
+    @property
+    def floor_plan_aps_by_serial(self) -> dict[str, CacheFloorPlanAP]:
+        return {ap["serial"]: CacheFloorPlanAP(ap) for ap in self.FloorPlanAPDB.all()}
 
     @property
     def hook_config(self) -> list:
@@ -3167,11 +3335,10 @@ class Cache:
         }
         filter_msg = ", ".join([f"{k}: {v if k != 'dev_type' else utils.unlistify(v)}" for k, v in filters.items() if v])
 
+        cache_type = []
         if dev_type:
             switch_types = ["cx", "sw"] if "switch" in dev_type else []
             cache_type = [*[t for t in dev_type if t != "switch"], *switch_types]
-        else:
-            cache_type = []
 
         def include_device(dev: dict) -> bool:
             criteria = []
@@ -3297,7 +3464,7 @@ class Cache:
             Response: CentralAPI Response object
         """
         if not glp_api:  # We only started caching subscription data with glp addition, classic does not cache subscriptions
-            return await api.platform.get_subscriptions(sub_type=sub_type, device_type=dev_type)
+            return await api.platform.get_subscriptions(sub_type=sub_type, device_type=dev_type)  # pragma: no cover
 
         resp: Response = await glp_api.subscriptions.get_subscriptions(sub_type=sub_type, dev_type=dev_type)
         if resp.ok:
@@ -3309,11 +3476,28 @@ class Cache:
                 cache_data = sub_data.cache_dump()
             else:
                 cache_data = list({**self.subscriptions_by_id, **{sub["id"]: sub for sub in sub_data.cache_dump()}}.values())
+
             _ = asyncio.create_task(self.update_db(self.SubDB, data=cache_data, truncate=True))
 
         return resp
 
+    async def update_floor_plan_cache(self, data, cache: Literal["buildings", "floors"] = "buildings") -> bool:
+        if cache == "floors":
+            model = models.Floors
+            db = self.FloorPlanAPDB
+        elif cache == "buildings":
+            model = models.BuildingResponses
+            db = self.BuildingDB
 
+        try:
+            data = model(data)
+        except ValidationError as e:
+            log.error(utils.clean_validation_errors(e), show=True, caption=True, log=True)
+            return False
+
+        cache_data = data.cache_dump()
+        _ = asyncio.create_task(self.update_db(db, data=cache_data, truncate=True))
+        return True
 
     # TODO need add bool or something to prevent combining and added device with current when a device is added as insert is all that is needed
     async def update_inv_db(
@@ -3365,7 +3549,7 @@ class Cache:
 
             db_res = self.InvDB.remove(doc_ids=doc_ids)
 
-            if len(db_res) != len(doc_ids):
+            if len(db_res) != len(doc_ids):  # pragma: no cover
                 log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
 
     async def refresh_inv_db(
@@ -3385,7 +3569,7 @@ class Cache:
         """
         if glp_api:
             return await self.refresh_inv_db_glp(dev_type=dev_type)
-        return await self.refresh_inv_db_classic(dev_type=dev_type)
+        return await self.refresh_inv_db_classic(dev_type=dev_type)  # pragma: no cover
 
     async def refresh_inv_db_glp(
             self,
@@ -3784,7 +3968,7 @@ class Cache:
             return self.HookDataDB.insert_multiple(data)
 
     # Not tested or used yet, until we have commands that add/del MPSK networks
-    async def update_mpsk_net_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:
+    async def update_mpsk_net_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:  # pragma: no cover
         if remove:
             return await self.update_db(self.MpskNetDB, doc_ids=data)
 
@@ -3796,7 +3980,6 @@ class Cache:
     async def refresh_mpsk_networks_db(self) -> Response:
         resp = await api.cloudauth.cloudauth_get_mpsk_networks()
         if resp.ok:
-            self.updated.append(api.cloudauth.cloudauth_get_mpsk_networks)  # TODO remove once all check use responses.mpsk check
             self.responses.mpsk = resp
             if resp.output:
                 _update_data = models.MpskNetworks(resp.raw)
@@ -4054,7 +4237,6 @@ class Cache:
         query_str: str = None,
         query_type: str = "device",
     ) -> List[Dict[str, Any]]:
-        # typer.secho(f" -- Ambiguous identifier provided.  Please select desired {query_type}. --\n", color="cyan")
         typer.echo()
         set_width_cols = {}
         if query_type == "site":

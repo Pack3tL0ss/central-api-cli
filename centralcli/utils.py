@@ -10,6 +10,7 @@ import string
 import sys
 import urllib.parse
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from random import choice
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
@@ -22,6 +23,8 @@ from rich import print_json
 from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
+
+from centralcli.typedefs import StrOrURL
 
 if TYPE_CHECKING:
     from .typedefs import PrimaryDeviceTypes
@@ -58,6 +61,19 @@ class ToBool:
             return False
         else:
             return True
+
+class MacFormat(str, Enum):
+    COLS = "COLS"
+    DASHES = "DASHES"
+    DOTS = "DOTS"
+    CLEAN = "CLEAN"
+    OBJECT = "OBJECT"
+    cols = "cols"
+    dashes = "dashes"
+    dots = "dots"
+    clean = "clean"
+
+
 class Convert:
     def __init__(self, mac: str, fuzzy: bool = False):
         self.orig = mac
@@ -88,7 +104,7 @@ class Convert:
         return '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
 
     @property
-    def dost(self) -> str:
+    def dots(self) -> str:
         return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
 
     @property
@@ -126,6 +142,15 @@ class Mac(Convert):
 
     def __hash__(self):
         return self.dec
+
+    def get_range(self, items: int = 10, mac_format: MacFormat = MacFormat.cols):
+        mac_objects = [Convert(hex(mac_dec).lstrip("0x")) for mac_dec in range(self.dec, self.dec + items)]
+        if mac_format.upper() == MacFormat.OBJECT:
+            return mac_objects
+
+        mac_format = mac_format if isinstance(mac_format, MacFormat) else MacFormat(mac_format)
+        case_func = str.lower if mac_format.value.islower() else str.upper
+        return list(map(case_func, [getattr(mac, mac_format.value.lower()) for mac in mac_objects]))
 
 
 class Utils:
@@ -637,6 +662,7 @@ class Utils:
     def clean_validation_errors(exc) -> str:
         """strip off the 'for further information ... part of a pydantic ValidationError"""
         return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
+
 
 if __name__ == "__main__":
     utils = Utils()
