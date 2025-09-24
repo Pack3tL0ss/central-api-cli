@@ -472,7 +472,6 @@ def stop(
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
-        # console = Console(emoji=False)
         with render.Spinner("Terminating Webhook Proxy..."):
             p = psutil.Process(pid)
             for _ in range(2):
@@ -484,10 +483,9 @@ def stop(
                 else:
                     return True
 
-        # with console.status("Waiting for WebHook Proxy to die..."):
         with render.Spinner("Waiting for WebHook Proxy to die..."):
             _pass = 0
-            while p.is_running() or _pass < 8:
+            while p.is_running() and _pass < 8:
                 sleep(1)
                 if not p.is_running():
                     return True
