@@ -220,16 +220,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
         except Exception as e:
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
-    if not inventory_only:
-        caption = "  [cyan]cencli show all[/cyan]|[cyan]cencli show inventory -v[/cyan] displays fields common to all device types. " if not verbosity else " "
-        caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}\n{caption}"
-        if not dev_type:
-            caption = f"{caption} To see all columns for a given device use [cyan]cencli show <DEVICE TYPE>[/cyan]"
-        else:
-            caption = f"[reset]Counts: {_cnt_str}"
-    else:
-        caption = f"[reset]Counts: {_cnt_str}"
-
+    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}"
     if inventory and not inventory_only:
         caption = f"{caption}\n  [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
@@ -583,10 +574,8 @@ def aps(
     Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
     """
     if not status:
-        if up and down:
-                ...  # They used both flags.  ignore
-        elif up or down:
-                status = StatusOptions.Down if down else StatusOptions.Up
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
 
     if dirty:
         if not group:
@@ -647,10 +636,8 @@ def switches_(
 ) -> None:
     """Show details for switches
     """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
 
     show_devices(
         switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
@@ -688,10 +675,8 @@ def gateways_(
 ):
     """Show details for gateways
     """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
 
     show_devices(
         gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
@@ -756,7 +741,7 @@ def stacks(
     render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
 
 
-@app.command(short_help="Show device inventory", help="Show device inventory / all devices that have been added to Aruba Central.")
+@app.command()
 def inventory(
     dev_type: ShowInventoryArgs = typer.Argument(ShowInventoryArgs.all,),
     sub: bool = typer.Option(
@@ -778,6 +763,7 @@ def inventory(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Show [green]GreenLake[/] device inventory."""
     dev_type = dev_type.value
     title = f"{what_to_pretty(dev_type)} in Inventory"
 
@@ -856,7 +842,7 @@ def subscriptions(
                     _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
                     _ok_cnt = len(resp.output) - _expired_cnt
                     caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
-                except Exception as e:
+                except Exception as e:  # pragma: no cover
                     log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
                     caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
 
@@ -1079,17 +1065,13 @@ def interfaces(
         dev_type = dev.generic_type
         devs = [dev]
     else:
-        if [do_ap, do_gw, do_switch].count(True) > 1:
-            common.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
-
-        if do_ap:
-            dev_type = "ap"
-        elif do_gw:
-            dev_type = "gw"
-        elif do_switch:
-            dev_type = "switch"
-        else:
+        _dev_type = [_dev_type for _dev_type, var in {"ap": do_ap, "gw": do_gw, "switch": do_switch}.items() if var]
+        if not _dev_type:
             common.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
+        dev_type = _dev_type.pop(0)
+
+        if _dev_type:
+            common.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
 
         # Update cache basesd on provided filters
         kwargs = {"site": site} if site else {"group": group}  # monitoring API only allows 1 filter
@@ -1285,16 +1267,11 @@ def vlans(
     Command applies to sites, gateways, or switches
     """
     # TODO cli command lacks the filtering options available from method currently.
-    obj: CentralObject = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+    status = status or state
 
-    if up:
-        status = "Up"
-    elif down:
-        status = "Down"
-    else:
-        if state and not status:
-            status = state
-
+    obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
     if obj.is_site:
         resp = api.session.request(api.topo.get_site_vlans, obj.id)
     elif obj.is_dev:
@@ -1310,8 +1287,7 @@ def vlans(
         elif obj.type.lower() == 'gw':
             resp = api.session.request(api.monitoring.get_gateway_vlans, obj.serial)
         else:
-            print("Command is only valid on gateways and switches")
-            raise typer.Exit(1)
+            common.exit("Command is only valid on gateways and switches")
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
@@ -1386,7 +1362,7 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
 
     try:
         res_by_mac = _get_reservation_pool_from_config(cfg_resp=cfg_resp, res_by_mac=res_by_mac)
-    except Exception as e:
+    except Exception as e: # pragma: no cover
         msg = f"{e.__class__.__name__} while trying to extract reservation info from config in _get_reservation_pool_from_config."
         log.exception(f"{msg}\n{e}")
         log.error(f"{msg}", caption=True)
@@ -1825,15 +1801,16 @@ def variables(
     workspace: str = common.options.workspace,
 ):
     """Show Variables for all or a specific device"""
+    dev = None
     if device and device != "all":
-        device = common.cache.get_dev_identifier(device, include_inventory=True, conductor_only=True)
+        dev = common.cache.get_dev_identifier(device, include_inventory=True, conductor_only=True)
 
-    resp = api.session.request(api.configuration.get_variables, serial=None if not device else device.serial,)
-    if resp.ok and device:
+    resp = api.session.request(api.configuration.get_variables, serial=None if not dev else dev.serial,)
+    if resp.ok and dev:
         resp.output = resp.output.get("variables", resp.output)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
-    if not device and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
+    if not dev and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
         all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
         if not all([all_keys[0] == key_list for key_list in all_keys[1:]]):
             tablefmt = "json"
@@ -1842,7 +1819,7 @@ def variables(
     render.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Variables" if not device else f"{device.summary_text} Variables",
+        title="Variables" if not dev else f"{dev.summary_text} Variables",
         pager=pager,
         outfile=outfile,
     )
@@ -1978,11 +1955,10 @@ def task(
                 and provide the task_id.
     """
     resp = api.session.request(api.device_management.get_task_status, task_id)
-    if "reason" in resp.output and "expired" in resp.output:
+    if "reason" in resp.output and "expired" in resp.output["reason"]:
         resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
 
-    render.display_results(
-        resp, tablefmt="action", title=f"Task {task_id} status", outfile=outfile)
+    render.display_results(resp, tablefmt="action", title=f"Task {task_id} status", outfile=outfile)
 
 
 @app.command()
@@ -2002,19 +1978,15 @@ def run(
     """
     dev = common.cache.get_dev_identifier(device)
 
-    if dev.type == "cx":
-        clitshoot.send_cmds_by_id(dev, commands=[6002], pager=pager, outfile=outfile, exit=True)
-    elif dev.type == "sw":
-        clitshoot.send_cmds_by_id(dev, commands=[1022], pager=pager, outfile=outfile, exit=True)
-    elif dev.type == "gw":
-        clitshoot.send_cmds_by_id(dev, commands=[2385], pager=pager, outfile=outfile, exit=True)
-    # Above device types will exit
+    if dev.type != "ap":
+        type_to_command = {"cx": 6002, "sw": 1022, "gw": 2385}
+        clitshoot.send_cmds_by_id(dev, commands=[type_to_command[dev.type]], pager=pager, outfile=outfile, exit=True)
+        # exits
 
-    # APs
     resp = api.session.request(api.configuration.get_device_configuration, dev.serial)
-    if isinstance(resp.output, str) and resp.output.startswith("{"):
+    if isinstance(resp.output, str) and resp.output.startswith("{"):  # pragma: no cover
         try:
-            cli_config = json.loads(resp.output)
+            cli_config: dict[str, Any] = json.loads(resp.output)
             cli_config = cli_config.get("_data", cli_config)
             resp.output = cli_config
         except Exception as e:
@@ -2030,7 +2002,7 @@ def config_(
     group_dev: str = common.arguments.get(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
-        help = "Device Identifier, Group Name along with --ap or --gw option, or 'cencli' to see cencli configuration details.",
+        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
         show_default=False,
     ),
     device: str = typer.Argument(
@@ -2048,7 +2020,7 @@ def config_(
         help="Show config (sync) status. Applies to GWs.",
         hidden=True,
     ),
-    file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config cencli[/].  Display raw file contents (i.e. cat the file)"),
+    file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config self[/].  Display raw file contents (i.e. cat the file)"),
     verbose: int = common.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {common.help_block('Show Config for current WorkSpace')}"),
     raw: bool = common.options.raw,
     outfile: Path = common.options.outfile,
@@ -2069,9 +2041,9 @@ def config_(
     \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for gateways.
     \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, per AP settings if AP, template or
     \t\trunning config if switch.
-    \t[cyan]cencli show config cencli[/]\t\tcencli configuration information (from config.yaml)
+    \t[cyan]cencli show config self[/]\t\tcencli configuration information (from config.yaml)
     """
-    if group_dev == "cencli":
+    if group_dev.lower() in ["cencli", "self"]:
         if file:
             render.display_results(data=config.file.read_text())
             common.exit(code=0)
@@ -2081,13 +2053,13 @@ def config_(
     if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
         _group: CacheGroup = common.cache.get_group_identifier(group_dev.group)
         if device:
-            log.warning(f"ignoring extra argument {device}.  As {group_dev.name} is a device.", caption=True)
+            log.warning(f"ignoring extra argument [red]{device}[/].  As [cyan]{group_dev.name}[/] is a device.", caption=True)
         if _group.wired_tg:
             return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
         else:
             return run(group_dev.serial, outfile=outfile, pager=pager)
 
-    if group_dev.is_group:
+    if group_dev.is_group:  # TODO group level AP config is not supported for Template Group,  Need logic to show template
         group = group_dev
         if device:
             device: CacheDevice = common.cache.get_dev_identifier(device)
@@ -2112,7 +2084,7 @@ def config_(
     if do_gw or (device and device.generic_type == "gw"):
         if device:
             if device.generic_type != "gw":
-                common.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+                common.exit(f"Invalid input: [cyan]--gw[/] option conflicts with [cyan]{device.name}[/] which is an [bright_green]{device.generic_type}[/]")
 
         caasapi = caas.CaasAPI()
         if not status:
@@ -2122,7 +2094,7 @@ def config_(
                 args += [device.mac]
             _data_key = "config"
         else:
-            func = caasapi.get_config_status
+            func = caasapi.get_config_status  # pragma: no cover  # TODO REMOVE this API endpoint does not work
             args = [device.serial]
     elif do_ap or (device and device.generic_type == "ap"):
         func = api.configuration.get_ap_config
@@ -2162,10 +2134,10 @@ def token(
     if not no_refresh:
         api.session.refresh_token()
 
-    tokens = api.session.auth.getToken()
+    tokens: dict[str, str] = api.session.auth.getToken()
     if tokens:
         if common.workspace != "default":
-            print(f"Account: [cyan]{common.workspace}")
+            print(f"Account: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
         print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
 
 
@@ -2263,10 +2235,19 @@ def wlans(
 
     Shows summary of all WLANs in Central by default.  Each SSID is only listed once.
     Use -v (fetch details for wlans in each group) or specify [cyan]--group[/] for more details.
+
+    [deep_sky_blue1]:information:[/]  [cyan]--site[/] & [cyan]--label[/] options can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/] options.
     """
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
+    if (site or label) and any([group, swarm, verbose]):
+        common.exit("Invalid combination of options.  [cyan]--site[/] & [cyan]--label[/] can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/]")
+    if len([p for p in {site, label, group, swarm} if p]) > 1:
+        common.exit("Invalid combination of options.  You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] options.")
+
     if group:
-        _group: CentralObject = common.cache.get_group_identifier(group)
+        _group: CacheGroup = common.cache.get_group_identifier(group, dev_type="ap")
+        if _group.wlan_tg:
+            common.exit(f"Group [cyan]{_group.name}[/] is a Template Group for WLAN.  Operation is not supported by API for template groups.")
         title = f"{title} in group {_group.name}"
         group = _group.name
     if label:
@@ -2292,7 +2273,7 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO specifying WLAN name ... is ignored if verbose
+    # TODO # FIXME specifying WLAN name ... is ignored if verbose
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
@@ -2422,7 +2403,6 @@ def clients(
     wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
     ssid: str = typer.Option(None, help="Filter by SSID [dim italic](Applies only to wireless clients)[/]", show_default=False,),
     band: RadioBandOptions = typer.Option(None, help="Filter by Band [dim italic](Applies only to wireless clients)[/]", show_default=False,),
-    denylisted: bool = typer.Option(False, "-D", "--denylisted", help=f"Show denylisted clients {common.help_block('--dev (AP only)', help_type='requires')}",),
     failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
     device: str = common.options.device,
     verbose: int = common.options.verbose,
@@ -2475,17 +2455,6 @@ def clients(
                     log.warning(f"[cyan]--{k}[/] [green]{v}[/] ignored.  Doesn't make sense with [cyan]--dev[/] [green]{dev.name}[/] specified.", log=False, caption=True)
             group = site = label = None
 
-    if denylisted:
-        if not dev:
-            common.exit("[cyan]--dev[/] :triangular_flag: is required when [cyan]-D|--denylisted[/] :triangular_flag: is set.", emoji=True)
-        elif dev.type != "ap":
-            common.exit(f"[cyan]-D|--denylisted[/]  :triangular_flag: is only valid for APs not {lib_to_gen_plural(dev.type)}.", emoji=True)
-        else:
-            if len(kwargs) > 2:  # client_type and serial
-                log.warning(f"Only [cyan]--dev[/] is appropriate with [cyan]-D|--denylisted[/] flag is used.  {len(kwargs) - 1} invalid flags were ignored.", caption=True)
-            kwargs = {"serial": dev.serial}
-            title = f"{dev.name} Denylisted Clients"
-
     if not client:
         if wired:
             title = "All Wired Clients" if not dev else f"{dev.name} Wired Clients"
@@ -2499,55 +2468,45 @@ def clients(
             title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band.value}Ghz radios"
             kwargs["client_type"] = "wireless"
 
-    if not denylisted:
-        if group:
-            _group = common.cache.get_group_identifier(group)
-            kwargs["group"] = _group.name
-            title = f"{title} in group {_group.name}"
+    if group:
+        _group = common.cache.get_group_identifier(group)
+        kwargs["group"] = _group.name
+        title = f"{title} in group {_group.name}"
 
-        if site:
-            _site = common.cache.get_site_identifier(site)
-            kwargs["site"] = _site.name
-            title = f"{title} in site {_site.name}"
+    if site:
+        _site = common.cache.get_site_identifier(site)
+        kwargs["site"] = _site.name
+        title = f"{title} in site {_site.name}"
 
-        if label:
-            _label: CacheLabel = common.cache.get_label_identifier(label)
-            kwargs["label"] = _label.name
-            title = f"{title} on devices with label {_label.name}"
+    if label:
+        _label = common.cache.get_label_identifier(label)
+        kwargs["label"] = _label.name
+        title = f"{title} on devices with label {_label.name}"
 
-        if ssid:
-            kwargs["network"] = ssid
-            if "Wired Clients" in title:
-                log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
-            else:
-                title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
+    if ssid:
+        kwargs["network"] = ssid
+        if "Wired Clients" in title:
+            log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
+        else:
+            title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
 
-        if failed:
-            kwargs["client_status"] = "FAILED_TO_CONNECT"
-            title = title.replace("Clients", "Failed Clients")
+    if failed:
+        kwargs["client_status"] = "FAILED_TO_CONNECT"
+        title = title.replace("Clients", "Failed Clients")
 
-        if past:
-            kwargs["past"] = past.upper()
-            title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
+    if past:
+        kwargs["past"] = past.upper()
+        title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
-    if not denylisted:
-        resp = api.session.request(common.cache.refresh_client_db, **kwargs)
-    else:
-        resp = api.session.request(api.configuration.get_denylist_clients, **kwargs)
+    resp = api.session.request(common.cache.refresh_client_db, **kwargs)
+
 
     if not resp:
         render.display_results(resp, exit_on_fail=True)
 
-    caption = None if any([client, denylisted, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
+    caption = None if any([client, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
 
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-
-    verbose_kwargs = {}
-    if not denylisted:
-        verbose_kwargs["cleaner"] = cleaner.get_clients
-        verbose_kwargs["cache"] = common.cache
-        verbose_kwargs["verbosity"] = verbose
-        verbose_kwargs["format"] = tablefmt
 
     if sort_by:
         sort_by = sort_by if sort_by != "dot11" else "802.11"
@@ -2563,9 +2522,53 @@ def clients(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        **verbose_kwargs
+        cleaner=cleaner.get_clients,
+        cache=common.cache,
+        verbosity=verbose,
+        format=tablefmt
     )
 
+
+@app.command()
+def denylisted(
+    device: list[str] = common.arguments.device,
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show denylisted clients."""
+    devs = [cache.get_dev_identifier(d, dev_type="ap") for d in device if d not in ["client", "clients"]]  # allow unnecessary keyword client(s)
+    dev = None if not devs else devs[0]
+
+    if not dev:
+        common.exit("Missing required argument [cyan]device [dim italic](AP)[/][/].")
+
+    title = f"{dev.name} Denylisted Clients"
+    resp = api.session.request(api.configuration.get_denylist_clients, serial=dev.serial)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=f'[cyan]{len(resp.output.get("blacklist", "?"))}[/] denylisted client{utils.singular_plural_sfx(resp.output.get("blacklist", []))}',
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        group_by="ap" if not sort_by else None,
+        reverse=reverse,
+        exit_on_fail=True,
+        min_width=55,
+        cleaner=cleaner.get_denylist_clients if tablefmt in ["rich", "tabulate"] else None
+    )
 
 @app.command()
 def tunnels(
@@ -2879,14 +2882,11 @@ def alerts(
 
     :information:  Notification must be Configured.
     """
-    if device:
-        device: CacheDevice = common.cache.get_dev_identifier(device)
-    if group:
-        group: CacheGroup = common.cache.get_group_identifier(group)
-    if site:
-        site: CacheSite = common.cache.get_site_identifier(site)
+    dev = None if not device else common.cache.get_dev_identifier(device)
+    _group = None if not group else common.cache.get_group_identifier(group)
+    _site = None if not site else common.cache.get_site_identifier(site)
     if label:
-        if group:
+        if _group:
             log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
             label = None
         else:
@@ -2902,12 +2902,12 @@ def alerts(
     start, end = common.verify_time_range(start=start, end=end, past=past, end_offset=pendulum.duration(hours=24))
 
     kwargs = {
-        "group": None if not group else group.name,
+        "group": None if not _group else _group.name,
         "label": None if not label else label.name,
         "from_time": start,
         "to_time": end,
-        "serial": None if not device else device.serial,
-        "site": None if not site else site.name,
+        "serial": None if not dev else dev.serial,
+        "site": None if not _site else _site.name,
         'severity': severity,
         "search": search,
         "type": alert_type,
@@ -2924,16 +2924,16 @@ def alerts(
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     title = "Alerts/Notifications (Configured Notification Rules)"
-    if device:
-        title = f"{title} [reset]for[cyan] {device.generic_type.upper()} {device.name}|{device.serial}[reset]"
-    if group or site or label:
+    if dev:
+        title = f"{title} [reset]for[cyan] {dev.generic_type.upper()} {dev.name}|{dev.serial}[reset]"
+    if _group or _site or label:
         title = f"{title} [bright_green]filtered by[/]"
-        if group:
-            title = f"{title} group: [cyan]{group.name}[/]"
-        if site:
-            title = f"{title} site: [cyan]{site.name}[/]"
+        if _group:
+            title = f"{title} group: [cyan]{_group.name}[/]"
+        if _site:
+            title = f"{title} site: [cyan]{_site.name}[/]"
         if label:
-            title = f"{title} label: [cyan]{site.name}[/]"
+            title = f"{title} label: [cyan]{_site.name}[/]"
 
     render.display_results(
         resp,
@@ -2969,7 +2969,7 @@ def notifications(
 
     Display alerty types, notification targets, and rules.
     """
-    resp = api.session.request(api.central.central_get_notification_config, search=search)
+    resp = api.session.request(api.central.get_notification_config, search=search)
 
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
     title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
@@ -3002,7 +3002,7 @@ def last(
     workspace: str = common.options.workspace,
 ) -> None:
     """Re-display output from Last command.  (No API Calls)"""
-    if not config.last_command_file.exists():
+    if not config.last_command_file.exists():  # pragma: no cover
         common.exit("Unable to find cache for last command.")
 
     kwargs = config.last_command_file.read_text()
@@ -3062,7 +3062,7 @@ def webhooks(
 
 
 # TODO callbacks.py send all validation to callbacks
-def hook_proxy_what_callback(ctx: typer.Context, what: ShowHookProxyArgs):
+def hook_proxy_what_callback(ctx: typer.Context, what: ShowHookProxyArgs):  # pragma: no cover
     if ctx.resilient_parsing:  # tab completion, return without validating
         return what
 
@@ -3077,7 +3077,7 @@ def hook_proxy_what_callback(ctx: typer.Context, what: ShowHookProxyArgs):
 
 @app.command(help="Show WebHook Proxy details/logs", hidden=not hook_enabled)
 def hook_proxy(
-    what: ShowHookProxyArgs = typer.Argument(None, callback=hook_proxy_what_callback),
+    what: ShowHookProxyArgs = typer.Argument(ShowHookProxyArgs.pid, callback=hook_proxy_what_callback),
     tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show hook-proxy logs)", is_eager=True),
     brief: bool = typer.Option(False, "-b", help="Brief output for 'pid' and 'port'"),
     debug: bool = common.options.debug,
@@ -3220,7 +3220,6 @@ def guests(
     else:
         if refresh:
             _ = api.session.request(common.cache.refresh_portal_db)
-        portals = [portal for portal in common.cache.portals if "Username/Password" in portal["auth_type"]]
         for idx in range(0, 2):
             portals = [portal for portal in common.cache.portals if "Username/Password" in portal["auth_type"]]
             if not portals:
@@ -3308,11 +3307,9 @@ def radios(
 ) -> None:
     """Show details for Radios."""
     if not status:
-        if up and down:
-            ...  # They used both flags.  ignore
-        elif up or down:
-            status = "Down" if down else "Up"
-    status = None if not status else status.title()
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
+            status = status.title()
 
     group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
     site: CacheSite = None if not site else common.cache.get_site_identifier(site)
@@ -3525,7 +3522,7 @@ def cron(
 
     This will keep the tokens valid, even if cencli is not used.
     """
-    if os.name != "posix":
+    if os.name != "posix":  # pragma: no cover
         render.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
 
     user = getpass.getuser()
@@ -3577,7 +3574,7 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     else:
         out = {**out, config.workspace: workspaces.get(config.workspace, {})}
 
-    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
+    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 
