@@ -138,8 +138,15 @@ def test_show_switches():
     assert "API" in result.stdout
 
 
+def test_show_switches_up():
+    result = runner.invoke(app, ["show", "switches", "--up"],)
+    capture_logs(result, "test_show_switches_up")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_gateways():
-    result = runner.invoke(app, ["show", "gateways", "--table"],)
+    result = runner.invoke(app, ["show", "gateways", "--up", "--table"],)
     capture_logs(result, "test_show_gateways")
     assert result.exit_code == 0
     assert "site" in result.stdout
@@ -269,6 +276,13 @@ def test_show_sites():
     assert "site" in result.stdout.lower()
 
 
+def test_show_site_by_name():
+    result = runner.invoke(app, ["show", "sites", test_data["ap"]["site"]],)
+    capture_logs(result, "test_show_site_by_name")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_switch_by_name():
     result = runner.invoke(app, ["show", "switches", test_data["switch"]["name"], "--debug"],)
     capture_logs(result, "test_show_switch_by_name")
@@ -331,6 +345,20 @@ def test_show_gateway_by_name():
     assert result.exit_code == 0
     assert "site" in result.stdout
     assert "status" in result.stdout
+
+def test_show_devices_all_up():
+    result = runner.invoke(app, ["show", "devices", "all", "--up"],)
+    capture_logs(result, "test_show_device_all_up")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_devices_down():
+    result = runner.invoke(app, ["show", "devices", "--down"],)
+    capture_logs(result, "test_show_devices_down")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
 
 def test_show_device_by_name():
     result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
@@ -431,7 +459,7 @@ def test_show_cache_devices_sites():
 
 
 def test_show_variables():
-    result = runner.invoke(app, ["show", "variables"],)
+    result = runner.invoke(app, ["show", "variables", "all", "--table"],)  # Also tests logic that converts tablfmt to json
     capture_logs(result, "test_show_variables")
     assert result.exit_code == 0
     assert "_sys_serial" in result.stdout
@@ -461,12 +489,41 @@ def test_show_vlans_site():
     assert "API" in result.stdout
 
 
+def test_show_vlans_gw():
+    result = runner.invoke(app, ["show", "vlans", test_data["gateway"]["mac"]],)
+    capture_logs(result, "test_show_vlans_gw")
+    assert result.exit_code == 0
+    assert "pvid" in result.stdout
+
+
+def test_show_vlans_stack():
+    result = runner.invoke(app, ["show", "vlans", test_data["vsf_switch"]["mac"]],)
+    capture_logs(result, "test_show_vlans_stack")
+    assert result.exit_code == 0
+    assert "pvid" in result.stdout
+
+
+def test_show_vlans_invalid_dev_type():
+    result = runner.invoke(app, ["show", "vlans", test_data["ap"]["serial"]],)
+    capture_logs(result, "test_show_vlans_invalid_dev_type", expect_failure=True)
+    assert result.exit_code == 1
+    assert "valid" in result.stdout
+
+
 if config.dev.mock_tests:
     def test_show_task():
         result = runner.invoke(app, ["show", "task", "17580829600233"],)
         capture_logs(result, "test_show_task")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+if config.dev.mock_tests:
+    def test_show_task_invalid_expired():
+        result = runner.invoke(app, ["show", "task", "17580829612345"],)
+        capture_logs(result, "test_show_task_invalid_expired")
+        assert result.exit_code == 0
+        assert "invalid" in result.stdout
 
 
 def test_show_templates_all():
@@ -486,11 +543,10 @@ def test_show_templates_by_group():
 
 
 def test_show_templates_dev_type():
-    result = runner.invoke(app, ["show", "templates", "group", test_data["template_switch"]["group"], "--dev-type", "sw"],)
+    result = runner.invoke(app, ["show", "templates", "--dev-type", "sw"],)
     capture_logs(result, "test_show_templates_dev_type")
     assert result.exit_code == 0
     assert "group" in result.stdout
-    assert "version" in result.stdout
 
 
 def test_show_template_by_dev_name():
@@ -547,6 +603,13 @@ def test_show_all_ap_lldp_neighbors():
     assert "switch" in result.stdout
 
 
+def test_show_all_ap_lldp_neighbors_no_site():
+    result = runner.invoke(app, ["show", "aps", "-n"],)
+    capture_logs(result, "test_show_all_ap_lldp_neighbors_no_site", expect_failure=True)
+    assert result.exit_code == 1
+    assert "site" in result.stdout
+
+
 def test_show_cx_switch_lldp_neighbors():
     result = runner.invoke(app, ["show", "lldp", test_data["switch"]["mac"].lower(),],)
     capture_logs(result, "test_show_cx_switch_lldp_neighbors")
@@ -566,6 +629,13 @@ def test_show_certs():
     result = runner.invoke(app, ["show", "certs", "--yaml"],)
     assert result.exit_code == 0
     assert "expired" in result.stdout
+
+
+def test_show_labels():
+    result = runner.invoke(app, ["show", "labels"],)
+    capture_logs(result, "test_show_labels")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_last():
@@ -678,12 +748,11 @@ def test_show_clients():
     assert "mac" in result.stdout
 
 
-def test_show_clients_wireless():
+def test_show_clients_wireless_w_band():
     cache.responses.client = None
-    result = runner.invoke(app, ["show", "clients", "--wireless", "--table", "--debug"],)
-    capture_logs(result, "test_show_clients_wireless")
+    result = runner.invoke(app, ["show", "clients", "-w", "--band", "6"],)
+    capture_logs(result, "test_show_clients_wireless_w_band")
     assert result.exit_code == 0
-    assert "ip" in result.stdout
     assert "mac" in result.stdout
 
 
@@ -696,6 +765,13 @@ def test_show_clients_wired():
     assert "mac" in result.stdout
 
 
+def test_show_clients_stack():
+    result = runner.invoke(app, ["show", "clients", "--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"],)
+    capture_logs(result, "test_show_clients_stack")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_client_by_mac():
     mac = test_data["client"]["wireless"]["mac"]
     result = runner.invoke(app, ["show", "clients", mac],)
@@ -703,6 +779,22 @@ def test_show_client_by_mac():
     assert result.exit_code == 0
     assert "role" in result.stdout
     assert f'mac {clean_mac(mac)}' in clean_mac(result.stdout)
+
+
+def test_show_client_for_dev():
+    result = runner.invoke(app, ["show", "clients", "--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]],)  # site is ignored
+    capture_logs(result, "test_show_client_for_dev")
+    assert result.exit_code == 0
+    assert "ignored" in result.stdout
+    assert "API" in result.stdout
+
+
+def test_show_denylisted():
+    cache.responses.client = None
+    result = runner.invoke(app, ["show", "denylisted", "clients", test_data["ap"]["name"]],)  # "clients" is unnecessary and should be stripped
+    capture_logs(result, "test_show_denylisted")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_group_level_config():
@@ -830,6 +922,98 @@ def test_show_config_ap_dev():
     assert "wlan" in result.stdout
 
 
+def test_show_config_ap_env_w_group():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["ap"]["group"],
+            test_data["ap"]["name"],
+            "--env"
+        ]
+    )
+    capture_logs(result, "test_show_config_ap_env_w_group")
+    assert result.exit_code == 0
+    assert "per-ap" in result.stdout
+
+
+def test_show_config_group_no_type():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["ap"]["group"]
+        ]
+    )
+    capture_logs(result, "test_show_config_group_no_type", expect_failure=True)
+    assert result.exit_code == 1
+    assert "nvalid" in result.stdout
+
+
+def test_show_config_invalid_2_devs():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["ap"]["name"],
+            test_data["switch"]["name"],
+        ]
+    )
+    capture_logs(result, "test_show_config_invalid_2_devs", expect_failure=True)
+    assert result.exit_code == 1
+    assert "nvalid" in result.stdout
+
+
+def test_show_config_invalid_ap_w_gw_flag():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["ap"]["name"],
+            "--gw",
+        ]
+    )
+    capture_logs(result, "test_show_config_invalid_ap_w_gw_flag", expect_failure=True)
+    assert result.exit_code == 1
+    assert "nvalid" in result.stdout
+
+
+def test_show_config_group_no_type_ap_only_group(ensure_cache_group3):
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            "cencli_test_group3"
+        ]
+    )
+    capture_logs(result, "test_show_config_group_no_type_ap_only_group")
+    assert result.exit_code == 0
+    assert "--ap" in result.stdout
+    assert "hash" in result.stdout
+
+
+def test_show_config_sw_tg():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["template_switch"]["name"],
+            "this-is-ignored",  # test branch logic that displays warning for ignored extra arg
+
+        ]
+    )
+    capture_logs(result, "test_show_config_sw_tg")
+    assert result.exit_code == 0
+    assert "TEMPLATE" in result.stdout
+    assert "this-is-ignored" in result.stdout
+
+
+def test_show_config_sw_ui():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            test_data["switch"]["name"].replace("-", "_")
+        ]
+    )
+    capture_logs(result, "test_show_config_sw_ui")
+    assert result.exit_code == 0
+    assert "Troubleshooting" in result.stdout
+
+
 def test_show_config_cencli():  # output is yaml
     result = runner.invoke(app, [
             "show",
@@ -840,6 +1024,19 @@ def test_show_config_cencli():  # output is yaml
     capture_logs(result, "test_show_config_cencli")
     assert result.exit_code == 0
     assert "current_workspace" in result.stdout
+
+
+def test_show_config_cencli_file():
+    result = runner.invoke(app, [
+            "show",
+            "config",
+            "self",
+            "-f"
+        ]
+    )
+    capture_logs(result, "test_show_config_cencli_file")
+    assert result.exit_code == 0
+    assert "client_id" in result.stdout
 
 
 def test_show_config_cencli_verbose():  # output is yaml
@@ -1007,7 +1204,20 @@ def test_show_roaming():
     assert "API" in result.stdout
 
 
-def test_show_run():
+def test_show_routes():
+    result = runner.invoke(app, [
+            "show",
+            "routes",
+            test_data["gateway"]["name"],
+            "-r"
+        ]
+    )
+    capture_logs(result, "test_show_routes")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_run_ap():
     result = runner.invoke(app, [
             "show",
             "run",
@@ -1017,6 +1227,18 @@ def test_show_run():
     capture_logs(result, "test_show_run")
     assert result.exit_code == 0
     assert "version" in result.stdout
+
+
+def test_show_run_cx():
+    result = runner.invoke(app, [
+            "show",
+            "run",
+            test_data["switch"]["serial"],
+        ]
+    )
+    capture_logs(result, "test_show_run")
+    assert result.exit_code == 0
+    assert "Troubleshooting" in result.stdout
 
 
 # There is no CLI command for this currently testing the API directly via test method command
@@ -1109,6 +1331,18 @@ def test_show_upgrade_multi():
     assert "API" in result.stdout
 
 
+def test_show_upgrade_no_dev():
+    result = runner.invoke(app, [
+            "show",
+            "upgrade",
+            "status"
+        ]
+    )
+    capture_logs(result, "test_show_upgrade_no_dev", expect_failure=True)
+    assert result.exit_code == 1
+    assert "required" in result.stdout
+
+
 def test_show_uplinks():
     result = runner.invoke(app, [
             "show",
@@ -1177,6 +1411,30 @@ def test_show_subscriptions_details():  # glp
     assert result.exit_code == 0
 
 
+def test_show_vsx(ensure_dev_cache_test_vsx_switch):
+    result = runner.invoke(app, [
+            "show",
+            "vsx",
+            test_data["vsx_switch"]["serial"]
+        ]
+    )
+    capture_logs(result, "test_show_vsx")
+    assert result.exit_code == 0
+    assert "config_sync" in result.stdout
+
+
+def test_show_vsx_invalid_sw():
+    result = runner.invoke(app, [
+            "show",
+            "vsx",
+            test_data["template_switch"]["serial"]
+        ]
+    )
+    capture_logs(result, "test_show_vsx_invalid_sw", expect_failure=True)
+    assert result.exit_code == 1
+    assert "only valid" in result.stdout
+
+
 def test_show_webhooks():
     result = runner.invoke(app, [
             "show",
@@ -1190,6 +1448,123 @@ def test_show_webhooks():
     assert "API" in result.stdout
 
 
+def test_show_wlans():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+        ]
+    )
+    capture_logs(result, "test_show_wlans")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_verbose():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "-v"
+        ]
+    )
+    capture_logs(result, "test_show_wlans_verbose")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_group():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--group",
+            test_data["ap"]["group"]
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_group")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_swarm():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--swarm",
+            test_data["aos8_ap"]["name"]
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_swarm")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_site():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--site",
+            test_data["ap"]["site"]
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_site")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_label(ensure_cache_label1):
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--label",
+            "cencli_test_label1"
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_label")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_site_verbose_invalid():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--site",
+            test_data["ap"]["site"],
+            "-v"
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_site_verbose_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "not" in result.stdout
+
+
+def test_show_wlans_too_many_flags():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--site",
+            test_data["ap"]["site"],
+            "--label",
+            "cencli_test_label1"
+        ]
+    )
+    capture_logs(result, "test_show_wlans_too_many_flags", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_show_wlans_by_tg_invalid(ensure_cache_group2):
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            "--group",
+            "cencli_test_group2"
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_tg_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "template group" in result.stdout.lower()
+
+
 def test_show_cron():
     result = runner.invoke(app, [
             "show",
@@ -1199,3 +1574,16 @@ def test_show_cron():
     capture_logs(result, "test_show_cron")
     assert result.exit_code == 0
     assert "cron.weekly" in result.stdout
+
+
+def test_show_guest_summary():
+    result = runner.invoke(app, [
+            "test",
+            "method",
+            "get_guest_summary",
+            test_data["portal"]["ssid"]
+        ]
+    )
+    capture_logs(result, "test_show_guest_summary")
+    assert result.exit_code == 0
+    assert "200" in result.stdout

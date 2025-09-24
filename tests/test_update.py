@@ -3,7 +3,7 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 from centralcli.exceptions import ConfigNotFoundException
 
-from . import capture_logs, test_data
+from . import capture_logs, config, test_data
 from ._test_data import gw_group_config_file
 
 runner = CliRunner()
@@ -85,6 +85,28 @@ def test_update_mpsk(ensure_cache_mpsk):
     assert "204" in result.stdout
 
 
+# TODO need cencli update command
+def test_update_guest(ensure_cache_guest1):
+    result = runner.invoke(
+        app,
+        [
+            "test",
+            "method",
+            "update_guest",
+            "portal_id=e5538808-0e05-4ecd-986f-4bdce8bf52a4",
+            "visitor_id=7c9eb0df-b211-4225-94a6-437df0dfca59",
+            "name=superlongemail@kabrew.com",
+            "company_name=ConsolePi",
+            "phone=+16155551212",
+            "email=superlongemail@kabrew.com",
+            "valid_till_days=30"
+        ]
+    )
+    capture_logs(result, "test_update_guest")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_update_template(ensure_cache_template):
     result = runner.invoke(
         app,
@@ -99,3 +121,20 @@ def test_update_template(ensure_cache_template):
     capture_logs(result, "test_update_template")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+if config.dev.mock_tests:
+    def test_update_webhook():
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "webhook",
+                "851cb87d-8e10-49f9-84a6-a256bad891ea",
+                "cencli_test",
+                "https://wh.consolepi.com",
+                "--yes",
+            ]
+        )
+        capture_logs(result, "test_update_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout

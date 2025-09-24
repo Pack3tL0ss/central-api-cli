@@ -46,7 +46,7 @@ class AiOpsAPI:
             if not device_type:
                 raise ValueError("device_type must be provided if serial is provided")
             device_type = constants.lib_to_api(device_type, "aiops")
-        if len([param for param in [site_id, client_mac, serial] if param is not None]) > 1:
+        if len([param for param in [site_id, client_mac, serial] if param is not None]) > 1:  # pragma: no cover
             raise ValueError("Too many filtering arguments provided.  Only one of site_id, client_mac, or serial is expected.")
 
         base_url = "/aiops/v2/insights"

@@ -39,6 +39,7 @@ Bottom Line.
 
 """
 import sys
+import time
 import traceback
 from functools import partial
 from unittest import mock
@@ -62,10 +63,10 @@ api_clients = APIClients()
 class NonDefaultWorkspaceException(CentralCliException): ...
 
 
-def capture_logs(result: Result, test_func: str = None, expect_failure: bool = False):
+def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
-    if result.exit_code != (0 if not expect_failure else 1):
-        log.error(f"{test_func} returned error:\n{result.stdout}", show=True)
+    if result.exit_code != (0 if not expect_failure else 1) or log_output:
+        log.error(f"{test_func} {'returned error' if not log_output else 'output'}:\n{result.stdout}", show=True)
         if "unable to gather device" in result.stdout:
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
@@ -103,6 +104,30 @@ def refresh_tokens(_, old_token: dict) -> dict:
     log.info("mock refresh_tokens called.  Simulating token refresh.")
     return old_token
 
+class MockSleep:
+    real_sleep: bool = False
+
+    @classmethod
+    def real(cls, do_sleep: bool):
+        cls.real_sleep = do_sleep
+
+    def __call__(self, sleep_time: int | float, *args, **kwargs) -> None:
+        if self.real_sleep:
+            start = time.perf_counter()
+            while time.perf_counter() - start < sleep_time:
+                continue
+            log.info(f"slept for {time.perf_counter() - start}, {sleep_time = }, {args = }, {kwargs = }")
+
+    def __enter__(self):
+        self.real_sleep = True
+        return self
+
+    def __exit__(self, *args):
+        self.real_sleep = False
+
+
+mock_sleep = MockSleep()
+
 
 if __name__ in ["tests", "__main__"]:
     monkeypatch_terminal_size()
@@ -110,7 +135,8 @@ if __name__ in ["tests", "__main__"]:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
-        pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
+        # pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
+        pytest.MonkeyPatch().setattr("time.sleep", mock_sleep)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
     ensure_default_account()
     if "--collect-only" not in sys.argv:

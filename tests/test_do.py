@@ -11,6 +11,13 @@ from ._test_data import test_device_file
 runner = CliRunner()
 
 
+# TODO NEEDS COMMAND, and alert id to int cache (like logs/events)
+def test_ack_notification():
+    resp = api.session.request(api.central.central_acknowledge_notifications, "AZl5PdWQBnVd7wH8QpSa")
+    assert resp.ok
+    assert resp.status == 200
+
+
 def test_add_device_missing_mac():
     result = runner.invoke(app, ["add", "device", "serial", test_data["switch"]["serial"], "group", test_data["switch"]["group"], "--sub", "advanced-switch-6100", "-y"])
     capture_logs(result, "test_add_device_missing_mac", expect_failure=True)

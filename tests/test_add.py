@@ -61,17 +61,18 @@ def test_add_group2_tg():
     )
 
 
-def test_add_group3_wlan_tg():
-    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group3", "--ap", "--wlan-tg", "-Y"])
+def test_add_group3():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group3", "--ap", "-Y"])
+    capture_logs(result, "test_add_group3")
     assert True in [
         result.exit_code == 0 and "Created" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout
     ]
 
 
-def test_add_group4_aos10_gw_wlan():
-    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "-Y"])
-    capture_logs(result, "test_add_group4_aos10_gw_wlan")
+def test_add_group4_aos10_gw_wlan_cnx():
+    result = runner.invoke(app, ["-d", "add", "group",  "cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx", "-Y"])
+    capture_logs(result, "test_add_group4_aos10_gw_wlan_cnx")
     assert True in [
         result.exit_code == 0 and "Created" in result.stdout,
         result.exit_code == 1 and "already exists" in result.stdout
@@ -242,7 +243,7 @@ def test_add_wlan_no_psk(ensure_cache_group1):
 
 if config.dev.mock_tests:
     def test_add_webhook():
-        result = runner.invoke(app, ["add", "webhook",  "cencli_test_webhook", "http://fake.consolepi.com:8123/webhook", "-y"])
+        result = runner.invoke(app, ["add", "webhook",  "cencli_test_webhook", "http://wh.consolepi.com:8123/webhook", "-y"])
         capture_logs(result, "test_add_webhook")
         assert result.exit_code == 0
         assert "200" in result.stdout

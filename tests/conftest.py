@@ -3,13 +3,14 @@ import shutil
 from pathlib import Path
 
 import pendulum
+import psutil
 import pytest
 from typer.testing import CliRunner
 
 from centralcli import cache, common, config, log
 from centralcli.cli import app
 
-from . import test_data
+from . import mock_sleep, test_data
 from ._mock_request import test_responses
 from ._test_data import test_device_file, test_files, test_group_file
 
@@ -201,30 +202,27 @@ def ensure_cache_group2():
 @pytest.fixture(scope="function")
 def ensure_cache_group3():
     if config.dev.mock_tests:
-        batch_del_group1 = [
-            {
-                "name": "cencli_test_group3",
-                "allowed_types": ["ap"],
-                "gw_role": "branch",
-                "aos10": False,
-                "microbranch": False,
-                "wlan_tg": True,
-                "wired_tg": False,
-                "monitor_only_sw": False,
-                "monitor_only_cx": False,
-                "cnx": None
-            }
-        ]
-        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+        cache_data = {
+            "name": "cencli_test_group3",
+            "allowed_types": ["ap"],
+            "gw_role": "branch",
+            "aos10": False,
+            "microbranch": False,
+            "wlan_tg": False,
+            "wired_tg": False,
+            "monitor_only_sw": False,
+            "monitor_only_cx": False,
+            "cnx": None
+        }
+        if cache_data["name"] not in cache.groups_by_name:
+            assert asyncio.run(cache.update_group_db(data=cache_data))
     yield
 
 
 @pytest.fixture(scope="function")
 def ensure_cache_group4():
     if config.dev.mock_tests:
-        batch_del_group1 = [
+        group_data = [
             {
                 "name": "cencli_test_group4",
                 "allowed_types": ["ap", "gw"],
@@ -235,12 +233,23 @@ def ensure_cache_group4():
                 "wired_tg": False,
                 "monitor_only_sw": False,
                 "monitor_only_cx": False,
-                "cnx": False
+                "cnx": True
             }
         ]
-        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
+        missing = [group["name"] for group in group_data if group["name"] not in cache.groups_by_name]
         if missing:
-            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+            assert asyncio.run(cache.update_group_db(data=group_data))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_hook_proxy_started():
+    if config.dev.mock_tests and not [p.pid for p in psutil.process_iter(attrs=["name", "cmdline"]) if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]]:
+        with mock_sleep:
+            result = runner.invoke(app, ["start", "hook-proxy", "-y"])
+        assert result.exit_code == 0
+        assert "Started" in result.stdout
+
     yield
 
 
@@ -312,6 +321,33 @@ def ensure_dev_cache_test_ap():
 
     if test_data["test_devices"]["ap"]["serial"] in cache.devices_by_serial:
         serial = test_data["test_devices"]["ap"]["serial"]
+        assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    return
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_vsx_switch():
+    test_switch = {
+        "name": "border1",
+        "status": "Up",
+        "type": "cx",
+        "model": "8360-48XT4C switch (JL720A)",
+        "ip": "10.0.30.142",
+        "mac": "ec:02:73:bb:41:00",
+        "serial": "SG18KRT025",
+        "group": "ATM-LOCAL",
+        "site": None,
+        "version": "10.14.1020",
+        "swack_id": None,
+        "switch_role": 1
+    }
+    if config.dev.mock_tests:
+        if test_switch["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_switch, truncate=False))
+    yield
+
+    if config.dev.mock_tests and test_switch["serial"] in cache.devices_by_serial:
+        serial = test_switch["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
     return
 
