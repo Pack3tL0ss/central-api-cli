@@ -47,7 +47,7 @@ class LoggedRequests:
         self.remain_sec = None
 
     def __repr__(self):
-        return f"<{self.__module__}.{type(self).__name__} ({self.reason or 'OK' if self.ok else '?'}) object at {hex(id(self))}>"
+        return f"<{self.__module__}.{type(self).__name__} ({self.reason or ('OK' if self.ok else '?')}) object at {hex(id(self))}>"
 
     def update(self, response: ClientResponse):
         rh = response.headers
@@ -224,7 +224,7 @@ class Session():
 
             return spin_txt if not self.running_spinners else self.running_spinners[0]
 
-    async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:
+    async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:  # pragma: no cover
         if not config.debugv:
             return
         call_data = {
@@ -247,11 +247,11 @@ class Session():
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
-        if config.dev.sanitize and utils.is_serial(end_name):
+        if config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
             end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
-        run_sfx = '' if self.req_cnt == 1 else f' Request: {self.req_cnt}'
+        run_sfx = '' if self.req_cnt <= 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
         spin_txt_run = f"{spin_word} ({end_name}) Data...{run_sfx}"
         spin_txt_retry = DEFAULT_SPIN_TXT  # helps detect if this was not set correctly after previous failure :poop:
