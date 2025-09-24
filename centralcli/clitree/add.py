@@ -70,7 +70,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
     resp = utils.listify(resp)
     for r in resp:
         if r.url.path == '/platform/device_inventory/v1/devices':
-            if not r.ok:
+            if not r.ok:  # pragma: no cover
                 return
             try:
                 inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
@@ -473,10 +473,8 @@ def cert(
             econsole.print("Provide certificate content encoded in base64 format.")
         cert_file = utils.get_multiline_input(prompt=f"[cyan]Enter/Paste in {'certificate' if not crl else 'crl'} text[/].")
         kwargs["cert_data"] = cert_file
-    elif cert_file.exists():
-        kwargs["cert_file"] = cert_file
     else:
-        common.exit(f"[red1]Error[/]: The specified certificate file [cyan]{cert_file.name}[/] not found.")
+        kwargs["cert_file"] = cert_file
 
     econsole.print("[bright_green]Upload Certificate:")
     _ = [
@@ -567,20 +565,16 @@ def template(
 def _get_variable_file(var_file: Path) -> dict[str, dict[str, str]]:
     var_data = config.get_file_data(var_file)
 
-    invalid = None
     try:
         if isinstance(var_data, list):
             var_data = {dev_vars["_sys_serial"]: dev_vars for dev_vars in var_data}
         elif "_sys_serial" in var_data:
             var_data = {var_data["_sys_serial"]: var_data}
-    except KeyError as e:
-        log.exception(f"{repr(e)} While attempting to parse variables from {var_file.name}", caption=True)
-        invalid = True
+    except KeyError as e:  # pragma: no cover
+        log.exception(f"{repr(e)} While attempting to parse variables from {var_file.name}\n{e}")
+        common.exit(f"{repr(e)} While attempting to parse variables from {var_file.name}")
 
     if not all("_sys_serial" in vars and "_sys_lan_mac" in vars for vars in var_data.values()):
-        invalid = True
-
-    if invalid:
         common.exit("Missing required variable [cyan]_sys_serial[/] and/or [cyan]_sys_lan_mac[/].")
 
     return var_data
