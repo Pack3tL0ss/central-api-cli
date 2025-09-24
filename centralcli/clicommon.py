@@ -917,7 +917,7 @@ class CLICommon:
         confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
         file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
         render.console.print(f'{len(data)} Devices found in {file_str}')
-        render.console.print(confirm_str, emoji=False)
+        render.console.print(confirm_str.lstrip("\n"), emoji=False)
         render.console.print(f'\n{word} {len(data)} devices found in {file_str}')
         if warn:
             msg = ":warning:  Warnings exist"
