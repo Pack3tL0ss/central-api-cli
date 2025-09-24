@@ -4474,6 +4474,14 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str,
+        include_inventory: bool,
+        conductor_only: bool,
+    ) -> CacheDevice: ...
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str,
     ) -> CacheDevice: ...
 
     @overload
