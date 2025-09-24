@@ -202,6 +202,8 @@ class GuestAPI:
     ) -> Response:
         """Update guest visitor account.
 
+        All options need to be provided, this replaces current data for the guest.
+
         Args:
             portal_id (str): Portal ID of the splash page
             visitor_id (str): Visitor ID of the portal
