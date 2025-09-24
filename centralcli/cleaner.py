@@ -2122,3 +2122,8 @@ def get_dirty_diff(data: list[dict[str, str]],) -> list[dict[str, str]]:
         return data
 
     return [{"ap": f"{item.get('name', 'err-no-name-field')} [dim]({item.get('id', 'err-no-id-field')})[/]", "dirty diff": item["dirty_diff"]} for item in data]
+
+def get_denylist_clients(data: dict[str, str | list[str]]) -> list[dict[str, str]]:
+    return [
+        {"ap": f'{device["device_name"]} {device["device_id"]}', "denylisted MAC": mac} for device in data for mac in device["blacklist"]
+    ]
