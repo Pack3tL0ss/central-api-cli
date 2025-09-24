@@ -7,7 +7,8 @@ from ... import constants, utils
 from ...client import BatchRequest
 
 if TYPE_CHECKING:
-    from ... import Response, Session
+    from centralcli.client import Session
+    from centralcli.response import Response
 
 
 class CentralAPI:
@@ -265,26 +266,23 @@ class CentralAPI:
 
         return await self.session.patch(url, json_data=json_data)
 
-    async def delete_site(self, site_id: int | List[int]) -> Response | List[Response]:
-        """Delete Site.
+    async def delete_site(self, site_ids: int | list[int]) -> list[Response]:
+        """Delete Site(s).
 
         Args:
             site_id (int|List[int]): Either the site_id or a list of site_ids to be deleted.
 
         Returns:
-            Response: CentralAPI Response object
+            list[Response]: A List of CentralAPI Response objects
         """
         b_url = "/central/v2/sites"
-        if isinstance(site_id, list):
-            return await self.session._batch_request(
-                [
-                    BatchRequest(self.session.delete, f"{b_url}/{_id}")
-                    for _id in site_id
-                ]
-            )
-        else:
-            url = f"{b_url}/{site_id}"
-            return await self.session.delete(url)
+        site_ids = utils.listify(site_ids)
+        return await self.session._batch_request(
+            [
+                BatchRequest(self.session.delete, f"{b_url}/{_id}")
+                for _id in site_ids
+            ]
+        )
 
     async def move_devices_to_site(
         self,
@@ -564,21 +562,22 @@ class CentralAPI:
 
     async def central_acknowledge_notifications(
         self,
-        NoName: List[str] = None,
+        notification_ids: list[str] | str,
     ) -> Response:
-        """Acknowledge Notifications by ID List / All.
+        """Acknowledge Notifications by List of Notification IDs.
 
         Args:
-            NoName (List[str], optional): Acknowledge notifications
+            NoName (list[str] | str): Notification IDs to Acknowledge
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v1/notifications"
+        notification_ids = notification_ids if not isinstance(notification_ids, str) else [notification_ids]
 
-        return await self.session.post(url)
+        return await self.session.post(url, json_data=notification_ids)
 
-    async def central_get_notification_config(
+    async def get_notification_config(
         self,
         search: str = None,
         sort: str = '-created_ts',
