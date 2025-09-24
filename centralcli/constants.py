@@ -1250,7 +1250,7 @@ class IdenMetaVars:
         self.dev_types = "[ap|gw|cx|sw]"
         self.dev_types_w_mas = "[ap|gw|cx|sw|mas]"
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
-        self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
+        self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|self]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
         self.portal_many = "[PORTAL_NAME] ... (multiple allowed)"
