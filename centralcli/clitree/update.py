@@ -543,7 +543,7 @@ def webhook(
     updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'{_pfx}{url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
     conf_msg = f"{conf_msg}\n{updates}"
     render.console.print(conf_msg, overflow="ellipsis")
-    if render.confirm():
+    if render.confirm(yes):
         resp = api.session.request(api.central.update_webhook, wid, name, urls)
         render.display_results(resp, tablefmt="action")
 
