@@ -34,11 +34,10 @@ import typer
 from rich import print
 from rich.console import Console
 
-from centralcli import caas, cleaner, common, config, constants, render, utils
+from centralcli import caas, cache, cleaner, common, config, constants, render, utils
 from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
 from centralcli.client import BatchRequest
 
-cache = common.cache
 iden_meta = constants.iden_meta
 
 app = typer.Typer()
@@ -55,8 +54,7 @@ def bulk_edit(
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Import and Apply settings from bulk-edit.csv
-    """
+    """Import and Apply settings from bulk-edit.csv"""
     caasapi = caas.CaasAPI()
     cmds = caasapi.build_cmds(file=input_file)
     # TODO log cli
@@ -111,8 +109,9 @@ def add_vlan(
 @app.command()
 def import_vlan(
     key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
-    import_file: str = common.arguments.import_file,
+    import_file: Path = common.arguments.import_file,
     file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
+    yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
@@ -127,21 +126,20 @@ def import_vlan(
         common.exit("key is required when using the default import file")
 
     data = config.get_file_data(import_file)
-    if key:
-        data = data.get(key)
+    data = data.get(key)
 
-    if not data:
+    if not data:  # pragma: no cover
         common.exit(f"[cyan]{key}[/] Not found in [cyan]{import_file}[/]")
 
     args = data.get("arguments", [])
     kwargs = data.get("options", {})
     _msg = (
-        f"\n{typer.style('add-vlan', fg='bright_green')}"
-        f'\n{typer.style("  settings:", fg="cyan")}'
-        f"\n    args: {', '.join(args)}\n    kwargs: {', '.join([f'{k}={v}' for k, v in kwargs.items()])}"
+        f"\n[bright_green]Add{'' if not yes else 'ing'} VLAN[/]"
+        '\n  [cyan]settings[/]:'
+        f"\n    [magenta]args[/]: {', '.join(args)}\n    [magenta]kwargs[/]: {', '.join([f'{k}=[deep_sky_blue1]{v}[/]' for k, v in kwargs.items()])}"
     )
-    typer.echo(f"{_msg}")
-    if render.confirm():
+    render.econsole.print(_msg)
+    if render.confirm(yes):
         add_vlan(*args, **kwargs)
 
 
@@ -247,13 +245,13 @@ def caas_batch(
 def send_cmds(
     kw1: constants.SendCmdArgs = typer.Argument(
         ...,
-        help="What to send the commands to, [grey42]use 'file' to send_cmds to nodes based on import file.[/]",
+        help="What to send the commands to, [dim]use 'file' to send_cmds to nodes based on import file.[/]",
         show_default=False
     ),
     nodes: str = typer.Argument(
         None,
         autocompletion=cache.send_cmds_completion,
-        help="The device/group/site identifier, [grey42]or 'all' for all gateways in the environment[/] :warning:  [bright_red]Use Caution[/]",
+        help="The device/group/site identifier, [dim]or 'all' for all gateways in the environment[/] :warning:  [bright_red]Use Caution[/]",
         metavar=iden_meta.group_or_dev_or_site,
         show_default=False,
         # callback=cli.send_cmds_node_callback,
@@ -268,7 +266,7 @@ def send_cmds(
     ),
     commands: List[str] = typer.Argument(
         None,
-        help="The commands to send.  ([grey42]space seperated, with each command wrapped in quotes[/]).",
+        help="The commands to send.  ([dim]space seperated, with each command wrapped in quotes[/]).",
         callback=common.send_cmds_node_callback,
         show_default=False,
     ),
