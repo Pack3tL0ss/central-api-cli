@@ -13,38 +13,6 @@ class FirmwareAPI:
     def __init__(self, session: Session):
         self.session = session
 
-    async def get_vc_firmware(
-        self,
-        swarm_id: str = None,
-        group: str = None,
-        offset: int = 0,
-        limit: int = 100,
-    ) -> Response:
-        """List Firmware Details of Swarms.
-
-        Args:
-            swarm_id: (str, optional): Providing swarm_id results in details for that swarm.
-            group (str, optional): Group name
-            offset (int, optional): Pagination offset Defaults to 0.
-            limit (int, optional): Pagination limit. Max is 1000 Defaults to 100.
-
-            Providing swarm_id is effectively a filter, it provides no additional detail.
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = "/firmware/v1/swarms"
-        if swarm_id:
-            url = f"{url}/{swarm_id}"
-            params = {}
-        else:
-            params = {
-                'group': group,
-                'offset': offset,
-                'limit': limit
-            }
-
-        return await self.session.get(url, params=params)
 
     async def get_firmware_version_list(
         self,
