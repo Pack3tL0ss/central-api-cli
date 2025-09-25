@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import test_cert_file
+from ._test_data import test_cert_file, test_invalid_var_file
 
 runner = CliRunner()
 
@@ -146,6 +146,13 @@ def test_add_variables(ensure_cache_group2):
     capture_logs(result, "test_add_variables")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+def test_add_variables_invalid(ensure_cache_group2):
+    result = runner.invoke(app, ["add", "variables",  str(test_invalid_var_file), "-Y"])
+    capture_logs(result, "test_add_variables_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Missing" in result.stdout
 
 
 def test_add_label():

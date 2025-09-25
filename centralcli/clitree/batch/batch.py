@@ -23,7 +23,7 @@ from . import add, assign, delete, examples, update
 
 try:
     import readline  # noqa imported for backspace support during prompts.
-except Exception:
+except Exception:  # pragma: no cover
     pass
 
 app = typer.Typer()

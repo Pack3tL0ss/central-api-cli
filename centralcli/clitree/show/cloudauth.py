@@ -77,7 +77,7 @@ def upload(
     if resp.ok:
         try:
             resp.output = cleaner.cloudauth_upload_status(resp.output)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}")
 
     render.display_results(

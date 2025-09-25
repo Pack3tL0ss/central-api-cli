@@ -1149,6 +1149,34 @@ def test_show_firmware_swarm():
     assert "API" in result.stdout
 
 
+def test_show_firmware_swarm_multi():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "swarm",
+            test_data["aos8_ap"]["name"],
+            test_data["ap"]["serial"]
+        ]
+    )
+    capture_logs(result, "test_show_firmware_swarm_multi")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_swarm_by_group():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "swarm",
+            "--group",
+            test_data["aos8_ap"]["group"],
+        ]
+    )
+    capture_logs(result, "test_show_firmware_swarm_by_group")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_firmware_device_multi():
     result = runner.invoke(app, [
             "show",
@@ -1161,6 +1189,46 @@ def test_show_firmware_device_multi():
     capture_logs(result, "test_show_firmware_device_multi")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+def test_show_firmware_device_dev_type_cx():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "device",
+            "--dev-type",
+            "cx",
+        ]
+    )
+    capture_logs(result, "test_show_firmware_dev_type_cx")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_device_dev_type_ap():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "device",
+            "--dev-type",
+            "ap",
+        ]
+    )
+    capture_logs(result, "test_show_firmware_dev_type_ap")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_firmware_device_no_args():
+    result = runner.invoke(app, [
+            "show",
+            "firmware",
+            "device",
+        ]
+    )
+    capture_logs(result, "test_show_firmware_device_no_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "--dev-type" in result.stdout
 
 
 def test_show_firmware_list_verbose():
@@ -1587,3 +1655,16 @@ def test_show_guest_summary():
     capture_logs(result, "test_show_guest_summary")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+def test_show_guest_summary_invalid_days():
+    result = runner.invoke(app, [
+            "test",
+            "method",
+            "get_guest_summary",
+            test_data["portal"]["ssid"],
+            "days=30"
+        ]
+    )
+    assert isinstance(result.exception, ValueError)
+

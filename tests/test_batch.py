@@ -3,8 +3,19 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 from centralcli.exceptions import InvalidConfigException
 
-from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_rename_aps_file, test_site_file, test_sub_file_csv, test_sub_file_yaml, test_verify_file
+from . import cache, capture_logs, config
+from ._test_data import (
+    test_data,
+    test_device_file,
+    test_group_file,
+    test_label_file,
+    test_mpsk_file,
+    test_rename_aps_file,
+    test_site_file,
+    test_sub_file_csv,
+    test_sub_file_yaml,
+    test_verify_file,
+)
 
 runner = CliRunner()
 
@@ -21,6 +32,27 @@ def test_batch_add_macs():
     capture_logs(result, "test_batch_add_macs")
     assert result.exit_code == 0
     assert "202" in result.stdout
+
+
+def test_batch_add_labels():
+    result = runner.invoke(app, ["batch", "add",  "labels", str(test_label_file), "-Y"])
+    capture_logs(result, "test_batch_add_labels")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_batch_add_mpsk():
+    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
+    capture_logs(result, "test_batch_add_mpsk")
+    assert result.exit_code == 0
+    assert "202" in result.stdout
+
+
+def test_batch_add_mpsk_invalid_options():
+    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "-Y"])
+    capture_logs(result, "test_batch_add_mpsk_invalid_options", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
 
 
 def test_batch_add_sites():
@@ -69,7 +101,7 @@ def test_batch_assign_subscriptions_csv():
 
 def test_batch_move_no_import_file():
     result = runner.invoke(app, ["batch", "move",  "devices",])
-    capture_logs(result, "test_batch_move_too_many_args", expect_failure=True)
+    capture_logs(result, "test_batch_move_no_import_file", expect_failure=True)
     assert result.exit_code == 1
     assert "Invalid" in result.stdout
 

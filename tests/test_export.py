@@ -8,7 +8,7 @@ runner = CliRunner()
 
 
 def test_export_redsky_bssids():
-    result = runner.invoke(app, ["export", "redsky-bssids", "--pnc", "-y"])
+    result = runner.invoke(app, ["export", "redsky-bssids", "--pnc", "-M", "6", "-y"])
     capture_logs(result, "test_export_redsky_bssids")
     assert result.exit_code == 0
     assert "API" in result.stdout

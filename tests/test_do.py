@@ -172,7 +172,7 @@ def test_clone_group():
 
 
 def test_kick_client():
-    result = runner.invoke(app, ["kick",  "client", test_data["client"]["wireless"]["name"][0:-2], "--yes"])
+    result = runner.invoke(app, ["kick",  "client", test_data["client"]["wireless"]["name"][0:-2], "--refresh", "--yes"])
     capture_logs(result, "test_kick_client")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -344,5 +344,12 @@ if config.dev.mock_tests:
     def test_test_webhook():
         result = runner.invoke(app, ["test", "webhook", "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
         capture_logs(result, "test_sync_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+if config.wss.key:
+    def test_validate_wss_key():
+        result = runner.invoke(app, ["test", "method", "validate_wss_key", config.wss.base_url, config.wss.key])
+        capture_logs(result, "test_validate_wss_key")
         assert result.exit_code == 0
         assert "200" in result.stdout

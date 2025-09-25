@@ -320,7 +320,7 @@ class Config:
         self._normalized_workspace = self._workspace.replace(" ", "_")
         try:
             c = ConfigData(workspace=self.workspace, **self.data)
-        except ValidationError as e:
+        except ValidationError as e:  # pragma: no cover
             econsole.print("\n".join([line for line in str(e).splitlines() if "errors.pydantic.dev" not in line]))
             sys.exit(1)
         self.base_url = c.current_workspace.classic.base_url
@@ -330,7 +330,7 @@ class Config:
         self.wss = c.current_workspace.classic.wss
         self.defined_workspaces: list[str] = list(c.workspaces.keys())
         self.is_old_cfg = True if "workspaces" not in self.data else False
-        if self.is_old_cfg:
+        if self.is_old_cfg:  # pragma: no cover
             config_dict = c.model_dump(exclude={"workspace", "central_info"}, exclude_none=True, exclude_unset=True)
             workspaces: dict[str, Any] = config_dict.get("workspaces")
             if workspaces and "default" in workspaces:
@@ -591,7 +591,7 @@ class Config:
 
         return workspace
 
-    def _cnx_first_run(self, workspace_dict: dict) -> dict | None:
+    def _cnx_first_run(self, workspace_dict: dict) -> dict | None:  # pragma: no cover
         """Method to collect CNX configuration from user when no config file exists.
 
         Args:
@@ -627,7 +627,7 @@ class Config:
 
             return workspace_dict
 
-    def first_run(self) -> str:
+    def first_run(self) -> str:  # pragma: no cover
         """Method to collect configuration from user when no config file exists.
 
         Returns:

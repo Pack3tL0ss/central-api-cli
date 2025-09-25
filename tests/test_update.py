@@ -122,6 +122,53 @@ def test_update_template(ensure_cache_template):
     assert result.exit_code == 0
     assert "200" in result.stdout
 
+
+def test_update_cp_cert(ensure_cache_group1, ensure_cache_cert):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "cp-cert",
+            "cencli_test",
+            "-G",
+            "cencli_test_group1",
+            "--yes",
+        ]
+    )
+    capture_logs(result, "test_update_cp_cert")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_update_cp_cert_no_group(ensure_cache_cert):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "cp-cert",
+            "cencli_test"
+        ]
+    )
+    capture_logs(result, "test_update_cp_cert_no_group", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_update_cp_cert_invalid_group(ensure_cache_cert, ensure_cache_group4):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "cp-cert",
+            "cencli_test",
+            "cencli_test_group4"
+        ]
+    )
+    capture_logs(result, "test_update_cp_cert_invalid_group", expect_failure=True)
+    assert result.exit_code == 1
+    assert "not supported" in result.stdout
+
+
 if config.dev.mock_tests:
     def test_update_webhook():
         result = runner.invoke(
