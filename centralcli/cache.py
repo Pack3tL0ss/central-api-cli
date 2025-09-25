@@ -988,7 +988,7 @@ class CacheCert(CentralObject):  #, Text):
     def text(self) -> Text:
         return Text.from_markup(
             f'Certificate: [bright_green]{self.name}[/]|[magenta]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]|'
-            f'[magenta]expiration[/]: [cyan]{DateTime(self.expiration, "date-string")}[/]|[magenta]md5[/]: [cyan]{self.md5_checksum}[/]'
+            f'[magenta]expiration[/]: [cyan]{"" if self.expiration is None else DateTime(self.expiration, "date-string")}[/]|[magenta]md5[/]: [cyan]{self.md5_checksum}[/]'
         )
 
     def ok(self) -> bool:
@@ -2417,8 +2417,6 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
                 elif m.md5_checksum.startswith(incomplete) and m.md5_checksum not in args:
                     out += [tuple([m.md5_checksum, m.help_text])]
-                else:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
         for m in out:
             yield m
