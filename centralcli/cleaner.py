@@ -1942,7 +1942,7 @@ def get_device_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, An
         if "aps" not in data:
             return data
 
-        out = {**data, **{k if k != "name" else "hostname": v for k, v in data["aps"][0].items()}}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
+        out = data if not data["aps"] else {**data, **{k if k != "name" else "hostname": v for k, v in data["aps"][0].items()}}  # TODO need to test with AOS8 IAP likely multiple APs not sure if they work with /firmware/device
         del out["aps"]
         del out["aps_count"]
         return out
