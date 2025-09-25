@@ -317,13 +317,19 @@ def cp_cert(
         autocompletion=common.cache.cert_completion,
         show_default=False,
     ),
-    _groups: list[str] = typer.Argument(None, hidden=True, autocompletion=common.cache.ap_group_completion,),  # HACK typer list[str] for typer.Option does not work
-    groups: list[str] = common.options.get(
-        "group_many", "-G", "--group",
-        default=...,
+    groups: list[str] = common.arguments.get(
+        "groups",
+        default=None,
         metavar=iden_meta.group.replace("NAME]", "NAME|all]"),
-        help="The Group [dim italic](AP Group)[/] to be updated to use the Captive Portal certificate. [dark_orange3]:warning:[/]  [cyan]all[/] Will push to all AP groups",
-        autocompletion=common.cache.ap_group_completion
+        help="The Group(s) [dim italic](AP Group)[/] to be updated to use the Captive Portal certificate. [dark_orange3]:warning:[/]  [cyan]all[/] Will push to all AP groups",
+        autocompletion=lambda incomplete: [item for item in [*common.cache.ap_group_completion(incomplete), ("all", "Update cp-cert for [bright_green]ALL[/] AP groups",)] if item[0].startswith(incomplete)],
+    ),
+    _groups: list[str] = common.options.get(
+        "group_many", "-G", "--group",
+        default=None,
+        metavar=iden_meta.group.replace("NAME]", "NAME|all]"),
+        help="The Group(s) [dim italic](AP Group)[/] to be updated to use the Captive Portal certificate. [dark_orange3]:warning:[/]  [cyan]all[/] Will push to all AP groups",
+        autocompletion=lambda incomplete: [item for item in [*common.cache.ap_group_completion(incomplete), ("all", "Update cp-cert for [bright_green]ALL[/] AP groups",)] if item[0].startswith(incomplete)],
     ),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -336,21 +342,29 @@ def cp_cert(
     The certificate must be uploaded to Aruba Central first.  Use [cyan]cencli add certificate[/] to upload the certificate.
     and [cyan]cencli show certs[/] to see the available certificates.
 
-    [dark_orange3]:warning:[/]  "--group|-G [red]all[/]" Will update Captive Portal certificate usage for **all** AP groups.
+    [dark_orange3]:warning:[/]  Specifying "[red]all[/]" for group will update Captive Portal certificate usage for **all** AP groups.
 
     :information:  Not supported on Template Groups.  [dim italic](They are filtered out if [cyan]all[/] is specified)[/]
     """
+    groups = groups or []
     groups += _groups or []
+    groups = [g for g in groups if g.lower() not in ["group", "groups"]]  # allow unnecessary keyword group/groups
+    if not groups:
+        common.exit("Invalid Arguments/Options [cyan]groups[/] must be specified. [italic]All arguments after the certificate or via [cyan]-G[/]|[cyan]--group[/] :triangular_flag:\nUse 'all' to update Captive Portal certificate for all AP Groups")
+
     cert: CacheCert = common.cache.get_cert_identifier(certificate)
     if cert.expired:
         common.exit(f"Aborting as {cert.summary_text} - is [bright_red bold]Expired[/].")
-    if groups != ["all"]:
+
+    if "all" not in groups:
         groups: list[CacheGroup] = [common.cache.get_group_identifier(g, dev_type="ap") for g in groups]
     else:
         groups: list[CacheGroup] = common.cache.ap_groups
 
     # filter out Template Groups and CNX managed groups.
     groups = [g for g in groups if g.cnx is not True and not g.wlan_tg]
+    if not groups:
+        common.exit("Command is currently not supported for Template Groups, or New Central managed groups.")
 
     _confirm_msg = f"Updat{'ing' if yes else 'e'} Captive Portal Certificate to {cert.name}|checksum: {cert.md5_checksum}\n  "
     if len(groups) > 1:
