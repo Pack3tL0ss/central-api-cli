@@ -15,7 +15,7 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
