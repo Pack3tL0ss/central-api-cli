@@ -8,8 +8,9 @@ from typing import TYPE_CHECKING
 import tablib
 import typer
 from pydantic import RootModel, ValidationError
+from rich.markup import escape
 
-from centralcli import cleaner, common, log, render
+from centralcli import cleaner, common, log, render, utils
 from centralcli.cache import api
 from centralcli.models.imports import ImportMACs, ImportMPSKs
 
@@ -51,7 +52,7 @@ def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: 
         try:
             data = Model(data)
         except ValidationError as e:
-            common.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+            common.exit(utils.clean_validation_errors(e))
 
         data: RootModel = data.model_dump()
         # CACHE cache update after successful upload
@@ -223,7 +224,7 @@ def macs(
 @app.command()
 def mpsk(
     import_file: Path = common.arguments.import_file,
-    ssid: str = typer.Option(None, "--ssid", help="SSID to associate mpsk definitions with", autocompletion=common.cache.mpsk_network_completion, show_default=False,),
+    ssid: str = typer.Option(None, "--ssid", help=f"SSID to associate mpsk definitions with [dim red]{escape('[required')}[/] [italic](unless using --example)[/][dim red]{escape(']')}[/]", autocompletion=common.cache.mpsk_network_completion, show_default=False,),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
