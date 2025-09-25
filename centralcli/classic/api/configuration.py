@@ -2210,7 +2210,7 @@ class ConfigAPI:
             "include_groups": include_groups,
             "exclude_groups": exclude_groups,
         }
-        payload = self.strip_none(payload)
+        payload = utils.strip_none(payload)
         return await self.session.post(url, json_data=payload)
 
     async def get_snapshots_by_group(self, group: str):
