@@ -115,11 +115,10 @@ def swarm(
         if len(devs) == 1:
             title = f"{title} for swarm with id {devs[0].swack_id}"
     else:
+        kwargs = {}
         if group:
             group: CacheGroup = common.cache.get_group_identifier(group)
             kwargs = {"group": group.name}
-        else:
-            kwargs = {}
 
         batch_reqs = [BatchRequest(api.firmware.get_all_swarms_firmware_details, **kwargs)]
 
@@ -173,11 +172,11 @@ def compliance(
 ) -> None:
     """Show firmware compliance details for a group/device type."""
     group = group or utils.listify(group_)
-    group = None if not group else group
+    group = None if not group else [g for g in group if g.lower() != "group"]  # Allows user to add unnecessary "group" keyword before the group
 
     if group:
-        if len(group) > 2:  # Allows user to add unnecessary "group" keyword before the group
-            common.exit(f"Unknown extra arguments: {[x for x in list(group)[0:-1] if x.lower() != 'group']}.  Only 1 group is allowed.")
+        if len(group) > 1:
+            common.exit(f"Unknown extra arguments: {group[-1]}.  Only 1 group is allowed.")
         group = group[-1]
         group: CentralObject = common.cache.get_group_identifier(group)
 
@@ -195,8 +194,6 @@ def compliance(
             f"Invalid URL or No compliance set for {device_type.lower()} "
             f"{'Globally' if group is None else f'in group {group.name}'}"
         )
-        # typer.echo(str(resp).replace("404", typer.style("404", fg="red")))
-    # else:
 
     render.display_results(
         resp,
@@ -225,8 +222,6 @@ def _list(
     workspace: str = common.options.workspace,
 ):
     """Show available firmware list for a specific device or a type of device."""
-    caption = None if verbose else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
-
     dev: CacheDevice = device if not device else common.cache.get_dev_identifier(device, conductor_only=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
@@ -263,9 +258,19 @@ def _list(
 
 
     resp = api.session.request(api.firmware.get_firmware_version_list, **kwargs)
+    caption = None if not resp.ok or verbose or len(resp.output) + 7 <= render.console.height else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"
     render.display_results(
         resp,
-        tablefmt=tablefmt, title=title, caption=caption if resp.ok else None, pager=pager, outfile=outfile, set_width_cols={"version": {"min": 25}}, cleaner=cleaner.get_fw_version_list, format=tablefmt, verbose=bool(verbose))
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        set_width_cols={"version": {"min": 25}},
+        cleaner=cleaner.get_fw_version_list,
+        format=tablefmt,
+        verbose=bool(verbose)
+    )
 
 
 @app.callback()
