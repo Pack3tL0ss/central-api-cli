@@ -964,6 +964,9 @@ class CacheCert(CentralObject):  #, Text):
         self._expiration = expiration
         self.md5_checksum = md5_checksum
 
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} (Certificate|{self.name}|{'OK' if not self.expired else 'EXPIRED'}) object at {hex(id(self))}>"
+
     @classmethod
     def set_db(cls, db: Table):
         cls.db: Table = db
