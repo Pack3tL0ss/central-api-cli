@@ -937,7 +937,7 @@ class CLICommon:
                     update_func = self.cache.update_inv_db
                     kwargs = {"data": _data}
                 except ValidationError as e:
-                    log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {e.__class__.__name__}", show=True)
+                    log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
                     _data = None
 
             cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
@@ -1759,7 +1759,7 @@ class CLICommon:
         try:
             data: List[APUpdate] = APUpdates(data)
         except ValidationError as e:
-            self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+            self.exit(utils.clean_validation_errors(e))
 
         for ap in data:
             cache_ap: CacheDevice = self.cache.get_dev_identifier(ap.serial)  # , dev_type="ap")
