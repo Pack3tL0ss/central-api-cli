@@ -140,9 +140,7 @@ def subscription(
 
 @app.callback()
 def callback():
-    """
-    Assign licenses / labels
-    """
+    """Assign licenses / labels"""
     pass
 
 
