@@ -63,8 +63,8 @@ class TTY:
         self._rows, self._cols = self.get_tty_size()
 
     def get_tty_size(self):
-        s = shutil.get_terminal_size()
-        return s.lines, s.columns
+        self._rows, self._cols = shutil.get_terminal_size()
+        return self._rows, self._cols
 
     def __bool__(self):
         return sys.stdin.isatty()
