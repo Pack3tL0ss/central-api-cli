@@ -75,6 +75,7 @@ ruff = ">=0.8.0"
 pytest = ">=6"
 pytest-cov = ">=6.2.1"
 nox = ">=2025.5.1"
+pytest-asyncio = ">=1.2.0"
 
 
 [build-system]
