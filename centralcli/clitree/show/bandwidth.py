@@ -183,7 +183,7 @@ def client(
     device: str = typer.Option(None, "--dev", help="Show Bandwidth details for clients connected to a specific device", metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, case_sensitive=False, show_default=False,),
     group: str = typer.Option(None, help="Show Bandwidth for clients connected to devices in a specific group", metavar=iden_meta.group, autocompletion=common.cache.group_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for clients connected to devices with a specific label", metavar=iden_meta.label, autocompletion=common.cache.label_completion, show_default=False),
-    swarm_or_stack: bool = typer.Option(False, "-s", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.", show_default=False),
+    swarm_or_stack: bool = typer.Option(False, "-S", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.", show_default=False),
     start: datetime = common.options.start,
     end: datetime = common.options.end,
     past: str = common.options.past,
@@ -221,24 +221,24 @@ def client(
         if client.site:
             title = f'{title}|s:{client.site}'
         if swarm_or_stack:
-            log.warning(f"[cyan]-s[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored as client was specified.  Output is for client {client.summary_text}", caption=True)
+            log.warning(f"[cyan]-S[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
         if dev:
-            log.warning(f"[cyan]--dev[/] {device} was ignored as client was specified.  Output is for client {client.summary_text}", caption=True)
+            log.warning(f"[cyan]--dev[/] {device} was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
         if any([group, label]):
             _err = f"[cyan]--group[/] {group.name}" if group and not label else f"[cyan]--label[/] {label.name}"
             _err = _err if not label else f"[cyan]--group[/] {group.name} & [cyan]--label[/] {label.name}"
-            log.warning(f"{_err} was ignored as client was specified.  Output is for client {client.summary_text}", caption=True)
+            log.warning(f"{_err} was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
     elif swarm_or_stack:
         if not dev:
             common.exit("[cyan]--dev[/] DEVICE must be provided with [cyan]-s[/]|[cyan]--swarm[/]|[cyan]--stack[/] option.")
         else:
             if dev.type == "ap" and dev.is_aos10:
-                log.warning(f"[cyan]-s[/]|[cyan]--swarm[/] is only valid for AOS8 APs {dev.name} is AOS10.", caption=True)
-                log.warning(f"[cyan]-s[/]|[cyan]--swarm[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/] is only valid for AOS8 APs {dev.name} is AOS10.", caption=True)
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
                 kwargs["serial"] = dev.serial
             elif dev.generic_type not in ["switch", "ap"]:
                 log.warning(f"[cyan]swarm[/]/[cyan]stack[/] flag only applies to switches or APs not {dev.type}.", caption=True)
-                log.warning(f"[cyan]-s[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
             else:
                 kwargs[f'{"swarm_id" if dev.type == "ap" else "stack_id"}'] = dev.swack_id
     elif dev:
@@ -314,13 +314,13 @@ def uplink(
 
 @app.command()
 def wlan(
-    network: str = typer.Argument(..., metavar="[WLAN SSID]", help="Use [cyan]cencli show wlans[/] for a list of networks", show_default=False,),
+    network: str = typer.Argument(..., metavar="[WLAN SSID]", help="Use [cyan]cencli show wlans[/] for a list of networks", show_default=False,),  # COMPLETION
     group: str = typer.Option(None, help="Show Bandwidth for APs in a specific group", metavar=iden_meta.group, autocompletion=common.cache.group_completion, show_default=False),
     site: str = typer.Option(None, help="Show Bandwidth for APs in a specific site", metavar=iden_meta.site, autocompletion=common.cache.site_completion, show_default=False),
     label: str = typer.Option(None, help="Show Bandwidth for APs with a specific label", metavar=iden_meta.label, autocompletion=common.cache.label_completion, show_default=False),
     device: str = typer.Option(
         None,
-        "-s", "--swarm",
+        "-S", "--swarm",
         metavar=iden_meta.dev,
         autocompletion=common.cache.dev_switch_ap_completion,
         help=f"Show bandwidth for the swarm associated with provided AP [grey42]{escape('[Valid for AOS8 IAP]')}[/]",
