@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+import yaml
 
 from centralcli import common, config
 from centralcli.exceptions import ImportException
@@ -20,12 +22,18 @@ def setup_cert_file(cert_path: str) -> Path:
 
     return test_cert_file
 
+def _get_dump_func(sfx: str) -> Callable:
+    dump_func = {
+        "json": json.dumps,
+        "yaml": yaml.safe_dump,
+        "csv": lambda data: "\n".join([",".join(k for k in data[0].keys()), *[",".join(v for v in inner.values()) for inner in data]])
+    }
+    return dump_func.get(sfx, json.dumps)
 
 def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -> Path:
-    test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
-
     data = test_data["batch"]
     keys = import_type.split(":")
+    sfx = "json" if len(keys) < 2 else keys[1]
     import_type = keys[0]
     for k in keys:
         data = data[k]
@@ -36,8 +44,9 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -
     else:
         data = data
 
+    test_batch_file = config.cache_dir / f"test_runner_{import_type}.{sfx}"
     res = test_batch_file.write_text(
-        json.dumps(data)
+        _get_dump_func(sfx)(data)
     )
     if not res:
         raise ImportException("Batch import file creation from test_data returned 0 chars written")  # pragma: no cover
@@ -65,4 +74,4 @@ test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"])
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
-test_files = [test_device_file, test_group_file, test_sub_file_csv, test_sub_file_yaml, test_rename_aps_file, test_verify_file, test_site_file, test_cert_file]
+test_files = [test_device_file, test_group_file, test_sub_file_csv, test_sub_file_yaml, test_rename_aps_file, test_verify_file, test_site_file, test_cert_file, test_mpsk_file, test_invalid_var_file, test_label_file, test_sub_file_yaml, test_sub_file_csv]
