@@ -33,7 +33,7 @@ app.add_typer(add.app, name="add",)
 app.add_typer(update.app, name="update",)
 
 
-class FstrInt:
+class FstrInt:  # pragma: no cover requires tty
     def __init__(self, val: int) -> None:
         self.i = val
         self.o = val + 1
@@ -42,7 +42,7 @@ class FstrInt:
         return len(str(self.i))
 
 
-def _get_full_int(val: list[str]) -> FstrInt:
+def _get_full_int(val: list[str]) -> FstrInt:  # pragma: no cover requires tty
     rv = []
     while True:
         for i in val:
@@ -52,7 +52,7 @@ def _get_full_int(val: list[str]) -> FstrInt:
                 return FstrInt(int("".join(rv)) - 1)
 
 
-def _lldp_rename_get_fstr():
+def _lldp_rename_get_fstr():  # pragma: no cover requires tty
     rtxt = "[bright_blue]RESULT: [/bright_blue]"
     point_txt = "[bright_blue]-->[/bright_blue]"
     lldp_rename_text = f"""
@@ -115,7 +115,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
             return fstr
 
 # TODO use get_topo_for_site similar to show aps -n  single call can get neigbor detail for all aps
-def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:
+def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no cover requires tty
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
     """
     br = BatchRequest
@@ -139,7 +139,7 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:
 
     return ap_dict
 
-def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> list[dict[str, str]]:
+def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> list[dict[str, str]]:  # pragma: no cover requires tty
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
     space = "_" if space is None else space
     # TODO get all APs then filter down after, stash down aps for easy subsequent call
@@ -443,9 +443,9 @@ def verify(
     console.begin_capture()
 
     if failed:
-        print("\n".join(not_ok_devs))
+        render.econsole.print("\n".join(not_ok_devs))
     elif passed:
-        print("\n".join(ok_devs))
+        render.console.print("\n".join(ok_devs))
     else:
         console.rule("Validation Results")
         for s in validation:

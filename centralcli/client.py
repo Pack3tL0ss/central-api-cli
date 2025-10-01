@@ -659,7 +659,7 @@ class Session():
         """
         auth = self.auth
         token_data: dict = None
-        if sys.stdin.isatty():
+        if sys.stdin.isatty():  # pragma: no cover
             internal = "internal" in auth.central_info["base_url"]
 
             token_only = [

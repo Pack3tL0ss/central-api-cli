@@ -54,7 +54,7 @@ def test_update_site(ensure_cache_site4):
             "update",
             "site",
             "cencli_test_site4",
-            "'100 Bledsoe Park Rd'",
+            "'400 Zieglers Fort Rd'",
             "Gallatin",
             "TN",
             "37066",

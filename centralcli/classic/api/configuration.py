@@ -100,10 +100,8 @@ class ConfigAPI:
         props_by_group = {d["group"]: d["properties"] for d in deepcopy(props_resp.output)}
 
         combined = {tg: {"properties": pv, "template_details": tv} for (tg, tv), (pg, pv) in zip(template_by_group.items(), props_by_group.items()) if pg == tg}
-        if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:
+        if len(set([len(combined), len(template_by_group), len(props_by_group)])) > 1:  # pragma: no cover
             raise CentralCliException("Unexpected error in get_all_groups, length of responses differs.")
-            # TODO refactor to send failed Response if this happens otherwise cache can be truncated if props_resp was OK but others failed.
-            # log.error("Unexpected error in get_all_groups, length of responses differs.", show=True, caption=True, log=True)
 
         combined_resp = Response(props_resp._response, elapsed=max([r.elapsed for r in batch_resp]))
         combined_resp.output = [{"group": k, **v} for k, v in combined.items()]

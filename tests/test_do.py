@@ -327,6 +327,13 @@ if config.dev.mock_tests:
         assert "dev-type" in result.stdout
 
 
+    def test_set_fw_compliance(ensure_cache_group2):
+        result = runner.invoke(app, ["set", "firmware", "compliance", "ap", "cencli_test_group2", "10.7.2.1_93286", "-y"])
+        capture_logs(result, "test_set_fw_compliance")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
     def test_assign_subscription_by_key():
         result = runner.invoke(app, ["assign", "subscription", test_data["subscription"]["key"], test_data["subscription"]["assign_to_device"]["serial"], "-y"])
         capture_logs(result, "test_assign_subscription_by_key")
@@ -341,9 +348,16 @@ if config.dev.mock_tests:
         assert "secure_token" in result.stdout
 
 
+    def test_rename_site(ensure_cache_site4):
+        result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40"])
+        capture_logs(result, "test_rename_site")
+        assert result.exit_code == 0
+        assert "address" in result.stdout
+
+
     def test_test_webhook():
         result = runner.invoke(app, ["test", "webhook", "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
-        capture_logs(result, "test_sync_webhook")
+        capture_logs(result, "test_test_webhook")
         assert result.exit_code == 0
         assert "200" in result.stdout
 

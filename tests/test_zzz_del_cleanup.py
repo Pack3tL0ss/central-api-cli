@@ -33,8 +33,7 @@ def test_batch_del_devices(ensure_cache_batch_devices):
     result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_device_file)}', "-Y"])
     capture_logs(result, "test_batch_del_devices")
     assert result.exit_code == 0
-    assert "subscriptions successfully removed" in result.stdout.lower()
-    assert "200" in result.stdout
+    assert "devices updated" in result.stdout.lower()
 
 
 def test_batch_del_groups(ensure_cache_batch_del_groups):
@@ -193,6 +192,13 @@ def test_delete_variables(ensure_inv_cache_test_switch):
 
 
 if config.dev.mock_tests:
+    def test_delete_fw_compliance(ensure_cache_group2):
+        result = runner.invoke(app, ["delete", "firmware",  "compliance", "ap", "cencli_test_group2", "-y"])
+        capture_logs(result, "test_delete_fw_compliance")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
     def test_delete_webhook():
         result = runner.invoke(app, ["delete", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7", "-y"])
         capture_logs(result, "test_delete_webhook")

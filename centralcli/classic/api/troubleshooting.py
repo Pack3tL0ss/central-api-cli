@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from ... import constants, utils
 
-if TYPE_CHECKING:  # pragma: no cover
+if TYPE_CHECKING:
     from ...client import Session
     from ...response import Response
 

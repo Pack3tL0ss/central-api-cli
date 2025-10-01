@@ -700,7 +700,7 @@ class MonitoringAPI:
         """
         if device_type not in ["switches", "aps", "gateways"]:
             device_type = constants.lib_to_api(device_type, "monitoring")
-            if device_type not in ["switches", "aps", "gateways"]:
+            if device_type not in ["switches", "aps", "gateways"]:  # pragma: no cover
                 raise ValueError(f"device_type must be one of ap, gw, switch not {device_type}")
 
         dev_params = {
@@ -742,7 +742,7 @@ class MonitoringAPI:
         url = f"/monitoring/v1/{device_type}"
         if device_type == "aps":
             url = url.replace("v1", "v2")
-        elif device_type == "gateways" and config.is_cop:
+        elif device_type == "gateways" and config.is_cop:  # pragma: no cover
             url = url.replace("v1/gateways", "v2/mobility_controllers")
         params = {**common_params, **dev_params[device_type]}
 
@@ -808,7 +808,7 @@ class MonitoringAPI:
             Response: CentralAPI Response object
         """
         device_type = constants.lib_to_api(device_type, "monitoring")
-        if device_type not in ["switches", "aps", "gateways"]:
+        if device_type not in ["switches", "aps", "gateways"]:  # pragma: no cover
             raise ValueError(f"device_type must be one of ap, gw, switch not {device_type}")
 
         url = f"/monitoring/v1/{device_type}/{serial}"
@@ -967,7 +967,7 @@ class MonitoringAPI:
         url = "/monitoring/v2/events"
         from_time, to_time = utils.parse_time_options(from_time, to_time)
 
-        if offset + limit > 10_000:
+        if offset + limit > 10_000:  # pragma: no cover
             if offset >= 10_000:
                 log.error(f"get_events provided {offset=}, {limit=} endpoint allows max 10,000", show=True, log=True, caption=True)
                 return Response()

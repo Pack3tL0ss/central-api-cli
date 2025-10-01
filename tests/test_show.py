@@ -58,6 +58,111 @@ def test_show_archived():
     assert "API" in result.stdout
 
 
+def test_show_bandwidth_uplink_gw():
+    result = runner.invoke(app, ["show", "bandwidth", "uplink", test_data["gateway"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_uplink_gw")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
+def test_show_bandwidth_uplink_switch():
+    result = runner.invoke(app, ["show", "bandwidth", "uplink", test_data["switch"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_uplink_switch")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
+def test_show_bandwidth_client():
+    result = runner.invoke(app, ["show", "bandwidth", "client"],)
+    capture_logs(result, "test_show_bandwidth_client")
+    assert result.exit_code == 0
+    assert "All" in result.stdout
+
+
+def test_show_bandwidth_client_by_client():
+    result = runner.invoke(app, ["show", "bandwidth", "client", test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
+    capture_logs(result, "test_show_bandwidth_client_by_client")
+    assert result.exit_code == 0
+    assert "ignored" in result.stdout  # -S --dev --group flags are ignored
+
+
+def test_show_bandwidth_client_swarm_no_dev():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "-S"],)
+    capture_logs(result, "test_show_bandwidth_client_swarm_no_dev", expect_failure=True)
+    assert result.exit_code == 1
+    assert "--dev" in result.stdout
+
+
+def test_show_bandwidth_client_swarm():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["aos8_ap"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_client_swarm")
+    assert result.exit_code == 0
+    assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
+
+
+def test_show_bandwidth_client_swarm_aos10():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_client_swarm_aos10")
+    assert result.exit_code == 0
+    assert "AOS10" in result.stdout  # swarm is only valid for AOS8...
+
+
+def test_show_bandwidth_client_dev_ap():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
+    capture_logs(result, "test_show_bandwidth_client_dev_ap")
+    assert result.exit_code == 0
+    assert "--group" in result.stdout  # --group flag is ignored
+
+
+def test_show_bandwidth_client_group():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "--group", test_data["ap"]["group"]],)
+    capture_logs(result, "test_show_bandwidth_client_group")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
+def test_show_bandwidth_client_label(ensure_cache_label1):
+    result = runner.invoke(app, ["show", "bandwidth", "client", "--label", "cencli_test_label1"],)
+    capture_logs(result, "test_show_bandwidth_client_label")
+    assert result.exit_code == 0
+    assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
+
+
+def test_show_bandwidth_client_gw():
+    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["gateway"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_client_gw")
+    assert result.exit_code == 0
+    assert "only applies" in result.stdout  # -S flag ignored as --dev is a gateway
+
+
+def test_show_bandwidth_switch():
+    result = runner.invoke(app, ["show", "bandwidth", "switch", test_data["switch"]["mac"]],)
+    capture_logs(result, "test_show_bandwidth_switch")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
+def test_show_bandwidth_wlan():
+    result = runner.invoke(app, ["show", "bandwidth", "wlan", test_data["tunneled_ssid"]["ssid"]],)
+    capture_logs(result, "test_show_bandwidth_wlan")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
+def test_show_bandwidth_wlan_w_dev():
+    result = runner.invoke(app, ["show", "bandwidth", "wlan", test_data["tunneled_ssid"]["ssid"], "--swarm", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_wlan_w_dev")
+    assert result.exit_code == 0
+    assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
+
+
+def test_show_bandwidth_too_many_flags():
+    result = runner.invoke(app, ["show", "bandwidth", "wlan", test_data["tunneled_ssid"]["ssid"], "-S", test_data["ap"]["name"], "--site", test_data["ap"]["site"]],)
+    capture_logs(result, "test_show_bandwidth_too_many_flags", expect_failure=True)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout
+
+
 def test_show_branch_health():
     result = runner.invoke(app, ["show", "branch", "health"],)
     capture_logs(result, "test_show_branch_health")
@@ -413,6 +518,14 @@ def test_show_dhcp_pools_gw():
     assert "API" in result.stdout
 
 
+def test_show_interfaces_gw():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["gateway"]["name"]), "--table"],)
+    capture_logs(result, "test_show_interfaces_gw")
+    assert result.exit_code == 0
+    assert "vlan" in result.stdout
+    assert "status" in result.stdout
+
+
 def test_show_interfaces_switch():
     result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--table"],)
     capture_logs(result, "test_show_interfaces_switch")
@@ -618,6 +731,13 @@ def test_show_cx_switch_lldp_neighbors():
     assert "remote port" in result.stdout.replace("_", " ")
 
 
+def test_show_cx_switch_stack_lldp_neighbors():
+    result = runner.invoke(app, ["show", "lldp", test_data["vsf_switch"]["mac"],],)
+    capture_logs(result, "test_show_cx_switch__stack_lldp_neighbors")
+    assert result.exit_code == 0
+    assert "chassis" in result.stdout
+
+
 def test_show_groups():
     result = runner.invoke(app, ["show", "groups", "--csv"],)
     assert result.exit_code == 0
@@ -738,6 +858,22 @@ def test_show_clients_too_many_filters():
     result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
     assert result.exit_code == 1
     assert "one of" in result.stdout
+
+
+def test_show_client_location_no_client():
+    cache.responses.client = None
+    result = runner.invoke(app, ["show", "clients", "--location"],)
+    capture_logs(result, "test_show_client_location_no_client", expect_failure=True)
+    assert result.exit_code == 1
+    assert "required" in result.stdout
+
+
+def test_show_client_location():
+    cache.responses.client = None
+    result = runner.invoke(app, ["show", "clients", "--location", test_data["client"]["wireless"]["mac"]],)
+    capture_logs(result, "test_show_client_location")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
 
 
 def test_show_clients():
@@ -1548,6 +1684,18 @@ def test_show_wlans_by_group():
         ]
     )
     capture_logs(result, "test_show_wlans_by_group")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_wlans_by_name():
+    result = runner.invoke(app, [
+            "show",
+            "wlans",
+            test_data["tunneled_ssid"]["ssid"]
+        ]
+    )
+    capture_logs(result, "test_show_wlans_by_name")
     assert result.exit_code == 0
     assert "API" in result.stdout
 

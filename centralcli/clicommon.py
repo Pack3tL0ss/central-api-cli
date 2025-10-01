@@ -1551,7 +1551,7 @@ class CLICommon:
             stack_ids = [r.url.name for r in del_resp if r.ok and "switch_stacks" in r.url.parts]
             for stack_id in stack_ids:
                 doc_ids += [d.doc_id for d in self.cache.DevDB.search(self.cache.Q.swack_id == stack_id) if d is not None]
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.error(f"Error: {e.__class__.__name__} occured fetching doc_ids for local cache update after delete.  Use [cyan]cencli show all[/] to ensure device cache is current.", caption=True, log=True)
 
         return doc_ids

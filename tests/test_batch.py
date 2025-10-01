@@ -132,3 +132,24 @@ def test_batch_verify():
     capture_logs(result, "test_batch_verify")
     assert result.exit_code == 0
     assert "validation" in result.stdout
+
+
+def test_batch_delete_devices_no_sub_gws():
+    result = runner.invoke(app, ["batch", "delete", "devices", "--no-sub", "--dev-type", "gw", "-Y"])
+    capture_logs(result, "test_batch_delete_devices_no_sub_gws")
+    assert result.exit_code == 0
+    assert "Devices updated" in result.stdout
+
+
+def test_batch_delete_devices_invalid_no_sub():
+    result = runner.invoke(app, ["batch", "delete", "devices", f'{str(test_verify_file)}', "--no-sub"])
+    capture_logs(result, "test_batch_delete_devices_invalid_no_sub", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_batch_delete_devices_invalid_dev_type():
+    result = runner.invoke(app, ["batch", "delete", "devices", f'{str(test_verify_file)}', "--dev-type", "cx"])
+    capture_logs(result, "test_batch_delete_devices_invalid_dev_type", expect_failure=True)
+    assert result.exit_code == 1
+    assert "--dev-type" in result.stdout
