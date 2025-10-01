@@ -24,11 +24,8 @@ if TYPE_CHECKING:
 app = typer.Typer()
 
 
-def batch_add_cloudauth(upload_type: CloudAuthUploadTypes = "mac", import_file: Path = None, *, ssid: CacheMpskNetwork = None, data: bool = None, yes: bool = False) -> Response:
-    if import_file is not None:
-        data = common._get_import_file(import_file, upload_type)
-    elif not data:
-        common.exit("[red]Error!![/] No import file provided")
+def batch_add_cloudauth(import_file: Path, upload_type: CloudAuthUploadTypes = "mac", *, ssid: CacheMpskNetwork = None, yes: bool = False) -> Response:
+    data = common._get_import_file(import_file, upload_type)
 
     render.econsole.print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid.name}[/]' if upload_type == 'mpsk' else ''}")
     # cloudauth accepts csv files
@@ -207,7 +204,7 @@ def macs(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch add macs [OPTIONS] [IMPORT_FILE]"))
 
-    resp = batch_add_cloudauth("mac", import_file, yes=yes)
+    resp = batch_add_cloudauth(import_file, upload_type="mac", yes=yes)
     caption = (
         "\nUse [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
         "Use [cyan]cencli show cloud-auth registered-macs[/] to see all registered macs."
@@ -243,7 +240,7 @@ def mpsk(
         common.exit(render._batch_invalid_msg("cencli batch add mpsk --ssid <SSID> [IMPORT_FILE]", provide="Provide [bright_green]IMPORT_FILE[/] & [cyan]--ssid[/] [magenta]<SSID>[/] or [cyan]--example[/]"))
 
     ssid: CacheMpskNetwork = common.cache.get_mpsk_network_identifier(ssid)
-    resp = batch_add_cloudauth("mpsk", import_file, ssid=ssid, yes=yes)
+    resp = batch_add_cloudauth(import_file, upload_type="mpsk", ssid=ssid, yes=yes)
     caption = [
         "[dim italic]Use [cyan]cencli show cloud-auth upload mpsk[/] to see the status of the import.",
         f"Use [cyan]cencli show mpsk named {ssid.name} -v[/] to determine the randomly generated MPSKs[/dim italic]"
