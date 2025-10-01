@@ -349,7 +349,7 @@ if config.dev.mock_tests:
 
 
     def test_rename_site(ensure_cache_site4):
-        result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40"])
+        result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40", "--yes"])
         capture_logs(result, "test_rename_site")
         assert result.exit_code == 0
         assert "address" in result.stdout
