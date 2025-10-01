@@ -1867,7 +1867,7 @@ def lldp(
 
     reqs = {dev: BatchRequest(api.topo.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
     reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
-    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
+    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_stack_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
 
 
     batch_resp = api.session.batch_request(list(reqs.values()))
@@ -2395,6 +2395,7 @@ def clients(
         autocompletion=common.cache.client_completion,
         show_default=False,
     ),
+    location: bool = typer.Option(False, help=f"Show Location for client [dim](AP must be on a floor plan)[/] {render.help_block('client argument', help_type='requires')}"),
     past: TimeRange = common.options("3h", include_mins=False).past,
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
@@ -2425,6 +2426,18 @@ def clients(
     """
     if [site, group, label].count(None) < 2:
         common.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
+    if location:
+        if not client:
+            common.exit("Client argument is required with [cyan]--location[/] :triangular_flag:")
+        _client = common.cache.get_client_identifier(client, exit_on_fail=True)
+        title = f"Client Location ([cyan]{_client.name}[/]|[cyan]{_client.mac}[/])"
+        resp = api.session.request(api.visualrf.get_client_location, _client.mac)
+        if resp.ok:
+            resp.output = resp.raw.get("location", resp.output)
+        tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table)
+        render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
+        common.exit(code=0 if resp.ok else 1)
+
 
     kwargs = {}
     dev = None
