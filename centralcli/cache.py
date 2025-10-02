@@ -4645,7 +4645,7 @@ class Cache:
                     ...  # self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
                     if not match:
-                        _msg = f"[bright_red]No Match found[/] in Inventory{' or Device (monitoring)' if include_inventory else ''} Cache"
+                        _msg = f"[bright_red]No Match found[/] in {'Inventory or Device (monitoring)' if include_inventory else 'Device (monitoring)'} Cache"
                     else:
                         _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
