@@ -114,7 +114,7 @@ def variables(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    dev = common.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device, include_inventory=True)
     serial = dev.serial
 
     var_dict = common.parse_var_value_list(var_value)
