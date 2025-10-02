@@ -1461,7 +1461,8 @@ def test_show_sdwan_dps_compliance():
 def test_show_swarms():
     result = runner.invoke(app, [
             "show",
-            "swarms"
+            "swarms",
+            "--up"
         ]
     )
     capture_logs(result, "test_show_swarms")
@@ -1608,11 +1609,38 @@ def test_show_tunnels():
 def test_show_subscriptions_details():  # glp
     result = runner.invoke(app, [
             "show",
-            "subscriptions"
+            "subscriptions",
+            "--sort",
+            "end-date",
+            "-r"
         ]
     )
     capture_logs(result, "test_show_subscriptions_details")
     assert result.exit_code == 0
+
+
+def test_show_subscription_stats():
+    result = runner.invoke(app, [
+            "show",
+            "subscriptions",
+            "stats",
+        ]
+    )
+    capture_logs(result, "test_show_subscription_stats")
+    assert result.exit_code == 0
+    assert "used" in result.stdout
+
+
+def test_show_subscription_names():
+    result = runner.invoke(app, [
+            "show",
+            "subscriptions",
+            "names",
+        ]
+    )
+    capture_logs(result, "test_show_subscription_names")
+    assert result.exit_code == 0
+    assert "advance" in result.stdout
 
 
 def test_show_vsx(ensure_dev_cache_test_vsx_switch):
