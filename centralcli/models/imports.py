@@ -377,7 +377,7 @@ class ImportSubDevices(RootModel):
         out_dict = {sub.id: BySubId(sub) for sub in subs}
         start = time.perf_counter()
         with Spinner(f"Gathering [green]GreenLake[/] device_ids from cache for [cyan]{len(self)}[/] devices found in import") as spinner:
-            inv_devs = asyncio.run(self.get_inv_objects())
+            inv_devs = asyncio.run(self.get_inv_objects())  # TODO if import has id field spot check a few to see that the id matches up with the serial in the cache, then assume all id fields are good... no need to lookup all of them
         duration = round(time.perf_counter() - start, 3)
         spinner.succeed(f"[cyan]{len(self)}[/] device_ids fetched in {duration}s.  Avg: {round(duration / len(self), 3)}")
 

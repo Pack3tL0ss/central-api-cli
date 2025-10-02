@@ -13,10 +13,7 @@ from rich.markup import escape
 from centralcli import cleaner, common, log, render, utils
 from centralcli.cache import CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.constants import (
-    BatchRenameArgs,
-    iden_meta,
-)
+from centralcli.constants import BatchRenameArgs, iden_meta
 from centralcli.response import Response
 
 from . import add, assign, delete, examples, update
