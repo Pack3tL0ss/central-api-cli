@@ -4,6 +4,7 @@
 from functools import partial
 from pathlib import Path
 from time import sleep
+from typing import Any
 
 import typer
 from rich.progress import track
@@ -13,7 +14,7 @@ from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
 from centralcli.constants import iden_meta, lib_to_api
 
-try:
+try:  # pragma: no cover
     from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
 except Exception:
@@ -28,7 +29,7 @@ typer.Argument = partial(typer.Argument, show_default=False)
 typer.Option = partial(typer.Option, show_default=False)
 
 
-def send_cmds_by_id(device: CacheDevice, commands: list[int], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
+def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, Any]] | dict[str, Any], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
     _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
@@ -394,35 +395,8 @@ def ping(
             cmd_args["Is_Mgmt"] = str(mgmt)
 
     commands = {cmd_id: cmd_args}
-    dev_type = lib_to_api(dev.type, "tshoot")
+    send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
 
-    resp = api.session.request(api.tshooting.start_ts_session, dev.serial, device_type=dev_type, commands=commands)
-    render.display_results(resp, tablefmt="action", suppress_rl=True, exit_on_fail=True)
-    render.econsole.print()  # Add a space after results
-
-    complete = False
-    while not complete:
-        for _ in range(3):
-            _delay = 13 if dev.type == "cx" else 10
-            for _ in track(range(_delay), description="[green]Allowing time for commands to complete[/]..."):
-                sleep(1)
-            ts_resp = api.session.request(api.tshooting.get_ts_output, dev.serial, resp.session_id)
-
-            if ts_resp.output.get("status", "") == "COMPLETED":
-                if "output" in ts_resp.output:
-                    ts_resp.output = ts_resp.output["output"]
-                render.display_results(ts_resp)
-                complete = True
-                break
-            else:
-                render.console.print(f'{ts_resp.output.get("message", "").split(".")[0]}. [cyan]Waiting...[/]')
-
-        if not complete:
-            render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{dev.name}[/]')
-            render.econsole.print(f"Use [cyan]cencli show tshoot {dev.name} {resp.session_id}[/] after some time, or continue to check for response now.")
-            if not render.confirm(prompt="Continue to wait/retry?", abort=False):
-                render.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
-                break
 
 # API-FLAW gw returns a success response with no task_id, aos8 ap returns success with task_id but call to /device_management/v1/status/{task_id} just returns success lacks the actual details
 @app.command(hidden=True)  # hidden due to above
