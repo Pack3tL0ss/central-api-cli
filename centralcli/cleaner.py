@@ -1513,8 +1513,9 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         list[dict] | dict: Cleaned API response payload with less interesting fields removed
     """
     if isinstance(data, list) and data and "member_port_detail" in data[0]:  # switch stack
-        normal_ports = [p for sw in data[0]["member_port_detail"] for p in sw["ports"]]
-        stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
+        common = {"device": data[0]["device"], "_dev_type": data[0]["_dev_type"]}
+        normal_ports = [{**common, **p} for sw in data[0]["member_port_detail"] for p in sw["ports"]]
+        stack_ports = [{**common, **{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
         data = sort_interfaces([*normal_ports, *stack_ports])
     else:
         data = utils.listify(data)
@@ -1875,6 +1876,7 @@ def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = 
     data = utils.unlistify(data)
     # TODO circular import if placed at top review import logic
     from centralcli import cache
+
     # switches_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] in ["cx", "sw"]]
     if filter is None:
         aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP"}
