@@ -772,7 +772,7 @@ def inventory(
         include_inventory = True
         verbose -= 1
 
-    if verbose or include_inventory:
+    if include_inventory:  # `show inventory -v` is the same as `show all --inv``
         show_devices(
             dev_type=dev_type, outfile=outfile, include_inventory=include_inventory, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
@@ -783,14 +783,12 @@ def inventory(
 
     _api = glp_api or api
     resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
-    # caption = None if glp_api else _build_device_caption(resp, inventory=True)
-    # captions are added to Resonse Object in refresh_inv_db
 
     render.display_results(
         resp,
         tablefmt=tablefmt,
         title=title,
-        # caption=caption,
+        # caption=caption,  # captions are added to Resonse Object in refresh_inv_db
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -837,12 +835,12 @@ def subscriptions(
             set_width_cols = {"name": {"min": 39}}
             if sort_by:
                 _cleaner_kwargs["default_sort"] = False
-            if not glp_api:
+            if not glp_api:  # pragma: no cover
                 try:
                     _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
                     _ok_cnt = len(resp.output) - _expired_cnt
                     caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
-                except Exception as e:  # pragma: no cover
+                except Exception as e:
                     log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
                     caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
 
@@ -858,8 +856,6 @@ def subscriptions(
         resp = api.session.request(common.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         set_width_cols = {"name": {"min": 39}}
-    else:
-        raise ValueError("Error in logic evaluating what")
 
     render.display_results(
         resp,
@@ -922,7 +918,7 @@ def swarms(
             resp = api.session.request(api.monitoring.get_swarm_details, device.swack_id)
     else:
         title = "All Swarms"
-        resp = api.session.request(api.monitoring.get_swarms, group=group, status=status, public_ip_address=pub_ip, swarm_name=name)
+        resp = api.session.request(api.monitoring.get_swarms, group=group, status=None if not status else status.value, public_ip_address=pub_ip, swarm_name=name)
 
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
@@ -959,7 +955,7 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
     if _failed:
         try:
             log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
-        except Exception:
+        except Exception:  # pragma: no cover
             log.warning("Incomplete output, failures occured, see log")
 
 
@@ -996,7 +992,7 @@ def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters,
         if filter_caption:
             caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
 
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         log.exception(f"{e.__class__.__name__} in do_interface_filters\n{e}")
         log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub", caption=True)
 
@@ -1033,7 +1029,7 @@ def interfaces(
     do_yaml: bool = common.options.do_yaml,
     do_csv: bool = common.options.do_csv,
     do_table: bool = common.options.do_table,
-    yes: bool = common.options.yes,
+    yes: bool = common.options.get("yes", help="Bypass confirmation prompts - Assume Yes [dim italic](Prompt occurs if # of API calls required > 15)[/]"),
     raw: bool = common.options.raw,
     outfile: Path = common.options.outfile,
     pager: bool = common.options.pager,
@@ -1067,20 +1063,20 @@ def interfaces(
     else:
         _dev_type = [_dev_type for _dev_type, var in {"ap": do_ap, "gw": do_gw, "switch": do_switch}.items() if var]
         if not _dev_type:
-            common.exit("One of --ap, --gw, --switch :triangular_flag: is required when no device is specified")
+            common.exit("One of [cyan]--ap[/], [cyan]--gw[/], [cyan]--switch[/] :triangular_flag: is required when no device is specified")
         dev_type = _dev_type.pop(0)
 
         if _dev_type:
-            common.exit("Only one of --ap, --gw, --switch :triangular_flag: can be provided.")
-
-        # Update cache basesd on provided filters
-        kwargs = {"site": site} if site else {"group": group}  # monitoring API only allows 1 filter
-        dev_resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
-        if not dev_resp:
-            render.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
+            common.exit("Only one of [cyan]--ap[/], [cyan]--gw[/], [cyan]--switch[/] :triangular_flag: can be provided.")
 
         site: CacheSite = site if not site else common.cache.get_site_identifier(site)
         group: CacheGroup = group if not group else common.cache.get_group_identifier(group)
+
+        # Update cache basesd on provided filters
+        kwargs = {"site": site if not site else site.name} if site else {"group": group if not group else group.name}  # monitoring API only allows 1 filter
+        dev_resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
+        if not dev_resp:
+            render.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
 
         devs: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in common.cache.devices] if cd.generic_type == dev_type]
         if site:
@@ -1141,7 +1137,7 @@ def interfaces(
             up_ifaces = len([i for i in utils.listify(ifaces) if i.get("status").lower() == "up"])  # listify as individual dev response is a dict, vs List for multi-device
             down_ifaces = len(utils.listify(ifaces)) - up_ifaces
             caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.error(f"{e.__class__.__name__} while trying to get counts from interface output")
 
         if filters:
