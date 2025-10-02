@@ -536,12 +536,9 @@ class CLICommon:
             return data
 
         devices = []
-        for idx, (sub, dev) in enumerate(data.items(), start=1):
+        for sub, dev in data.items():
             if not utils.is_resource_id(sub):
                 sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
-                if not sub_obj:
-                    self.exit(f"Unable to determine subscription id from subscription {sub} on line {idx} of import file.")
-
                 sub = sub_obj.id
             inv_devs = [self.cache.get_combined_inv_dev_identifier(d) for d in utils.listify(dev)]
             devices += [{"serial": d.serial, "subscription": sub} for d in inv_devs]
@@ -815,7 +812,7 @@ class CLICommon:
         if not verified_sites:
             self.exit("[italic dark_olive_green2]No Sites remain after validation[/].")
 
-        address_fields = {"site_name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green3", "country": "magenta", "zipcode": "blue", "latitude": "medium_spring_green", "longitude": "spring_green3"}
+        address_fields = {"site_name": "bright_green", "address": "bright_cyan", "city": "turquoise4", "state": "dark_olive_green2", "country": "magenta", "zipcode": "blue", "latitude": "medium_spring_green", "longitude": "spring_green3"}
         confirm_msg = utils.summarize_list(
             [
                 "|".join([f'[{address_fields[k]}]{v}[/]' for k, v in site.model_dump().items() if v and k in address_fields]) for site in list(verified_sites)
