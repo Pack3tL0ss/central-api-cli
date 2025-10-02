@@ -350,6 +350,13 @@ def test_show_inventory():
     assert "mac" in result.stdout
 
 
+def test_show_inventory_verbose():
+    result = runner.invoke(app, ["show", "inventory", "-v"],)
+    capture_logs(result, "test_show_inventory_verbose")
+    assert result.exit_code == 0
+    assert "mac" in result.stdout
+
+
 def test_show_radios():
     result = runner.invoke(app, ["show", "radios", test_data["ap"]["name"]],)
     capture_logs(result, "test_show_radios")
@@ -568,7 +575,7 @@ def test_show_interfaces_site_aps():
     capture_logs(result, "test_show_interfaces_site_aps")
     assert result.exit_code == 0
     assert "".join(test_data["ap"]["name"][0:6]) in result.stdout
-    assert "Ignoring" in result.stdout  # --fast and --slow contradict error is shown in caption
+    assert "Contradictory" in result.stdout  # --fast and --slow contradict error is shown in caption
 
 
 def test_show_interfaces_group_switches():
@@ -660,7 +667,7 @@ def test_show_vlans_gw():
 
 
 def test_show_vlans_stack():
-    result = runner.invoke(app, ["show", "vlans", test_data["vsf_switch"]["mac"]],)
+    result = runner.invoke(app, ["show", "vlans", test_data["vsf_switch"]["mac"]], "--down",)
     capture_logs(result, "test_show_vlans_stack")
     assert result.exit_code == 0
     assert "pvid" in result.stdout
