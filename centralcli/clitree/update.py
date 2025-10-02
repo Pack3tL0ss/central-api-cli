@@ -226,22 +226,6 @@ def group(
         )
         render.display_results(resp, tablefmt="action")
 
-def generate_template(template_file: Path | str, var_file: Path | str, group_dev: str):
-    '''Generate configuration files based on j2 templates and provided variables
-    '''
-    template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
-    var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
-
-    config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
-
-    env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
-    template = env.get_template(template_file.name)
-
-    # TODO output to temp or out dir cwd could be non-writable
-    group_dev: Path = Path.cwd() / f"{group_dev}.cfg"
-    group_dev.write_text(template.render(config_data))
-
-    return group_dev
 
 config_help = f"""Update group or device level config (ap or gw).
 
