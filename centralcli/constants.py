@@ -658,6 +658,7 @@ class ArgToWhat:
         self.swarms = self.swarm = "swarms"
         self.certs = self.cert = self.certificates = self.certificate = "certs"
         self.bssids = self.bssid = "bssids"
+        self.labels = self.label = "labels"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
@@ -665,6 +666,12 @@ class ArgToWhat:
 
     def _init_assign(self):
         self.subscription = self.subscriptions = "subscription"
+        self.label = self.labels = "label"
+
+    def _init_unassign(self):
+        self.subscription = self.subscriptions = "subscription"
+        self.license = self.licenses = "license"  # TODO # DEPRECATED need to add unassign subscription and hide license if config.glp.ok
+        self.label = self.labels = "label"
 
     def _init_cancel(self):
         self.device = self.devices = "device"
@@ -721,7 +728,7 @@ class ArgToWhat:
     def _init_convert(self):
         self.template = self.templates = "template"
 
-    def _init_tshoot(self):
+    def _init_ts(self):
         self.ap = self.aps = self.iap = "ap"
         self.gateway = self.gateways = self.gw = "gateway"
         self.switch = self.switch = self.switches = "switch"
