@@ -109,7 +109,7 @@ class MockSleep:
 
     @classmethod
     def real(cls, do_sleep: bool):
-        cls.real_sleep = do_sleep
+        cls.real_sleep = do_sleep  # pragma: no cover
 
     def __call__(self, sleep_time: int | float, *args, **kwargs) -> None:
         if self.real_sleep:

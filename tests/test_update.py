@@ -170,6 +170,23 @@ def test_update_cp_cert_invalid_group(ensure_cache_cert, ensure_cache_group4):
 
 
 if config.dev.mock_tests:
+    def test_update_variable():
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "variables",
+                test_data["test_devices"]["switch"]["serial"],
+                "mac_auth_ports",
+                "=",
+                "5",
+                "-y"
+            ]
+        )
+        capture_logs(result, "test_update_variable")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
     def test_update_webhook():
         result = runner.invoke(
             app,

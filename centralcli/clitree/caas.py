@@ -53,7 +53,7 @@ def bulk_edit(
     default: bool = common.options.default,
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover
     """Import and Apply settings from bulk-edit.csv"""
     caasapi = caas.CaasAPI()
     cmds = caasapi.build_cmds(file=input_file)
@@ -108,9 +108,9 @@ def add_vlan(
 
 @app.command()
 def import_vlan(
-    key: str = typer.Argument(..., help="The Key from stored_tasks with vlan details to import"),
+    key: str = typer.Argument(..., help="The Key from stored_tasks file with vlan details to import", show_default=False),
     import_file: Path = common.arguments.import_file,
-    file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True,),
+    file: Path = typer.Option(None, help="Same as providing IMPORT_FILE argument", exists=True, show_default=False),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -122,8 +122,6 @@ def import_vlan(
     is implied only need to provide key
     """
     import_file = file or import_file or config.stored_tasks_file
-    if import_file == config.stored_tasks_file and not key:
-        common.exit("key is required when using the default import file")
 
     data = config.get_file_data(import_file)
     data = data.get(key)

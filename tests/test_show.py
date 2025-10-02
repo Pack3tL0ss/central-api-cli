@@ -765,6 +765,55 @@ def test_show_lldp_by_ap_name():
     assert "neighbor" in result.stdout
 
 
+def test_show_overlay_connection():
+    result = runner.invoke(app, ["show", "overlay", "connection", test_data["gateway"]["name"].lower()],)
+    capture_logs(result, "test_show_overlay_connection")
+    assert result.exit_code == 0
+    assert "peer" in result.stdout
+
+
+def test_show_overlay_interfaces():
+    result = runner.invoke(app, ["show", "overlay", "interfaces", test_data["gateway"]["name"].lower()],)
+    capture_logs(result, "test_show_overlay_interfaces")
+    assert result.exit_code == 0
+    assert "Routes" in result.stdout
+
+
+def test_show_overlay_routes():
+    result = runner.invoke(app, ["show", "overlay", "routes", test_data["gateway"]["name"].lower()],)
+    capture_logs(result, "test_show_overlay_routes")
+    assert result.exit_code == 0
+    assert "Routes" in result.stdout
+
+def test_show_ospf_neighbor():
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            "neighbors",
+            test_data["gateway"]["name"],
+            "--debug",
+            "--table"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "Router ID" in result.stdout
+
+
+def test_show_overlay_routes_advertised():
+    result = runner.invoke(app, [
+            "show",
+            "overlay",
+            "routes",
+            test_data["gateway"]["name"],
+            "-a",
+            "--debug",
+            "--table"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "nexthop" in result.stdout
+
+
 def test_show_all_ap_lldp_neighbors():
     result = runner.invoke(app, ["show", "aps", "-n", "--site", test_data["ap"]["site"].lower(), "--table"],)
     capture_logs(result, "test_show_all_ap_lldp_neighbors")
@@ -1005,64 +1054,6 @@ def test_show_group_level_config():
     assert result.exit_code == 0
     assert "!" in result.stdout
     assert "mgmt-user" in result.stdout
-
-
-# FIXME killing these tests as there is a problem with the API endpoint
-# error: The requested URL was not found on the server. If you entered the URL  ... even when testing from swagger
-# def test_show_ospf_neighbor():
-#     result = runner.invoke(app, [
-#             "show",
-#             "ospf",
-#             "neighbors",
-#             test_data["gateway"]["name"],
-#             "--debug",
-#             "--table"
-#         ]
-#     )
-#     assert result.exit_code == 0
-#     assert "Router ID" in result.stdout
-
-
-# def test_show_overlay_routes_learned():
-#     result = runner.invoke(app, [
-#             "show",
-#             "overlay",
-#             "routes",
-#             test_data["gateway"]["name"],
-#             "--debug"
-#         ]
-#     )
-#     assert result.exit_code == 0
-#     assert "nexthop" in result.stdout
-
-
-# def test_show_overlay_routes_advertised():
-#     result = runner.invoke(app, [
-#             "show",
-#             "overlay",
-#             "routes",
-#             test_data["gateway"]["name"],
-#             "-a",
-#             "--debug",
-#             "--table"
-#         ]
-#     )
-#     assert result.exit_code == 0
-#     assert "nexthop" in result.stdout
-
-
-# def test_show_overlay_interfaces():
-#     result = runner.invoke(app, [
-#             "show",
-#             "overlay",
-#             "interfaces",
-#             test_data["gateway"]["name"],
-#             "--debug",
-#             "--table"
-#         ]
-#     )
-#     assert result.exit_code == 0
-#     assert "state" in result.stdout
 
 
 def test_show_config_gw_group():

@@ -341,6 +341,20 @@ if config.dev.mock_tests:
         assert "202" in result.stdout
 
 
+    def test_refresh_cache():
+        result = runner.invoke(app, ["refresh", "cache"])
+        capture_logs(result, "test_refresh_cache")
+        assert result.exit_code == 0
+        assert "refresh completed" in result.stdout.lower()
+
+
+    def test_refresh_token():
+        result = runner.invoke(app, ["refresh", "token"])
+        capture_logs(result, "test_refresh_token")
+        assert result.exit_code == 0
+        assert "✔" in result.stdout
+
+
     def test_refresh_webhook_token():
         result = runner.invoke(app, ["refresh", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
         capture_logs(result, "test_refresh_webhook")

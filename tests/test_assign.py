@@ -17,6 +17,7 @@ def test_assign_label(ensure_cache_label1):
             "label",
             "cencli_test_label1",
             test_data["ap"]["name"],
+            test_data["switch"]["name"],
             "-Y"
         ]
     )

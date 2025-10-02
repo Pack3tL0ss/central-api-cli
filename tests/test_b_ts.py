@@ -15,9 +15,16 @@ def test_ts_inventory():
     assert "API" in result.stdout
 
 
-def test_ts_ping():
-    result = runner.invoke(app, ["ts", "ping", test_data["switch"]["name"], test_data["gateway"]["ip"]])
-    capture_logs(result, "test_ts_ping")
+def test_ts_ping_mgmt():
+    result = runner.invoke(app, ["ts", "ping", test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"])
+    capture_logs(result, "test_ts_ping_mgmt")
+    assert result.exit_code == 0
+    assert "packets" in result.stdout
+
+
+def test_ts_ping_repititions():
+    result = runner.invoke(app, ["ts", "ping", test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-m"])
+    capture_logs(result, "test_ts_ping_repititions")
     assert result.exit_code == 0
     assert "packets" in result.stdout
 
@@ -41,3 +48,45 @@ def test_ts_clear():
     capture_logs(result, "test_ts_clear")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+def test_ts_command():
+    result = runner.invoke(app, ["ts", "command", test_data["ap"]["name"], "show", "ap-env"])
+    capture_logs(result, "test_ts_command")
+    assert result.exit_code == 0
+    assert "completed" in result.stdout
+
+
+def test_ts_show_tech():
+    result = runner.invoke(app, ["ts", "show-tech", test_data["switch"]["name"]])
+    capture_logs(result, "test_ts_show_tech")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_ts_clients_wired():
+    result = runner.invoke(app, ["ts", "clients", test_data["wired_clients_ap"]["name"]])
+    capture_logs(result, "test_ts_clients_wired")
+    assert result.exit_code == 0
+    assert "completed" in result.stdout
+
+
+def test_ts_dpi():
+    result = runner.invoke(app, ["ts", "dpi", test_data["ap"]["name"]])
+    capture_logs(result, "test_ts_dpi")
+    assert result.exit_code == 0
+    assert "completed" in result.stdout
+
+
+def test_ts_ssid():
+    result = runner.invoke(app, ["ts", "ssid", test_data["ap"]["name"]])
+    capture_logs(result, "test_ts_ssid")
+    assert result.exit_code == 0
+    assert "completed" in result.stdout
+
+
+def test_ts_overlay():
+    result = runner.invoke(app, ["ts", "overlay", test_data["ap"]["name"]])
+    capture_logs(result, "test_ts_overlay")
+    assert result.exit_code == 0
+    assert "completed" in result.stdout
