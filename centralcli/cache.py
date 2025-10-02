@@ -1627,8 +1627,8 @@ class Cache:
         }
 
     @property
-    def subscriptions(self) -> Dict[str, Document]:
-        return self.SubDB.all()
+    def subscriptions(self) -> list[CacheSub]:
+        return [CacheSub(sub) for sub in sorted(self.SubDB.all(), key=lambda s: (s["expired"], s["name"]))]
 
     @property
     def subscriptions_by_id(self) -> Dict[str, Document]:
@@ -1767,7 +1767,7 @@ class Cache:
 
     @property
     def license_names(self) -> list:
-        return [lic["name"] for lic in self.LicenseDB.all()]
+        return sorted([lic["name"] for lic in self.LicenseDB.all()])
 
     @property
     def templates(self) -> list:
@@ -3620,7 +3620,8 @@ class Cache:
             inv_model = models.Inventory(combined)
 
         if dev_type and dev_type != "all":
-            inv_model = models.Inventory([i for i in inv_model.model_dump() if i["type"] == dev_type])
+            dev_type: list[str] = [dev_type] if dev_type != "switch" else ["cx", "sw"]
+            inv_model = models.Inventory([i for i in inv_model.model_dump() if i["type"] in dev_type])
 
         resp = [r for r in batch_resp if r.ok][-1]
         resp.rl = sorted([r.rl for r in batch_resp])[0]
@@ -5734,9 +5735,9 @@ class Cache:
 
         elif retry:
             log.error(f"Central API CLI Cache unable to gather Subscription data from provided identifier {query_str}", show=True)
-            valid = "\n".join([f'[cyan]{m["name"]}[/]' for m in db.all()])
+            valid = "\n".join([sub.summary_text for sub in self.subscriptions])
             econsole.print(f":warning:  [cyan]{query_str}[/] appears to be invalid")
-            econsole.print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
+            econsole.print(f"\n[bright_green]Available Subscriptions[/]:\n--\n{valid}\n--\n")
             raise typer.Exit(1)
         else:
             if not completion:
