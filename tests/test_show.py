@@ -534,6 +534,21 @@ def test_show_interfaces_switch():
     assert "status" in result.stdout
 
 
+def test_show_interfaces_ap_up():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["ap"]["name"]), "--up"],)
+    capture_logs(result, "test_show_interfaces_ap_up")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_interfaces_ap_down():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["ap"]["name"]), "--down", "--group", "ingored"],)
+    capture_logs(result, "test_show_interfaces_ap_down")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+    assert "gnored" in result.stdout  # --group is ignored given device is provided
+
+
 def test_show_interfaces_switch_slow():
     result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["name"][0:-2]), "--slow"],)
     capture_logs(result, "test_show_interfaces_switch_slow")
@@ -541,12 +556,47 @@ def test_show_interfaces_switch_slow():
     assert "API" in result.stdout
 
 
+def test_show_interfaces_switch_fast():
+    result = runner.invoke(app, ["show", "interfaces", "".join(test_data["switch"]["ip"]), "--fast"],)
+    capture_logs(result, "test_show_interfaces_switch_fast")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
 def test_show_interfaces_site_aps():
-    result = runner.invoke(app, ["show", "interfaces", "--site", test_data["ap"]["site"], "--ap"],)
+    result = runner.invoke(app, ["show", "interfaces", "--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"],)
     capture_logs(result, "test_show_interfaces_site_aps")
     assert result.exit_code == 0
     assert "".join(test_data["ap"]["name"][0:6]) in result.stdout
-    assert "mac" in result.stdout
+    assert "Ignoring" in result.stdout  # --fast and --slow contradict error is shown in caption
+
+
+def test_show_interfaces_group_switches():
+    result = runner.invoke(app, ["show", "interfaces", "--group", test_data["switch"]["group"].swapcase(), "--switch"],)
+    capture_logs(result, "test_show_interfaces_group_switches")
+    assert result.exit_code == 0
+    assert "API" in result.stdout
+
+
+def test_show_interfaces_group_gws():
+    result = runner.invoke(app, ["show", "interfaces", "--group", test_data["gateway"]["group"].swapcase(), "--gw"],)
+    capture_logs(result, "test_show_interfaces_group_gws")
+    assert result.exit_code == 0
+    assert test_data["gateway"]["name"] in result.stdout
+
+
+def test_show_interfaces_invalid_flags():
+    result = runner.invoke(app, ["show", "interfaces", "--ap", "--gw"],)
+    capture_logs(result, "test_show_interfaces_invalid_flags", expect_failure=True)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout
+
+
+def test_show_interfaces_invalid_all_no_type():
+    result = runner.invoke(app, ["show", "interfaces"],)
+    capture_logs(result, "test_show_interfaces_invalid_all_no_type", expect_failure=True)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout.lower()
 
 
 def test_show_cache():
@@ -1475,12 +1525,11 @@ def test_show_swarm_specific_ap():
             "show",
             "swarms",
             test_data["aos8_ap"]["name"],
-            "--down",
             "--up",
             "--sort",
             "version"
         ]
-    )  # --up and --down and --sort are ignored in this case, given a specific AP is provided. Improves coverage/hits branch
+    )  # --up and --sort are ignored in this case, given a specific AP is provided. Improves coverage/hits branch
     capture_logs(result, "test_show_swarm_specific_ap")
     assert result.exit_code == 0
     assert "API" in result.stdout
