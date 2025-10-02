@@ -453,8 +453,7 @@ class Utils:
 
     @staticmethod
     def generate_template(template_file: Path | str, var_file: Path | str | None,) -> str:
-        '''Generate configuration files based on j2 templates and provided variables
-        '''
+        """Generate configuration files based on j2 templates and provided variables."""
         template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
         if var_file is not None:
             var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
