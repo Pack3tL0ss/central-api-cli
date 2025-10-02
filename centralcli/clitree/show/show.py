@@ -87,7 +87,7 @@ from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay
 if TYPE_CHECKING:
     from tinydb.table import Document
 
-    from ...cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite
+    from ...cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite, CacheSub
 
 
 app = typer.Typer()
@@ -749,6 +749,7 @@ def inventory(
         help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {common.help_block('show all')}",
         show_default=False,
     ),
+    key: str = typer.Option(None, help="Show all devices assigned to a specific subscription [dim](key)[/]", autocompletion=cache.sub_completion),
     verbose: int = common.options.verbose,
     sort_by: SortInventoryOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -767,21 +768,23 @@ def inventory(
     dev_type = dev_type.value
     title = f"{what_to_pretty(dev_type)} in Inventory"
 
-    include_inventory = False
-    if verbose:
-        include_inventory = True
+    if verbose:  # `show inventory -v` is the same as `show all --inv``
         verbose -= 1
 
-    if include_inventory:  # `show inventory -v` is the same as `show all --inv``
         show_devices(
-            dev_type=dev_type, outfile=outfile, include_inventory=include_inventory, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
-        common.exit(code=0)
+        common.exit(code=0 if all([r.ok for r in api.session.requests if r.reason != "Unauthorized" and not r.url.startswith("/oauth2")]) else 1)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     _api = glp_api or api
+    if key and dev_type == "all":
+        sub: CacheSub = cache.get_sub_identifier(key)
+        key = sub.key
+        dev_type = ShowInventoryArgs(sub.type)
+
     resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
 
     render.display_results(
@@ -795,7 +798,8 @@ def inventory(
         reverse=reverse,
         set_width_cols={"services": {"min": 31}},
         cleaner=cleaner.get_device_inventory,
-        sub=sub
+        sub=sub,
+        key=key
     )
 
 
@@ -1279,7 +1283,7 @@ def vlans(
                 iden = obj.serial
                 stack = False
 
-            resp = api.session.request(api.monitoring.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw")
+            resp = api.session.request(api.monitoring.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw", status=None if not status else status.name)
         elif obj.type.lower() == 'gw':
             resp = api.session.request(api.monitoring.get_gateway_vlans, obj.serial)
         else:

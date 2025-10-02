@@ -1038,6 +1038,7 @@ class CacheSub(CentralObject, Text):
         super().__init__("sub", data)
         self.id: str = data["id"]
         self.name: str = data["name"]
+        self.type: str = data["type"].lower()
         self.key: str = data["key"]
         self.qty: int = data["qty"]
         self.available: int = data["available"]
@@ -2445,6 +2446,8 @@ class Cache:
             for m in sorted(match, key=lambda i: i.name):
                 if m.name.startswith(incomplete) and m.name not in args:
                     out += [tuple([m.name, m.help_text])]
+                elif m.key.startswith(incomplete) and m.key not in args:
+                    out += [tuple([m.key, m.help_text])]
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
                 else:

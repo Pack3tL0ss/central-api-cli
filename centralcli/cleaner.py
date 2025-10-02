@@ -1335,7 +1335,7 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
     return data
 
 
-def get_device_inventory(data: list[dict], sub: bool = None) -> list[dict]:
+def get_device_inventory(data: list[dict], sub: bool = None, key: str = None) -> list[dict]:
     field_order = [
         "id",
         "serial",
@@ -1353,7 +1353,9 @@ def get_device_inventory(data: list[dict], sub: bool = None) -> list[dict]:
     data = simple_kv_formatter(data, key_order=field_order, emoji_bools=True)
     data = sorted(strip_no_value(data), key=lambda i: (i["services"] or "", i["model"]))
 
-    if sub is not None:
+    if key is not None:
+        data = [{k: v for k, v in d.items()} for d in data if(d["subscription key"] or "") == key]
+    elif sub is not None:
         if sub:
             data = [{k: v for k, v in d.items()} for d in data if d["services"]]
         else:
