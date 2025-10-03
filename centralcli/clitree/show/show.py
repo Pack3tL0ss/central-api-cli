@@ -222,7 +222,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
 
     caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}"
     if inventory and not inventory_only:
-        caption = f"{caption}\n  [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
+        caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
 
@@ -2853,6 +2853,7 @@ def logs(
         resp,
         tablefmt=tablefmt,
         title=title,
+        caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -2860,7 +2861,6 @@ def logs(
         set_width_cols={"event type": {"min": 5, "max": 12}},
         cleaner=cleaner.get_event_logs if not verbose else None,
         cache_update_func=common.cache.update_event_db if not verbose else None,
-        caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
     )
 
 
