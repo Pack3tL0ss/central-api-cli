@@ -179,9 +179,24 @@ def test_kick_client():
 
 
 def test_kick_invalid_client():
-    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.eeff", "--yes"])
+    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.1122", "--yes"])
+    capture_logs(result, "test_kick_invalid_client", expect_failure=True)
     assert result.exit_code == 1
     assert "nable to gather" in result.stdout
+
+
+def test_kick_client_not_connected_w_refresh(ensure_cache_client_not_connected):
+    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.eeff", "-R", "--yes"])
+    capture_logs(result, "test_kick_client_not_connected_w_refresh", expect_failure=True)
+    assert result.exit_code == 1
+    assert "not connected" in result.stdout
+
+
+def test_kick_client_not_connected(ensure_cache_client_not_connected):
+    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.eeff", "--yes"])
+    capture_logs(result, "test_kick_client_not_connected")
+    assert result.exit_code == 0
+    assert "API" in result.stdout  # This passes as we use previous mock response, but hits logic in kick otherwise not hit
 
 
 def test_kick_all():
@@ -360,6 +375,20 @@ if config.dev.mock_tests:
         capture_logs(result, "test_refresh_webhook")
         assert result.exit_code == 0
         assert "secure_token" in result.stdout
+
+
+    def test_rename_ap(ensure_dev_cache_ap):
+        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["name"], test_data["ap"]["name"][0:-5], "--yes"])
+        capture_logs(result, "test_rename_ap")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_rename_group(ensure_cache_group3):
+        result = runner.invoke(app, ["rename", "group",  "cencli_test_group3", "cencli_test_group30", "--yes"])
+        capture_logs(result, "test_rename_group", expect_failure=True)
+        assert result.exit_code == 1
+        assert "400" in result.stdout
 
 
     def test_rename_site(ensure_cache_site4):

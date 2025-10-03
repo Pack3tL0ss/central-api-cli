@@ -916,6 +916,13 @@ def test_show_logs_by_id():
     assert "Response" in result.stdout
 
 
+def test_show_logs_client():
+    result = runner.invoke(app, ["show", "logs", "--client", test_data["client"]["wireless"]["mac"], "-a"],)
+    capture_logs(result, "test_show_logs_client")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_show_mpsk_networks():
     result = runner.invoke(app, ["show", "mpsk", "networks"],)
     capture_logs(result, "test_show_mpsk_networks")

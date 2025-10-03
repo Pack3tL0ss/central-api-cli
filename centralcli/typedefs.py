@@ -71,11 +71,11 @@ class Self:
 
 try:
     from typing import Self  # noqa
-except ImportError:
+except ImportError:  # pragma: no cover
     ...
 
 
 try:
     from enum import StrEnum
-except ImportError:
-    from stringenum import StrEnum as StrEnum  # backport StrEnum functionality pre 3.11
+except ImportError:  # pragma: no cover
+    from stringenum import StrEnum as StrEnum  # type: ignore # backport StrEnum functionality pre 3.11

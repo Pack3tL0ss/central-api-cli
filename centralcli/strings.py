@@ -256,7 +256,7 @@ class Example:
     def txt_file_example(self) -> List[str] | None:
         if not self.by_text_field:
             return
-        if self.by_text_field not in self.ds.dict[0]:
+        if self.by_text_field not in self.ds.dict[0]:  # pragma: no cover
             log.error(f"Example provided by_text_field {self.by_text_field}, but it does not exist in the example data")
             return
 

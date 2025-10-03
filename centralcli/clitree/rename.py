@@ -77,16 +77,17 @@ def group(
     """
     group: CacheGroup = common.cache.get_group_identifier(group)
 
-    print(f"Please Confirm: rename group [red]{group.name}[/red] -> [bright_green]{new_name}[/bright_green]")
+    render.econsole.print(f"Please Confirm: rename group [red]{group.name}[/red] -> [bright_green]{new_name}[/bright_green]")
     if render.confirm(yes):
         resp = api.session.request(api.configuration.update_group_name, group.name, new_name)
 
         # API-FLAW Doesn't actually appear to be valid for any group type
-        if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):
+        if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):  # pragma: no cover  Don't think this message is ever returned now.
             resp.output["description"] = f"{group.name} is an AOS_10X group, " \
                 "rename only supported on AOS_8X groups. Use clone."
 
         render.display_results(resp, tablefmt="action")
+        common.exit(code=int(not resp.ok))
 
 
 @app.callback()

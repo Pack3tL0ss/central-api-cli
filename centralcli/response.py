@@ -193,7 +193,7 @@ class Response:
         if isinstance(self.output, dict) and "error" in self.output and "error_description" in self.output:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
-        try:
+        try:  # pragma: no cover
             if config.dev.capture_raw and self.url and self.url.path not in self.raw:  # url.path being in raw response indicates this is a CombinedResponse
                 with render.Spinner("Capturing raw response"):
                     if not config.capture_file.exists():
@@ -204,7 +204,7 @@ class Response:
         except Exception as e:
             log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}", log=True, caption=True)
 
-    def dump(self) -> str:
+    def dump(self) -> str:  # pragma: no cover
         def _get_body(res):
             if hasattr(res, "_body"):
                 return self._response._body.decode("utf-8")

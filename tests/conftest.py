@@ -299,6 +299,32 @@ def ensure_inv_cache_test_switch():
 
 
 @pytest.fixture(scope="function")
+def ensure_dev_cache_ap():
+    if config.dev.mock_tests:
+        cache_data =   {
+            "name": "ktcn.605h.5866",
+            "status": "Up",
+            "type": "ap",
+            "model": "605H",
+            "ip": "10.0.31.149",
+            "mac": "f0:1a:a0:2a:58:66",
+            "serial": "CNR4LHJ08G",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.7.2.1_93286",
+            "swack_id": "CNR4LHJ08G",
+            "switch_role": None
+        }
+        if cache_data["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))
+    yield
+
+    if cache_data["name"] not in [ap["name"] for ap in cache.devices if ap["type"] == "ap"]:
+        assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))
+    return
+
+
+@pytest.fixture(scope="function")
 def ensure_dev_cache_test_ap():
     if config.dev.mock_tests:
         test_ap = {
@@ -519,6 +545,29 @@ def ensure_cache_site4():
         if missing:
             assert asyncio.run(cache.update_site_db(data=sites))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_client_not_connected():
+    if config.dev.mock_tests:
+        cache_data =   {
+            "mac": "aa:bb:cc:dd:ee:ff",
+            "name": "not-connected",
+            "ip": "10.0.110.299",
+            "type": "wireless",
+            "network_port": "HPE_Aruba",
+            "connected_serial": "CNR4LHJ08G",
+            "connected_name": "ktcn.605h.5866",
+            "site": "WadeLab",
+            "group": "WadeLab",
+            "last_connected": None
+        }
+        if cache_data["mac"] not in cache.clients_by_mac:
+            assert asyncio.run(cache.update_db(cache.ClientDB, cache_data, truncate=False))
+    yield
+
+    client = cache.get_client_identifier(cache_data["mac"])
+    asyncio.run(cache.update_db(cache.ClientDB, doc_ids=client.doc_id))
 
 
 @pytest.fixture(scope="function")

@@ -34,7 +34,7 @@ def token(
     """
     if not all and not workspace_list:
         api.session.refresh_token()
-    else:
+    else:  # pragma: no cover  This is tested manually not practical to test automated against multiple workspaces
         console = Console()
         if workspace_list:
             verified_workspace_list = []
