@@ -547,13 +547,16 @@ def format_data_by_key(data: list[dict[str, Any]], output_by_key: str) -> dict[s
                     f"{'-'.join([item[key] for key in found_keys])}": {k: v for k, v in item.items()} for item in data
                 }
         else:
-            _output_key = [k for k in output_by_key if k in data[0]]
-            if _output_key:
-                _output_key = _output_key[0]
-                data: dict[str, dict] = {
-                    item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
-                    for item in data
-                }
+            try:
+                _output_key = [k for k in output_by_key if k in data[0]]
+                if _output_key:
+                    _output_key = _output_key[0]
+                    data: dict[str, dict] = {
+                        item[_output_key]: {k: v for k, v in item.items() if k != _output_key}
+                        for item in data
+                    }
+            except TypeError as e:
+                log.exception(f"{repr(e)} while attempting to format data by key '{_output_key}'\n{e}")
     return data
 
 
@@ -612,7 +615,7 @@ def output(
             if value is None:
                 return ""
             elif isinstance(value, DateTime):
-                return str(value.original)
+                return str(value.iso)
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
         def normalize_key_for_csv(key: str) -> str:
