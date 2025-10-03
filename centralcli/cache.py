@@ -1911,6 +1911,7 @@ class Cache:
         ]
 
         # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
+        # resp: Response = min([r for r in res if r is not None and r.rl.has_value], key=lambda x: x.rl)
         resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
         resp.output = combined
         # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
