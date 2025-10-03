@@ -78,7 +78,7 @@ class GreenLakeDevicesAPI:
 
         return await self.session._batch_request(batch_reqs)
 
-    async def remove_devices(self, device_ids: list[str] | str, remove_app: bool = True) -> Response:
+    async def remove_devices(self, device_ids: list[str] | str, remove_app: bool = True) -> list[Response]:
         url = "/devices/v2beta1/devices"
         header = {"Content-Type": "application/merge-patch+json"}
         device_ids = utils.listify(device_ids)
