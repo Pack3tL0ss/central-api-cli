@@ -7,7 +7,6 @@ from pathlib import Path
 
 import typer
 import yaml
-from jinja2 import Environment, FileSystemLoader
 from rich.markup import escape
 from rich.text import Text
 
