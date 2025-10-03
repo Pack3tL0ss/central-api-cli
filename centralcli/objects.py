@@ -106,6 +106,16 @@ class DateTime():
             return self.pretty
 
     @property
+    def iso(self) -> str:
+        """Render date in ISO format
+
+        Returns:
+            str: Date as string in format: '2013-03-31T03:30:00+02:00'
+        """
+        return pendulum.from_timestamp(self.ts, tz=self.tz).to_iso8601_string()
+
+
+    @property
     def day_datetime(self) -> str:
         """Render date in day_datetime format
 
