@@ -798,6 +798,8 @@ def archive(
             "Use [cyan]cencli batch archive --example[/] to see expected format."
         )
 
+    render.econsole.print(f"[red]Archiv{'e' if not yes else 'ing'}[/] the [bright_green]{len(serials)}[/] devices found in {import_file.name}")
+    render.confirm(yes)
     res = api.session.request(api.platform.archive_devices, serials)
     if res:
         caption = res.output.get("message")
