@@ -1,4 +1,3 @@
-# pragma: exclude file  Need to exclude for now as all routing endpoints return a 404 (tested on internal and us-west4)
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
