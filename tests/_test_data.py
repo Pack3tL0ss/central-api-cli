@@ -60,6 +60,17 @@ def _create_invalid_var_file(file: str) -> Path:
     return test_var_file
 
 
+def setup_deploy_file(group_file: Path, site_file: Path, label_file: Path, device_file: Path) -> Path:
+    test_deploy_file = config.cache_dir / "test_runner_deploy.yaml"
+    test_deploy_file.write_text(
+        f"groups: !include {group_file}\n"
+        f"sites: !include {site_file}\n"
+        f"labels: !include {label_file}\n"
+        f"devices: !include {device_file}\n"
+    )
+    return test_deploy_file
+
+
 test_data: dict[str, Any] = get_test_data()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
@@ -72,6 +83,22 @@ test_mpsk_file: Path = setup_batch_import_file(test_data=test_data, import_type=
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"])
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
+test_deploy_file = setup_deploy_file(group_file=test_group_file, site_file=test_site_file, label_file=test_label_file, device_file=test_device_file)
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
-test_files = [test_device_file, test_group_file, test_sub_file_csv, test_sub_file_yaml, test_rename_aps_file, test_verify_file, test_site_file, test_cert_file, test_mpsk_file, test_invalid_var_file, test_label_file, test_sub_file_yaml, test_sub_file_csv]
+test_files = [
+    test_device_file,
+    test_group_file,
+    test_sub_file_csv,
+    test_sub_file_yaml,
+    test_rename_aps_file,
+    test_verify_file,
+    test_site_file,
+    test_cert_file,
+    test_mpsk_file,
+    test_invalid_var_file,
+    test_label_file,
+    test_sub_file_yaml,
+    test_sub_file_csv,
+    test_deploy_file
+]

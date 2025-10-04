@@ -317,10 +317,11 @@ def ensure_dev_cache_ap():
         }
         if cache_data["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))
+        clean_cache_data = cache.devices.copy()
     yield
 
-    if cache_data["name"] not in [ap["name"] for ap in cache.devices if ap["type"] == "ap"]:
-        assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))
+    if config.dev.mock_tests and cache_data["name"] not in [ap["name"] for ap in cache.devices if ap["type"] == "ap"]:
+        assert asyncio.run(cache.update_db(cache.DevDB, data=clean_cache_data, truncate=True))
     return
 
 

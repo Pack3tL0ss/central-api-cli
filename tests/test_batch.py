@@ -3,9 +3,10 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 from centralcli.exceptions import InvalidConfigException
 
-from . import cache, capture_logs, config
+from . import capture_logs, config
 from ._test_data import (
     test_data,
+    test_deploy_file,
     test_device_file,
     test_group_file,
     test_label_file,
@@ -153,3 +154,18 @@ def test_batch_delete_devices_invalid_dev_type():
     capture_logs(result, "test_batch_delete_devices_invalid_dev_type", expect_failure=True)
     assert result.exit_code == 1
     assert "--dev-type" in result.stdout
+
+
+def test_batch_archive():
+    result = runner.invoke(app, ["batch", "archive", str(test_device_file), "-y"])
+    capture_logs(result, "test_batch_archive")
+    assert result.exit_code == 0
+    assert "True" in result.stdout
+
+
+def test_batch_deploy():
+    result = runner.invoke(app, ["batch", "deploy", str(test_deploy_file), "-yyyyy"])
+    capture_logs(result, "test_batch_deploy")
+    assert result.exit_code == 0
+    assert "201" in result.stdout
+    assert "200" in result.stdout
