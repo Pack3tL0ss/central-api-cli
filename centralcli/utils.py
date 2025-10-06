@@ -458,24 +458,7 @@ class Utils:
         if var_file is not None:
             var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
 
-        valid_ext = ['.yaml', '.yml', '.json', '.csv', '.tsv', '.dbf']
         if template_file.suffix == ".j2":
-            if var_file is None or not var_file.exists():
-                _var_files = [template_file.parent / f"{template_file.stem}{sfx}" for sfx in valid_ext]
-                _var_files = [f for f in _var_files if f.exists()]
-                if len(_var_files) == 1:
-                    var_file = _var_files[0]
-                else:
-                    econsole = Console(stderr=True)
-                    if not _var_files:
-                        econsole.print(f":x: No variable file found for {template_file}")
-                    else:
-                        econsole.print(
-                            f":x: Multiple potential variable files found {', '.join([f.name for f in _var_files])} for {template_file}.\n"
-                            "Use command line flag to specify variable file."
-                        )
-                    raise typer.Exit(1)
-
             config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
 
             env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
