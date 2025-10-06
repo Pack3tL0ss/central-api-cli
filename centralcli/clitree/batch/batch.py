@@ -523,6 +523,7 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     return devices, ignored, requests
 
 
+# TOGLP batch assign subscription is the GLP subscribe, need to decide if makes sense to keep it there, or update this command to support GLP
 @app.command()
 def subscribe(
     import_file: Path = common.arguments.import_file,
