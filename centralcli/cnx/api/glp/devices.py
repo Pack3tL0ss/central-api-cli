@@ -48,20 +48,19 @@ class GreenLakeDevicesAPI:
     async def update_devices(
             self,
             device_ids: str | list[str],
-            subscription_ids: list[str] | str | None = None,
+            subscription_ids: list[str] | str | None = UNSET,
             tags: dict[str, str] | None = None,
             application_id: str | None = UNSET,
             archive: bool = None,
-        ) -> Response:
+        ) -> list[Response]:
         url = "/devices/v2beta1/devices"
         header = {"Content-Type": "application/merge-patch+json"}
         device_ids = utils.listify(device_ids)
-        subscription_ids = utils.listify(subscription_ids)
 
         # Same endpoint but operations need to be done via separate calls.
         payloads = []
-        if subscription_ids:
-            payloads += [{"subscription": [{"id": sub} for sub in subscription_ids]}]
+        if subscription_ids is not UNSET:
+            payloads += [{"subscription": [] if subscription_ids is None else [{"id": sub} for sub in utils.listify(subscription_ids)]}]
         if tags:
             payloads += [{"tags": tags}]
         if archive is not None:
