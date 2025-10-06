@@ -67,10 +67,10 @@ def capture_logs(result: Result, test_func: str = None, log_output: bool = False
     test_func = test_func or "UNDEFINED"
     if result.exit_code != (0 if not expect_failure else 1) or log_output:
         log.error(f"{test_func} {'returned error' if not log_output else 'output'}:\n{result.stdout}", show=True)
-        if "unable to gather device" in result.stdout:
+        if "unable to gather device" in result.stdout:  # pragma: no cover
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
-    if result.exception and not isinstance(result.exception, SystemExit):
+    if result.exception and not isinstance(result.exception, SystemExit):  # pragma: no cover
         log.exception(f"{test_func} {repr(result.exception)}", exc_info=True)
         with log.log_file.open("a") as log_file:
             traceback.print_exception(result.exception, file=log_file)

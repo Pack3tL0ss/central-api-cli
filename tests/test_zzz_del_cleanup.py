@@ -26,7 +26,7 @@ def test_del_device(ensure_inv_cache_add_do_del_ap):
     result = runner.invoke(app, ["delete",  "device", "CN63HH906Z", "-Y"])
     capture_logs(result, "test_del_device")
     assert result.exit_code == 0
-    assert "200" in result.stdout
+    assert "successfully" in result.stdout
 
 
 def test_batch_del_devices(ensure_cache_batch_devices):

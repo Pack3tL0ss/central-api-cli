@@ -71,6 +71,14 @@ def setup_deploy_file(group_file: Path, site_file: Path, label_file: Path, devic
     return test_deploy_file
 
 
+def setup_j2_file() -> Path:
+    test_j2_file = config.cache_dir / "test_runner_template.j2"
+    test_j2_file.write_text(
+        "This is a simple {{some_var}} j2 template file\n"
+    )
+    return test_j2_file
+
+
 test_data: dict[str, Any] = get_test_data()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
@@ -84,6 +92,7 @@ test_site_file: Path = setup_batch_import_file(test_data=test_data)
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"])
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
 test_deploy_file = setup_deploy_file(group_file=test_group_file, site_file=test_site_file, label_file=test_label_file, device_file=test_device_file)
+test_j2_file = setup_j2_file()
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
 test_files = [
@@ -100,5 +109,6 @@ test_files = [
     test_label_file,
     test_sub_file_yaml,
     test_sub_file_csv,
-    test_deploy_file
+    test_deploy_file,
+    test_j2_file,
 ]

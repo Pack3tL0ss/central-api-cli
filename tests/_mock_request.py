@@ -81,7 +81,7 @@ def _build_response(
     resp = response_class(method, url, **kwargs)
 
     for hdr in _headers.getall(hdrs.SET_COOKIE, ()):
-        resp.cookies.load(hdr)
+        resp.cookies.load(hdr)  # pragma: no cover
 
     # Reified attributes
     resp._headers = _headers

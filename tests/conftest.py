@@ -736,3 +736,26 @@ def ensure_cache_template_by_name():
         if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
             assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_j2_var_yaml():
+    test_j2_file = config.cache_dir / "test_runner_template.yaml"
+    test_j2_file.write_text(
+        "some_var: some_value\n"
+    )
+    assert test_j2_file.exists()
+    yield
+
+    test_j2_file.unlink(missing_ok=True)
+
+@pytest.fixture(scope="function")
+def ensure_cache_j2_var_csv():
+    test_j2_file = config.cache_dir / "test_runner_template.csv"
+    test_j2_file.write_text(
+        "some_var,\nsome_value,\n"
+    )
+    assert test_j2_file.exists()
+    yield
+
+    test_j2_file.unlink(missing_ok=True)

@@ -376,7 +376,7 @@ def swarm(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
+) -> None:  # pragma: no cover this command is hidden
     """Update AOS8 IAP swarm settings
 
     :warning:  It is recommended to do TimeZone updates via the UI currently, as API endpoint does not automatically add the appropriate daylight saving time rule
@@ -724,7 +724,7 @@ def wlan(
     if hide is not None:
         render.econsole.print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
 
-    if yes or typer.confirm("\nProceed?", abort=True):
+    if render.confirm(yes):
         update_res = api.session.batch_request(update_req)
         render.display_results(update_res)
 

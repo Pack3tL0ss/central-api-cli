@@ -6,7 +6,7 @@ from centralcli.cli import app
 from centralcli.exceptions import MissingRequiredArgumentException
 
 from . import capture_logs, config, test_data
-from ._test_data import test_device_file
+from ._test_data import test_device_file, test_j2_file
 
 runner = CliRunner()
 
@@ -46,6 +46,27 @@ def test_convert_template():
     capture_logs(result, "test_convert_template")
     assert result.exit_code == 0
     assert "hash" in result.stdout
+
+
+def test_convert_template_var_file_not_exist():
+    result = runner.invoke(app, ["convert", "template", str(test_j2_file)])
+    capture_logs(result, "test_convert_template_var_file_not_exist", expect_failure=True)
+    assert result.exit_code == 1
+    assert "no variable file found" in result.stdout.lower()
+
+
+def test_convert_template_auto_var_file(ensure_cache_j2_var_yaml):
+    result = runner.invoke(app, ["convert", "template", str(test_j2_file)])
+    capture_logs(result, "test_convert_template_auto_var_file")
+    assert result.exit_code == 0
+    assert "some_value" in result.stdout
+
+
+def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml, ensure_cache_j2_var_csv):
+    result = runner.invoke(app, ["convert", "template", str(test_j2_file)])
+    capture_logs(result, "test_convert_template_too_many_var_file_matches", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Too many matches" in result.stdout
 
 
 def test_unarchive(ensure_inv_cache_test_ap):
@@ -305,6 +326,34 @@ if config.dev.mock_tests:
         capture_logs(result, "test_upgrade_group")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    def test_update_ap_no_change():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
+        capture_logs(result, "test_upgrade_group_no_change")
+        assert result.exit_code == 0
+        assert "NO CHANGES" in result.stdout.upper()
+
+
+    def test_update_ap():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"] - 0.1, "-y"])
+        capture_logs(result, "test_upgrade_group")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_ap_invalid():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], test_data["ap"]["serial"], "--hostname", "this_will_fail"])
+        capture_logs(result, "test_update_ap_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "multiple" in result.stdout
+
+
+    def test_update_wlan():
+        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk", "-y"])
+        capture_logs(result, "test_upgrade_wlan")
+        assert result.exit_code == 0
+        assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
 
 
     def test_cancel_upgrade_ap():
