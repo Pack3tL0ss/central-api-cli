@@ -2,18 +2,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+from datetime import datetime
+
 import typer
 
-from centralcli import common, log, render
-from centralcli.cache import CacheDevice, CacheLabel, api
+from centralcli import common, log, render, utils
+from centralcli.cache import CacheDevice, CacheLabel, CacheSub
+from centralcli.clicommon import APIClients
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
+from centralcli.objects import DateTime
+
+api_clients = APIClients()
+api = api_clients.classic
+glp_api = api_clients.glp
 
 app = typer.Typer()
 
 
 # TOGLP
-@app.command()
+@app.command(deprecated=True, hidden=glp_api is not None)
 def license(
     license: common.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
     devices: list[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=f"{iden_meta.dev_many} or 'auto'", autocompletion=common.cache.dev_completion, show_default=False),
@@ -21,8 +29,12 @@ def license(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-) -> None:
-    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type."""
+) -> None:  # pragma: no cover
+    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
+
+    :warning:  This command is deprecated, and will be replaced by [cyan]unassign subscription[/] which is available now if Greenlake (glp)
+    details are provided in the config.
+    """
     do_auto = True if "auto" in [s.lower() for s in devices] else False
     if do_auto:
         _msg = f"Disable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
@@ -54,6 +66,40 @@ def license(
             log.warning(
                 f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
                 )
+
+
+@app.command(hidden=not glp_api)
+def subscription(
+    sub_name_or_id: str = typer.Argument(..., help="subscription id or key from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
+    devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
+    end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Unassign subscription from device(s) by serial number(s).
+
+    :warning:  Removing a subscription from a device will eventually cause it to disconnect from Aruba Central.
+    :information: It is not necessary to unassign the existing subscription if the goal is to assign a different subscription.
+    This can be done in one step using [cyan]assign subscription[/] or [cyan]batch assign subscriptions[/]
+    """
+    if not glp_api:  # pragma: no cover
+        common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
+
+    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
+    _msg = f"Unassign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green]|[medium_spring_green]{sub.key}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
+
+    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
+    res_ids = [d.id for d in devs]
+
+    _msg = f"{_msg} from device:" if len(res_ids) == 1 else f"{_msg} from the following {len(res_ids)} devices:"
+    _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
+    render.econsole.print(_msg)
+    if render.confirm(yes):
+        resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=None)
+        render.display_results(resp, tablefmt="action")
+        # CACHE update available subs in sub cache
 
 
 @app.command()
@@ -97,7 +143,7 @@ def label(
 @app.callback()
 def callback():
     """
-    Unassign licenses / labels
+    Unassign Subscriptions / labels
     """
     pass
 
