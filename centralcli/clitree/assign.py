@@ -21,7 +21,7 @@ app = typer.Typer()
 # TODO consider removing auto option as we've added enable/disable auto-sub ...
 # TODO update cache for device after successful assignment
 # TOGLP
-@app.command(deprecated=True)
+@app.command(deprecated=True, hidden=glp_api is not None)
 def license(
     license: common.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
     devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
@@ -30,9 +30,9 @@ def license(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:  # pragma: no cover
-    """Assign (or rassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+    """Assign (or reassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
 
-    :warning:  This command is deprecated, and will be replaced by `assign subscription` which is available now if Greenlake (glp)
+    :warning:  This command is deprecated, and will be replaced by [cyan]assign subscription[/] which is available now if Greenlake (glp)
     details are provided in the config.
 
     If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
@@ -70,6 +70,41 @@ def license(
         # TODO cache update similar to batch unsubscribe
 
 
+@app.command(hidden=not glp_api)
+def subscription(
+    sub_name_or_id: str = typer.Argument(..., help="subscription id or key from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
+    devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
+    end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Assign (or reassign) Subscription to devices by serial number(s).
+
+    Device must exist in [green]GreenLake[/] inventory.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
+    Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription in one command.
+    """
+    if not glp_api:  # pragma: no cover
+        common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
+
+    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
+    if len(devices) > sub.available:
+        log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for [bright_green]{sub.name}[/bright_green]|[medium_spring_green]{sub.key}[/].  [dim italic]As of last Subscription cache update[/]", show=True)
+
+    _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green]|[medium_spring_green]{sub.key}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
+
+    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
+    res_ids = [d.id for d in devs]
+
+    _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
+    _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
+    render.econsole.print(_msg)
+    if render.confirm(yes):
+        resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=sub.id)
+        render.display_results(resp, tablefmt="action")
+
+
 @app.command(name="label")
 def label_(
     label: str = typer.Argument(..., metavar=iden_meta.label, help="Label to assign to device(s)", autocompletion=common.cache.label_completion, show_default=False,),
@@ -103,44 +138,9 @@ def label_(
         # We don't cache device label assignments
 
 
-@app.command(hidden=not glp_api)
-def subscription(
-    sub_name_or_id: str = typer.Argument(..., help="subscription_id from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
-    devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
-    end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
-    yes: bool = common.options.yes,
-    debug: bool = common.options.debug,
-    default: bool = common.options.default,
-    workspace: str = common.options.workspace,
-) -> None:
-    """Assign (or rassign) Subscription to devices by serial number(s).
-
-    Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
-    Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription in one command.
-    """
-    if not glp_api:  # pragma: no cover
-        common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
-
-    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
-    if len(devices) > sub.available:
-        log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for {sub.name} with id {sub.id}.  [dim italic]As of last Subscription cache update[/]", show=True)
-
-    _msg = f"Assign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green] subscription with id: [medium_spring_green]{sub.id}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
-
-    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
-    res_ids = [d.id for d in devs]
-
-    _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
-    _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
-    render.econsole.print(_msg)
-    if render.confirm(yes):
-        resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=sub.id)
-        render.display_results(resp, tablefmt="action")
-
-
 @app.callback()
 def callback():
-    """Assign licenses / labels"""
+    """Assign Subscriptions / labels"""
     pass
 
 
