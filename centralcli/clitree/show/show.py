@@ -285,7 +285,7 @@ def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[Cac
         data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
         model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
         api.session.request(common.cache.update_dev_db, model_data)
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
         log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
 
@@ -469,10 +469,9 @@ def all_(
     workspace: str = common.options.workspace,
 ):
     """Show details for All devices [dim italic](that have checked in with Central)[/]."""
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
 
     show_devices(
         dev_type="all", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, status=status, state=state,
@@ -520,10 +519,9 @@ def devices(
 ):
     """Show details for devices
     """
-    if down:
-        status = "Down"
-    elif up:
-        status = "Up"
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
 
     devices = devices if devices is not None else ["all"]
 
@@ -1542,6 +1540,7 @@ def cache_(
     else:
         for idx, arg in enumerate(args, start=1):
             cache_out: List[Document] = getattr(common.cache, arg)
+            cache_out = [dict(d) for d in cache_out]
             arg = arg if not hasattr(arg, "value") else arg.value
             if arg == "devices":
                 cache_out = sort_devices(cache_out)
