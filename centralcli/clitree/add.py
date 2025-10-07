@@ -632,14 +632,7 @@ def guest(
         # TODO API allows password not to be sent, but don't think there is any logical scenario where we wouldn't need it.  Don't think you can get any auto-generated password
         # and notify-to does not send pass to user if pass is not part of payload.
 
-    _phone_strip = list("()-. ")
-    if phone:
-        phone_orig = phone
-        phone = "".join([p for p in list(phone) if p not in _phone_strip])
-        if not phone.startswith("+"):
-            if not len(phone) == 10:
-                common.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
-            phone = f"+1{phone}"
+    phone = phone if not phone else utils.parse_phone_number(phone)
 
     # TODO Add options for expire after / valid forever
     kwargs = {

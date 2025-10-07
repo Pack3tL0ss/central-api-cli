@@ -651,18 +651,13 @@ def wlan(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Update configuration options of an existing WLAN/SSID
-    """
+    """Update configuration options of an existing WLAN/SSID."""
     if groups:
-        _groups = [common.cache.get_group_identifier(group) for group in groups]
+        _groups = [common.cache.get_group_identifier(group, dev_type="ap") for group in groups]
         batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
     else:  # TODO coppied from show wlans -v make common func
-        group_res = api.session.request(api.configuration.get_groups_properties)
-        if not group_res:
-            log.error(f"Unable to determine Groups that contain SSID {wlan}", caption=True,)
-            render.display_results(group_res, exit_on_fail=True)
-
-        groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
+        _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
+        groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
         batch_req = [BatchRequest(api.configuration.get_wlan, group=group, wlan_name=wlan) for group in groups]
 
     api.session.silent = True
@@ -728,21 +723,6 @@ def wlan(
         update_res = api.session.batch_request(update_req)
         render.display_results(update_res)
 
-def get_guest_id(portal_id: str, name: str) -> str:
-    guest_resp = api.session.request(api.guest.get_guests, portal_id)
-    if not guest_resp:
-        log.error(f"Unable to Update details for {name}, request to fetch visitor_id failed.", caption=True, log=True)
-        render.display_results(guest_resp, tablefmt="action", exit_on_fail=True)
-
-    guests = [g for g in guest_resp.output if g["name"] == name]
-    if not guests:
-        common.exit(f"Unable to update details for {name}, no match found while fetching visitor_id.")
-    elif len(guests) > 1:
-        guest_resp.output = guests
-        render.display_results(guest_resp, caption=f"Guests matching user {name}", tablefmt="yaml")
-        common.exit(f"Too many matches for {name} while fetching visitor_id.")
-    else:
-        return guests[0]["id"]
 
 @app.command()
 def guest(
@@ -771,23 +751,14 @@ def guest(
         is_enabled = None
     notify = True if notify_to is not None else None
 
-    portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
-    visitor_id = get_guest_id(portal.id, name)
-
-    # TODO move to utils used by add and update.
-    _phone_strip = list("()-. ")
-    if phone:
-        phone_orig = phone
-        phone = "".join([p for p in list(phone) if p not in _phone_strip])
-        if not phone.startswith("+"):
-            if not len(phone) == 10:
-                common.exit(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
-            phone = f"+1{phone}"
+    portal: CachePortal = common.cache.get_portal_identifier(portal)
+    guest = common.cache.get_guest_identifier(name, portal_id=portal.id)
+    phone = phone if not phone else utils.parse_phone_number(phone)
 
     # TODO Add options for expire after / valid forever
     payload = {
         "portal_id": portal.id,
-        "visitor_id": visitor_id,
+        "visitor_id": guest.id,
         "name": name,
         "company_name": company,
         "phone": phone,
@@ -806,7 +777,7 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     render.econsole.print(_msg)
     if render.confirm(yes):
-        resp = api.session.request(api.guest.add_guest, **payload)
+        resp = api.session.request(api.guest.update_guest, **payload)
         password = None
         payload = None
         render.display_results(resp, tablefmt="action")

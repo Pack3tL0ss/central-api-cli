@@ -653,6 +653,20 @@ class Utils:
         prepared = req.prepare()
         return {"params": params, "payload": prepared.body, "headers": prepared.headers}
 
+    @staticmethod
+    def parse_phone_number(phone_number: int | str, strict: bool = True) -> str:
+        phone_orig, phone = phone_number, str(phone_number)
+        _phone_strip = list("()-. ")
+        phone = "".join([p for p in list(phone) if p not in _phone_strip])
+        if not phone.startswith("+"):
+            if not len(phone) == 10 and strict:
+                econsole = Console(stderr=True)
+                econsole.print(f"phone number provided {phone_orig} appears to be [bright_red]invalid[/]")
+                raise typer.Exit(code=1)
+            phone = f"+1{phone}"
+
+        return phone
+
 if __name__ == "__main__":
     utils = Utils()
     x = ["[dark_orange2]:warning:[/] This is a test.", "[bright_green]:recycle:[/]This is also a test"]
