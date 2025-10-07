@@ -769,12 +769,11 @@ def guest(
     }
     payload = utils.strip_none(payload)
     options = "\n  ".join(yaml.safe_dump(payload).splitlines())
-    if password:
-        payload["password"] = password
-
     _msg = f"[bright_green]Update[/] Guest: [cyan]{name}[/] with the following options:\n  {options}\n"
     if password:
+        payload["password"] = password
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
+
     render.econsole.print(_msg)
     if render.confirm(yes):
         resp = api.session.request(api.guest.update_guest, **payload)
