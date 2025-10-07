@@ -9,6 +9,49 @@ from ._test_data import gw_group_config_file
 runner = CliRunner()
 
 
+if config.dev.mock_tests:
+    def test_update_ap_same_as_current():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
+        capture_logs(result, "test_update_ap_same_as_current")
+        assert result.exit_code == 0
+        assert "NO CHANGES" in result.stdout.upper()
+
+
+    def test_update_ap_no_change():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"]])
+        capture_logs(result, "test_upgrade_group_no_change", expect_failure=True)
+        assert result.exit_code == 1
+        assert "NO CHANGES" in result.stdout.upper()
+
+
+    def test_update_ap():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"] - 0.1, "-y"])
+        capture_logs(result, "test_upgrade_group")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_ap_invalid():
+        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], test_data["ap"]["serial"], "--hostname", "this_will_fail"])
+        capture_logs(result, "test_update_ap_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "multiple" in result.stdout
+
+
+    def test_update_wlan():
+        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk", "-y"])
+        capture_logs(result, "test_upgrade_wlan")
+        assert result.exit_code == 0
+        assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
+
+
+    def test_update_wlan_by_group():
+        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk", "-y"])
+        capture_logs(result, "test_upgrade_wlan_by_group")
+        assert result.exit_code == 0
+        assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
+
+
 def test_update_cloned_group(ensure_cache_group_cloned):
     result = runner.invoke(
         app,
@@ -55,7 +98,7 @@ def test_update_site(ensure_cache_site4):
             "site",
             "cencli_test_site4",
             "'400 Zieglers Fort Rd'",
-            "Gallatin",
+            "Gallatin,",
             "TN",
             "37066",
             "-Y"
@@ -64,6 +107,20 @@ def test_update_site(ensure_cache_site4):
     capture_logs(result, "test_update_site")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+def test_update_site_no_data(ensure_cache_site4):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "site",
+            "cencli_test_site4",
+        ]
+    )
+    capture_logs(result, "test_update_site_no_data", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
 
 
 # TODO need cencli update command

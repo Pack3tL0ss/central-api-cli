@@ -1,10 +1,11 @@
 """We need this module to run near the end so cache is fully up to date for completion tests."""
-from centralcli.cli import app  # type: ignore # NoQA
+from click import Command, Context
 from typer.testing import CliRunner
-from centralcli import cache
-from click import Context, Command
-from . import test_data
 
+from centralcli import cache
+from centralcli.cli import app  # type: ignore # NoQA
+
+from . import test_data
 
 runner = CliRunner()
 ctx = Context(Command("cencli reset"), info_name="reset", resilient_parsing=True)
@@ -144,7 +145,7 @@ def test_group_dev_ap_gw_completion_partial_name(incomplete: str = test_data["ap
 
 def test_client_completion_partial_name(incomplete: str = test_data["client"]["wireless"]["name"].capitalize()[0:-2]):
     _ = cache.get_client_identifier(incomplete)
-    result = list(cache.client_completion(incomplete=incomplete))
+    result = list(cache.client_completion(ctx, incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 

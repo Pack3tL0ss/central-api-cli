@@ -236,6 +236,13 @@ def test_show_cluster():
     assert "API" in result.stdout
 
 
+def test_show_cluster_ssid_not_exist():
+    result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], "not_exist_ssid"])
+    capture_logs(result, "test_show_cluster_ssid_not_exist")
+    assert result.exit_code == 0
+    assert "not_exist" in result.stdout
+
+
 def test_show_switches():
     result = runner.invoke(app, ["show", "switches", "--group", test_data["switch"]["group"]],)
     capture_logs(result, "test_show_switches")
@@ -980,13 +987,6 @@ def test_show_stacks_dev():
     assert "API" in result.stdout
 
 
-def test_show_clients_too_many_filters():
-    cache.responses.client = None
-    result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
-    assert result.exit_code == 1
-    assert "one of" in result.stdout
-
-
 def test_show_client_location_no_client():
     cache.responses.client = None
     result = runner.invoke(app, ["show", "clients", "--location"],)
@@ -1050,6 +1050,13 @@ def test_show_client_for_dev():
     assert result.exit_code == 0
     assert "ignored" in result.stdout
     assert "API" in result.stdout
+
+
+def test_show_clients_too_many_filters():
+    cache.responses.client = None
+    result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
+    assert result.exit_code == 1
+    assert "one of" in result.stdout
 
 
 def test_show_denylisted():

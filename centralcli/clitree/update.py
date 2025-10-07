@@ -676,7 +676,7 @@ def wlan(
     if failed:
         unexpected_failures = [
             f for f in failed
-            if "cannot find" not in f.output.get("description").lower() and f.output.get("description") != "Invalid configuration ID"
+            if "cannot find" not in f.output.get("description", "").lower() and f.output.get("description", "") != "Invalid configuration ID"
         ]
         if unexpected_failures:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Unexpected error while querying groups for existense of {wlan}")

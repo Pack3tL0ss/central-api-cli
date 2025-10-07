@@ -328,34 +328,6 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_update_ap_no_change():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
-        capture_logs(result, "test_upgrade_group_no_change")
-        assert result.exit_code == 0
-        assert "NO CHANGES" in result.stdout.upper()
-
-
-    def test_update_ap():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"] - 0.1, "-y"])
-        capture_logs(result, "test_upgrade_group")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-
-    def test_update_ap_invalid():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], test_data["ap"]["serial"], "--hostname", "this_will_fail"])
-        capture_logs(result, "test_update_ap_invalid", expect_failure=True)
-        assert result.exit_code == 1
-        assert "multiple" in result.stdout
-
-
-    def test_update_wlan():
-        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk", "-y"])
-        capture_logs(result, "test_upgrade_wlan")
-        assert result.exit_code == 0
-        assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
-
-
     def test_cancel_upgrade_ap():
         result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["ap"]["serial"], "-y"])
         capture_logs(result, "test_cancel_upgrade_ap")
