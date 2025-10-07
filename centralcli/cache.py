@@ -2992,12 +2992,14 @@ class Cache:
     @ensure_config
     def client_completion(
         self,
+        ctx: typer.Context,
         incomplete: str,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
         """Completion for clients.
 
         Args:
+            ctx (typer.Context): Provided automatically by typer
             incomplete (str): The last partial or full command before completion invoked.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
@@ -3013,6 +3015,10 @@ class Cache:
         out = []
         args = args or []
         if match:
+            # filter by type if we can gather type from context
+            render.econsole.print(ctx.params)
+            if ctx.params.get("wireless") or ctx.params.get("wired"):
+                match = [m for m in match if m.type == f"{'wireless' if ctx.params.get('wireless') else 'wired'}"]
             # remove clients that are already on the command line
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
@@ -4643,7 +4649,7 @@ class Cache:
             # no match found initiate cache update
             if retry and (not match or Model == CacheInvDevice) and self.responses.dev is None:
                 if dev_type and (cache_updated or self.responses.device_type == dev_type):
-                    ...  # self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
+                    ...  # pragma: no cover self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
                     if not match:
                         _msg = f"[bright_red]No Match found[/] in {'Inventory or Device (monitoring)' if include_inventory else 'Device (monitoring)'} Cache"
