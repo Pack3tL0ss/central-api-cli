@@ -1911,4 +1911,3 @@ def test_show_guest_summary_invalid_days():
         ]
     )
     assert isinstance(result.exception, ValueError)
-
