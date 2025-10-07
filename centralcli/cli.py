@@ -388,7 +388,7 @@ start_help = f"""Start WebHook Proxy Service on this system in the background
       - Queries alerts API at launch to gather any "Open" items.
       - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
 
-    [italic]Requires optional hook-proxy component '[bright_green]pip3 install -U centralcli{escape("[hook-proxy]")}[reset]'
+    [italic]Requires optional hook-proxy component '[bright_green]uv tool install -U centralcli{escape("[hook-proxy]")}[reset]'
     """  # pragma: no cover
 @app.command(help=start_help, short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
@@ -429,9 +429,7 @@ def start(
             terminate_process(pid)
             render.console.print("[cyan]Process Terminated")
 
-    # ["nohup", sys.executable, "-m", "centralcli.wh_proxy", "--port", str(port), "--account", config.account],
-    config_port = 9143 if not config.webhook else config.webhook.port
-    render.console.print(f"Webhook Proxy will listen on port {port or config_port}")
+    render.console.print(f"Webhook Proxy will listen on port {port or config.webhook.port}")
     if render.confirm(yes):
         port = port or config.webhook.port
         cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
@@ -459,10 +457,7 @@ def start(
 
 @app.command(hidden=not hook_enabled)
 def stop(
-    what: StartArgs = typer.Argument(
-        ...,
-        # metavar=f"hook-proxy",
-    ),
+    what: StartArgs = typer.Argument(...,),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -470,7 +465,6 @@ def stop(
 ) -> None:  # pragma: no cover
     """Stop WebHook Proxy (background process)."""
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
-    # TODO move these out of this function and just call them from both start/stop
     def terminate_process(pid):
         with render.Spinner("Terminating Webhook Proxy..."):
             p = psutil.Process(pid)
@@ -495,8 +489,11 @@ def stop(
 
     def _get_process_info():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if svc in str(p.cmdline()[1:]):
-                for flag in p.cmdline()[::-1]:
+            cmdline = p.info["cmdline"]
+            if not cmdline or len(cmdline) <= 1:
+                continue
+            if svc in str(cmdline):
+                for flag in cmdline[::-1]:
                     if flag.startswith("-"):
                         continue
                     elif flag.isdigit():
