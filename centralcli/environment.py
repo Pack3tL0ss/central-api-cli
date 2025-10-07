@@ -10,10 +10,12 @@ env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
 
 
-def _get_current_test() -> str | None:
+def _get_current_test() -> str | None:  # pragma: no cover only used when capturing responses for tests
     cur_test = environ.get("PYTEST_CURRENT_TEST")
     if cur_test:
         return cur_test.split("::")[1].split()[0]
+
+
 class Env:
     _is_pytest: bool = bool(environ.get("PYTEST_VERSION"))
     _cur_test: str | None = _get_current_test
@@ -46,7 +48,7 @@ class Env:
         return self._is_pytest
 
     @property
-    def current_test(self) -> str | None:
+    def current_test(self) -> str | None:  # pragma: no cover only used when capturing responses for tests
         return self._cur_test
 
     @current_test.setter

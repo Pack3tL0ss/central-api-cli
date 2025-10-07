@@ -686,8 +686,7 @@ def ensure_cache_batch_del_sites():
 @pytest.fixture(scope="function")
 def ensure_cache_guest1():
     if config.dev.mock_tests:
-        batch_del_guests = [
-            {
+        cache_data = {
             "portal_id": "e5538808-0e05-4ecd-986f-4bdce8bf52a4",
             "name": "superlongemail@kabrew.com",
             "id": "7c9eb0df-b211-4225-94a6-437df0dfca59",
@@ -698,11 +697,9 @@ def ensure_cache_guest1():
             "status": "Active",
             "created": 1755552751,
             "expires": 1755811951
-            }
-        ]
-        missing = [guest["id"] for guest in batch_del_guests if guest["id"] not in cache.guests_by_id]
-        if missing:
-            assert asyncio.run(cache.update_guest_db(data=batch_del_guests))
+        }
+        if cache_data["id"] not in cache.guests_by_id:
+            assert asyncio.run(cache.update_guest_db(data=[cache_data]))
     yield
 
 

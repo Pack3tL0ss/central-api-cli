@@ -85,26 +85,70 @@ def test_update_mpsk(ensure_cache_mpsk):
     assert "204" in result.stdout
 
 
-# TODO need cencli update command
-def test_update_guest(ensure_cache_guest1):
+def test_update_guest_disable(ensure_cache_guest1):
     result = runner.invoke(
         app,
         [
-            "test",
-            "method",
-            "update_guest",
-            "portal_id=e5538808-0e05-4ecd-986f-4bdce8bf52a4",
-            "visitor_id=7c9eb0df-b211-4225-94a6-437df0dfca59",
-            "name=superlongemail@kabrew.com",
-            "company_name=ConsolePi",
-            "phone=+16155551212",
-            "email=superlongemail@kabrew.com",
-            "valid_till_days=30"
+            "update",
+            "guest",
+            test_data["portal"]["name"],
+            test_data["portal"]["guest"]["name"],
+            "-DY",
         ]
     )
-    capture_logs(result, "test_update_guest")
+    capture_logs(result, "test_update_guest_disable")
     assert result.exit_code == 0
     assert "200" in result.stdout
+
+
+def test_update_guest_enable(ensure_cache_guest1):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "guest",
+            test_data["portal"]["name"],
+            test_data["portal"]["guest"]["name"],
+            "-EY",
+        ]
+    )
+    capture_logs(result, "test_update_guest_enable")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_update_guest_phone(ensure_cache_guest1):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "guest",
+            test_data["portal"]["name"],
+            test_data["portal"]["guest"]["name"],
+            "--phone",
+            test_data["portal"]["guest"]["phone"],
+            "-Y",
+        ]
+    )
+    capture_logs(result, "test_update_guest_phone")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+def test_update_guest_invalid():
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "guest",
+            test_data["portal"]["name"],
+            test_data["portal"]["guest"]["name"],
+            "-EDY",
+        ]
+    )
+    capture_logs(result, "test_update_guest_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
 
 
 def test_update_template(ensure_cache_template):

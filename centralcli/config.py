@@ -24,7 +24,7 @@ from .typedefs import JSON_TYPE
 
 try:
     import readline  # noqa
-except Exception:
+except Exception:  # pragma: no cover
     pass
 
 econsole = Console(stderr=True)
@@ -64,7 +64,7 @@ def confirm(
     prompt: str = "",
     *,
     console: Optional[Console] = None,
-) -> bool:
+) -> bool:  # pragma: no cover  requires tty
     """wrapper function for rich.Confirm().ask()
 
     Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
@@ -93,7 +93,7 @@ def ask(
     show_default: bool = True,
     show_choices: bool = True,
     default: Any = ...,
-) -> str:
+) -> str:  # pragma: no cover  requires tty
     """wrapper function for rich.Prompt().ask()
 
     Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
@@ -129,7 +129,7 @@ class ClusterURLs:
         self.classic = classic
         self.cnx = cnx
 
-class CentralURLs(Mapping):
+class CentralURLs(Mapping):  # pragma: no cover  used in first run wizard which requires tty
     def __init__(self):
         self.names = list(CLUSTER_URLS.keys())
         self.menu_names = self.names + ["other"]
@@ -188,9 +188,9 @@ def _get_config_file(cwd: Path) -> Path:
     for _dir in dirs:
         if Path.joinpath(_dir, "config.yaml").is_file():
             return _dir / "config.yaml"
-        if Path.joinpath(_dir, "config.yml").is_file():
+        if Path.joinpath(_dir, "config.yml").is_file():  # pragma: no cover
             return _dir / "config.yml"
-        for f in (Path.glob(_dir, "config.*")):
+        for f in (Path.glob(_dir, "config.*")):  # pragma: no cover
             if f.suffix in VALID_EXT and 'base_url' in f.read_text():
                 return f
 
@@ -258,11 +258,11 @@ class Config:
         self.is_completion = env.is_completion
         self.valid_suffix = VALID_EXT
         if base_dir and isinstance(base_dir, str):
-            base_dir = Path(base_dir)
+            base_dir = Path(base_dir)  # pragma: no cover
         self.base_dir = base_dir or Path(__file__).parent.parent
         try:
             self.cwd = Path.cwd()
-        except FileNotFoundError:  # In the very rare event the user launches a command from a directory that they've deleted in another session.
+        except FileNotFoundError:  # pragma:: no cover In the very rare event the user launches a command from a directory that they've deleted in another session.
             self.cwd = Path.home()
 
         self.file = _get_config_file(self.cwd)
@@ -435,7 +435,7 @@ class Config:
         return outdir
 
     @property
-    def new_config(self) -> str | None:
+    def new_config(self) -> str | None:  # pragma: no cover
         if not self.is_old_cfg:
             return
         example_str = f"\n# See Example at link below for all options.\n# {EXAMPLE_LINK}"
@@ -477,7 +477,7 @@ class Config:
             tuple[None, str | None, float | bool | None, bool]:
                 last_workspace, timestamp of last cmd using the workspace, if initial will_forget_msg has been displayed, if workspace is expired
         """
-        if self.sticky_workspace_file.is_file():
+        if self.sticky_workspace_file.is_file():  # pragma: no cover  We only allow test runs against default ws
             last_workspace_data = [row for row in self.sticky_workspace_file.read_text().split("\n") if row != ""]  # we don't add \n at end of file, but to handle it just in case
             if last_workspace_data:
                 last_workspace = last_workspace_data[0]
@@ -487,7 +487,7 @@ class Config:
                 return last_workspace, last_cmd_ts, big_msg_displayed, expired
         return None, None, False, None
 
-    def update_last_workspace_file(self, workspace: str, last_cmd_ts: int | float = round(time.time(), 2), msg_shown: bool = False):
+    def update_last_workspace_file(self, workspace: str, last_cmd_ts: int | float = round(time.time(), 2), msg_shown: bool = False):  # pragma: no cover  We only allow test runs against default ws
         self.sticky_workspace_file.parent.mkdir(exist_ok=True)
         self.sticky_workspace_file.write_text(f"{workspace}\n{last_cmd_ts}\n{int(msg_shown)}")
 
@@ -557,7 +557,7 @@ class Config:
             else:
                 raise TypeError(f'{model.__class__.__name__} model provided but data from import is unexpected type {type(import_data)}')
 
-    def get_workspace_from_args(self) -> str:
+    def get_workspace_from_args(self) -> str:  # pragma: no cover sys.argv not available when passed through test runner (it's pytest not the cli command anyway)
         """Determine account to use based on arguments & last_workspace file.
 
         Method does no harm / triggers no errors.  Any errors are handled

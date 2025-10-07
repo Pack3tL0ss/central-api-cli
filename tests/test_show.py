@@ -923,6 +923,20 @@ def test_show_logs_client():
     assert "200" in result.stdout
 
 
+def test_show_logs_self():
+    result = runner.invoke(app, ["show", "logs", "self"],)
+    capture_logs(result, "test_show_logs_self")
+    assert result.exit_code == 0
+    assert "INFO" in result.stdout
+
+
+def test_show_logs_pytest():
+    result = runner.invoke(app, ["show", "logs", "pytest"],)
+    capture_logs(result, "test_show_logs_pytest")
+    assert result.exit_code == 0
+    assert "INFO" in result.stdout
+
+
 def test_show_mpsk_networks():
     result = runner.invoke(app, ["show", "mpsk", "networks"],)
     capture_logs(result, "test_show_mpsk_networks")

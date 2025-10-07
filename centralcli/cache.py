@@ -4241,7 +4241,7 @@ class Cache:
         match: List[CentralObject] | List[models.Client],
         query_str: str = None,
         query_type: str = "device",
-    ) -> List[Dict[str, Any]]:
+    ) -> List[Dict[str, Any]]:  # pragma: no cover  required tty, not part of automated testing
         typer.echo()
         set_width_cols = {}
         if query_type == "site":

@@ -54,7 +54,7 @@ class MyLogger:
         self.critical  = partial(self.log_print, level="critical")
         self.fatal  = partial(self.log_print, level="fatal")
 
-    def __getattr__(self, name: str) -> Any:
+    def __getattr__(self, name: str) -> Any:  # pragma: no cover Exists only as a convenience when debugging
         if hasattr(self, "_log") and hasattr(self._log, name):
             return getattr(self._log, name)
         else:
@@ -75,7 +75,7 @@ class MyLogger:
         return logging.getLogger(self.log_file.stem)
 
     def print_file(self, pytest: bool = False, show_all: bool = False, unused_mocks: bool = False) -> None:
-        if unused_mocks:
+        if unused_mocks:  # pragma: no cover
             unused_mock_file = self.log_file.parent / "pytest-unused-mocks.log"
             logs = unused_mock_file.read_text()
         elif not pytest:
@@ -96,7 +96,7 @@ class MyLogger:
 
 
 
-    def follow(self, pytest: bool = False) -> None:
+    def follow(self, pytest: bool = False) -> None:  # pragma: no cover requires a tty
         """generator function that yields new lines in log file"""
         file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
         with file.open("r") as lf:
@@ -116,8 +116,7 @@ class MyLogger:
 
     @property
     def caption(self) -> None | str:
-        """render log messages queued for display in output caption.
-        """
+        """render log messages queued for display in output caption."""
         if self._caption:
             return "\n".join([f' {msg}' for msg in self._caption])
 
