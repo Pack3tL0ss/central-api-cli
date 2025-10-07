@@ -49,7 +49,9 @@ def _build_response(
     ) -> ClientResponse:
     if response_class is None:
         response_class = ClientResponse
-    if payload is not None:
+    if isinstance(payload, str):
+        body = payload.encode()
+    elif payload is not None:
         body = json.dumps(payload)
     if not isinstance(body, bytes):
         body = str.encode(body)
@@ -92,6 +94,7 @@ def _build_response(
     resp.content = stream_reader_factory(loop)
     resp.content.feed_data(body)
     resp.content.feed_eof()
+    # if str(resp.url) == "/cloudauth/api/v3/bulk/mac":
     return resp
 
 class TestResponses:
