@@ -50,10 +50,10 @@ class CloudAuthAPI:
 
         if resp:
             try:
-                ds = tablib.Dataset().load(resp.output)
+                ds = tablib.Dataset().load(resp.output, format="csv")
                 resp.output = yaml.load(ds.json, Loader=yaml.SafeLoader)
             except Exception as e:
-                log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True)
+                log.error(f"cloudauth_get_registered_macs caught {e.__class__.__name__} trying to convert csv return from API to dict.", caption=True, log=True)
 
         return resp
 
