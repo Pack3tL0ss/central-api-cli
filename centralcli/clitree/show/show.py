@@ -2320,8 +2320,7 @@ def cluster(
     workspace: str = common.options.workspace,
     update_cache = common.options.update_cache,
 ) -> None:
-    """Show Cluster mapped to a given group/SSID
-    """
+    """Show Cluster mapped to a given group/SSID."""
     caption = None
     group: CacheGroup = common.cache.get_group_identifier(group)
     resp = api.session.request(api.other.get_wlan_cluster_by_group, group.name, ssid)
@@ -2382,9 +2381,6 @@ def vsx(
     )
 
 
-# FIXME show clients wireless <tab completion> does not filter based on type of device
-# FIXME show clients wireless AP-NAME does not filter only devices on that AP
-# Same applies for wired
 @app.command()
 def clients(
     client: str = typer.Argument(
