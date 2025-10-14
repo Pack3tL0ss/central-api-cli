@@ -144,8 +144,7 @@ class CentralObject(MutableMapping):
         self.data[key] = value
 
     def __iter__(self):
-        for k, v in self.data.items():
-            yield k, v
+        return iter(self.data)
 
     def keys(self) -> KeysView:
         return self.data.keys()
@@ -2477,7 +2476,7 @@ class Cache:
             Iterator[Tuple[str, str]]: Matching completion string, help text, or
                 Returns None if config is invalid
         """
-        if not args:  # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
+        if not args:  # pragma: no cover # HACK resolves click 8.x issue now pinned to 7.2 until fixed upstream
             args = [k for k, v in ctx.params.items() if v and k[:2] not in ["kw", "va"]]
             args += [v for k, v in ctx.params.items() if v and k[:2] in ["kw", "va"]]
 
@@ -2502,9 +2501,6 @@ class Cache:
 
             if "site" not in args and "group" not in args:
                 out = [*out, *[m for m in self.dev_completion(incomplete, args)]]
-            elif "site" in args and "group" in args:
-                incomplete = "NULL_COMPLETION"
-                out += ["|", "<cr>"]
 
             for m in out:
                 yield m if isinstance(m, tuple) else (m, f"{ctx.info_name} ... {m}")
@@ -2534,6 +2530,7 @@ class Cache:
             yield m
 
     # TODO put client names with spaces in quotes
+    # TODO does not appear to be used by any command
     @ensure_config
     def dev_client_completion(
         self,
@@ -2604,8 +2601,8 @@ class Cache:
             Iterator[Tuple[str, str]]: Yields Tuple with completion and help text, or
                 Returns None if config is invalid
         """
-        # Prevents device completion for cencli show config cencli
-        if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") == "cencli":
+        # Prevents device completion for cencli show config self/cencli
+        if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") in ["cencli", "self"]:
             return
 
         yield from self.dev_ap_completion(incomplete, args=args)
@@ -2657,6 +2654,19 @@ class Cache:
         for m in out:
             yield m
 
+    @staticmethod
+    def _cencli_self(ctx: typer.Context, incomplete: str, args: tuple[str]) -> tuple[list[tuple[str, str]], list[str]]:
+        word = "self" if "self".startswith(incomplete) else "cencli"
+        if args:
+            if " ".join(args).lower() in ["show config", "update config"] and word.startswith(incomplete):
+                return [(word, "show cencli configuration")], args
+        elif ctx is not None:
+            args = [a for a in ctx.params.values() if a is not None]
+            if ctx.command_path in ["cencli show config", "cencli update config"] and ctx.params.get("group_dev") is None:  # typer not sending args fix
+                if word.startswith(incomplete):
+                    return [(word, "show cencli configuration")], args
+        return [[], args]
+
     # FIXME not completing partial serial number is zsh get_dev_completion appears to return as expected
     # works in BASH and powershell
     def _group_dev_completion(
@@ -2683,26 +2693,15 @@ class Cache:
         """
         # Add cencli as option to show and update config commands (update not implememnted yet)
         utils.listify(dev_type)
-        args = args or []
-        out = []
-        word = "self" if "self".startswith(incomplete) else "cencli"
-        if args:
-            if " ".join(args).lower() == "show config" and word.startswith(incomplete):
-                out += [(word, "show cencli configuration")]
-            elif " ".join(args).lower() == "update config" and word.startswith(incomplete):
-                out += [(word, "update cencli configuration")]
-        elif ctx is not None:
-            args = [a for a in ctx.params.values() if a is not None]
-            if ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
-                if word.startswith(incomplete):
-                    out += [(word, "show cencli configuration")]
-            elif ctx.command_path == "cencli update config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
-                if word.startswith(incomplete):
-                    out += [(word, "update cencli configuration")]
+        out, args = self._cencli_self(ctx, incomplete, args)
 
         group_out = self.group_completion(incomplete=incomplete, args=args)
+        group_out = group_out if not group_out else list(group_out)
+        if group_out and dev_type:
+            cache_groups = [self.get_group_identifier(g[0]) for g in group_out]
+            group_out = [complete_group for complete_group, cache_group in zip(group_out, cache_groups) if any([t in cache_group.allowed_types for t in dev_type])]
         if group_out:
-            out += list(group_out)
+            out += group_out
 
         if not bool([t for t in out if t[0] == incomplete]):  # group had exact match no need for dev
             match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
@@ -2749,35 +2748,15 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        dev_types = ["ap", "gw"]
-        match: list[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type=dev_types, completion=True)
+        yield from self._group_dev_completion(incomplete, ctx=ctx, dev_type=["ap", "gw"], args=args)
 
-        out = []
-        if match:
-            for m in sorted(match, key=lambda i: i.name):
-                out += [tuple([m.name, m.help_text])]
-                # out += [tuple([m.name if " " not in m.name else f"'{m.name}'", m.help_text])]  # FIXME completion for names with spaces is now broken, used to work.  Change in completion behavior
-
-        if args:
-            if " ".join(args).lower() == "show config" and "cencli".lower().startswith(incomplete):
-                out += [("cencli", "show cencli configuration")]
-            if " ".join(args).lower() == "update config" and "cencli".lower().startswith(incomplete):
-                out += [("cencli", "update cencli configuration")]
-        elif ctx.command_path == "cencli show config" and ctx.params.get("group_dev") is None:  # typer not sending args fix
-            if "cencli".lower().startswith(incomplete):
-                out += [("cencli", "update cencli configuration")]
-
-        # partial completion by serial: out appears to have list with expected tuple but does
-        # not appear in zsh
-
-        for m in out:
-            yield m
-
+    # TODO NOT USED???
+    @ensure_config
     def group_dev_gw_completion(
         self,
         incomplete: str,
         args: List[str] = None,
-    ) -> Iterator[Tuple[str, str]]:
+    ) -> Iterator[Tuple[str, str]]:  # pragma: no cover  This isn't used ... check if it was created with the intent to use it but never referenced
         """Completion for argument that can be either group or a gateway.
 
         Args:
@@ -2788,11 +2767,6 @@ class Cache:
             Iterator[Tuple[str, str]]: Name and help_text for the device, or
                 Returns None if config is invalid
         """
-        # Prevents exception during completion when config missing or invalid
-        if not config.valid:
-            econsole.print(":warning:  Invalid config")
-            return
-
         match: list[CacheDevice | CacheGroup] = self.get_identifier(incomplete, ["group", "dev"], device_type="gw", completion=True)
 
         out = []
@@ -2826,9 +2800,7 @@ class Cache:
             econsole.print(":warning:  Invalid config")
             return
 
-        if ctx.params.get("nodes"):
-            yield "commands"
-        elif ctx.params.get("kw1") == "all":
+        if ctx.params.get("nodes") or ctx.params.get("kw1") == "all":
             yield "commands"
         elif ctx.params.get("kw1") in ["commands", "file"]:
             yield None  # force shell path completion
@@ -3016,13 +2988,11 @@ class Cache:
         args = args or []
         if match:
             # filter by type if we can gather type from context
-            render.econsole.print(ctx.params)
             if ctx.params.get("wireless") or ctx.params.get("wired"):
                 match = [m for m in match if m.type == f"{'wireless' if ctx.params.get('wireless') else 'wired'}"]
             # remove clients that are already on the command line
             match = [m for m in match if m.name not in args]
             for c in sorted(match, key=lambda i: i.name):
-                # econsole.print(f"{c.name = } {incomplete = } {pfx = }")
                 if c.name.lower().startswith(incomplete.lower()):
                     if pfx == '"':
                         out += [(f'"{c.name}"', c.help_text)]
@@ -3030,11 +3000,12 @@ class Cache:
                         out += [(f"'{c.name}'", c.help_text)]
                     else:
                         out += [(c.name if " " not in c.name else f"'{c.name}'", c.help_text)]
-                elif c.mac.strip(":.-").lower().startswith(incomplete.strip(":.-")):
+                elif utils.Mac(c.mac).clean.startswith(utils.Mac(incomplete).clean):
                     out += [(c.mac, c.help_text)]
                 elif c.ip.startswith(incomplete):
                     out += [(c.ip, c.help_text)]
-                else:
+                else:  # pragma: no cover
+                    log.warning(f"DEV WARNING FailSafe Match hit in cache.client_completion {incomplete = }")
                     out += [(c.name, f'{c.help_text} FailSafe Match')]  # failsafe, shouldn't hit
 
         for c in out:
@@ -3238,8 +3209,6 @@ class Cache:
 
             if "site" not in args:
                 out += [m for m in self.dev_completion(incomplete=incomplete, args=args)]
-            else:
-                out += [m for m in self.null_completion(incomplete)]
 
             for m in out:
                 yield m
@@ -3533,35 +3502,11 @@ class Cache:
         if not remove:
             return await self._add_update_devices(data, "inv")
         else:
-            # return await self.update_db(self.InvDB, doc_ids=data)
-            # TODO batch update_dev_inv_cache... needs to be updated to send doc_ids for removal b4 this can be simplified.
-            if all([isinstance(d, int) for d in data]):
-                doc_ids = data
-            else:
-                doc_ids = []
-                for qry in data:
-                    # allow list of dicts with inventory data, only interested in serial
-                    if isinstance(qry, dict):
-                        qry = qry if "data" not in qry else qry["data"]
-                        if "serial" not in qry.keys():
-                            raise ValueError(f"update_dev_db data is dict but lacks 'serial' key {list(qry.keys())}")
-                        qry = qry["serial"]
-
-                    if not isinstance(qry, str):
-                        raise ValueError(f"update_inv_db data should be serial number(s) as str or list of str not {type(qry)}")
-                    if not utils.is_serial(qry):
-                        raise ValueError("Provided str does not appear to be a serial number.")
-                    else:
-                        match = self.InvDB.get((self.Q.serial == qry))
-                        if match:
-                            doc_ids += [match.doc_id]
-                        else:
-                            log.warning(f'Warning update_inv_db: no match found for {qry}', show=True)
-
-            db_res = self.InvDB.remove(doc_ids=doc_ids)
-
-            if len(db_res) != len(doc_ids):  # pragma: no cover
-                log.error(f"TinyDB InvDB table update returned an error.  data included {len(doc_ids)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
+            db_res = self.InvDB.remove(doc_ids=data)
+            if len(db_res) != len(data):  # pragma: no cover
+                log.error(f"TinyDB InvDB table update returned an error.  data included {len(data)} to remove but DB only returned {len(db_res)} doc_ids", show=True, caption=True,)
+                return False
+            return True
 
     async def refresh_inv_db(
             self,
@@ -3656,7 +3601,7 @@ class Cache:
     async def refresh_inv_db_classic(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'all'] = None,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover
         """Get devices from device inventory, and Update device Cache with results.
 
         This combines the results from 2 API calls:
@@ -3722,21 +3667,7 @@ class Cache:
                 combined_data = {**self.sites_by_id, **data}
                 return await self.update_db(self.SiteDB, data=list(combined_data.values()), truncate=True)
             else:
-                doc_ids = []
-                if all([isinstance(s, int) for s in data]):
-                    doc_ids = data
-                else:
-                    for qry in data:  # TODO remove once all cache removal calls refactored to use doc_ids from cache
-                        # provided list of site_ids to remove
-                        if isinstance(qry, str) and qry.isdigit():
-                            doc_ids += [self.SiteDB.get((self.Q.id == qry)).doc_id]
-                        else:
-                            # list of dicts with {search_key: value_to_search_for}
-                            if len(qry.keys()) > 1:
-                                raise ValueError(f"cache.update_site_db remove Should only have 1 query not {len(qry.keys())}")
-                            q = list(qry.keys())[0]
-                            doc_ids += [self.SiteDB.get((self.Q[q] == qry[q])).doc_id]
-                return await self.update_db(self.SiteDB, doc_ids=doc_ids)
+                return await self.update_db(self.SiteDB, doc_ids=data)
 
     async def refresh_site_db(self, force: bool = False) -> Response:
         if self.responses.site and not force:
@@ -3754,22 +3685,13 @@ class Cache:
             _ = await self.update_db(self.SiteDB, data=resp.output, truncate=True)
         return resp
 
+    # TODO make consistent this adds to existing cache update_site_db combines and truncates
     async def update_group_db(self, data: list | dict, remove: bool = False) -> bool:
         data = utils.listify(data)
         if not remove:
             return await self.update_db(self.GroupDB, data=data, truncate=False)
         else:
-            if isinstance(data, list) and all([isinstance(item, int) for item in data]):  # sent list of doc_ids
-                doc_ids = data
-            else:
-                doc_ids = []
-                for qry in data:
-                    if len(qry.keys()) > 1:
-                        raise ValueError(f"cache.update_group_db remove Should only have 1 query not {len(qry.keys())}")
-                    q = list(qry.keys())[0]
-                    doc_ids += [self.GroupDB.get((self.Q[q] == qry[q])).doc_id]
-
-            return await self.update_db(self.GroupDB, doc_ids=doc_ids)
+            return await self.update_db(self.GroupDB, doc_ids=data)
 
 
     async def refresh_group_db(self) -> Response:
@@ -3862,7 +3784,7 @@ class Cache:
                 update_data = data
                 resp = await self.update_db(self.TemplateDB, data=update_data, truncate=False)
 
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.exception(f"Exception during update of TemplateDB\n{e}")
             return
 
@@ -4807,7 +4729,7 @@ class Cache:
                     _msg = "[bright_red]No Match found[/] in Inventory Cache"
                     dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
-                if FUZZ and self.inventory and not silent:
+                if FUZZ and self.inventory and not silent:  # pragma: no cover  requires tty
                     if dev_type:
                         inv_generator = {"id": (d["id"] for d in self.inventory if "id" in d and d["type"] in dev_type), "serial": (d["serial"] for d in self.inventory if "serial" in d and d["type"] in dev_type)}
                     else:
@@ -4921,8 +4843,7 @@ class Cache:
         completion: Optional[bool],
         silent: Optional[bool],
         exit_on_fail: bool,
-    ) -> CacheSite | None:
-        ...
+    ) -> CacheSite | None: ...
 
     def get_site_identifier(
         self,
@@ -5000,7 +4921,7 @@ class Cache:
             # err_console.print(f'\n{match=} {query_str=} {retry=} {completion=} {silent=}')  # DEBUG
             if retry and not match and not self.responses.site:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and self.sites and not silent:
+                if FUZZ and self.sites and not silent:  # pragma: no cover requires tty
                     fuzz_match, fuzz_confidence = process.extract(query_str, [s["name"] for s in self.sites], limit=1)[0]
                     confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
                     if fuzz_confidence >= 70 and typer.confirm(confirm_str):
@@ -5150,10 +5071,10 @@ class Cache:
         elif retry:
             log.error(f"Unable to gather group data from provided identifier {query_str}", show=not silent)
             if all_match:
-                all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
                 _dev_type_str = escape(str(utils.unlistify(dev_type)))
+                all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
                 log.error(
-                    f"The Following groups matched {all_match_msg} excluded as allowed device types don't include any of {_dev_type_str}",
+                    f"The Following groups matched {all_match_msg} excluded as group not configured for any of {_dev_type_str}",
                     show=True,
                 )
 
@@ -5350,16 +5271,16 @@ class Cache:
         try:
             match = self.LogDB.search(self.Q.id == int(query))
             if not match:
-                econsole.print(f"\nUnable to gather log id from short index query [cyan]{query}[/]")
+                log.warning(f"\nUnable to gather log id from short index query [cyan]{query}[/]", show=True)
                 econsole.print("Short log_id aliases are built each time [cyan]show logs[/] / [cyan]show audit logs[/]... is ran.")
                 econsole.print("  repeat the command without specifying the log_id to populate the cache.")
-                econsole.print("  You can verify the cache by running (hidden command) 'show cache logs'")
+                econsole.print("  You can verify the cache by running [dim italic](hidden command)[/] [cyan]show cache logs[/]")
                 raise typer.Exit(1)
             else:
                 return match[-1]["long_id"]
 
         except ValueError as e:
-            econsole.print(f"\n[dark_orange3]:warning:[/]  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
+            econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]{e.__class__.__name__}[/]:  Expecting an intiger for log_id. '{query}' does not appear to be an integer.")
             raise typer.Exit(1)
 
     def get_event_log_identifier(self, query: str) -> dict:
@@ -5380,7 +5301,7 @@ class Cache:
             if not match:
                 log.warning(f"Unable to gather event details from short index query {query}", show=True)
                 print("Short event_id aliases are built each time [cyan]show logs[/] is ran.")
-                print("  You can verify the cache by running (hidden command) [cyan]show cache events[/]")
+                print("  You can verify the cache by running [dim italic](hidden command)[/] [cyan]show cache events[/]")
                 print("  run [cyan]show logs [OPTIONS][/] then use the short index for details")
                 raise typer.Exit(1)
             else:
@@ -5454,7 +5375,7 @@ class Cache:
 
             if not match and retry and self.responses.mpsk_network is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and self.mpsk_networks and not silent:
+                if FUZZ and self.mpsk_networks and not silent:  # pragma: no cover requires tty
                     match = self.fuzz_lookup(query_str, self.MpskNetDB)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]MPSK[/] Cache")
@@ -5595,7 +5516,7 @@ class Cache:
 
             if not match and retry and not cache_updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and db_all and not silent:
+                if FUZZ and db_all and not silent:  # pragma: no cover requires tty
                     match = self.fuzz_lookup(query_str, db=db)
                 if not match:
                     econsole.print(f":arrows_clockwise: Updating [cyan]{cache_name}[/] Cache")
@@ -5715,7 +5636,7 @@ class Cache:
 
             if not match and retry and not cache_updated:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found[/] for [cyan]{query_str}[/].")
-                if FUZZ and db.all() and not silent:
+                if FUZZ and db.all() and not silent:  # pragma: no cover requires tty
                     match = self.fuzz_lookup(query_str, db=db)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating [cyan]Subscription[/] Cache")
