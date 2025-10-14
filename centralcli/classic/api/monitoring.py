@@ -145,11 +145,11 @@ class MonitoringAPI:
         wired_params = {**params, **wired_only_params}
         wlan_params = {**params, **wlan_only_params}
 
-        if True in wlan_only_params.values():
+        if [v for v in wlan_only_params.values() if v is not None]:
             if client_type and client_type != "wireless":
                 raise ValueError(f"Invalid combination of filters.  WLAN only filter provided which conflicts with client type {client_type}")
             client_type = "wireless"
-        if True in wired_only_params.values():
+        if [v for v in  wired_only_params.values() if v is not None]:
             if client_type and client_type != "wired":
                 raise ValueError(f"Invalid combination of filters.  WIRED only filter provided which conflicts with client type {client_type}")
             client_type = "wired"
