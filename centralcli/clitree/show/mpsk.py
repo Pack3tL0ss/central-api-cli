@@ -85,7 +85,7 @@ def named(
     group_by = _mpsk_cnt = _caption = None
 
     if not ssid:
-        resp = api.session.request(common.cache.refresh_mpsk_db)
+        resp = api.session.request(common.cache.refresh_mpsk_db, role=role, status=status)
         if resp.ok and len(set([r["ssid"] for r in resp.output])) > 1:  # It looks odd to do group_by if there is only 1 SSID, it's not obvious that all in the grouping are the same SSID.
             group_by = "ssid"
     elif csv_import:
