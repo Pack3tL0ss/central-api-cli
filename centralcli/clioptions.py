@@ -210,8 +210,8 @@ class CLIOptions:
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
-        self.swarm_device: OptionInfo = typer.Option(None, "-s", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
-        self.swarm: OptionInfo = typer.Option(False, "-s", "--swarm", help="Filter by the swarm associated with the ap specified. [dim italic](device/AP Argument must be provided)[/]", autocompletion=cache.dev_ap_completion, show_default=False,)
+        self.swarm_device: OptionInfo = typer.Option(None, "-S", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
+        self.swarm: OptionInfo = typer.Option(False, "-S", "--swarm", help="Filter by the swarm associated with the ap specified. [dim italic](device/AP Argument must be provided)[/]", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.sort_by: OptionInfo = typer.Option(
             None,
             "--sort",
