@@ -367,7 +367,7 @@ class CLICommon:
             ctx.params["nodes"] = None
             return tuple([ctx.params["kw2"], *commands])
         else:
-            return commands
+            return commands or []
 
     @staticmethod
     def debug_callback(ctx: typer.Context, debug: bool):
@@ -590,7 +590,7 @@ class CLICommon:
 
     def _check_update_dev_db(self, device: CacheDevice) -> CacheDevice:
         if self.cache.responses.dev:  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
-            log.warning(f"_check_update_dev_db called for {device} devices have already been fetched this session. Skipping.")
+            log.warning(f"_check_update_dev_db called for {device.serial} devices have already been fetched this session. Skipping.")
         else:
             _ = api.session.request(self.cache.refresh_dev_db, dev_type=device.type)
             device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
