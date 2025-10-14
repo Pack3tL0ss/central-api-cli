@@ -2183,7 +2183,7 @@ class Cache:
         """Get guest info from Guest Cache"""
         retry = False if completion else retry
         if not query_str and completion:
-            return [CacheGuest(**g) for g in self.guests]
+            return [CacheGuest(g) for g in self.guests]
 
         match, all_match = None, None
         for _ in range(0, 2 if retry else 1):
@@ -2305,12 +2305,12 @@ class Cache:
                     out += [tuple([m.name, m.help_text])]
                 elif m.email and m.email.startswith(incomplete) and m.email not in args:
                     out += [tuple([m.email, m.help_text])]
-                elif m.phone and m.phone.startswith(incomplete) and m.phone not in args:
-                    out += [tuple([m.phone, m.help_text])]
+                elif m.phone and m.phone.lstrip("+").startswith(incomplete.lstrip("+")) and m.phone.lstrip("+") not in args:
+                    out += [tuple([m.phone.lstrip("+"), m.help_text])]  # TODO make sure cache strips +
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
                 else:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+                    out += [tuple([m.name, m.help_text])]  # pragma: no cover failsafe, shouldn't hit
 
         for m in out:
             yield m
@@ -2320,8 +2320,8 @@ class Cache:
         self,
         query_str: str,
         completion: bool,
-    ) -> list[CacheCert]:
-        ...
+    ) -> list[CacheCert]: ...
+    # COVERAGE-REMOVE
 
     def get_cert_identifier(
         self,
@@ -2366,7 +2366,7 @@ class Cache:
 
             if retry and not match and self.responses.cert is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and self.certs and not silent:
+                if FUZZ and self.certs and not silent:  # pragma: no cover  requires tty
                     match = self.fuzz_lookup(query_str, self.CertDB)
                 if not match:
                     econsole.print(":arrows_clockwise: Updating certificate Cache")
