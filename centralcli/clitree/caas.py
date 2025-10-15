@@ -284,8 +284,10 @@ def send_cmds(
     action = ""
     if kw1 == "group":
         if all:
-            g = cache.get_group_identifier(nodes)
+            g = cache.get_group_identifier(nodes, dev_type="gw")
             nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["group"] == g.name]
+            if not nodes:
+                common.exit(f"No gateways found in group {g.name}")
             action = f"all devices in {g.name} group."
         else:
             nodes = cache.get_group_identifier(nodes)
