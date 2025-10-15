@@ -2112,17 +2112,11 @@ class Cache:
         out = []
         args = args or ctx.params.values()  # HACK as args stopped working / seems to be passing args typer 0.10.0 / click 7.1.2
         if match:
-            # remove items that are already on the command line
-            match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete):
-                    out += [tuple([m.name, m.id])]
-                elif m.name.lower().startswith(incomplete.lower()):
-                    out += [tuple([m.name, m.id])]
-                elif str(m.id).startswith(incomplete):
+                if str(m.id).startswith(incomplete):
                     out += [tuple([m.id, m.name])]
-                else:
-                    out += [tuple([m.name, f"{m.help_text} Fail Safe match".lstrip()])]  # failsafe, shouldn't hit
+                elif m.name not in args:
+                    out += [tuple([m.name, m.id])]
 
         for m in out:
             yield m
@@ -2145,12 +2139,10 @@ class Cache:
             # remove items that are already on the command line
             match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete):
-                    out += [tuple([m.name, m.help_text])]
-                elif str(m.id).startswith(incomplete):
+                if str(m.id).startswith(incomplete):
                     out += [tuple([m.id, m.help_text])]
-                else:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+                elif m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -2301,16 +2293,14 @@ class Cache:
             # remove items that are already on the command line
             # match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete) and m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
-                elif m.email and m.email.startswith(incomplete) and m.email not in args:
+                if m.email and m.email.startswith(incomplete) and m.email not in args:
                     out += [tuple([m.email, m.help_text])]
-                elif m.phone and m.phone.lstrip("+").startswith(incomplete.lstrip("+")) and m.phone.lstrip("+") not in args:
-                    out += [tuple([m.phone.lstrip("+"), m.help_text])]  # TODO make sure cache strips +
+                elif m.phone and m.phone.startswith(incomplete.lstrip("+")) and m.phone.lstrip("+") not in args:
+                    out += [tuple([m.phone, m.help_text])]
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
-                else:
-                    out += [tuple([m.name, m.help_text])]  # pragma: no cover failsafe, shouldn't hit
+                elif m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -2321,7 +2311,6 @@ class Cache:
         query_str: str,
         completion: bool,
     ) -> list[CacheCert]: ...
-    # COVERAGE-REMOVE
 
     def get_cert_identifier(
         self,
@@ -2414,13 +2403,11 @@ class Cache:
         args = args or [item for k, v in ctx.params.items() if v for item in [k, v]]
 
         if match:
-            # remove items that are already on the command line
-            # match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete) and m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
-                elif m.md5_checksum.startswith(incomplete) and m.md5_checksum not in args:
+                if m.md5_checksum.startswith(incomplete) and m.md5_checksum not in args:
                     out += [tuple([m.md5_checksum, m.help_text])]
+                elif m.name not in args:
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -2441,16 +2428,12 @@ class Cache:
 
         out = []
         if match:
-            # remove items that are already on the command line
-            # match = [m for m in match if m.name not in args]
             for m in sorted(match, key=lambda i: i.name):
-                if m.name.startswith(incomplete) and m.name not in args:
-                    out += [tuple([m.name, m.help_text])]
-                elif m.key.startswith(incomplete) and m.key not in args:
+                if m.key.startswith(incomplete) and m.key not in args:
                     out += [tuple([m.key, m.help_text])]
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
-                else:
+                elif m.name not in args:
                     out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
 
         for m in out:
@@ -4606,8 +4589,8 @@ class Cache:
         # This param returns only the commander matching the name.
         if len(match) > 1 and (swack or conductor_only):
             unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
-            stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip or (d.switch_role and d.switch_role == 2)]
             if swack:
+                stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip or (d.switch_role and d.switch_role == 2)]
                 match = stacks
             elif conductor_only:
                 match = [*stacks, *[d for d in match if not d.swack_id]]
@@ -4617,7 +4600,7 @@ class Cache:
 
         # user selects which device if multiple matches returned
         if match:
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover  requires tty
                 match = self.handle_multi_match(sorted(match, key=lambda m: m.get("name", "")), query_str=query_str,)
 
             return match[0]
@@ -5532,7 +5515,7 @@ class Cache:
 
         if match:
             if cache_name == "sub" and len(match) > 1:
-                match = self._handle_sub_multi_match(match, end_date=end_date, best_match=best_match, all_match=all_match)
+                match = self._handle_sub_multi_match(match, end_date=end_date, best_match=best_match, all_match=all_match)  # pragma: no cover
                 if all_match:
                     return match
 
@@ -5594,7 +5577,7 @@ class Cache:
 
         for _ in range(0, 2):
             if query_str == "":
-                match = db.all()
+                match = [CacheSub(s) for s in db.all()]
             else:
                 match = db.search(
                     (self.Q.name == query_str)
@@ -5657,7 +5640,7 @@ class Cache:
                     return match
 
             if len(match) > 1:
-                match = self.handle_multi_match(match, query_str=query_str, query_type="sub",)
+                match = self.handle_multi_match(match, query_str=query_str, query_type="sub",)  # pragma: no cover
 
             return match[0]
 
