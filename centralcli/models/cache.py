@@ -567,6 +567,10 @@ class Guest(BaseModel):
     created: int = Field(alias=AliasChoices("created", "created_at"))
     expires: Optional[int] = Field(None, alias=AliasChoices("expires", "expire_at"))
 
+    @field_validator("phone", mode="before")
+    @classmethod
+    def normalize_phone(cls, phone: str) -> str:
+        return phone if not phone else phone.lstrip("+")
 
 class Guests(RootModel):
     root: List[Guest]
