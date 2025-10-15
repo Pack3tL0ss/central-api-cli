@@ -157,7 +157,7 @@ class Utils:
     def __init__(self):
         self.Mac = Mac
 
-    def json_print(self, obj):
+    def json_print(self, obj):  # pragma: no cover  used for debugging
         try:
             print_json(data=obj)
         except Exception:
@@ -321,7 +321,7 @@ class Utils:
             if not strip_empty_obj:
                 return {k: v if not callable(v) else v.__name__ for k, v in data.items() if v is not None}
             else:
-                return {k: v for k, v in data.items() if isinstance(v, bool) or v}
+                return {k: v for k, v in data.items() if isinstance(v, (bool, int)) or v}
         elif isinstance(data, (list, tuple)):
             if strip_empty_obj:
                 return type(data)(d for d in data if d)
@@ -513,18 +513,21 @@ class Utils:
         return dict_to_update
 
     def get_interfaces_from_range(self, interfaces: str | List[str]) -> List[str]:
-        console = Console(stderr=True)
+        econsole = Console(stderr=True)
         interfaces = self.listify(interfaces)
 
         def expand_range(interface_range: str) -> List[str]:
             if "-" not in interface_range:
                 return self.listify(interface_range)
             elif interface_range.count("-") > 1:
-                console.print("Invalid Interface Range, expected a single '-'")
+                econsole.print("[dark_orange3]:warning:[/]  Invalid Interface Range, expected a single '-'")
                 raise typer.Exit(1)
             _start, _end = interface_range.split("-")
             if "/".join(_start.split("/")[0:-1]) != "/".join(_end.split("/")[0:-1]):
-                console.print(f'Interface range can not go beyond the same stack-member/module [cyan]{"/".join(_start.split("/")[0:-1])}[/] in start or range should match [cyan]{"/".join(_end.split("/")[0:-1])}[/] specified as end of range.')
+                econsole.print(
+                    f'[dark_orange3]:warning:[/]  Interface range can not go beyond the same stack-member/module [cyan]{"/".join(_start.split("/")[0:-1])}[/]'
+                    f' in start or range should match [cyan]{"/".join(_end.split("/")[0:-1])}[/] specified as end of range.'
+                )
                 raise typer.Exit(1)
             prefix = "/".join(_start.split("/")[0:-1])
             return [f"{prefix}/{p}" for p in range(int(_start.split("/")[-1]), int(_end.split("/")[-1]) + 1)]
