@@ -196,16 +196,7 @@ def logs(
     """
     title = "audit event logs"
     if tail:
-        common.ws_follow_tail(title=title, log_type="audit")  # program will exit here
-    # if tail:
-    #     render.econsole.print(f"Following tail on {title}.  Use CTRL-C to stop.")
-    #     try:
-    #         api.session.request(follow_audit_logs)
-    #     except KeyboardInterrupt:
-    #         common.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
-    #     except Exception as e:
-    #         common.exit(str(e))
-    #     common.exit()
+        common.ws_follow_tail(title=title, log_type="audit")  # pragma: no cover requires tty ... program will exit here
 
     start, end = common.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=2))
     caption = None
