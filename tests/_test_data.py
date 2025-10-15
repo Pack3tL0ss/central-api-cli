@@ -85,6 +85,7 @@ test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type
 test_sub_file_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:yaml")
 test_sub_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:csv")
 test_rename_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="rename_aps")
+test_update_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="update_aps")
 test_verify_file: Path = setup_batch_import_file(test_data=test_data, import_type="verify")
 test_label_file: Path = setup_batch_import_file(test_data=test_data, import_type="labels")
 test_mpsk_file: Path = setup_batch_import_file(test_data=test_data, import_type="mpsk")
@@ -111,4 +112,5 @@ test_files = [
     test_sub_file_csv,
     test_deploy_file,
     test_j2_file,
+    test_update_aps_file,
 ]

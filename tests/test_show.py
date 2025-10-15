@@ -1075,6 +1075,14 @@ def test_show_client_location():
     assert "API" in result.stdout
 
 
+def test_get_floor_details():
+    cache.responses.client = None
+    result = runner.invoke(app, ["test", "method", "get_floor_details", "5000692__ae78073d-a227-4c0e-9510-9f3002414304"],)
+    capture_logs(result, "test_get_floor_details")
+    assert result.exit_code == 0
+    assert "floor" in result.stdout
+
+
 cmac = test_data["client"]["wireless"]["mac"]
 @pytest.mark.parametrize(
     "args,pass_condition",

@@ -16,6 +16,7 @@ from ._test_data import (
     test_site_file,
     test_sub_file_csv,
     test_sub_file_yaml,
+    test_update_aps_file,
     test_verify_file,
 )
 
@@ -133,6 +134,13 @@ def test_batch_move_too_many_args():
 def test_batch_rename_aps():
     result = runner.invoke(app, ["batch", "rename",  "aps", f'{str(test_rename_aps_file)}', "-Y"])
     capture_logs(result, "test_batch_rename_aps")
+    assert result.exit_code == 0
+    assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
+
+
+def test_batch_update_aps():
+    result = runner.invoke(app, ["batch", "update",  "aps", f'{str(test_update_aps_file)}', "-Y"])
+    capture_logs(result, "test_batch_update_aps")
     assert result.exit_code == 0
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
 

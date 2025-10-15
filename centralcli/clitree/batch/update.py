@@ -29,7 +29,7 @@ def aps(
     Use [cyan]--example[/] to see expected import file format and required fields.
     """
     if show_example:
-        print(examples.update_aps)
+        render.console.print(examples.update_aps)
         return
 
     if not import_file:
@@ -55,7 +55,7 @@ def devices(
     Use [cyan]--example[/] to see expected import file format and required fields.
     """
     if show_example:
-        print(examples.update_aps)
+        render.console.print(examples.update_aps)
         return
 
     if not import_file:

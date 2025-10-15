@@ -35,23 +35,21 @@ def group(
             "\n    Use [cyan]cencli show groups[/] after clone to verify."
         )
 
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.clone_group, clone_group, new_group)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        groups = common.cache.groups_by_name
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.clone_group, clone_group, new_group)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    groups = common.cache.groups_by_name
 
-        # API-FLAW clone and upgrade to aos10 does not work via the API
-        new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
-        if groups:
-            api.session.request(common.cache.update_group_db, new_data)
+    # API-FLAW clone and upgrade to aos10 does not work via the API
+    new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
+    if groups:
+        api.session.request(common.cache.update_group_db, new_data)
 
 
 
 @app.callback()
 def callback():
-    """
-    Clone Aruba Central Groups
-    """
+    """Clone Aruba Central Groups"""
     ...
 
 
