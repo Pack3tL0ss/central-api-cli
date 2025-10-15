@@ -802,7 +802,7 @@ def test_show_overlay_interfaces():
 
 
 def test_show_overlay_routes():
-    result = runner.invoke(app, ["show", "overlay", "routes", test_data["gateway"]["name"].lower()],)
+    result = runner.invoke(app, ["show", "overlay", "routes", test_data["gateway"]["name"].lower(), "--best"],)
     capture_logs(result, "test_show_overlay_routes")
     assert result.exit_code == 0
     assert "Routes" in result.stdout
@@ -812,6 +812,33 @@ def test_show_ospf_neighbor():
             "show",
             "ospf",
             "neighbors",
+            test_data["gateway"]["name"],
+            "--debug",
+            "--table"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "Router ID" in result.stdout
+
+
+def test_show_ospf_interfaces():
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            "interfaces",
+            test_data["gateway"]["name"],
+            "--table"
+        ]
+    )
+    assert result.exit_code == 0
+    assert "Router ID" in result.stdout
+
+
+def test_show_ospf_db():
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            "database",
             test_data["gateway"]["name"],
             "--debug",
             "--table"
@@ -1001,6 +1028,7 @@ def test_show_mpsk_networks():
         ([test_data["mpsk_ssid"]], lambda r: "API" in r),
         (["-E"], lambda r: "disabled" not in r),
         (["-D"], lambda r: "enabled" not in r),
+        (["--import"], lambda r: "ssid argument is required" in r)
     ]
 )
 def test_show_mpsk_named(args: list[str], pass_condition: Callable):

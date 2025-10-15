@@ -465,6 +465,13 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
+
+    def test_reset_overlay_connection():
+        result = runner.invoke(app, ["reset", "overlay", test_data["gateway"]["name"], "-y"])
+        capture_logs(result, "test_reset_overlay_connection")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
 if config.wss.key:
     def test_validate_wss_key():
         result = runner.invoke(app, ["test", "method", "validate_wss_key", config.wss.base_url, config.wss.key])
