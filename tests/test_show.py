@@ -1,17 +1,16 @@
 from pathlib import Path
+from typing import Callable
 
+import pytest
 from typer.testing import CliRunner
 
 from centralcli import cache
 from centralcli.cli import app
 
-from . import capture_logs, config, test_data
+from . import capture_logs, clean_mac, config, test_data
 
 runner = CliRunner()
 
-
-def clean_mac(mac: str) -> str:
-    return mac.replace(":", "").replace("-", "").replace(".", "").lower()
 
 # tty size is MonkeyPatched to 190, 55 the end result during pytest runs is 156, 31
 # Not sure why but it's larger than the 80, 24 fallback which it was using.
@@ -79,6 +78,13 @@ def test_show_bandwidth_client():
     assert "All" in result.stdout
 
 
+def test_show_bandwidth_ap():
+    result = runner.invoke(app, ["show", "bandwidth", "ap", test_data["ap"]["name"]],)
+    capture_logs(result, "test_show_bandwidth_ap")
+    assert result.exit_code == 0
+    assert "TX" in result.stdout
+
+
 def test_show_bandwidth_client_by_client():
     result = runner.invoke(app, ["show", "bandwidth", "client", test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
     capture_logs(result, "test_show_bandwidth_client_by_client")
@@ -121,7 +127,7 @@ def test_show_bandwidth_client_group():
     assert "TX" in result.stdout
 
 
-def test_show_bandwidth_client_label(ensure_cache_label1):
+def test_show_bandwidth_client_label(ensure_cache_label1: None):
     result = runner.invoke(app, ["show", "bandwidth", "client", "--label", "cencli_test_label1"],)
     capture_logs(result, "test_show_bandwidth_client_label")
     assert result.exit_code == 0
@@ -192,7 +198,7 @@ def test_show_branch_health_wan_down():
 
 
 def test_show_bssids():
-    result = runner.invoke(app, ["show", "bssids", "-s"],)  # also test warning for ignored -s without dev
+    result = runner.invoke(app, ["show", "bssids", "-S"],)  # also test warning for ignored -s without dev
     capture_logs(result, "test_show_bssids")
     assert result.exit_code == 0
     assert "Ignoring" in result.stdout
@@ -230,10 +236,10 @@ def test_show_cloud_auth_registered_macs():
 
 
 def test_show_cluster():
-    result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], test_data["tunneled_ssid"]["ssid"]], "--debugv")
+    result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], test_data["tunneled_ssid"]["ssid"], "--sort", "invalid-sort-field"])  # also testing invalid sort field
     capture_logs(result, "test_show_cluster")
     assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert "Sort Error" in result.stdout
 
 
 def test_show_cluster_ssid_not_exist():
@@ -251,7 +257,7 @@ def test_show_switches():
 
 
 def test_show_switches_up():
-    result = runner.invoke(app, ["show", "switches", "--up"],)
+    result = runner.invoke(app, ["show", "switches", "--up", "--sort", "ip"],)
     capture_logs(result, "test_show_switches_up")
     assert result.exit_code == 0
     assert "API" in result.stdout
@@ -357,6 +363,13 @@ def test_show_inventory():
     assert "mac" in result.stdout
 
 
+def test_show_inventory_failed_sub_call():
+    result = runner.invoke(app, ["show", "inventory"],)
+    capture_logs(result, "test_show_inventory_failed_sub_call")
+    assert result.exit_code == 0
+    assert "all to fetch subscription details failed" in result.stdout
+
+
 def test_show_inventory_verbose():
     result = runner.invoke(app, ["show", "inventory", "-v"],)
     capture_logs(result, "test_show_inventory_verbose")
@@ -389,10 +402,11 @@ def test_show_all_verbose():
 
 
 def test_show_sites():
-    result = runner.invoke(app, ["show", "sites"],)
+    cache.check_fresh(site_db=True)
+    result = runner.invoke(app, ["show", "sites"],)  # also tests cached response
     capture_logs(result, "test_show_sites")
     assert result.exit_code == 0
-    assert "site" in result.stdout.lower()
+    assert "API" in result.stdout
 
 
 def test_show_site_by_name():
@@ -742,7 +756,7 @@ def test_show_template_by_dev_serial():
     assert "%_sys_hostname%" in result.stdout
 
 
-def test_show_template_by_name(ensure_cache_template_by_name):
+def test_show_template_by_name(ensure_cache_template_by_name: None):
     result = runner.invoke(app, ["show", "templates", test_data["template"]["name"].lower(), "--group", test_data["template"]["group"].upper()])
     capture_logs(result, "test_show_template_by_name")
     assert result.exit_code == 0
@@ -771,12 +785,13 @@ def test_show_lldp_by_ap_name():
     assert "serial" in result.stdout
     assert "neighbor" in result.stdout
 
-
-def test_show_overlay_connection():
-    result = runner.invoke(app, ["show", "overlay", "connection", test_data["gateway"]["name"].lower()],)
+sfl = ["show", "overlay", "connection"]
+@pytest.mark.parametrize("args", [[*sfl, test_data["gateway"]["name"]], [*sfl, test_data["wlan_gw"]["name"]]])
+def test_show_overlay_connection(args: list[str]):
+    result = runner.invoke(app, args,)
     capture_logs(result, "test_show_overlay_connection")
     assert result.exit_code == 0
-    assert "peer" in result.stdout
+    assert "API" in result.stdout
 
 
 def test_show_overlay_interfaces():
@@ -804,6 +819,18 @@ def test_show_ospf_neighbor():
     )
     assert result.exit_code == 0
     assert "Router ID" in result.stdout
+
+
+def test_show_ospf_area():
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            "area",
+            test_data["gateway"]["name"],
+        ]
+    )
+    assert result.exit_code == 0
+    assert "area" in result.stdout
 
 
 def test_show_overlay_routes_advertised():
@@ -885,18 +912,23 @@ def test_show_audit_logs_past():
         assert "id" in result.stdout
 
 
-def test_show_audit_logs_by_id():
-    result = runner.invoke(app, ["show", "audit", "logs", "1"],)
+@pytest.mark.parametrize("log_id", ["1", "auditlogs_v1_event_details_audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"])
+def test_show_audit_logs_by_id(log_id: str):
+    result = runner.invoke(app, ["show", "audit", "logs", log_id],)
     capture_logs(result, "test_show_audit_logs_by_id")
     assert result.exit_code == 0
     if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
-        assert "Response" in result.stdout
+        assert "Response" in result.stdout  # pragma: no cover
+    else:
+        assert "API" in result.stdout  # pragma: no cover
 
-
-def test_show_audit_logs_invalid_id():
-    result = runner.invoke(app, ["show", "audit", "logs", "999"],)
+sal = ["show", "audit", "logs"]
+@pytest.mark.parametrize("args", [[*sal, "999"], [*sal, "not_an_int"]])
+def test_show_audit_logs_invalid(args: list[str]):
+    result = runner.invoke(app, args,)
+    capture_logs(result, "test_show_audit_logs_invalid", expect_failure=True)
     assert result.exit_code == 1
-    assert "nable to gather" in result.stdout
+    assert "⚠" in result.stdout
 
 
 def test_show_audit_acp_logs_count():
@@ -908,9 +940,11 @@ def test_show_audit_acp_logs_count():
         assert "id" in result.stdout
 
 
-def test_show_logs_past():
-    result = runner.invoke(app, ["show", "logs", "--past", "30m"],)
-    capture_logs(result, "test_show_logs_past")
+sfl = ["show", "logs", "--past", "30m"]
+@pytest.mark.parametrize("args", [sfl, [*sfl, "--dev", test_data["ap"]["name"], "-S"], [*sfl, "--dev", test_data["switch"]["name"], "-S"], [*sfl, "--group", test_data["ap"]["group"]]])
+def test_show_logs(args: list[str]):
+    result = runner.invoke(app, args,)
+    capture_logs(result, "test_show_logs")
     assert result.exit_code == 0
     assert "event logs" in result.stdout.lower()
     assert "description" in result.stdout
@@ -923,8 +957,10 @@ def test_show_logs_by_id():
     assert "Response" in result.stdout
 
 
-def test_show_logs_client():
-    result = runner.invoke(app, ["show", "logs", "--client", test_data["client"]["wireless"]["mac"], "-a"],)
+sfl = ["show", "logs", "-a", "--client"]
+@pytest.mark.parametrize("args", [[*sfl, test_data["client"]["wireless"]["mac"]], [*sfl, test_data["client"]["wireless"]["name"]]])
+def test_show_logs_client(args: list[str]):
+    result = runner.invoke(app, args,)
     capture_logs(result, "test_show_logs_client")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -944,25 +980,35 @@ def test_show_logs_pytest():
     assert "INFO" in result.stdout
 
 
+def test_show_logs_invalid():
+    result = runner.invoke(app, ["show", "logs", "-a", "--past", "30m"],)
+    capture_logs(result, "test_show_logs_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "\u26a0" in result.stdout
+
+
 def test_show_mpsk_networks():
     result = runner.invoke(app, ["show", "mpsk", "networks"],)
     capture_logs(result, "test_show_mpsk_networks")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
-
-def test_show_mpsk_named():
-    result = runner.invoke(app, ["show", "mpsk", "named"],)
+# LEFT-OFF-HERE
+# need capture for -E and -D options
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        ([], lambda r: "API" in r),
+        ([test_data["mpsk_ssid"]], lambda r: "API" in r),
+        (["-E"], lambda r: "disabled" not in r),
+        (["-D"], lambda r: "enabled" not in r),
+    ]
+)
+def test_show_mpsk_named(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "mpsk", "named", *args],)
     capture_logs(result, "test_show_mpsk_named")
     assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_mpsk_named_for_ssid():
-    result = runner.invoke(app, ["show", "mpsk", "named", test_data["mpsk_ssid"]],)
-    capture_logs(result, "test_show_mpsk_named_for_ssid")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_switch_vlans_by_name():
@@ -1186,7 +1232,7 @@ def test_show_config_invalid_ap_w_gw_flag():
     assert "nvalid" in result.stdout
 
 
-def test_show_config_group_no_type_ap_only_group(ensure_cache_group3):
+def test_show_config_group_no_type_ap_only_group(ensure_cache_group3: None):
     result = runner.invoke(app, [
             "show",
             "config",
@@ -1456,6 +1502,14 @@ def test_show_firmware_list_verbose():
     assert result.exit_code == 0
     assert "API" in result.stdout
 
+sfl = ["show", "firmware", "list"]
+@pytest.mark.parametrize("args", [sfl, [*sfl, test_data["ap"]["name"], "--swarm-id", "asdf"]])
+def test_show_firmware_list_invalid(args: list[str]):
+    result = runner.invoke(app, args)
+    capture_logs(result, "test_show_firmware_list_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
+
 
 def test_show_firmware_compliance_raw():
     result = runner.invoke(app, [
@@ -1680,16 +1734,10 @@ def test_show_tunnels():
     assert result.exit_code == 0
     assert "API" in result.stdout
 
-
-def test_show_subscriptions_details():  # glp
-    result = runner.invoke(app, [
-            "show",
-            "subscriptions",
-            "--sort",
-            "end-date",
-            "-r"
-        ]
-    )
+base = ["show", "subscriptions"]
+@pytest.mark.parametrize("args", (base, [*base, "--sort", "end-date", "-r"],))
+def test_show_subscriptions_details(args: list[str]):  # glp
+    result = runner.invoke(app, args)
     capture_logs(result, "test_show_subscriptions_details")
     assert result.exit_code == 0
 
@@ -1718,7 +1766,7 @@ def test_show_subscription_names():
     assert "advance" in result.stdout
 
 
-def test_show_vsx(ensure_dev_cache_test_vsx_switch):
+def test_show_vsx(ensure_dev_cache_test_vsx_switch: None):
     result = runner.invoke(app, [
             "show",
             "vsx",
@@ -1829,7 +1877,7 @@ def test_show_wlans_by_site():
     assert "API" in result.stdout
 
 
-def test_show_wlans_by_label(ensure_cache_label1):
+def test_show_wlans_by_label(ensure_cache_label1: None):
     result = runner.invoke(app, [
             "show",
             "wlans",
@@ -1871,7 +1919,7 @@ def test_show_wlans_too_many_flags():
     assert "Invalid" in result.stdout
 
 
-def test_show_wlans_by_tg_invalid(ensure_cache_group2):
+def test_show_wlans_by_tg_invalid(ensure_cache_group2: None):
     result = runner.invoke(app, [
             "show",
             "wlans",

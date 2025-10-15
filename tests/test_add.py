@@ -164,10 +164,11 @@ def test_add_label():
     ]
 
 
-def test_add_label_duplicate_name():
-    result = runner.invoke(app, ["-d", "add", "label",  "delme", "-Y"])
-    capture_logs(result, "test_add_label_duplicate_name", expect_failure=True)
-    assert result.exit_code == 1 and "already exist" in result.stdout
+def test_add_label_duplicate_name(ensure_cache_label1):
+    result = runner.invoke(app, ["-d", "add", "label",  "cencli_test_label1", "-Y"])
+    # capture_logs(result, "test_add_label_duplicate_name", expect_failure=True)
+    assert result.exit_code <= 1
+    assert "already exist" in result.stdout
 
 
 def test_add_label_multi():

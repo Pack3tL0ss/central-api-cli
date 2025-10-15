@@ -1,9 +1,9 @@
 import asyncio
-import json
 from typing import Any, Optional, Type, Union
 from unittest.mock import Mock
 from urllib.parse import unquote_plus
 
+import jsonref as json
 import pytest
 from aiohttp import RequestInfo, StreamReader
 from aiohttp.client import ClientResponse, ClientSession, hdrs
@@ -13,6 +13,7 @@ from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from centralcli import config, log, utils
+from centralcli.environment import env
 
 responses: list[dict[str, dict[str, Any]]] = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
 
@@ -101,19 +102,30 @@ class TestResponses:
     used_responses: list[int] = []
 
     @staticmethod
-    def _get_candidates(key: str) -> dict[str, Any]:
-        # strip audit_trail id from url, so any id will match.  this is for showing audit details for a specific log id.
-        if "/audit_trail_" in key:
-            key = f'{key.split("/audit_trail_")[0]}/audit_trail_'
-            return [v for r in responses for k, v in r.items() if key in k]
+    def _get_candidates(key: str) -> dict[str, Any]:  # LEFT-OFF-HERE  Add support for regex match of url key str within test block  i.e. "GET_/configuration/v1/ap_settings_cli/.*"
+        if env.current_test in responses:
+            if key in responses[env.current_test]:
+                return responses[env.current_test][key]
 
-        return [r[key] for r in responses if key in r]
+        ok_responses = responses["ok_responses"]
+        parts = key.split("_")
+        method = parts[0]
+        url = "_".join(parts[1:])
+        key = url.replace("/", "_").lstrip("_")
+        # strip audit_trail id from url, so any id will match.  this is for showing audit details for a specific log id.
+        if "_audit_trail_" in key:
+            key = f'{key.split("_audit_trail_")[0]}_audit_trail_'
+            return [ok_responses[method][[k for k in ok_responses[method].keys() if key in k][0]]]
+
+        res = ok_responses[method].get(key, responses["failed_responses"][method].get(key))
+        return [] if not res else [res]
 
     @property
     def unused(self) -> list[str]:  # pragma: no cover
-        return [
-            f"{idx}:{k}" for idx, r in enumerate(responses, start=1) for k, v in r.items() if hash(str(v)) not in self.used_responses
-        ]  # start=1 to account for '[' at the top of the raw_capture file.  So idx is line # in raw_capture file.
+        return []
+        # return [
+        #     f"{idx}:{k}" for idx, r in enumerate(responses, start=1) for k, v in r.items() if hash(str(v)) not in self.used_responses
+        # ]  # start=1 to account for '[' at the top of the raw_capture file.  So idx is line # in raw_capture file.
 
     def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
         url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
@@ -134,7 +146,7 @@ class TestResponses:
             log.info(f"Reusing previously used response for {url.path}")
             return resp_candidates[-1]
 
-        log.error(f"No Mock Response found for {key}.  Returning failed response.")  # pragma: no cover
+        log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed response.")  # pragma: no cover
         return {"url": url, "status": 418, "reason": f"No Mock Response Found for {key}"}  # pragma: no cover
 
 test_responses = TestResponses()

@@ -26,6 +26,7 @@ def _build_caption(resp: Response) -> str | None:
         "Down": "[bright_red]Down[/]"
     }
 
+    caption = None
     if resp and "summary" in resp.raw:
         s = resp.raw["summary"]
         oper_state = s.get("oper_state", "").split("_")[-1].title()
@@ -35,8 +36,6 @@ def _build_caption(resp: Response) -> str | None:
         caption = f'{caption}, Oper State: {color_status.get(oper_state, oper_state)}'
         caption = f'{caption}, interfaces: {s.get("num_interfaces")}'
         caption = f'{caption}\n  [cyan]Routes[/]: Advertised: {s.get("advertised_routes")}, Learned: {s.get("learned_routes")}'
-    else:
-        caption = None
 
     return caption
 

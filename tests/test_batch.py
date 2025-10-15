@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
@@ -100,9 +101,24 @@ def test_batch_assign_subscriptions_csv():
         assert result.stdout.count("code: 202") >= 2
 
 
+if config.dev.mock_tests:
+    def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1):
+        result = runner.invoke(app, ["batch", "move",  "devices", f"{str(test_device_file)}", "-y"])
+        capture_logs(result, "test_batch_move", )
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
 def test_batch_move_no_import_file():
-    result = runner.invoke(app, ["batch", "move",  "devices",])
+    result = runner.invoke(app, ["batch", "move",  "devices"])
     capture_logs(result, "test_batch_move_no_import_file", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_batch_move_import_file_not_exists():
+    result = runner.invoke(app, ["batch", "move",  "devices", "nonexistfile.fake.json"])
+    capture_logs(result, "test_batch_move_import_file_not_exists", expect_failure=True)
     assert result.exit_code == 1
     assert "Invalid" in result.stdout
 
@@ -149,11 +165,13 @@ def test_batch_delete_devices_invalid_no_sub():
     assert "Invalid" in result.stdout
 
 
-def test_batch_delete_devices_invalid_dev_type():
-    result = runner.invoke(app, ["batch", "delete", "devices", f'{str(test_verify_file)}', "--dev-type", "cx"])
-    capture_logs(result, "test_batch_delete_devices_invalid_dev_type", expect_failure=True)
+sfl = ["batch", "delete", "devices"]
+@pytest.mark.parametrize("args", [sfl, [*sfl, f'{str(test_verify_file)}', "--dev-type", "cx"]])
+def test_batch_delete_devices_invalid(args):
+    result = runner.invoke(app, args)
+    capture_logs(result, "test_batch_delete_devices_invalid", expect_failure=True)
     assert result.exit_code == 1
-    assert "--dev-type" in result.stdout
+    assert "\u26a0" in result.stdout
 
 
 def test_batch_archive():

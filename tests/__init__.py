@@ -42,6 +42,7 @@ import sys
 import time
 import traceback
 from functools import partial
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -59,6 +60,7 @@ from ._test_data import test_data as test_data
 
 install(show_locals=True)  # rich.traceback hook
 api_clients = APIClients()
+econsole = Console(stderr=True)
 
 class NonDefaultWorkspaceException(CentralCliException): ...
 
@@ -66,7 +68,7 @@ class NonDefaultWorkspaceException(CentralCliException): ...
 def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
     if result.exit_code != (0 if not expect_failure else 1) or log_output:
-        log.error(f"{test_func} {'returned error' if not log_output else 'output'}:\n{result.stdout}", show=True)
+        log.error(f"{test_func} {'returned error' if not log_output else 'output'}:\n{result.stdout = }", show=True)
         if "unable to gather device" in result.stdout:  # pragma: no cover
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
@@ -82,6 +84,10 @@ def ensure_default_account():
 
     if config.workspace != config.default_workspace:  # pragma: no cover
         raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.")
+
+
+def clean_mac(mac: str) -> str:
+    return mac.replace(":", "").replace("-", "").replace(".", "").lower()
 
 
 def monkeypatch_terminal_size():
@@ -103,6 +109,9 @@ def store_tokens(*args, **kwargs) -> bool:
 def refresh_tokens(_, old_token: dict) -> dict:
     log.info("mock refresh_tokens called.  Simulating token refresh.")
     return old_token
+
+def mock_write_file(outfile: Path, outdata: str) -> None:
+    econsole.print(f"[cyan]Writing output to {outfile}... [italic green]Done[/]")
 
 class MockSleep:
     real_sleep: bool = False
@@ -135,9 +144,9 @@ if __name__ in ["tests", "__main__"]:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
         pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
-        # pytest.MonkeyPatch().setattr("time.sleep", lambda *args, **kwargs: None)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("time.sleep", mock_sleep)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
+        pytest.MonkeyPatch().setattr("centralcli.render.write_file", mock_write_file)
     ensure_default_account()
     if "--collect-only" not in sys.argv:
-        log.info(f"{' Test Run START ':{'-'}^{150}}")
+        log.info(f"{' Test Run START ':{'-'}^{140}}")

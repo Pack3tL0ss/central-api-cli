@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
@@ -34,15 +35,18 @@ def test_export_redsky_bssids_too_many_filters():
     assert result.exit_code == 1
     assert "one of" in result.stdout
 
-def test_export_configs():
-    result = runner.invoke(app, ["export", "configs", "-y"])
+@pytest.mark.parametrize(
+    "args,expect",
+    [
+        (["export", "configs", "-y"], None),
+        (["export", "configs", "-G", "-R", "--show", "--yes"], "ignoring"), # -R invalid w/ -G will display warning
+        # (["export", "configs", "--env", "--yes"], None)
+    ]
+)
+def test_export_configs(args: list[str], expect: str | None):
+    result = runner.invoke(app, args)
     capture_logs(result, "test_export_configs")
     assert result.exit_code == 0
-    assert "Done" in result.stdout
-
-def test_export_configs_group_only():
-    result = runner.invoke(app, ["export", "configs", "-G", "-R", "--show", "--yes"])  # -R invalid w/ -G will display warning
-    capture_logs(result, "test_export_configs_group_only")
-    assert result.exit_code == 0
-    assert "ignoring" in result.stdout
+    if expect:
+        assert expect in result.stdout
     assert "Done" in result.stdout

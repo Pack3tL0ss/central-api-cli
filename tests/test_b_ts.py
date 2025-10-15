@@ -19,14 +19,14 @@ def test_ts_ping_mgmt():
     result = runner.invoke(app, ["ts", "ping", test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"])
     capture_logs(result, "test_ts_ping_mgmt")
     assert result.exit_code == 0
-    assert "packets" in result.stdout
+    assert "completed" in result.stdout
 
 
 def test_ts_ping_repititions():
     result = runner.invoke(app, ["ts", "ping", test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-m"])
     capture_logs(result, "test_ts_ping_repititions")
     assert result.exit_code == 0
-    assert "packets" in result.stdout
+    assert "completed" in result.stdout
 
 
 def test_ts_clients():

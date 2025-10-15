@@ -583,7 +583,7 @@ def output(
 
     # sanitize output for demos
     if config and config.dev.sanitize and raw_data and all(isinstance(x, dict) for x in raw_data):
-        outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]
+        outdata = [{k: d[k] if k not in REDACT else "--redacted--" for k in d} for d in raw_data]  # pragma: no cover Used for video demos
 
     # -- // List[str, ...] \\ --  Bypass all formatters, (config file output, etc...)
     if tablefmt != "simple" and outdata and all(isinstance(x, str) for x in outdata):
@@ -787,7 +787,7 @@ def help_block(default_txt: str, help_type: Literal["default", "requires"] = "de
 
 
 def bandwidth_graph(resp: Response, title: str = "Bandwidth Usage") -> None:
-    if not plot:
+    if not plot:  # pragma: no cover
         print(":warning:  Graphing in the terminal is not available for this platform (numpy C extensions need to be built manually).  Use formatting flags i.e. [cyan]--table[/] to see the timeseries data.")
         raise typer.Exit(1)
 

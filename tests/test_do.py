@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from centralcli import common
@@ -184,6 +185,21 @@ def test_bounce_poe_multiport_range():
     assert "task_id:" in result.stdout
 
 
+def test_bounce_poe_multiport_invalid_range():
+    result = runner.invoke(app, ["bounce", "poe", test_data["switch"]["name"].lower(), f'{"-".join(test_data["switch"]["test_ports"])}-1/1/22'])
+    capture_logs(result, "test_bounce_poe_multiport_invalid_range", expect_failure=True)
+    assert result.exit_code == 1
+    assert "\u26a0" in result.stdout  # \u26a0 is warning emoji
+
+
+def test_bounce_poe_multiport_invalid_range_across_members():
+    invalid_range = f'{test_data["switch"]["test_ports"][0]}-{int(test_data["switch"]["test_ports"][0].split("/")[0]) + 1}/{"/".join(test_data["switch"]["test_ports"][0].split("/")[1:])}'
+    result = runner.invoke(app, ["bounce", "poe", test_data["switch"]["name"].lower(), invalid_range])
+    capture_logs(result, "test_bounce_poe_multiport", expect_failure=True)
+    assert result.exit_code == 1
+    assert "\u26a0" in result.stdout  # \u26a0 is warning emoji
+
+
 def test_clone_group():
     result = runner.invoke(app, ["clone", "group", test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"])
     capture_logs(result, "test_clone_group")
@@ -205,12 +221,17 @@ def test_kick_invalid_client():
     assert result.exit_code == 1
     assert "nable to gather" in result.stdout
 
-
-def test_kick_client_not_connected_w_refresh(ensure_cache_client_not_connected):
-    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.eeff", "-R", "--yes"])
-    capture_logs(result, "test_kick_client_not_connected_w_refresh", expect_failure=True)
+@pytest.mark.parametrize(
+    "args,expected",
+    [
+        (["aabb.ccdd.eeff", "-R", "--yes"], "not connected")
+    ]
+)
+def test_kick_client_fail(ensure_cache_client_not_connected, args: list[str], expected: str):
+    result = runner.invoke(app, ["kick", "client", *args],)
+    capture_logs(result, "test_kick_client_fail", expect_failure=True)
     assert result.exit_code == 1
-    assert "not connected" in result.stdout
+    assert expected in result.stdout
 
 
 def test_kick_client_not_connected(ensure_cache_client_not_connected):
@@ -272,9 +293,23 @@ if config.dev.mock_tests:
         assert "valid" in result.stdout
 
 
+    def test_nuke_unsupported_type():
+        result = runner.invoke(app, ["nuke", test_data["switch"]["serial"]])
+        capture_logs(result, "test_nuke_unsupported_type", expect_failure=True)
+        assert result.exit_code == 1
+        assert "only applies to" in result.stdout
+
+
     def test_nuke_swarm():
         result = runner.invoke(app, ["nuke", test_data["aos8_ap"]["name"], "-sy"])
         capture_logs(result, "test_nuke_swarm")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_nuke_switch():
+        result = runner.invoke(app, ["nuke", test_data["template_switch"]["serial"], "-sy"])  # also testing path with warning msg due to -s (swarm) used with switch
+        capture_logs(result, "test_nuke_switch")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
@@ -307,8 +342,8 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_upgrade_ap():
-        result = runner.invoke(app, ["upgrade",  "device", test_data["ap"]["serial"], "10.7.2.1_93286", "-y"])
+    def test_upgrade_ap(ensure_dev_cache_test_ap):
+        result = runner.invoke(app, ["upgrade",  "device", test_data["ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "10.7.1.0-beta_91138", "-y"])
         capture_logs(result, "test_upgrade_ap")
         assert result.exit_code == 0
         assert "200" in result.stdout
@@ -322,11 +357,16 @@ if config.dev.mock_tests:
 
 
     def test_upgrade_group():
-        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.2.1_93286", "-y"])
+        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-beta_91138", "--in", "10m", "-y"])
         capture_logs(result, "test_upgrade_group")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
+    def test_upgrade_group_by_model_invalid():
+        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--model", "2930F", "--dev-type", "sw", "-y"])
+        capture_logs(result, "test_upgrade_group_by_model_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
 
     def test_cancel_upgrade_ap():
         result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["ap"]["serial"], "-y"])

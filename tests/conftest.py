@@ -179,10 +179,9 @@ def ensure_cache_group1():
 @pytest.fixture(scope="function")
 def ensure_cache_group2():
     if config.dev.mock_tests:
-        batch_del_group1 = [
-            {
+        cache_data = {
                 "name": "cencli_test_group2",
-                "allowed_types": ["sw"],
+                "allowed_types": ["sw", "ap"],
                 "gw_role": "branch",
                 "aos10": False,
                 "microbranch": False,
@@ -191,11 +190,9 @@ def ensure_cache_group2():
                 "monitor_only_sw": False,
                 "monitor_only_cx": False,
                 "cnx": None
-            }
-        ]
-        missing = [group["name"] for group in batch_del_group1 if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=batch_del_group1))
+        }
+        if cache_data["name"] not in cache.groups_by_name:
+            assert asyncio.run(cache.update_group_db(data=cache_data))
     yield
 
 
@@ -251,6 +248,116 @@ def ensure_hook_proxy_started():
         assert "Started" in result.stdout
 
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_batch_devices():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "id": "19478ff1-4168-5c61-895c-bc7c11aec0bd",
+                "serial": "CNKDKSM0YH",
+                "mac": "20:4C:03:BA:20:6C",
+                "type": "ap",
+                "model": "AP-505H-US",
+                "sku": "R3V48A",
+                "services": "advanced-ap",
+                "subscription_key": "ENCYHFWQLJNQCWDU",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
+                "serial": "CNKJKV309D",
+                "mac": "D0:D3:E0:CD:08:24",
+                "type": "ap",
+                "model": "AP-575-US",
+                "sku": "R4H18A",
+                "services": "advanced-ap",
+                "subscription_key": "ENCYHFWQLJNQCWDU",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "347bd5b1-e53e-50e9-8fac-1e80bba794a1",
+                "serial": "CNHPKLB01P",
+                "mac": "20:4C:03:81:E7:B2",
+                "type": "gw",
+                "model": "9004-US",
+                "sku": "R1B20A",
+                "services": "advance-70xx",
+                "subscription_key": "ARI76TMSFHXNJBJH",
+                "subscription_expires": 1860052515,
+                "assigned": True,
+                "archived": False
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+# we only want one of them to show as online
+@pytest.fixture(scope="function")
+def ensure_dev_cache_batch_devices():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "name": "ap.505h.206c",
+                "status": "Up",
+                "type": "ap",
+                "model": "505H",
+                "ip": "10.0.99.101",
+                "mac": "20:4C:03:BA:20:6C",
+                "serial": "CNKDKSM0YH",
+                "group": "WadeLab",
+                "site": "WadeLab",
+                "version": "10.7.2.1_93286",
+                "swack_id": "CNKDKSM0YH",
+                "switch_role": None
+            },
+            # {
+            #     "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
+            #     "serial": "CNKJKV309D",
+            #     "mac": "D0:D3:E0:CD:08:24",
+            #     "type": "ap",
+            #     "model": "AP-575-US",
+            #     "sku": "R4H18A",
+            #     "services": "advanced-ap",
+            #     "subscription_key": "ENCYHFWQLJNQCWDU",
+            #     "subscription_expires": 1788715367,
+            #     "assigned": True,
+            #     "archived": False
+            # },
+            {
+                "name": "mock-gw",
+                "status": "Up",
+                "type": "gw",
+                "model": "9004-US",
+                "ip": "10.99.0.101",
+                "mac": "20:4C:03:81:E7:B2",
+                "serial": "CNHPKLB01P",
+                "group": "cencli_test_cloned",
+                "site": None,
+                "version": "10.7.2.1_93286",
+                "swack_id": None,
+                "switch_role": None
+            }
+        ]
+        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.devices_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_dev_db(data=devices))
+    yield
+
+    if config.dev.mock_tests and missing:
+        doc_ids = [cache.devices_by_serial[s].doc_id for s in missing if s in cache.devices_by_serial]
+        if doc_ids:
+            assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=doc_ids))
+    return
+
 
 
 @pytest.fixture(scope="function")
@@ -353,6 +460,60 @@ def ensure_dev_cache_test_ap():
 
 
 @pytest.fixture(scope="function")
+def ensure_cache_vsf_stack():
+    cache_data = [
+        {
+            "name": "core-6300",
+            "status": "Up",
+            "type": "cx",
+            "model": "6300M 48SR5 CL6 PoE 4SFP56 Swch (JL659A)",
+            "ip": "10.0.30.213",
+            "mac": "64:e8:81:b8:0c:80",
+            "serial": "SG06KMY1S1",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.16.1006",
+            "swack_id": "b89e6557-392e-4089-87da-b59d151797ec",
+            "switch_role": 2
+        },
+        {
+            "name": "core-6300",
+            "status": "Up",
+            "type": "cx",
+            "model": "6300M 48SR5 CL6 PoE 4SFP56 Swch (JL659A)",
+            "ip": None,
+            "mac": "64:e8:81:aa:bb:cc",
+            "serial": "SG0WADE1S2",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.16.1006",
+            "swack_id": "b89e6557-392e-4089-87da-b59d151797ec",
+            "switch_role": 3
+        },
+        {
+            "name": "core-6300",
+            "status": "Up",
+            "type": "cx",
+            "model": "6300M 48SR5 CL6 PoE 4SFP56 Swch (JL659A)",
+            "ip": None,
+            "mac": "64:e8:81:cc:bb:aa",
+            "serial": "SG0WADE1S3",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.16.1006",
+            "swack_id": "b89e6557-392e-4089-87da-b59d151797ec",
+            "switch_role": 4
+        }
+    ]
+    if config.dev.mock_tests:
+        missing = [d for d in cache_data if d["serial"] not in cache.devices_by_serial]
+        if missing:
+            resp = common.batch_add_devices(data=missing, yes=True)
+            assert all([r.ok for r in resp])
+    yield
+
+
+@pytest.fixture(scope="function")
 def ensure_dev_cache_test_vsx_switch():
     test_switch = {
         "name": "border1",
@@ -370,7 +531,7 @@ def ensure_dev_cache_test_vsx_switch():
     }
     if config.dev.mock_tests:
         if test_switch["serial"] not in cache.devices_by_serial:
-            assert asyncio.run(cache.update_db(cache.DevDB, data=test_switch, truncate=False))
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_switch, truncate=False))  # pragma: no cover
     yield
 
     if config.dev.mock_tests and test_switch["serial"] in cache.devices_by_serial:
@@ -606,13 +767,11 @@ def ensure_cache_label3():
     yield
 
 
-@pytest.fixture(scope="function")
-def ensure_cache_group_cloned():
+def _ensure_cache_group_cloned(allow_gw: bool = False):
     if config.dev.mock_tests:
-        groups = [
-            {
+        cache_data = {
                 "name": "cencli_test_cloned",
-                "allowed_types": ["ap"],
+                "allowed_types": ["ap"] if not allow_gw else ["ap", "gw"],
                 "gw_role": "branch",
                 "aos10": False,
                 "microbranch": False,
@@ -621,12 +780,26 @@ def ensure_cache_group_cloned():
                 "monitor_only_sw": False,
                 "monitor_only_cx": False,
                 "cnx": None
-            }
-        ]
-        missing = [group["name"] for group in groups if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=groups))
+        }
+        if cache_data["name"] not in cache.groups_by_name:
+            assert asyncio.run(cache.update_group_db(data=cache_data))
+        elif allow_gw and "gw" not in cache.groups_by_name[cache_data["name"]]:
+            cache_group = cache.groups_by_name[cache_data["name"]]
+            cache_group["allowed_types"] = [*cache_group["allowed_types"], "gw"]
+            update_data = {**cache.groups_by_name, cache_data["name"]: cache_group}
+            assert asyncio.run(cache.update_db(cache.GroupDB, data=list(map(dict, update_data.values())), truncate=True))
+
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group_cloned():
+    yield from _ensure_cache_group_cloned()
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group_cloned_w_gw():
+    yield from _ensure_cache_group_cloned(allow_gw=True)
 
 
 @pytest.fixture(scope="function")
@@ -688,7 +861,7 @@ def ensure_cache_guest1():
     if config.dev.mock_tests:
         cache_data = {
             "portal_id": "e5538808-0e05-4ecd-986f-4bdce8bf52a4",
-            "name": "superlongemail@kabrew.com",
+            "name": "superlongemail",  # made diff than email to test completion
             "id": "7c9eb0df-b211-4225-94a6-437df0dfca59",
             "email": "superlongemail@kabrew.com",
             "phone": "+6155551212",
@@ -756,3 +929,23 @@ def ensure_cache_j2_var_csv():
     yield
 
     test_j2_file.unlink(missing_ok=True)
+
+
+
+@pytest.fixture(scope="function")
+def ensure_config_fake_workspaces():
+    # cache_data =   {
+    #     "mac": "aa:bb:cc:dd:ee:ff",
+    #     "name": "not-connected",
+    #     "ip": "10.0.110.299",
+    #     "type": "wireless",
+    #     "network_port": "HPE_Aruba",
+    #     "connected_serial": "CNR4LHJ08G",
+    #     "connected_name": "ktcn.605h.5866",
+    #     "site": "WadeLab",
+    #     "group": "WadeLab",
+    #     "last_connected": None
+    # }
+    # if cache_data["mac"] not in cache.clients_by_mac:
+    #     assert asyncio.run(cache.update_db(cache.ClientDB, cache_data, truncate=False))
+    yield

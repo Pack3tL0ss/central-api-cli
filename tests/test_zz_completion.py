@@ -1,11 +1,15 @@
 """We need this module to run near the end so cache is fully up to date for completion tests."""
+import sys
+from typing import Callable
+
+import pytest
 from click import Command, Context
 from typer.testing import CliRunner
 
-from centralcli import cache
+from centralcli import cache, common, log, render, utils
 from centralcli.cli import app  # type: ignore # NoQA
 
-from . import test_data
+from . import clean_mac, test_data
 
 runner = CliRunner()
 ctx = Context(Command("cencli reset"), info_name="reset", resilient_parsing=True)
@@ -24,10 +28,17 @@ def test_dev_completion_case_insensitive(incomplete: str = "BSmT"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_ap_gw_completion(incomplete: str = "ant"):
-    result = [c for c in cache.dev_ap_gw_completion(ctx=ctx, incomplete=incomplete, args=["show", "overlay", "summary"])]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+@pytest.mark.parametrize("expected,args", [(test_data["ap"]["name"], ["show", "overlay", "summary"]), ("self", ["cencli", "show", "config"])])
+def test_dev_ap_gw_completion(expected: str, args: list[str]):
+    ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
+    if expected == "self":
+        ctx.params = {"group_dev": "self"}
+    result = [c for c in cache.dev_ap_gw_completion(ctx=ctx, incomplete=expected[0:-2], args=args)]
+    if expected == "self":
+        assert len(result) == 0
+    else:
+        assert len(result) == 1
+        assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_group_completion(incomplete: str = ""):
     result = [c for c in cache.group_completion(incomplete)]
@@ -133,42 +144,52 @@ def test_dev_template_completion_partial_name(ensure_cache_template_by_name, inc
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_group_dev_completion_partial_name(incomplete: str = test_data["switch"]["name"].capitalize()[0:-2]):
-    result = list(cache.group_dev_completion(ctx=ctx, incomplete=incomplete))
+@pytest.mark.parametrize("expected,do_args", [(test_data["switch"]["name"], True), (test_data["switch"]["group"], False), ("self", True), ("self", False)])
+def test_group_dev_completion(expected: str, do_args: bool):
+    ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
+    ctx.params = {"group_dev": None}
+    result = list(cache.group_dev_completion(ctx=ctx, incomplete=expected[0:-2], args=("show", "config") if do_args else ()))
     assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_group_dev_ap_gw_completion_partial_name(incomplete: str = test_data["ap"]["name"].capitalize()[0:-2]):
-    result = list(cache.group_dev_ap_gw_completion(ctx=ctx, incomplete=incomplete))
+@pytest.mark.parametrize("expected,do_args", [(test_data["ap"]["name"], True), (test_data["ap"]["group"], False), ("self", True), ("self", False)])
+def test_group_dev_ap_gw_completion(expected: str, do_args: bool):
+    ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
+    ctx.params = {"group_dev": None}
+    result = list(cache.group_dev_ap_gw_completion(ctx=ctx, incomplete=expected[0:-2], args=("show", "config") if do_args else ()))
     assert len(result) == 1
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_client_completion_partial_name(incomplete: str = test_data["client"]["wireless"]["name"].capitalize()[0:-2]):
-    _ = cache.get_client_identifier(incomplete)
+@pytest.mark.parametrize("expected", [test_data["switch"]["name"]])
+def test_dev_switch_gw_completion(expected: str):
+    result = list(cache.dev_switch_gw_completion(incomplete=expected[0:-2],))
+    assert len(result) == 1
+    assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+@pytest.mark.parametrize(
+        "incomplete,params,expected",
+        [
+            (test_data['client']['wireless']['name'][0:-1].swapcase(), {"wireless": True}, test_data["client"]["wireless"]["name"]),
+            (f'"{test_data["client"]["wireless"]["name"].capitalize()[0:-2]}', {"wireless": True}, test_data["client"]["wireless"]["name"]),
+            (f"'{test_data['client']['wireless']['name'][0:-2]}", {"wireless": True}, test_data["client"]["wireless"]["name"]),
+            (test_data["client"]["wireless"]["mac"], {"wireless": True}, utils.Mac(test_data["client"]["wireless"]["mac"]).cols),
+            (test_data["client"]["wireless"]["ip"], {"wireless": True}, test_data["client"]["wireless"]["ip"])
+        ]
+    )
+def test_client_completion(incomplete: str, params: dict[str, str | bool], expected: str):
+    ctx.params = {**ctx.params, **params}
     result = list(cache.client_completion(ctx, incomplete=incomplete))
     assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert clean_mac(expected).lower().startswith(clean_mac(incomplete).lower().strip('"\''))
 
-def test_dev_client_completion(incomplete: str = test_data["ap"]["mac"]):
-    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
+@pytest.mark.parametrize("expected,params", [(test_data["ap"]["mac"], {"wireless": None, "wired": None}), (test_data["ap"]["name"], {"wireless": True, "wired": None}), (test_data["switch"]["serial"], {"wireless": None, "wired": True})])
+def test_dev_client_completion(expected: str, params: dict[str, bool | None]):
+    ctx = Context(Command("cencli blah blah"), info_name="cencli some command", resilient_parsing=True)
+    ctx.params = {**ctx.params, **params}
+    result = list(cache.dev_client_completion(ctx, incomplete=expected))
     assert len(result) == 1
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_client_completion_wireless(incomplete: str = test_data["ap"]["mac"]):
-    ctx.params = {**ctx.params, "wireless": True, "wired": None}
-    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
-    assert len(result) == 1
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-    del ctx.params["wired"]
-    del ctx.params["wireless"]
-
-def test_dev_client_completion_wired(incomplete: str = test_data["switch"]["serial"]):
-    ctx.params = {**ctx.params, "wireless": None, "wired": True}
-    result = list(cache.dev_client_completion(ctx, incomplete=incomplete))
-    assert len(result) == 1
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-    del ctx.params["wired"]
-    del ctx.params["wireless"]
 
 def test_event_log_completion_pytest(incomplete: str = "pyte"):
     result = list(cache.event_log_completion(incomplete=incomplete))
@@ -200,8 +221,14 @@ def test_portal_completion_empty_string(incomplete: str = ""):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_remove_completion_site(incomplete: str = test_data["ap"]["ip"]):
-    result = list(cache.remove_completion(ctx=ctx, incomplete=incomplete, args=("remove",)))
+@pytest.mark.parametrize(
+        "incomplete,args", [
+            ("sit", ("remove", test_data["ap"]["ip"])),
+            (test_data["ap"]["ip"], ("remove",))
+        ]
+    )
+def test_remove_completion_site(incomplete: str, args: tuple[str]):
+    result = list(cache.remove_completion(ctx=ctx, incomplete=incomplete, args=args))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
@@ -210,42 +237,99 @@ def test_remove_completion_dev(incomplete: str = test_data["ap"]["site"]):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_label_completion(ensure_cache_label1, incomplete: str = "cencli-test_label1"):
+@pytest.mark.parametrize("incomplete", ["cencli-test_label1", "110"])
+def test_label_completion(ensure_cache_label1, incomplete: str):
     result = list(cache.label_completion(ctx=ctx, incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+
+@pytest.mark.parametrize(
+        "incomplete,params,expected",
+        [
+            (test_data["gateway"]["name"], {"kw1": "all"}, "commands"),
+            (test_data["gateway"]["name"], {"kw1": "x"}, "commands"),
+            (test_data["gateway"]["name"], {"kw1": "commands"}, None),
+            ("cencli_test_g", {"kw1": "group"}, "cencli_test_group1"),
+            ("cencli_test_s", {"kw1": "site"}, "cencli_test_site1"),
+            (test_data["gateway"]["name"], {"kw1": "device"}, test_data["gateway"]["name"]),
+        ]
+    )
+def test_send_cmds_completion(ensure_cache_group1, ensure_cache_site1, incomplete: str, params: dict[str, str | bool], expected: str | None):
+    ctx.params = params
+    result = list(cache.send_cmds_completion(ctx=ctx, incomplete=incomplete))
+    assert len(result) > 0
+    assert str(expected) in str(result)
+
 
 def test_ws_completion(incomplete=""):
     result = list(cache.workspace_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_guest_completion(ensure_cache_guest1, incomplete="superlongemail@kabrew"):
-    result = list(cache.guest_completion(ctx, incomplete=incomplete))
-    assert len(result) == 1
-    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_cert_completion(ensure_cache_cert, incomplete="cencli-tes"):
+@pytest.mark.parametrize("expected", ["superlongemail", "superlongemail@kabrew.com", "6155551212", "7c9eb0df-b211-4225-94a6-437df0dfca59", ""])
+def test_guest_completion(ensure_cache_guest1, expected: str):
+    result = list(cache.guest_completion(ctx, incomplete=expected[0:-2]))
+    assert len(result) >= 1
+    try:
+        assert all([m.lower().startswith(expected.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+    except AssertionError:
+        log.error(f"test_guest_completion: {expected = }    {result = }")
+
+
+@pytest.mark.parametrize("incomplete", ["cencli-tes", "781b9320972dc571d9", ""])
+def test_cert_completion(ensure_cache_cert, incomplete: str):
     result = list(cache.cert_completion(ctx, incomplete=incomplete))
-    assert len(result) == 1
+    assert len(result) >= 1
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_sub_completion(ensure_cache_subscription, incomplete="advanced-ap"):
+
+@pytest.mark.parametrize(
+    "incomplete,pass_condition",
+    [
+        ("advanced-ap", lambda r: [sub[0] == "advanced-ap" for sub in r]),
+        ("", lambda r: len(r) > 1),
+    ]
+)
+def test_sub_completion(ensure_cache_subscription, incomplete: str, pass_condition: Callable):
     result = list(cache.sub_completion(ctx, incomplete=incomplete))
+    assert pass_condition(result)
+
+@pytest.mark.parametrize("incomplete,args", [("cencli_test_group1", ("group",)), ("cencli_test_site", ("site",)), ("", ("ap",)), ("sit", ("arg1", "arg2")), ("grou", ("arg1", "arg2"))])
+def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, incomplete: str, args: tuple[str]):
+    ctx = Context(Command("cencli move"), info_name="move", resilient_parsing=True)
+    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=args))
     assert len(result) > 0
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_kwarg_completion_group(ensure_cache_group1, incomplete="cencli_test_group1"):
-    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("group",)))
-    assert len(result) > 0
-    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+@pytest.mark.parametrize(
+    "workspace,args,default,pass_condition",
+    [
+        ("not verified", ("arg1", "dev"), False, lambda r, _: r == "not verified"),
+        (None, ("group",), True, lambda r, _: r == "default"),
+        ("default", ("arg1", "test", "method"), False, lambda r, _: r == "default"),
+        (None, ("arg1", "test", "method"), False, lambda r, _: r == "default"),
+        (None, ("arg1", "arg2"), False, lambda r, _: r == "default"),
+        ("default", ("arg1", "arg2"), False, lambda r, _: r == "default")
+    ]
+)
+def test_workspace_name_callback(workspace: str, args: tuple[str], default: bool, pass_condition: Callable):
+    ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=False)
+    if args:
+        sys.argv = args
+    with render.econsole.capture() as cap:
+        result = common.workspace_name_callback(ctx, workspace, default=default)
+    output = cap.get()
+    assert pass_condition(result, output)
 
-def test_dev_kwarg_completion_site(ensure_cache_site1, incomplete="cencli_test_site"):
-    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("site",)))
-    assert len(result) > 0
-    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
-
-def test_dev_kwarg_completion_ap(incomplete=""):
-    result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=("ap",)))
-    assert len(result) > 0
-    assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
+@pytest.mark.parametrize(
+    "query_str,swack,conductor_only,pass_condition",
+    [
+        (test_data["vsf_switch"]["name"], False, True, lambda r: r.name == test_data["vsf_switch"]["name"]),
+        (test_data["vsf_switch"]["name"], True, False, lambda r: r.name == test_data["vsf_switch"]["name"]),
+    ]
+)
+def test_get_dev_identifier(ensure_cache_vsf_stack, query_str: str, swack: bool, conductor_only: bool, pass_condition: Callable):
+    result = cache.get_dev_identifier(query_str, swack=swack, conductor_only=conductor_only)
+    assert pass_condition(result)

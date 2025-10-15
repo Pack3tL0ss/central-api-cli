@@ -48,7 +48,7 @@ def device(
                 needless_prefix = version.split("-")[0]
                 if not version.count(needless_prefix) == 2:
                     ap_version = f"{needless_prefix}-{version}"
-            if not dev.swack_id:
+            if not dev.swack_id:  # pragma: no cover
                 render.econsole.print(f"\n[cyan]{dev.name}[/] lacks a swarm_id, may not be populated yet if it was recently added.")
                 if yes > 1 or render.confirm(prompt="\nRefresh cache now to check if it's populated?"):
                     api.session.request(common.cache.refresh_dev_db, dev_type="ap")

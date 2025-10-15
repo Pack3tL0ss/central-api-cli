@@ -199,6 +199,13 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
+    def test_delete_fw_compliance_invalid():
+        result = runner.invoke(app, ["delete", "firmware",  "compliance", "ap", "cencli_test_group2", "extra-invalid"])
+        capture_logs(result, "test_delete_fw_compliance_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "\u26a0" in result.stdout
+
+
     def test_delete_webhook():
         result = runner.invoke(app, ["delete", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7", "-y"])
         capture_logs(result, "test_delete_webhook")
