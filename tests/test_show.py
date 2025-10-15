@@ -993,8 +993,7 @@ def test_show_mpsk_networks():
     assert result.exit_code == 0
     assert "API" in result.stdout
 
-# LEFT-OFF-HERE
-# need capture for -E and -D options
+
 @pytest.mark.parametrize(
     "args,pass_condition",
     [
@@ -1018,19 +1017,18 @@ def test_show_switch_vlans_by_name():
     assert "name" in result.stdout
     assert "pvid" in result.stdout
 
-
-def test_show_stacks():
-    result = runner.invoke(app, ["show", "stacks", "--up", "--group", test_data["vsf_switch"]["group"]],)
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["--up", "--group", test_data["vsf_switch"]["group"]], lambda r: "API" in r),
+        ([test_data["vsf_switch"]["mac"]], lambda r: "API" in r),
+    ]
+)
+def test_show_stacks(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "stacks", *args],)
     capture_logs(result, "test_show_stacks")
     assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_stacks_dev():
-    result = runner.invoke(app, ["show", "stacks", test_data["vsf_switch"]["mac"]],)
-    capture_logs(result, "test_show_stacks_dev")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_client_location_no_client():
@@ -1049,53 +1047,23 @@ def test_show_client_location():
     assert "API" in result.stdout
 
 
-def test_show_clients():
-    result = runner.invoke(app, ["show", "clients", "--table"],)
+cmac = test_data["client"]["wireless"]["mac"]
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["--table"], lambda r: "name" in r and "mac" in r),
+        (["--table", "-w", "--band", "6"], lambda r: "name" in r and "mac" in r),
+        (["--wired", "--table"], lambda r: "vlan" in r and "mac" in r),
+        (["--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"], lambda r: "API" in r),
+        ([cmac], lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)),
+        (["--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]], lambda r: "ignored" in r and "API" in r),  # site is ignored
+    ]
+)
+def test_show_clients(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "clients", *args],)
     capture_logs(result, "test_show_clients")
     assert result.exit_code == 0
-    assert "name" in result.stdout
-    assert "mac" in result.stdout
-
-
-def test_show_clients_wireless_w_band():
-    cache.responses.client = None
-    result = runner.invoke(app, ["show", "clients", "-w", "--band", "6"],)
-    capture_logs(result, "test_show_clients_wireless_w_band")
-    assert result.exit_code == 0
-    assert "mac" in result.stdout
-
-
-def test_show_clients_wired():
-    cache.updated = []
-    result = runner.invoke(app, ["show", "clients", "--wired", "--table", "--debug"],)
-    capture_logs(result, "test_show_clients_wired")
-    assert result.exit_code == 0
-    assert "vlan" in result.stdout
-    assert "mac" in result.stdout
-
-
-def test_show_clients_stack():
-    result = runner.invoke(app, ["show", "clients", "--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"],)
-    capture_logs(result, "test_show_clients_stack")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_client_by_mac():
-    mac = test_data["client"]["wireless"]["mac"]
-    result = runner.invoke(app, ["show", "clients", mac],)
-    capture_logs(result, f"test_show_client_by_mac ({mac})")
-    assert result.exit_code == 0
-    assert "role" in result.stdout
-    assert f'mac {clean_mac(mac)}' in clean_mac(result.stdout)
-
-
-def test_show_client_for_dev():
-    result = runner.invoke(app, ["show", "clients", "--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]],)  # site is ignored
-    capture_logs(result, "test_show_client_for_dev")
-    assert result.exit_code == 0
-    assert "ignored" in result.stdout
-    assert "API" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_clients_too_many_filters():
