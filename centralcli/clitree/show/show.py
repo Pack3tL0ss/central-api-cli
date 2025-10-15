@@ -2283,14 +2283,11 @@ def wlans(
         caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
         render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
-        group_res = api.session.request(api.configuration.get_groups_properties)
-        if group_res:
-            ap_groups = [g['group'] for g in group_res.output if 'AccessPoints' in g['properties']['AllowedDevTypes']]
-            batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
-            batch_resp = api.session.batch_request(batch_req)
-            resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
-        else:
-            resp = group_res
+        _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
+        ap_groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
+        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
+        batch_resp = api.session.batch_request(batch_req)
+        resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
 
         group_by = "group" if not sort_by else None
         render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
@@ -2727,7 +2724,7 @@ def logs(
     end: datetime = common.options.end,
     past: str = common.options.past,
     device: str = common.options.device,
-    swarm: bool = typer.Option(False, "--swarm", "-s", help="Filter logs for IAP cluster associated with provided device [cyan]--device[/] required.", show_default=False,),
+    swarm: bool = common.options.get("swarm", help="Filter logs for IAP cluster associated with provided device [cyan]--dev[/] required.",),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
     client: str = common.options.client,
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
@@ -2760,7 +2757,6 @@ def logs(
     title="Device event Logs"
     pytest = pytest or (event_id and event_id == "pytest")
     if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):  # pragma: no cover
-        from centralcli import log
         log.print_file(pytest, show_all=_all, unused_mocks=unused_mocks) if not tail else log.follow(pytest)
         common.exit(code=0)
 
@@ -2794,7 +2790,7 @@ def logs(
         device: CacheDevice = common.cache.get_dev_identifier(device)
         if swarm:
             if device.type != "ap":
-                log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}")
+                log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}", caption=True)
             else:
                 swarm_id = device.swack_id
         else:
@@ -2802,8 +2798,9 @@ def logs(
 
     client_mac = None
     if client:
-        if utils.Mac(client).ok:
-            client_mac = client
+        _mac = utils.Mac(client)
+        if _mac.ok:
+            client_mac = _mac.cols
         else:
             _client = common.cache.get_client_identifier(client)
             client_mac = _client.mac
