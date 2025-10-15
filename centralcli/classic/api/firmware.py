@@ -35,7 +35,7 @@ class FirmwareAPI:
         url = "/firmware/v1/versions"
 
         if [device_type, swarm_id, serial].count(None) != 2:
-            raise ValueError("You must specify one and one of device_type, swarm_id, serial parameters")
+            raise ValueError("You must specify one and only one of device_type, swarm_id, serial parameters")  # pragma: no cover
 
         params = {
             'device_type': None if device_type is None else constants.lib_to_api(device_type, "firmware"),
@@ -45,9 +45,6 @@ class FirmwareAPI:
 
         return await self.session.get(url, params=params)
 
-    # API-FLAW no API to upgrade cluster
-    # https://internal-ui.central.arubanetworks.com/firmware/controller/clusters/upgrade is what the UI calls when you upgrade via UI
-    # payload: {"reboot":true,"firmware_version":"10.5.0.0-beta_87046","devices":[],"clusters":[72],"when":0,"timezone":"+00:00","partition":"primary"}
     async def upgrade_firmware(
         self,
         scheduled_at: int | dt = None,
