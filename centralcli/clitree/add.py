@@ -397,7 +397,6 @@ def label(
     """
     econsole.print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
     econsole.print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
-    ...
     for idx in range(0, 2):
         duplicate_names = [name for name in [*[s["name"] for s in common.cache.sites], *common.cache.label_names] if name in labels]
         if duplicate_names:
