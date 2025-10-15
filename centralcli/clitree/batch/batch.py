@@ -700,7 +700,7 @@ def rename(
 
     # We only spot check the last serial.  If first call in a batch_request fails the process stops.
     if ap not in common.cache.devices_by_serial:
-        print("\n[dark_orange3]:warning:[/]  [italic]Device must be checked into Central to assign/change hostname.[/]")
+        render.econsole.print("\n[dark_orange3]:warning:[/]  [italic]Device must be checked into Central to assign/change hostname.[/]")
 
     render.confirm(yes, prompt="\nProceed with AP rename?")
     resp = api.session.batch_request(calls)
