@@ -452,9 +452,7 @@ def clear(
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
 ):
-    """
-    Clear previously ran troubleshooting session and output for a device.
-    """
+    """Clear previously ran troubleshooting session and output for a device."""
     dev = common.cache.get_dev_identifier(device)
     session_id = session_id or dev.get_ts_session_id()
     resp = api.session.request(api.tshooting.clear_ts_session, dev.serial, session_id=session_id)
