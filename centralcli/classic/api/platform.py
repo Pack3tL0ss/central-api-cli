@@ -21,7 +21,7 @@ class PlatformAPI:
         device_type: Literal['ap', 'gw', 'switch', 'all'] = None,
         offset: int = 0,
         limit: int = 1000,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover Only testing GLP for this going forward
         """Get devices from device inventory.
 
         Args:
@@ -253,7 +253,7 @@ class PlatformAPI:
     async def cop_delete_device_from_inventory(
         self,
         devices: List[str] = None,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover not testing cop currently
         """Delete devices using Serial number.  Only applies to CoP deployments.
 
         Device can not be archived in CoP inventory.
@@ -312,7 +312,7 @@ class PlatformAPI:
         device_type: constants.GenericDeviceTypes = None,
         offset: int = 0,
         limit: int = 1000,  # Doesn't appear to have max, allowed 10k limit in swagger
-    ) -> Response:
+    ) -> Response:  # pragma: no cover Only testing GLP for this going forward
         """Get user subscription keys.
 
         Args:
@@ -438,7 +438,11 @@ class PlatformAPI:
 
         return await self.session.post(url, json_data=json_data)
 
-    async def unassign_licenses(self, serials: str | List[str], services: str | List[str]) -> Response:
+    async def unassign_licenses(
+        self,
+        serials: str | List[str],
+        services: str | List[str]
+    ) -> Response:  # pragma: no cover Only testing GLP for this going forward
         """Unassign subscription(s) from device(s).
 
         Args:
