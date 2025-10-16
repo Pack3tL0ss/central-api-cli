@@ -1507,12 +1507,18 @@ def test_show_firmware_compliance_raw():
     assert result.exit_code == 0
 
 
-def test_show_roaming():
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([test_data["client"]["wireless"]["name"], "--refresh"]),
+        ([test_data["client"]["wireless"]["mac"]]),
+    ]
+)
+def test_show_roaming(args: list[str]):
     result = runner.invoke(app, [
             "show",
             "roaming",
-            test_data["client"]["wireless"]["name"],
-            "--refresh"
+            *args
         ]
     )
     capture_logs(result, "test_show_roaming")
