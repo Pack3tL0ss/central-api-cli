@@ -2688,20 +2688,6 @@ def roaming(
     render.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
-def show_logs_cencli_callback(ctx: typer.Context, cencli: bool) -> bool:
-    if ctx.resilient_parsing:  # tab completion, return without validating
-        return cencli
-
-    if ctx.params.get("tail", False):
-        if ctx.args and "cencli" not in ctx.args:
-            raise typer.BadParameter(
-                f"{ctx.args[-1]} invalid with -f option.  Use -f --cencli or just -f to follow tail on cencli log file"
-            )
-        return True
-
-    return cencli
-
-
 @app.command()
 def logs(
     event_id: str = typer.Argument(

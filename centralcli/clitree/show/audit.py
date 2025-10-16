@@ -19,20 +19,6 @@ if TYPE_CHECKING:
 app = typer.Typer()
 
 
-def show_logs_cencli_callback(ctx: typer.Context, cencli: bool):
-    if ctx.resilient_parsing:  # tab completion, return without validating
-        return cencli
-
-    if ctx.params.get("tail", False):
-        if ctx.args and "cencli" not in ctx.args:
-            raise typer.BadParameter(
-                f"{ctx.args[-1]} invalid with -f option.  Use -f --cencli or just -f to follow tail on cencli log file"
-            )
-        return True
-
-    return cencli
-
-
 @app.command(hidden=True, deprecated=True)
 def acp_logs(
     log_id: str = typer.Argument(
@@ -268,10 +254,8 @@ def logs(
 
 @app.callback()
 def callback():
-    """
-    Show Aruba Central audit logs
-    """
-    pass
+    """Show Aruba Central audit logs"""
+    ...
 
 
 if __name__ == "__main__":
