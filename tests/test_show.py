@@ -78,13 +78,6 @@ def test_show_bandwidth_client():
     assert "All" in result.stdout
 
 
-def test_show_bandwidth_ap():
-    result = runner.invoke(app, ["show", "bandwidth", "ap", test_data["ap"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_ap")
-    assert result.exit_code == 0
-    assert "TX" in result.stdout
-
-
 def test_show_bandwidth_client_by_client():
     result = runner.invoke(app, ["show", "bandwidth", "client", test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
     capture_logs(result, "test_show_bandwidth_client_by_client")
@@ -140,12 +133,24 @@ def test_show_bandwidth_client_gw():
     assert result.exit_code == 0
     assert "only applies" in result.stdout  # -S flag ignored as --dev is a gateway
 
-
-def test_show_bandwidth_switch():
-    result = runner.invoke(app, ["show", "bandwidth", "switch", test_data["switch"]["mac"]],)
-    capture_logs(result, "test_show_bandwidth_switch")
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["switch", test_data["switch"]["mac"]], lambda r: "TX" in r),
+        (["switch", test_data["switch"]["mac"], "--uplink"], lambda r: "TX" in r),
+        (["switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]], lambda r: "TX" in r),
+        (["ap", test_data["ap"]["name"]], lambda r: "TX" in r),
+        (["ap", "--ssid", "ignored"], lambda r: "--ssid" in r and "TX" in r),
+        (["ap", "--band", "5"], lambda r: "--band" in r and "TX" in r),
+        (["ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]], lambda r: "--group" in r and "TX" in r),
+        (["ap", test_data["aos8_ap"]["name"], "--swarm"], lambda r: "TX" in r),
+    ]
+)
+def test_show_bandwidth(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "bandwidth", *args],)
+    capture_logs(result, "test_show_bandwidth")
     assert result.exit_code == 0
-    assert "TX" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_bandwidth_wlan():
@@ -807,57 +812,30 @@ def test_show_overlay_routes():
     assert result.exit_code == 0
     assert "Routes" in result.stdout
 
-def test_show_ospf_neighbor():
+
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["database", test_data["gateway"]["name"], "--debug", "--table"], lambda r: "Router ID" in r),
+        (["database", test_data["wlan_gw"]["name"]], lambda r: "not enabled" in r),
+        (["interfaces", test_data["gateway"]["name"]], lambda r: "Router ID" in r),
+        (["interfaces", test_data["wlan_gw"]["name"]], lambda r: "not enabled" in r),
+        (["neighbors", test_data["gateway"]["name"]], lambda r: "Router ID" in r),
+        (["neighbors", test_data["wlan_gw"]["name"]], lambda r: "not enabled" in r),
+        (["area", test_data["gateway"]["name"]], lambda r: "area" in r),
+        (["area", test_data["wlan_gw"]["name"]], lambda r: "not enabled" in r),
+    ]
+)
+def test_show_ospf(args: list[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "ospf",
-            "neighbors",
-            test_data["gateway"]["name"],
-            "--debug",
-            "--table"
+            *args
         ]
     )
+    capture_logs(result, "test_show_ospf")
     assert result.exit_code == 0
-    assert "Router ID" in result.stdout
-
-
-def test_show_ospf_interfaces():
-    result = runner.invoke(app, [
-            "show",
-            "ospf",
-            "interfaces",
-            test_data["gateway"]["name"],
-            "--table"
-        ]
-    )
-    assert result.exit_code == 0
-    assert "Router ID" in result.stdout
-
-
-def test_show_ospf_db():
-    result = runner.invoke(app, [
-            "show",
-            "ospf",
-            "database",
-            test_data["gateway"]["name"],
-            "--debug",
-            "--table"
-        ]
-    )
-    assert result.exit_code == 0
-    assert "Router ID" in result.stdout
-
-
-def test_show_ospf_area():
-    result = runner.invoke(app, [
-            "show",
-            "ospf",
-            "area",
-            test_data["gateway"]["name"],
-        ]
-    )
-    assert result.exit_code == 0
-    assert "area" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_overlay_routes_advertised():
@@ -930,24 +908,24 @@ def test_show_last():
     assert result.exit_code == 0
 
 
-def test_show_audit_logs_past():
-    result = runner.invoke(app, ["show", "audit", "logs", "--past", "5d"],)
-    capture_logs(result, "test_show_audit_logs_past")
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["--past", "5d"], lambda r: "Empty Response" in r or ("audit" in r and "id" in r)),
+        (["1"], lambda r: "Empty Response" in r or "API" in r),
+        (["audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"], lambda r: "Empty Response" in r or "API" in r),
+        (["--all"], lambda r: "Empty Response" in r or "API" in r),
+        (["--dev", test_data["ap"]["serial"]], lambda r: "Empty Response" in r or "API" in r),
+        (["--dev", test_data["ap"]["name"], "--group", "ignored"], lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)),
+        (["--group", test_data["ap"]["group"]], lambda r: "Empty Response" in r or "API" in r),
+    ]
+)
+def test_show_audit_logs(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "audit", "logs", *args],)
+    capture_logs(result, "test_show_audit_logs")
     assert result.exit_code == 0
-    if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
-        assert "audit" in result.stdout.lower()
-        assert "id" in result.stdout
+    assert pass_condition(result.stdout)
 
-
-@pytest.mark.parametrize("log_id", ["1", "auditlogs_v1_event_details_audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"])
-def test_show_audit_logs_by_id(log_id: str):
-    result = runner.invoke(app, ["show", "audit", "logs", log_id],)
-    capture_logs(result, "test_show_audit_logs_by_id")
-    assert result.exit_code == 0
-    if "Empty Response" not in result.stdout and "No Data" not in result.stdout:
-        assert "Response" in result.stdout  # pragma: no cover
-    else:
-        assert "API" in result.stdout  # pragma: no cover
 
 sal = ["show", "audit", "logs"]
 @pytest.mark.parametrize("args", [[*sal, "999"], [*sal, "not_an_int"]])

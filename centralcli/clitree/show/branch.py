@@ -10,7 +10,6 @@ from centralcli.cache import api
 app = typer.Typer()
 
 
-
 @app.command()
 def health(
     site: str = common.arguments.get("site", default=None, help=f"Show branch health for a specific site. {render.help_block('All Sites')}"),
