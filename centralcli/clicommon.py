@@ -1567,7 +1567,7 @@ class CLICommon:
         # cache_devs: List[CacheInvMonDevice | None] = []
         serial_updates: Dict[int, str] = {}
         for idx, d in enumerate(serials_in):
-            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=True, exit_on_fail=False, retry=not cop_inv_only,)  # dev_type=dev_type)
+            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=not ui_only, exit_on_fail=False, retry=not cop_inv_only,)  # dev_type=dev_type)
             # TODO implement this logic as it won't update dev cache once we add timestamp to cache update.  Logic will be to assume mon/dev cache is current if updated within last x hours, updated it otherwise to ensure mon deletion is not necessary.
             # This would be for scenario where device is found in inv cache but not in dev cache.  commented cache_mon_devs/cache_inv_devs also part of this logic.
             # For now given dev cache could be stale sticking with existing logci that will update dev cache proactively if found in inv but not dev to ensure dev is current.
