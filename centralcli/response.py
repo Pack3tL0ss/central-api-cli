@@ -12,6 +12,7 @@ from rich.text import Text
 from yarl import URL
 
 from centralcli import config, log, utils
+from centralcli.environment import env
 from centralcli.exceptions import CentralCliException
 
 from . import render
@@ -193,14 +194,24 @@ class Response:
         if isinstance(self.output, dict) and "error" in self.output and "error_description" in self.output:
             self.output = f"{self.output['error']}: {self.output['error_description']}"
 
+        # try:  # pragma: no cover
+        #     if config.dev.capture_raw and self.url and self.url.path not in self.raw:  # url.path being in raw response indicates this is a CombinedResponse
+        #         with render.Spinner("Capturing raw response"):
+        #             if not config.capture_file.exists():
+        #                 config.capture_file.write_text("[\n")
+        #             with config.capture_file.open("a") as f:
+        #                 written = f.write(self.dump())
+        #                 log.info(f"raw capture wrote {written} to capture file", caption=True)
+        # except Exception as e:
+        #     log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}", log=True, caption=True)
+
         try:  # pragma: no cover
             if config.dev.capture_raw and self.url and self.url.path not in self.raw:  # url.path being in raw response indicates this is a CombinedResponse
                 with render.Spinner("Capturing raw response"):
-                    if not config.capture_file.exists():
-                        config.capture_file.write_text("[\n")
-                    with config.capture_file.open("a") as f:
-                        written = f.write(self.dump())
+                    written = self.dump()
+                    if written:
                         log.info(f"raw capture wrote {written} to capture file", caption=True)
+
         except Exception as e:
             log.error(f"Exception while attempting to capture raw output from {self.method}:{self.url.path_qs}.  {repr(e)}", log=True, caption=True)
 
@@ -210,32 +221,46 @@ class Response:
                 return self._response._body.decode("utf-8")
             return res.content.decode("utf-8")
 
+        def combine_response(url: str, out: dict) -> dict | None:
+            now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
+            if env.current_test:
+                key = f"{self.method}_{url}"
+                if env.current_test in now and key in now[env.current_test]:
+                    now[env.current_test][key] += [out]
+                    return now
+                return {**now, **{env.current_test: {key: [out]}}}
+
+            key = url.replace("/", "_").lstrip("_")
+            pkey = "ok_responses" if self.ok else "failed_responses"
+            if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
+                log.warning(f"A Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
+                return
+            return {**now, **{pkey: {self.method: {key: out}}}}
+
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
-        key = f"{self.method}_{_url.path_qs}"
         out = {
-            key: {
-                    "reason": self.error,
-                    "url": self.url.path,
-                    "method": self.method,
-                    # "request_headers": {} if not self._response else {k: v if k != "authorization" else f"{v.split(' ')[0]} --redacted--" for k, v in  self._response.request_info.headers.items()},
-                    "status": self.status,
-                    "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
-                    "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-")},
-                    "body": '',
-                    "payload": {}
-                }
-            }
+            "reason": self.error,
+            "url": self.url.path,
+            "method": self.method,
+            "status": self.status,
+            "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
+            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-RateLimit")},
+            "body": '',
+            "payload": {}
+        }
+
         try:
             if self.raw:
                 _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
-                out[key]["payload"] = self.raw
+                out["payload"] = self.raw
             elif self._response:
-                out[key]["body"] = _get_body(self._response)
+                out["body"] = _get_body(self._response)
         except json.JSONDecodeError as e:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
-            out[key]["body"] = _get_body(self._response)
+            out["body"] = _get_body(self._response)
 
-        return f"{json.dumps(out)},\n"
+        combined_out = combine_response(_url.path_qs, out)
+        return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out))
 
 
     def __bool__(self):

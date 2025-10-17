@@ -44,7 +44,7 @@ class Env:
     def current_test(self) -> str | None:  # pragma: no cover only used when capturing responses for tests
         cur_test = environ.get("PYTEST_CURRENT_TEST")
         if cur_test:
-            return cur_test.split("::")[1].split()[0].split("[")[0]
+            return cur_test if "::" not in cur_test else cur_test.split("::")[1].split()[0].split("[")[0]
 
     @current_test.setter
     def current_test(self, value: str | None) -> str | None:  # pragma: no cover  This only hits outside of pytest used with --test <name of test> which implies --capture-raw to capture response for use in automated testing.
