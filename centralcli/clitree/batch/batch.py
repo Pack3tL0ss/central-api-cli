@@ -813,7 +813,7 @@ def archive(
             data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
             render.display_results(data=data, title=title, caption=caption)
     else:
-        render.display_results(res, tablefmt="action")
+        render.display_results(res, tablefmt="action", exit_on_fail=True)
 
 
 @app.command()
@@ -852,7 +852,7 @@ def unarchive(
             data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
             render.display_results(data=data, title=title, caption=caption)
     else:
-        render.display_results(res, tablefmt="action")
+        render.display_results(res, tablefmt="action", exit_on_fail=True)
 
 
 @app.callback()
