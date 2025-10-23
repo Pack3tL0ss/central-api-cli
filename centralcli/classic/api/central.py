@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from ... import constants, utils
 from ...client import BatchRequest
@@ -14,6 +14,20 @@ if TYPE_CHECKING:
 class CentralAPI:
     def __init__(self, session: Session):
         self.session = session
+
+    def _verify_device_type(device_type: constants.GenericDeviceTypes) -> None:
+        """Verify provided device type is valid for these API endpoints.
+
+        Args:
+            device_type (constants.GenericDeviceTypes): device_type provided.
+
+        Raises:
+            ValueError: Raises ValueError if device_type is not valid.
+        """
+        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
+            raise ValueError(
+                f"Invalid Value for device_type {device_type}.  Supported Values: {constants.lib_to_api.valid_generic_str}"
+            )
 
     async def get_all_sites(
         self,
@@ -45,8 +59,6 @@ class CentralAPI:
 
         return await self.session.get(url, params=params)
 
-    # async def get_site_details(self, site_id):
-    #     return await self.session.get(f"/central/v2/sites/{site_id}", callback=cleaner.sites)
 
     async def get_site_details(
         self,
@@ -77,13 +89,13 @@ class CentralAPI:
     async def add_webhook(
         self,
         name: str,
-        urls: List[str],
+        urls: str | list[str],
     ) -> Response:
         """Add / update Webhook.
 
         Args:
             name (str): name of the webhook
-            urls (List[str]): List of webhook urls
+            urls (str | list[str]): List of webhook urls
 
         Returns:
             Response: CentralAPI Response object
@@ -102,19 +114,20 @@ class CentralAPI:
         self,
         wid: str,
         name: str,
-        urls: List[str],
+        urls: str | list[str],
     ) -> Response:
         """Update webhook settings.
 
         Args:
             wid (str): id of the webhook
             name (str): name of the webhook
-            urls (List[str]): List of webhook urls
+            urls (str | list[str]): List of webhook urls
 
         Returns:
             Response: CentralAPI Response object
         """
         url = f"/central/v1/webhooks/{wid}"
+        urls = utils.listify(urls)
 
         json_data = {
             'name': name,
@@ -270,7 +283,7 @@ class CentralAPI:
         """Delete Site(s).
 
         Args:
-            site_id (int|List[int]): Either the site_id or a list of site_ids to be deleted.
+            site_id (int|list[int]): Either the site_id or a list of site_ids to be deleted.
 
         Returns:
             list[Response]: A List of CentralAPI Response objects
@@ -287,7 +300,7 @@ class CentralAPI:
     async def move_devices_to_site(
         self,
         site_id: int,
-        serials: str | List[str],
+        serials: str | list[str],
         device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Associate list of devices to a site.
@@ -295,21 +308,17 @@ class CentralAPI:
         Args:
             site_id (int): Site ID
             device_type (str): Device type. Valid Values: ap, gw switch
-            serials (str | List[str]): List of device serial numbers of the devices to which the site
+            serials (str | list[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO make device_types consistent throughout
-        device_type = constants.lib_to_api(device_type, "site")
-        if not device_type:
-            raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_str}"
-            )
-
         url = "/central/v2/sites/associations"
         serials = utils.listify(serials)
+
+        device_type = constants.lib_to_api(device_type, "site")
+        self._verify_device_type(device_type)
 
         json_data = {
             'site_id': site_id,
@@ -322,28 +331,25 @@ class CentralAPI:
     async def remove_devices_from_site(
         self,
         site_id: int,
-        serials: List[str],
+        serials: str | list[str],
         device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Remove a list of devices from a site.
 
         Args:
             site_id (int): Site ID
-            serials (str | List[str]): List of device serial numbers of the devices to which the site
+            serials (str | list[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
             device_type (Literal['ap', 'gw', 'switch']): Device type. Valid Values: ap, gw, switch.
 
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api(device_type, "site")
-        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
-            raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
-            )
-
         url = "/central/v2/sites/associations"
         serials = utils.listify(serials)
+
+        device_type = constants.lib_to_api(device_type, "site")
+        self._verify_device_type(device_type)
 
         json_data = {
             'site_id': site_id,
@@ -410,28 +416,25 @@ class CentralAPI:
     async def assign_label_to_devices(
         self,
         label_id: int,
-        serials: str | List[str],
+        serials: str | list[str],
         device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """Associate Label to a list of devices.
 
         Args:
             label_id (int): Label ID
-            serials (str | List[str]): List of device serial numbers of the devices to which the label
+            serials (str | list[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
             device_type (str): Device type. Valid Values: ap, gw, switch
 
         Returns:
             Response: CentralAPI Response object
         """
-        device_type = constants.lib_to_api(device_type, "site")
-        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
-            raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
-            )
-
         url = "/central/v2/labels/associations"
         serials = utils.listify(serials)
+
+        device_type = constants.lib_to_api(device_type, "site")
+        self._verify_device_type(device_type)
 
         json_data = {
             'label_id': label_id,
@@ -444,14 +447,14 @@ class CentralAPI:
     async def remove_label_from_devices(
         self,
         label_id: int,
-        serials: str | List[str],
+        serials: str | list[str],
         device_type: constants.GenericDeviceTypes,
     ) -> Response:
         """unassign a label from a list of devices.
 
         Args:
             label_id (int): Label ID
-            serials (str | List[str]): List of device serial numbers of the devices to which the label
+            serials (str | list[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
             device_type (Literal['ap', 'gw', 'switch']): Device type. Valid Values: ap, gw, switch.
 
@@ -459,14 +462,10 @@ class CentralAPI:
             Response: CentralAPI Response object
         """
         url = "/central/v2/labels/associations"
+        serials = utils.listify(serials)
 
         device_type = constants.lib_to_api(device_type, "site")
-        if device_type not in ["CONTROLLER", "IAP", "SWITCH"]:
-            raise ValueError(
-                f"Invalid Value for device_type.  Supported Values: {constants.lib_to_api.valid_generic_str}"
-            )
-
-        serials = utils.listify(serials)
+        self._verify_device_type(device_type)
 
         json_data = {
             'label_id': label_id,
