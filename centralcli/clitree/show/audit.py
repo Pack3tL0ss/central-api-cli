@@ -101,7 +101,7 @@ def acp_logs(
         title = f"{title} for last 5 days"
 
     kwargs = {
-        "log_id": log_id if log_id is None else common.cache.get_audit_log_identifier(log_id),  # TODO show audit system-logs and show audit logs is using same DB
+        "log_id": log_id if log_id is None else common.cache.get_audit_log_identifier(log_id),
         "username": user,
         "from_time": start,
         "to_time": end,
@@ -187,11 +187,11 @@ def logs(
     start, end = common.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=2))
     caption = None
 
-    if all(x is None for x in [start, end]):
+    if _all:
+        title = f"All available {title}"
+    elif all(x is None for x in [start, end]):
         start = pendulum.now(tz="UTC").subtract(days=2)
         title = f"{title} for last 2 days"
-    elif _all:
-        title = f"All available {title}"
 
     dev_id = None
     if device:
@@ -233,9 +233,9 @@ def logs(
         render.display_results(resp, tablefmt="action")
     else:
         tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-        _time_words = common.get_time_range_caption(start, end, default="for last 2 days.")
+        _time_words = "" if _all else common.get_time_range_caption(start, end, default="for last 2 days.")
         caption = [
-            f"[cyan]{len(resp)}[/] audit log{'s' if len(resp) != 1 else ''} {_time_words}",
+            f"[cyan]{len(resp)}[/] audit log{'s' if len(resp) != 1 else ''} {_time_words}".rstrip(),
             "Use [cyan]show audit logs <id>[/] to see details for a log.  Logs lacking an id don't have details."
         ]
 
