@@ -564,7 +564,6 @@ def get_clients(
     data: list[dict],
     verbosity: int = 0,
     cache: callable = None,
-    filters: list[str] = None,
     format: TableFormat = None,
     **kwargs
 ) -> list:
@@ -630,11 +629,6 @@ def get_clients(
             )
             for idx, d in enumerate(data)
         ]
-
-    if filters:  # filter by devices which is a list of serial numbers  # This should be deprecated.  show clients no longer allows multiple devices.
-        _filter = "~|~".join(filters)
-        data = [d for d in data if d["connected device"]["serial"].upper() in _filter.upper()]
-
 
     # if tablefmt is tabular we need each row to have the same columns
     if format in ["csv", "rich", "table"]:
