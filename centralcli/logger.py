@@ -154,7 +154,7 @@ class MyLogger:
 
             if i not in _logged:  # prevents errant duplicates.
                 if log:
-                    getattr(self._log, level)(self._remove_rich_markups(i).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
+                    getattr(self._log, level)(self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
