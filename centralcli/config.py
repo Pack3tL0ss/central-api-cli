@@ -372,10 +372,11 @@ class Config:
 
     @property
     def closed_capture_file(self) -> Path:
-        file = self.log_dir / "raw-capture-closed.json"
-        if self.capture_file.exists():
-            file.write_text(f"{self.capture_file.read_text().rstrip().rstrip(',')}\n]")
-        return file
+        # file = self.log_dir / "raw-capture-closed.json"
+        # if self.capture_file.exists():
+        #     file.write_text(f"{self.capture_file.read_text().rstrip().rstrip(',')}\n]")
+        # return file
+        return self.log_dir / "raw-capture3.json"
 
     @property
     def workspaces(self) -> dict[str, Any]:

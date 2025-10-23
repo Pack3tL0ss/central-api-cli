@@ -1,7 +1,9 @@
 import asyncio
+import datetime
 from typing import Any, Optional, Type, Union
 from unittest.mock import Mock
 from urllib.parse import unquote_plus
+from zoneinfo import ZoneInfo
 
 import jsonref as json
 import pytest
@@ -9,13 +11,13 @@ from aiohttp import RequestInfo, StreamReader
 from aiohttp.client import ClientResponse, ClientSession, hdrs
 from aiohttp.client_proto import ResponseHandler
 from aiohttp.helpers import TimerNoop
+from jinja2 import Environment, FileSystemLoader
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
 from centralcli import config, log, utils
 from centralcli.environment import env
 
-responses: list[dict[str, dict[str, Any]]] = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
 
 # MOCKED aiohttp.client.ClientResponse object
 # vendored/customized from aioresponses
@@ -101,24 +103,44 @@ def _build_response(
 class TestResponses:
     used_responses: list[int] = []
 
-    @staticmethod
-    def _get_candidates(key: str) -> dict[str, Any]:  # LEFT-OFF-HERE  Add support for regex match of url key str within test block  i.e. "GET_/configuration/v1/ap_settings_cli/.*"
-        if env.current_test in responses:
-            if key in responses[env.current_test]:
-                return responses[env.current_test][key]
+    def __init__(self):
+        self.responses = self._get_responses_from_capture_file()
 
-        ok_responses = responses["ok_responses"]
+    @staticmethod
+    def _get_responses_from_capture_file() -> list[dict[str, dict[str, Any]]]:
+        if not config.closed_capture_file.exists():
+            return {}
+        else:
+            now = datetime.datetime.now(tz=ZoneInfo("UTC"))
+            in_five_months = now + datetime.timedelta(days=5 * 30)  # approx
+            in_two_months = now + datetime.timedelta(days=2 * 30)  # approx
+            # Set up Jinja2 environment
+            j2env = Environment(loader=FileSystemLoader(config.closed_capture_file.parent)) # Assuming template is in the same directory
+            template = j2env.get_template(config.closed_capture_file.name)
+
+            # Render the template with the dates
+            return json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months))
+
+    def _get_candidates(self, key: str) -> dict[str, Any]:  # LEFT-OFF-HERE  Add support for regex match of url key str within test block  i.e. "GET_/configuration/v1/ap_settings_cli/.*"
         parts = key.split("_")
         method = parts[0]
         url = "_".join(parts[1:])
+
+        if env.current_test in self.responses:
+            if key in self.responses[env.current_test]:
+                path = url.split("?")[0]
+                candidates = utils.listify(self.responses[env.current_test][key])
+                return (True, [{**c, "url": path, "method": method} for c in candidates])
+
         key = url.replace("/", "_").lstrip("_")
+        ok_responses = self.responses["ok_responses"]
         # strip audit_trail id from url, so any id will match.  this is for showing audit details for a specific log id.
         if "_audit_trail_" in key:
             key = f'{key.split("_audit_trail_")[0]}_audit_trail_'
-            return [ok_responses[method][[k for k in ok_responses[method].keys() if key in k][0]]]
+            return (False, [ok_responses[method][[k for k in ok_responses[method].keys() if key in k][0]]])
 
-        res = ok_responses[method].get(key, responses["failed_responses"][method].get(key))
-        return [] if not res else [res]
+        res = ok_responses[method].get(key, self.responses["failed_responses"].get(method, {}).get(key))
+        return (False, []) if not res else (False, [res])
 
     @property
     def unused(self) -> list[str]:  # pragma: no cover
@@ -134,19 +156,20 @@ class TestResponses:
             url = url.with_query(params)
         key = f"{method.upper()}_{url.path_qs}"
 
-        resp_candidates = self._get_candidates(key)
+        has_per_test_res, resp_candidates = self._get_candidates(key)
 
         for resp in resp_candidates:
             res_hash = hash(str(resp))
             if res_hash not in self.used_responses:
                 self.used_responses += [res_hash]
+                log.info(f"{env.current_test} - returning {resp['status']} MOCK response")
                 return resp
 
         if resp_candidates:  # pragma: no cover
-            log.info(f"Reusing previously used response for {url.path}")
+            log.info(f"{env.current_test} - Reusing previously used {resp['status']} response for {url.path}")
             return resp_candidates[-1]
 
-        log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed response.")  # pragma: no cover
+        log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed (418) response.")  # pragma: no cover
         return {"url": url, "status": 418, "reason": f"No Mock Response Found for {key}"}  # pragma: no cover
 
 test_responses = TestResponses()
