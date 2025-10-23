@@ -3654,7 +3654,7 @@ class Cache:
 
     async def refresh_site_db(self, force: bool = False) -> Response:
         if self.responses.site and not force:
-            log.warning("cache.refresh_side_db called, but site cache has already been fetched this session.  Returning stored response.")
+            log.warning("cache.refresh_site_db called, but site cache has already been fetched this session.  Returning stored response.")
             return self.responses.site
 
         resp = await api.central.get_all_sites()
