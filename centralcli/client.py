@@ -557,8 +557,9 @@ class Session():
 
         # No errors but the total provided by Central doesn't match the # of records
         try:
-            if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
-                log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
+            if not url.path.startswith("/topology_external_api/vlans"):  # API-FLAW vlan endpoint total never matches the # of VLANs.  This is a bug
+                if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
+                    log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
 
@@ -647,7 +648,7 @@ class Session():
         else:
             return False
 
-    def get_token_from_user(self) -> dict:
+    def get_token_from_user(self) -> dict:  # pragma: no cover  requires tty
         """Handle invalid or expired tokens
 
         For prod cluster it leverages ArubaCentralBase.handleTokenExpiry()
