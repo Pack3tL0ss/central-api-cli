@@ -164,13 +164,14 @@ def configs(
         print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
     render.confirm(yes)
 
+    exit_code = 0
     if gw_grp_reqs:
         gw_grp_res = api.session.batch_request(gw_grp_reqs)
 
         for g, r in zip(gw_groups, gw_grp_res):
             if not r.ok:
-                error = f"Failed to retrieve Group level gateway configuration for group [cyan]{g}[/]... {r.error}"
-                log.error(error, show=True)
+                log.error(f"Failed to retrieve Group level gateway configuration for group [cyan]{g}[/]... {r.error}", show=True)
+                exit_code = 1
                 continue
             if isinstance(r.output, dict) and "config" in r.output:
                 r.output = r.output["config"]
@@ -192,6 +193,7 @@ def configs(
         for g, r in zip(ap_groups, ap_grp_res):
             if not r.ok:
                 log.error(f"Failed to retrieve Group level AP configuration for group [cyan]{g}[/]... {r.error}", show=True)
+                exit_code = 1
                 continue
 
             _outdir = outdir if flat else outdir/ g / "aps"
@@ -211,6 +213,7 @@ def configs(
         for d, r in zip(gws, gw_res):
             if not r.ok:
                 log.error(f"Failed to retrieve configuration for {d.name}... {r.error}", show=True)
+                exit_code = 1
                 continue
             if isinstance(r.output, dict) and "config" in r.output:
                 r.output = r.output["config"]
@@ -232,6 +235,7 @@ def configs(
         for d, r in zip(aps, ap_res):
             if not r.ok:
                 log.error(f"Failed to retrieve configuration for {d.name}... {r.error}", show=True)
+                exit_code = 1
                 continue
 
             _outdir = outdir / d.group / "aps" if not flat else outdir
@@ -253,6 +257,7 @@ def configs(
                 for d, r in zip(aps, ap_env_res):
                     if not r.ok:
                         log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
+                        exit_code = 1
                         continue
                     console.rule()
                     console.print(f"[bold]AP env for {d.rich_help_text}[reset]")
@@ -274,6 +279,7 @@ def configs(
         for (group, name), r in zip(map(lambda k: k.split("~|~"), ap_template_reqs.keys()), ap_template_resp):
             if not r.ok:
                 log.error(f"Failed to retrieve template contents for AP template: {name} in group {group}... {r.error}", show=True)
+                exit_code = 1
                 continue
 
             _outdir = outdir / group / "aps" if not flat else outdir
@@ -293,6 +299,7 @@ def configs(
         for (group, name), r in zip(map(lambda k: k.split("~|~"), cx_template_reqs.keys()), cx_template_resp):
             if not r.ok:
                 log.error(f"Failed to retrieve template contents for CX template: {name} in group {group}... {r.error}", show=True)
+                exit_code = 1
                 continue
 
             _outdir = outdir / group / "switch" if not flat else outdir
@@ -312,6 +319,7 @@ def configs(
         for (group, name), r in zip(map(lambda k: k.split("~|~"), sw_template_reqs.keys()), sw_template_resp):
             if not r.ok:
                 log.error(f"Failed to retrieve template contents for AOS-SW template: {name} in group {group}... {r.error}", show=True)
+                exit_code = 1
                 continue
 
             _outdir = outdir / group / "switch" if not flat else outdir
@@ -341,6 +349,8 @@ def configs(
         else:
             _config_header("[bold]Combined Variables file[reset]")
             render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+
+    common.exit(code=exit_code)
 
 class EvalLocationResponse:
     _responses: list[Response] = []

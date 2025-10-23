@@ -255,7 +255,7 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
             count_text = f"{count_text} [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
 
             # Add counts by band
-            wlan_clients = wlan_raw[0]["raw_wireless_response"]["clients"]  # TODO use CombinedResponse
+            wlan_clients = wlan_raw[0]["raw_wireless_response"].get("clients", [])  # TODO use CombinedResponse
             count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients)
         else:
             count_text = f"[bright_green]Client Count[/]: [cyan]{_tot}[/],"
@@ -418,6 +418,7 @@ def show_devices(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        exit_on_fail=True,
         output_by_key=output_key,
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
@@ -2504,13 +2505,10 @@ def clients(
         title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
 
     resp = api.session.request(common.cache.refresh_client_db, **kwargs)
-
-
     if not resp:
         render.display_results(resp, exit_on_fail=True)
 
     caption = None if any([client, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
-
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
 
     if sort_by:

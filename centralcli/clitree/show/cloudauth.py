@@ -48,7 +48,8 @@ def registered_macs(
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
-        reverse=reverse
+        reverse=reverse,
+        exit_on_fail=True
     )
 
 
@@ -89,6 +90,7 @@ def upload(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
+        exit_on_fail=True
     )
 
 @app.callback()
