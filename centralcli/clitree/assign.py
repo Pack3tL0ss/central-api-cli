@@ -18,56 +18,45 @@ glp_api = api_clients.glp
 app = typer.Typer()
 
 
-# TODO consider removing auto option as we've added enable/disable auto-sub ...
-# TODO update cache for device after successful assignment
-# TOGLP
+# CACHE update cache for device after successful assignment
 @app.command(deprecated=True, hidden=glp_api is not None)
 def license(
     license: common.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
-    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, help="device serial numbers or 'auto' to enable auto-subscribe.", show_default=False),
+    devices: list[str] = common.arguments.devices,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:  # pragma: no cover
-    """Assign (or reassign) Licenses to devices by serial number(s) or enable auto-subscribe for the license type.
+    """Assign (or reassign) Licenses to devices by serial number(s).
 
     :warning:  This command is deprecated, and will be replaced by [cyan]assign subscription[/] which is available now if Greenlake (glp)
     details are provided in the config.
 
     If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
 
-    Device must already be added to Central.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
-    Use '--license' option with '[cyan]cencli add device ...[/]' to add device and assign license in one command.
+    [deep_sky_blue1]:information:[/]  Device must already be added to Central (GreenLake inventory).  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
+    Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription/license in one command.
+
+    [deep_sky_blue1]:information:[/]  Use [cyan]cencli enable[/]|[cyan]disable auto-sub[/] to enable/disable auto subscription.
     """
-    # TODO add confirmation method builder to output class
-    do_auto = True if "auto" in [s.lower() for s in devices] else False
-    if do_auto:
-        _msg = f"Enable Auto-assignment of [bright_green]{license.value}[/bright_green] to applicable devices."
-        if len(devices) > 1:
-            render.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
+    _msg = f"Assign [bright_green]{license.value}[/bright_green] to"
+    try:
+        _serial_nums = [s if utils.is_serial(s) else common.cache.get_dev_identifier(s).serial for s in devices]
+    except Exception:
+        _serial_nums = devices
+
+    if len(_serial_nums) > 1:
+        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
+        _msg = f"{_msg}:\n    {_dev_msg}"
     else:
-        _msg = f"Assign [bright_green]{license.value}[/bright_green] to"
-        try:
-            _serial_nums = [s if utils.is_serial(s) else common.cache.get_dev_identifier(s).serial for s in devices]
-        except Exception:
-            _serial_nums = devices
-        if len(_serial_nums) > 1:
-            _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
-            _msg = f"{_msg}:\n    {_dev_msg}"
-        else:
-            dev = _serial_nums[0]
-            _msg = f"{_msg} [cyan]{dev}[/]"
+        dev = _serial_nums[0]
+        _msg = f"{_msg} [cyan]{dev}[/]"
 
     render.econsole.print(_msg)
     if render.confirm(yes):
-        if not do_auto:
-            resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
-        else:
-            resp = api.session.request(api.platform.enable_auto_subscribe, services=license.name)
-
+        resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
         render.display_results(resp, tablefmt="action")
-        # TODO cache update similar to batch unsubscribe
 
 
 @app.command(hidden=not glp_api)
