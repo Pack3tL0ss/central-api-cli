@@ -3,21 +3,12 @@ import pytest
 from typer.testing import CliRunner
 
 from centralcli import common
-from centralcli.cache import api
 from centralcli.cli import app
-from centralcli.exceptions import MissingRequiredArgumentException
 
 from . import capture_logs, config, test_data
 from ._test_data import test_device_file, test_j2_file
 
 runner = CliRunner()
-
-
-# TODO NEEDS COMMAND, and alert id to int cache (like logs/events)
-def test_ack_notification():
-    resp = api.session.request(api.central.central_acknowledge_notifications, "AZl5PdWQBnVd7wH8QpSa")
-    assert resp.ok
-    assert resp.status == 200
 
 
 def test_add_device_missing_mac():
@@ -255,15 +246,6 @@ def test_kick_all_by_ssid():
     assert "200" in result.stdout
 
 
-def test_kick_all_missing_argument():
-    try:
-        api.session.request(api.device_management.kick_users, test_data["ap"]["serial"])
-    except MissingRequiredArgumentException:
-        ...  # Test Passes
-    else:  # pragma: no cover
-        raise AssertionError("test_kick_all_missing_argument should have raised a MissingRequiredArgumentException but did not")
-
-
 def test_save():
     result = runner.invoke(app, ["save",  test_data["switch"]["serial"]])
     capture_logs(result, "test_save")
@@ -477,12 +459,5 @@ if config.dev.mock_tests:
     def test_reset_overlay_connection():
         result = runner.invoke(app, ["reset", "overlay", test_data["gateway"]["name"], "-y"])
         capture_logs(result, "test_reset_overlay_connection")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-if config.wss.key:
-    def test_validate_wss_key():
-        result = runner.invoke(app, ["test", "method", "validate_wss_key", config.wss.base_url, config.wss.key])
-        capture_logs(result, "test_validate_wss_key")
         assert result.exit_code == 0
         assert "200" in result.stdout

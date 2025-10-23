@@ -922,7 +922,7 @@ def test_show_certs():
 
 
 def test_show_labels():
-    result = runner.invoke(app, ["show", "labels"],)
+    result = runner.invoke(app, ["show", "labels", "-r"],)
     capture_logs(result, "test_show_labels")
     assert result.exit_code == 0
     assert "API" in result.stdout
