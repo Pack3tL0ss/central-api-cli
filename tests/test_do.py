@@ -1,3 +1,4 @@
+import pendulum
 import pytest
 from typer.testing import CliRunner
 
@@ -121,26 +122,17 @@ def test_remove_test_ap_from_site(ensure_inv_cache_test_ap, ensure_dev_cache_tes
     assert result.exit_code == 0
     assert "200" in result.stdout
 
-
-def test_blink_switch_on_timed():
-    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on", "1"])
-    capture_logs(result, "test_blink_switch_on_timed")
-    assert result.exit_code == 0
-    assert "state:" in result.stdout
-    assert "task_id:" in result.stdout
-
-
-def test_blink_switch_on():
-    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "on"])
-    capture_logs(result, "test_blink_switch_on")
-    assert result.exit_code == 0
-    assert "state:" in result.stdout
-    assert "task_id:" in result.stdout
-
-
-def test_blink_switch_off():
-    result = runner.invoke(app, ["blink", test_data["switch"]["name"].lower(), "off"])
-    capture_logs(result, "test_blink_switch_off")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([test_data["switch"]["name"], "on", "1"]),
+        ([test_data["switch"]["name"], "on"]),
+        ([test_data["switch"]["name"], "off"]),
+    ]
+)
+def test_blink_switch(args: list[str]):
+    result = runner.invoke(app, ["blink", *args])
+    capture_logs(result, "test_blink_switch")
     assert result.exit_code == 0
     assert "state:" in result.stdout
     assert "task_id:" in result.stdout
@@ -200,8 +192,16 @@ def test_bounce_poe_multiport_invalid_range_across_members():
     assert "\u26a0" in result.stdout  # \u26a0 is warning emoji
 
 
-def test_clone_group():
-    result = runner.invoke(app, ["clone", "group", test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"]),
+        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "-Y"]),
+
+    ]
+)
+def test_clone_group(args: list[str]):
+    result = runner.invoke(app, ["clone", "group", *args])
     capture_logs(result, "test_clone_group")
     assert result.exit_code == 0
     assert "201" in result.stdout
@@ -299,17 +299,16 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "only applies to" in result.stdout
 
-
-    def test_nuke_swarm():
-        result = runner.invoke(app, ["nuke", test_data["aos8_ap"]["name"], "-sy"])
-        capture_logs(result, "test_nuke_swarm")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-
-    def test_nuke_switch():
-        result = runner.invoke(app, ["nuke", test_data["template_switch"]["serial"], "-sy"])  # also testing path with warning msg due to -s (swarm) used with switch
-        capture_logs(result, "test_nuke_switch")
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ([test_data["aos8_ap"]["name"], "-sy"]),
+            ([test_data["template_switch"]["serial"], "-sy"]),  # also testing path with warning msg due to -s (swarm) used with switch
+        ]
+    )
+    def test_nuke(args: list[str]):
+        result = runner.invoke(app, ["nuke", *args])
+        capture_logs(result, "test_nuke")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
@@ -403,8 +402,17 @@ if config.dev.mock_tests:
         assert "dev-type" in result.stdout
 
 
-    def test_set_fw_compliance(ensure_cache_group2):
-        result = runner.invoke(app, ["set", "firmware", "compliance", "ap", "cencli_test_group2", "10.7.2.1_93286", "-y"])
+    in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
+    at_str = in_45_mins.to_datetime_string().replace(" ", "T")[0:-3]
+    @pytest.mark.parametrize(
+        "args",
+        [
+            (["ap", "cencli_test_group2", "10.7.2.1_93286"]),
+            (["ap", "cencli_test_group2", "10.7.2.1_93286", "--at", at_str]),
+        ]
+    )
+    def test_set_fw_compliance(ensure_cache_group2, args: list[str]):
+        result = runner.invoke(app, ["set", "firmware", "compliance", *args, "-y"])
         capture_logs(result, "test_set_fw_compliance")
         assert result.exit_code == 0
         assert "200" in result.stdout

@@ -104,7 +104,7 @@ class PlatformAPI:
             "limit": limit if not count or limit < count else count,
         }
 
-        if log_id:
+        if log_id:  # pragma: no cover this endpoint is not useful other.get_audit_event_logs is the endpoint with the audit logs
             url = f"{url}/{log_id}"
             params = {}
 

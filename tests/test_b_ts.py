@@ -1,3 +1,4 @@
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
@@ -15,16 +16,16 @@ def test_ts_inventory():
     assert "API" in result.stdout
 
 
-def test_ts_ping_mgmt():
-    result = runner.invoke(app, ["ts", "ping", test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"])
-    capture_logs(result, "test_ts_ping_mgmt")
-    assert result.exit_code == 0
-    assert "completed" in result.stdout
-
-
-def test_ts_ping_repititions():
-    result = runner.invoke(app, ["ts", "ping", test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-m"])
-    capture_logs(result, "test_ts_ping_repititions")
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"]),
+        ([test_data["template_switch"]["name"], test_data["gateway"]["ip"]]),
+    ]
+)
+def test_ts_ping(args: list[str]):
+    result = runner.invoke(app, ["ts", "ping", *args])
+    capture_logs(result, "test_ts_ping")
     assert result.exit_code == 0
     assert "completed" in result.stdout
 

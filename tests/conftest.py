@@ -107,7 +107,6 @@ def cleanup_import_files():
 def setup():
     if config.dev.mock_tests:
         yield do_nothing()
-        # yield stash_cache_file()
     else:  # pragma: no cover
         yield do_nothing()
 
@@ -116,7 +115,6 @@ def teardown():
     cleanup_import_files()
     if config.dev.mock_tests:
         return _cleanup_mock_cache()
-        # return restore_cache_file()
     else:
         return cleanup_test_items()  # pragma: no cover
 
@@ -767,6 +765,20 @@ def ensure_cache_label3():
     yield
 
 
+@pytest.fixture(scope="function")
+def ensure_cache_batch_labels():
+    if config.dev.mock_tests:
+        batch_del_labels = [
+            {"id":1109,"name":"cencli_test_label4","devices":0},
+            {"id":1110,"name":"cencli_test_label5","devices":0},
+            {"id":1111,"name":"cencli_test_label6","devices":0},
+        ]
+        missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
+        if missing:
+            assert asyncio.run(cache.update_label_db(data=batch_del_labels))
+    yield
+
+
 def _ensure_cache_group_cloned(allow_gw: bool = False):
     if config.dev.mock_tests:
         cache_data = {
@@ -929,23 +941,3 @@ def ensure_cache_j2_var_csv():
     yield
 
     test_j2_file.unlink(missing_ok=True)
-
-
-
-@pytest.fixture(scope="function")
-def ensure_config_fake_workspaces():
-    # cache_data =   {
-    #     "mac": "aa:bb:cc:dd:ee:ff",
-    #     "name": "not-connected",
-    #     "ip": "10.0.110.299",
-    #     "type": "wireless",
-    #     "network_port": "HPE_Aruba",
-    #     "connected_serial": "CNR4LHJ08G",
-    #     "connected_name": "ktcn.605h.5866",
-    #     "site": "WadeLab",
-    #     "group": "WadeLab",
-    #     "last_connected": None
-    # }
-    # if cache_data["mac"] not in cache.clients_by_mac:
-    #     assert asyncio.run(cache.update_db(cache.ClientDB, cache_data, truncate=False))
-    yield

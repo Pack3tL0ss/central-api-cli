@@ -44,6 +44,13 @@ def test_batch_add_labels():
     assert "200" in result.stdout
 
 
+def test_batch_delete_labels(ensure_cache_batch_labels):
+    result = runner.invoke(app, ["batch", "delete",  "labels", str(test_label_file), "-Y"])
+    capture_logs(result, "test_batch_delete_labels")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
 def test_batch_add_mpsk():
     result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
     capture_logs(result, "test_batch_add_mpsk")
@@ -71,6 +78,13 @@ def test_batch_unarchive_devices():
     capture_logs(result, "test_batch_unarchive_device")
     assert result.exit_code == 0
     assert "uccess" in result.stdout
+
+
+def test_batch_unarchive_devices_fail():
+    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
+    capture_logs(result, "test_batch_unarchive_device_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
 
 
 def test_batch_add_devices():
@@ -187,6 +201,13 @@ def test_batch_archive():
     capture_logs(result, "test_batch_archive")
     assert result.exit_code == 0
     assert "True" in result.stdout
+
+
+def test_batch_archive_fail():
+    result = runner.invoke(app, ["batch", "archive", str(test_device_file), "-y"])
+    capture_logs(result, "test_batch_archive_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
 
 
 def test_batch_deploy():

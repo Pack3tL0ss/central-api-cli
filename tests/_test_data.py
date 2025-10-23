@@ -48,6 +48,7 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -
     res = test_batch_file.write_text(
         _get_dump_func(sfx)(data)
     )
+
     if not res:
         raise ImportException("Batch import file creation from test_data returned 0 chars written")  # pragma: no cover
 
@@ -78,6 +79,21 @@ def setup_j2_file() -> Path:
     )
     return test_j2_file
 
+def create_var_file(seed_file, file_type: str = "json", flat: bool = False):
+    file_data = config.get_file_data(Path(seed_file))
+    out_file = config.cache_dir / f"test_runner_variables{'_flat' if flat else ''}.{file_type}"
+    if file_type == "csv":
+        all_keys = [k for item in file_data.values() for k in list(item.keys())]
+        rows = [[item.get(k, "") for k in all_keys] for item in file_data.values()]
+        out = "\n".join([",".join(all_keys), *[",".join(r) for r in rows]])
+        out_file.write_text(out)
+    else:
+        if flat:
+            key = list(file_data.keys())[0]
+            file_data = file_data[key]
+        out_file.write_text(json.dumps(file_data, indent=2, sort_keys=False))
+    return out_file
+
 
 test_data: dict[str, Any] = get_test_data()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
@@ -92,8 +108,14 @@ test_mpsk_file: Path = setup_batch_import_file(test_data=test_data, import_type=
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"])
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
+test_switch_var_file_json = create_var_file(test_data["test_devices"]["switch"]["variable_file"])
+test_switch_var_file_flat = create_var_file(test_data["test_devices"]["switch"]["variable_file"], flat=True)
+test_switch_var_file_csv = create_var_file(test_data["test_devices"]["switch"]["variable_file"], file_type="csv")
 test_deploy_file = setup_deploy_file(group_file=test_group_file, site_file=test_site_file, label_file=test_label_file, device_file=test_device_file)
 test_j2_file = setup_j2_file()
+# Persistent files, not deleted
+test_ap_ui_group_template = Path(test_data["template"]["ap_ui_group"]["template_file"])
+test_ap_ui_group_variables = Path(test_data["template"]["ap_ui_group"]["variable_file"])
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
 test_files = [
@@ -113,4 +135,7 @@ test_files = [
     test_deploy_file,
     test_j2_file,
     test_update_aps_file,
+    test_switch_var_file_json,
+    test_switch_var_file_flat,
+    test_switch_var_file_csv,
 ]

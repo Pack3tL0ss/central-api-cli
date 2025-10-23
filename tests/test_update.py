@@ -1,10 +1,11 @@
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
 from centralcli.exceptions import ConfigNotFoundException
 
 from . import capture_logs, config, test_data
-from ._test_data import gw_group_config_file
+from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables
 
 runner = CliRunner()
 
@@ -124,7 +125,14 @@ def test_update_site_no_data(ensure_cache_site4):
 
 
 # TODO need cencli update command
-def test_update_mpsk(ensure_cache_mpsk):
+@pytest.mark.parametrize(
+    "args",
+    [
+        (["enabled=True", "reset=True"]),
+        (["enabled=False"]),
+    ]
+)
+def test_update_mpsk(ensure_cache_mpsk, args: list[str]):
     result = runner.invoke(
         app,
         [
@@ -133,8 +141,7 @@ def test_update_mpsk(ensure_cache_mpsk):
             "update_named_mpsk",
             "1EBTWK86LPQ86S0B",
             "4e650830-d4d6-4a19-b9af-e0f776c69d24",
-            "enabled=True",
-            "reset=True"
+            *args
         ]
     )
     capture_logs(result, "test_update_mpsk")
@@ -220,6 +227,31 @@ def test_update_template(ensure_cache_template):
         ]
     )
     capture_logs(result, "test_update_template")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([]),
+        ([str(test_ap_ui_group_variables)]),
+    ]
+)
+def test_update_config(ensure_cache_group4, args: list[str]):
+    result = runner.invoke(
+        app,
+        [
+            "update",
+            "config",
+            "--yes",
+            "--ap",
+            "cencli_test_group4",
+            str(test_ap_ui_group_template),
+            *args
+        ]
+    )
+    capture_logs(result, "test_update_config")
     assert result.exit_code == 0
     assert "200" in result.stdout
 

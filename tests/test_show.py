@@ -5,7 +5,8 @@ import pytest
 from typer.testing import CliRunner
 
 from centralcli import cache
-from centralcli.cli import app
+from centralcli.cli import api, app
+from centralcli.client import Session
 
 from . import capture_logs, clean_mac, config, test_data
 
@@ -234,7 +235,7 @@ def test_show_bssids_too_many_filters():
 # API returns csv, the Response.output attribute is converted in cloudauth.get_registered_macs()
 # to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
 def test_show_cloud_auth_registered_macs():
-    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs"],)
+    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", "--sort", "mac"],)
     capture_logs(result, "test_show_cloud_auth_registered_macs")
     assert result.exit_code == 0
     assert "MAC" in result.stdout
@@ -282,6 +283,19 @@ def test_show_all():
     assert result.exit_code == 0
     assert "mac" in result.stdout
     assert "serial" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "pass_condition",
+    [
+        lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code ==0),
+        lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code ==0),
+    ]
+)
+def test_show_all_fail(pass_condition: Callable):
+    result = runner.invoke(app, ["show", "all"],)
+    capture_logs(result, "test_show_all", expect_failure="Partial Failure" not in result.stdout)
+    assert pass_condition(result)
 
 
 def test_show_insights():
@@ -347,6 +361,7 @@ def test_show_insights_no_dev_type():
 
 
 def test_show_insights_too_many_filters():
+    config.debugv = True
     result = runner.invoke(
         app,
         [
@@ -357,6 +372,7 @@ def test_show_insights_too_many_filters():
             "site_id=7"
         ]
     )
+    config.debugv = config.debug = False
     assert result.exit_code == 1
     assert isinstance(result.exception, ValueError)
 
@@ -376,9 +392,11 @@ def test_show_inventory_failed_sub_call():
 
 
 def test_show_inventory_verbose():
+    from centralcli.clitree.show.show import api as sapi
+    Session.requests = api.session.requests = sapi.session.requests = []
     result = runner.invoke(app, ["show", "inventory", "-v"],)
-    capture_logs(result, "test_show_inventory_verbose")
-    assert result.exit_code <= 1  # verbose uses api.session.requests to determine exit code, which during test runs will have more than just the requests involved with this command.
+    # capture_logs(result, "test_show_inventory_verbose")
+    assert result.exit_code == 0  # verbose uses api.session.requests to determine exit code, which during test runs could have more than just the requests involved with this command.
     assert "mac" in result.stdout
 
 
@@ -883,10 +901,17 @@ def test_show_cx_switch_stack_lldp_neighbors():
     assert "chassis" in result.stdout
 
 
-def test_show_groups():
-    result = runner.invoke(app, ["show", "groups", "--csv"],)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--csv",),
+        ("--yaml",),
+    ]
+)
+def test_show_groups(args: tuple[str]):
+    result = runner.invoke(app, ["show", "groups", *args],)
     assert result.exit_code == 0
-    assert "name" in result.stdout
+    assert "allowed_types" in result.stdout
     assert "aos10" in result.stdout
 
 
@@ -1080,11 +1105,20 @@ def test_show_clients(args: list[str], pass_condition: Callable):
     assert pass_condition(result.stdout)
 
 
-def test_show_clients_too_many_filters():
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        (["--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]], lambda r: "one of" in r),
+        ([], lambda r: "API" in r)
+    ]
+)
+def test_show_clients_fail(args: list[str], pass_condition: Callable):
+    api.session.requests = []  # Clearing class var Session.requests did not work for some reason, this does.  Need requests cleared or first call is not run by itself
     cache.responses.client = None
-    result = runner.invoke(app, ["show", "clients", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
+    result = runner.invoke(app, ["show", "clients", *args],)
+    capture_logs(result, "test_show_clients_fail", expect_failure=True)
     assert result.exit_code == 1
-    assert "one of" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_denylisted():

@@ -49,15 +49,21 @@ if config.dev.mock_tests:
         assert "uccess" in result.stdout
         assert "API" in result.stdout
 
-
-    def test_caas_send_cmds_invalid():
+    @pytest.mark.parametrize(
+        "fixture,args", [
+            (None, ["device", "20:4c:03:26:28:4c"]),  # device doesn't exist
+            ("ensure_cache_group4", ["group", "cencli_test_group4", "-A", *mock_commands])  # no gateways in group
+        ]
+    )
+    def test_caas_send_cmds_invalid(fixture: str | None, args: list[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
         result = runner.invoke(
             app,
             [
                 "caas",
                 "send-cmds",
-                "device",
-                "20:4c:03:26:28:4c"
+                *args
             ]
         )
         capture_logs(result, "test_caas_send_cmds_invalid", expect_failure=True)
