@@ -48,6 +48,7 @@ from unittest import mock
 import pytest
 from click.testing import Result
 from rich.console import Console
+from rich.markup import escape
 from rich.traceback import install
 
 from centralcli import cache, config, log
@@ -67,8 +68,9 @@ class NonDefaultWorkspaceException(CentralCliException): ...
 
 def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
+    _msg = 'returned error' if not expect_failure else 'Passed when failure was expected'
     if result.exit_code != (0 if not expect_failure else 1) or log_output:
-        log.error(f"{test_func} {'returned error' if not log_output else 'output'}:\n{result.stdout = }", show=True)
+        log.error(f"{test_func} {_msg if not log_output else 'output'}:\n{escape(f'{result.stdout = }')}", show=True)
         if "unable to gather device" in result.stdout:  # pragma: no cover
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
