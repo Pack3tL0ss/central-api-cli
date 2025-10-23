@@ -36,13 +36,13 @@ def group(
         )
 
     render.confirm(yes)
+    # API-FLAW clone and upgrade to aos10 does not work via the API
     resp = api.session.request(api.configuration.clone_group, clone_group, new_group)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
     groups = common.cache.groups_by_name
 
-    # API-FLAW clone and upgrade to aos10 does not work via the API
-    new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
     if groups:
+        new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
         api.session.request(common.cache.update_group_db, new_data)
 
 
