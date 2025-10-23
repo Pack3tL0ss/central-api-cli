@@ -225,6 +225,8 @@ def group(
         _msg = f"{_msg}\n    [cyan]APs[/cyan]: [bright_green]Template Group[/bright_green]"
     if gw_role:
         _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role.value}[/bright_green]"
+    elif gw:  # --sdwan results in gw_role being set (vpnc)
+        _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]branch[/bright_green] [dim italic]Not specified.  This is the default[/]"
     if microbranch:
         _msg = f"{_msg}\n    [cyan]AP Role[/cyan]: [bright_green]Microbranch[/bright_green]"
     if mon_only_sw:
@@ -565,9 +567,9 @@ def _get_variable_file(var_file: Path) -> dict[str, dict[str, str]]:
     var_data = config.get_file_data(var_file)
 
     try:
-        if isinstance(var_data, list):
+        if isinstance(var_data, list):  # csv
             var_data = {dev_vars["_sys_serial"]: dev_vars for dev_vars in var_data}
-        elif "_sys_serial" in var_data:
+        elif "_sys_serial" in var_data:  # flat single device dict
             var_data = {var_data["_sys_serial"]: var_data}
     except KeyError as e:  # pragma: no cover
         log.exception(f"{repr(e)} While attempting to parse variables from {var_file.name}\n{e}")
@@ -596,7 +598,7 @@ def variables(
     """
     var_data = _get_variable_file(variable_file)
 
-    econsole.print(f"[bright_green]{'Uploading' if yes else 'Upload'}[/] variables for {len(var_data)} device with variables defined in [cyan]{variable_file.name}[/]")
+    econsole.print(f"[bright_green]Upload{'ing' if yes else ''}[/] variables for {len(var_data)} device{'s' if len(var_data) > 1 else ''} with variables defined in [cyan]{variable_file.name}[/]")
     render.confirm(yes)
 
     batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, serial, dev_data["_sys_lan_mac"], var_dict=dev_data) for serial, dev_data in var_data.items()]
