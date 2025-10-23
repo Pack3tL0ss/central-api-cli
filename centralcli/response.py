@@ -225,8 +225,11 @@ class Response:
             now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
             if env.current_test:
                 key = f"{self.method}_{url}"
-                if env.current_test in now and key in now[env.current_test]:
-                    now[env.current_test][key] += [out]
+                if env.current_test in now:
+                    if key in now[env.current_test]:
+                        now[env.current_test][key] += [out]
+                    else:
+                        now[env.current_test][key] = [out]
                     return now
                 return {**now, **{env.current_test: {key: [out]}}}
 
@@ -235,7 +238,7 @@ class Response:
             if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
                 log.warning(f"A Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
                 return
-            return {**now, **{pkey: {self.method: {key: out}}}}
+            return {**now, pkey: {self.method: {**now[pkey][self.method], key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         out = {
@@ -260,7 +263,7 @@ class Response:
             out["body"] = _get_body(self._response)
 
         combined_out = combine_response(_url.path_qs, out)
-        return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out))
+        return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out, indent=2, sort_keys=False))
 
 
     def __bool__(self):
