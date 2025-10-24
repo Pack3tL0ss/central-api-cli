@@ -15,6 +15,7 @@ class CentralAPI:
     def __init__(self, session: Session):
         self.session = session
 
+    @staticmethod
     def _verify_device_type(device_type: constants.GenericDeviceTypes) -> None:
         """Verify provided device type is valid for these API endpoints.
 
