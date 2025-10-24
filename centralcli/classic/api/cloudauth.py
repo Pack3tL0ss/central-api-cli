@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import aiohttp
 import tablib
 import yaml
 
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
     from centralcli.typedefs import CloudAuthUploadTypes
 
     from ...client import Session
+
 
 class CloudAuthAPI:
     def __init__(self, session: Session):
@@ -57,43 +57,6 @@ class CloudAuthAPI:
 
         return resp
 
-    async def upload_fixme(
-        self,
-        upload_type: CloudAuthUploadTypes,
-        file: Path | str,
-        ssid: str = None,
-    ) -> Response:  # pragma: no cover
-        """Upload file.
-
-        This doesn't work still sorting the format of FormData
-
-        Args:
-            upload_type (CloudAuthUploadType): Type of file upload  Valid Values: mpsk, mac
-            file (Path | str): The csv file to upload
-            ssid (str, optional): MPSK network SSID, required if {upload_type} = 'mpsk'
-
-        Returns:
-            Response: CentralAPI Response object
-        """
-        url = f"/cloudauth/api/v3/bulk/{upload_type}"
-        file = file if isinstance(file, Path) else Path(str(file))
-        # data = multipartify(file.read_bytes())
-        # data = aiohttp.FormData(file.open())
-
-        params = {
-            'ssid': ssid
-        }
-        files = { "file": (file.name, file.open("rb"), "text/csv") }
-        form_data = aiohttp.FormData(files)
-        # files = {f'{upload_type}_import': (f'{upload_type}_import.csv', file.read_bytes())}
-        headers = {
-            "Content-Type": "multipart/form-data",
-            'Accept': 'application/json'
-        }
-        headers = {**headers, **dict(aiohttp.FormData(files)._writer._headers)}
-
-        return await self.session.post(url, headers=headers, params=params, payload=form_data)
-
     async def upload(
         self,
         upload_type: CloudAuthUploadTypes,
@@ -112,7 +75,7 @@ class CloudAuthAPI:
             Response: CentralAPI Response object
         """
         url = f"/cloudauth/api/v3/bulk/{upload_type}"
-        file = file if isinstance(file, Path) else Path(str(file))
+        file = file if isinstance(file, Path) else Path(str(file))  # pragma: no cover
         params = {'ssid': ssid}
         files = {"file": (file.name, file.open("rb"), "text/csv")}
 

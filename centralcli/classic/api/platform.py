@@ -277,7 +277,7 @@ class PlatformAPI:
         serial: str = None,
         mac: str = None,
         device_list: List[Dict[Literal["serial", "mac"], str]] = []
-    ) -> Response:
+    ) -> Response:  # pragma: no cover Not used by any command and will be updated to use GLP
         """Verify Device Addition
 
         Args:
@@ -422,14 +422,8 @@ class PlatformAPI:
         serials = utils.listify(serials)
         services = utils.listify(services)
 
-        if len(serials) > 50:
+        if len(serials) > 50:  # pragma: no cover Not testing as focus is on GLP call for the same now.
             raise ValueError(f"{url} endpoint allows a max of 50 serials per call.  {len(serials)} were provided.")
-
-        # TODO Working code for doing 50 serial chunking here.  This results in _batch_request calling _batch_request and a list of lists.  Would need to flatted the lists
-        # for display_results to handle the output.
-        # requests = [self.BatchRequest(self.session.post, url, json_data={"serials": chunk, "services": services}) for chunk in utils.chunker(serials, 50)]
-        # better to add a chunk: int = None param to _batch_request and do it there
-        # return await self.session._batch_request(requests)
 
         json_data = {
             'serials': serials,

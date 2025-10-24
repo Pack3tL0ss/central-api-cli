@@ -7,6 +7,7 @@ from typer.testing import CliRunner
 from centralcli import cache
 from centralcli.cli import api, app
 from centralcli.client import Session
+from centralcli.environment import env
 
 from . import capture_logs, clean_mac, config, test_data
 
@@ -377,8 +378,16 @@ def test_show_insights_too_many_filters():
     assert isinstance(result.exception, ValueError)
 
 
-def test_show_inventory():
-    result = runner.invoke(app, ["show", "inventory"],)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--key", "EC5C0481E85EB4DB79"),
+        ("--sub",),
+        ("--no-sub",),
+    ]
+)
+def test_show_inventory(args: tuple[str]):
+    result = runner.invoke(app, ["show", "inventory", *args],)
     capture_logs(result, "test_show_inventory")
     assert result.exit_code == 0
     assert "mac" in result.stdout
@@ -915,10 +924,20 @@ def test_show_groups(args: tuple[str]):
     assert "aos10" in result.stdout
 
 
-def test_show_certs():
-    result = runner.invoke(app, ["show", "certs", "--yaml"],)
+@pytest.mark.parametrize(
+    "args,pass_condition,test_name_update",
+    [
+        [("--yaml", "--valid", "--svr"), lambda r: "expired" in r, None],
+        [("--ca",), lambda r: "⚠" in r, None],  # No data after applying filters
+        [(), lambda r: "Empty" in r, "no_payload"],  # empty_response
+    ]
+)
+def test_show_certs(args: tuple[str], pass_condition: Callable, test_name_update: None | str):
+    if test_name_update:
+        env.current_test = f"{env.current_test}_{test_name_update}"
+    result = runner.invoke(app, ["show", "certs", *args],)
     assert result.exit_code == 0
-    assert "expired" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_labels():

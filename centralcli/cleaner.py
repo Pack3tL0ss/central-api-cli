@@ -1045,7 +1045,7 @@ def get_certificates(data: dict[str, Any], valid: bool = None, cert_types: list[
         return f"[bright_red]{value}[/]" if value is True else value
 
 
-    if data and len(data[0]) != len(short_keys):
+    if data and len(data[0]) != len(short_keys):  # pragma: no cover
         log = logging.getLogger()
         log.error(
             f"get_certificates has returned more keys than expected, check for changes in response schema\n"
@@ -1110,7 +1110,7 @@ def get_vlans(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     return data
 
-
+# TODO WIP not used yet
 def routes(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     data = utils.unlistify(data)
     if isinstance(data, list) or "routes" not in data:

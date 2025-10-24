@@ -40,6 +40,12 @@ if config.dev.mock_tests:
         assert resp.status == 200
 
 
+def test_get_ap_system_config():
+    resp = api.session.request(api.configuration.get_ap_system_config, test_data["ap"]["group"])
+    assert resp.ok
+    assert resp.status == 200
+
+
 def test_kick_all_missing_argument():
     try:
         api.session.request(api.device_management.kick_users, test_data["ap"]["serial"])
