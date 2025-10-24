@@ -1132,9 +1132,7 @@ class ConfigAPI:
 
     # >>>> CERTIFICATES <<<<
 
-    async def get_certificates(
-            self, q: str = None, offset: int = 0, limit: int = 20, callback: callable = None, callback_kwargs: dict = None
-        ) -> Response:
+    async def get_certificates(self, q: str = None, offset: int = 0, limit: int = 20) -> Response:
             """Get Certificates details.
 
             Args:
@@ -1147,11 +1145,9 @@ class ConfigAPI:
                 Response: CentralAPI Response object
             """
             url = "/configuration/v1/certificates"
+            params = {"q": q, "offset": offset, "limit": limit}  # offset and limit are both required by the API method.
 
-            # offset and limit are both required by the API method.
-            params = {"q": q, "offset": offset, "limit": limit}
-
-            return await self.session.get(url, params=params, callback=callback, callback_kwargs=callback_kwargs)
+            return await self.session.get(url, params=params)
 
     async def upload_certificate(
         self,
@@ -1734,64 +1730,24 @@ class ConfigAPI:
 
         return [*update_resp, *skipped, *list(failed.values())]
 
-    # 2 methods below are not used by any commands
+    # not used by any commands
     async def get_ap_system_config(
         self,
-        group_name_or_guid_or_serial_number: str,
+        scope: str,
     ) -> Response:
         """Get System Config.
 
         Args:
-            group_name_or_guid_or_serial_number (str): Group name of the group or guid of the swarm
+            scope (str): Group name of the group or guid of the swarm
                 or serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
 
         Returns:
             Response: CentralAPI Response object
         """
-        url = f"/configuration/v1/system_config/{group_name_or_guid_or_serial_number}"
-
-        return await self.session.get(url)
-
-    # TODO all params required by API GW, need call to get current properties
-    # if not all are provided
-    async def update_ap_system_config(
-        self,
-        scope: str,
-        dns_server: str = None,
-        ntp_server: List[str] = None,
-        username: str = None,
-        password: str = None,
-    ) -> Response:
-        """Update system config.
-
-        All params are required by Aruba Central
-
-        Args:
-            scope (str): Group name of the group or swarm_id.
-                Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f.
-            dns_server (str): DNS server IPs or domain name
-            ntp_server (List[str]): List of ntp server,
-                Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
-                IPs or domain name.
-            username (str): username
-            password (str): password
-
-        Returns:
-            Response: CentralAPI Response object
-        """
         url = f"/configuration/v1/system_config/{scope}"
 
-        json_data = {
-                'dns_server': dns_server,
-                'ntp_server': ntp_server,
-                'username': username,
-                'password': password
-        }
-
-        return await self.session.post(url, json_data=json_data)
-
-    # >>>> CONFIGURATION <<<<
+        return await self.session.get(url)
 
     # API-FLAW  Seems to work fine for cx, ap, but gw the return is
     # "Fetching configuration in progress for Mobility Controller SERIAL/MAC"

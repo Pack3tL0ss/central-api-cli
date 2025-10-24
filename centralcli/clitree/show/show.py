@@ -2632,7 +2632,6 @@ def uplinks(
     render.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
 
 
-# TODO use common time parser see clishowbandwidth
 @app.command()
 def roaming(
     client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=common.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
