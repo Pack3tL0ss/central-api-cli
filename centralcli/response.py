@@ -236,9 +236,10 @@ class Response:
             key = url.replace("/", "_").lstrip("_")
             pkey = "ok_responses" if self.ok else "failed_responses"
             if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
-                log.warning(f"A Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
+                log.warning(f"A ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
                 return
-            return {**now, pkey: {self.method: {**now[pkey][self.method], key: out}}}
+
+            return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         out = {
