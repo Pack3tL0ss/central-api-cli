@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, overload
 
 import tablib
 import yaml
@@ -10,9 +10,46 @@ from ... import log, utils
 from ...client import Response
 
 if TYPE_CHECKING:
-    from centralcli.typedefs import CloudAuthUploadTypes
+    from centralcli.constants import TimeRange
+    from centralcli.typedefs import CloudAuthTimeWindow, CloudAuthUploadTypes
 
     from ...client import Session
+
+@overload
+def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str: ...
+
+
+@overload
+def parse_time_window(time_window: None) -> None: ...
+
+
+def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str:
+    """Common helper to parse CLI time_window option and return format expected by cloud-auth
+
+    Args:
+        time_window (CloudAuthTimeWindow | TimeRange | None): time_window TimeRange enum or str like
+            3M where M=Months, w=weeks, d=days, h=hours, m=minutes.
+            Valid windows: "3h", "1d", "1w", "1M", "3M"
+
+    Returns:
+        str: returns time window in format required by cloud-auth API endpoints.
+
+    Raises:
+        ValueError if time window is invalid.
+    """
+    valid = ["3h", "1d", "1w", "1M", "3M"]
+    cli_to_api = {
+        "h": "hour",
+        "d": "day",
+        "w": "week",
+        "M": "month"
+    }
+
+    time_window = time_window if not hasattr(time_window, "value") else time_window.value
+    if time_window not in valid:
+        raise ValueError(f"Invalid value for time_window {time_window}.  Valid values: {', '.join(valid)}")
+
+    return f"{time_window[0]}-{cli_to_api[time_window[1]]}"
 
 
 class CloudAuthAPI:
@@ -283,6 +320,88 @@ class CloudAuthAPI:
             'role': role,
             'status': status,
             'sort': sort
+        }
+
+        return await self.session.get(url, params=params)
+
+
+    async def get_authentications(
+        self,
+        from_time: str = None,
+        time_window: CloudAuthTimeWindow | TimeRange = None,
+        airpass: bool = False,
+        cursor: str = None,
+        limit: int = 1000
+    ) -> Response:
+        """Fetch list of authentications using Cloud Identity or AirPass.
+
+        Args:
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.  Default to None, which results in "1h" if time_window is not provided.
+            time_window (CloudAuthTimeWindow | TimeRange, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: "3h", "1d", "1w", "1M", "3M"
+            airpass (bool, optional): Set to true to fetch airpass authentications.  Default is to fetch Cloud Identitiy authentications.
+            cursor (str | None, optional): Pagination cursor.  Should be None for first call.  Use "cursor"
+                in payload of previous call for subsequent calls to get the next page of results.
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed range is 1
+                to 1000.  Defaults to 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v1/auth/{'cloud_identity' if not airpass else 'air_pass'}/list"
+        if time_window:
+            time_window = parse_time_window(time_window)
+        elif not from_time:
+            from_time = "1h"
+
+        params = {
+            'from_time': from_time,
+            'time_window': time_window,
+            'cursor': cursor,
+            'limit': limit,
+        }
+
+        return await self.session.get(url, params=params)
+
+
+    async def get_sessions(
+        self,
+        from_time: str = None,
+        time_window: CloudAuthTimeWindow | TimeRange = None,
+        airpass: bool = False,
+        cursor: str = None,
+        limit: int = 1000
+    ) -> Response:
+        """Fetch list of sessions using Cloud Identity or AirPass.
+
+        Args:
+            from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
+                day , hour , minute respectively; like 3h. This is ignored if Time Window is
+                specified.  Default to None, which results in "1h" if time_window is not provided.
+            time_window (CloudAuthTimeWindow | TimeRange, optional): Set Time Window to include requests started in a specific
+                time window.  Valid Values: "3h", "1d", "1w", "1M", "3M"
+            airpass (bool, optional): Set to true to fetch airpass sessions.  Default is to fetch Cloud Identitiy sessions.
+            cursor (str | None, optional): Pagination cursor.  Should be None for first call.  Use "cursor"
+                in payload of previous call for subsequent calls to get the next page of results.
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed range is 1
+                to 1000.  Defaults to 1000.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = f"/cloudAuth/api/v1/session/{'cloud_identity' if not airpass else 'air_pass'}/list"
+        if time_window:
+            time_window = parse_time_window(time_window)
+        elif not from_time:
+            from_time = "1h"
+
+        params = {
+            'from_time': from_time,
+            'time_window': time_window,
+            'cursor': cursor,
+            'limit': limit,
         }
 
         return await self.session.get(url, params=params)
