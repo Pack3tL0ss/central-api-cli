@@ -899,7 +899,7 @@ class ConfigAPI:
         else:
             template = template if isinstance(template, Path) else Path(str(template))
             if not template.exists():
-                raise FileNotFoundError
+                raise FileNotFoundError(f"{str(template)} File Not Found")
 
             files = {'template': ('template.txt', template.read_bytes())}
 
@@ -923,7 +923,7 @@ class ConfigAPI:
         name: str,
         payload: str = None,
         template: Path | str | bytes = None,
-        device_type: constants.DeviceTypes ="ap",
+        device_type: constants.DeviceTypes = "ap",
         version: str = "ALL",
         model: str = "ALL",
     ) -> Response:
@@ -965,7 +965,7 @@ class ConfigAPI:
         if template:
             template = template if isinstance(template, Path) else Path(str(template))
             if not template.exists():
-                raise FileNotFoundError
+                raise FileNotFoundError(f"{str(template)} Not found.")
             if template.is_file() and template.stat().st_size > 0:
                 template_data: bytes = template.read_bytes()
         elif payload:
@@ -1220,23 +1220,27 @@ class ConfigAPI:
             if var:
                 break
 
+        cert_bytes = None
         if cert_file:
             cert_file = Path(cert_file) if not isinstance(cert_file, Path) else cert_file
             cert_name = cert_name or cert_file.stem
-            if not cert_format:
+            if cert_format:
+                cert_format = cert_format.upper()
+            else:
                 if cert_file.suffix.lower() in [".pfx", ".p12"]:
                     cert_format = "PKCS12"
-                elif cert_file.suffix.lower() in [".pem", ".cer"]:
+                elif cert_file.suffix.lower() in [".pem", ".cer", "crt"]:
                     cert_format = "PEM"
                 else:
                     # TODO determine format using cryptography lib
                     cert_format = "DER"
+
+            if cert_format == "PEM":
+                cert_data = cert_file.read_text()
             else:
-                cert_format = cert_format.upper()
+                cert_bytes = cert_file.read_bytes()
 
-            cert_data = cert_file.read_text()
-
-        cert_bytes = cert_data.encode("utf-8")
+        cert_bytes = cert_bytes or cert_data.encode("utf-8")
         cert_b64 = base64.b64encode(cert_bytes).decode("utf-8")
 
         json_data = {
