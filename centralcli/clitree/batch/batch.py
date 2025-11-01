@@ -348,7 +348,6 @@ def batch_deploy(import_file: Path, yes: bool = False) -> list[Response]:
 
 @app.command()
 def verify(
-    # what: BatchAddArgs = common.arguments.what,
     import_file: Path = common.arguments.import_file,
     no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
     failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
@@ -362,9 +361,6 @@ def verify(
 
     The same import file used to add/move can be used to validate.
     """
-    # if what != "devices":
-    #     common.exit("Only devices and device assignments are supported at this time.")
-
     data = common._get_import_file(import_file, import_type="devices")
 
     resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
@@ -788,16 +784,7 @@ def archive(
         common.exit(render._batch_invalid_msg("cencli batch archive [OPTIONS] [IMPORT_FILE]"))
 
     data = common._get_import_file(import_file, "devices", text_ok=True)
-    if data and isinstance(data, list):
-        if all([isinstance(x, dict) for x in data]):
-            serials = [x.get("serial") or x.get("serial_num") for x in data]
-        elif all(isinstance(x, str) for x in data):
-            serials = data if not data[0].lower().startswith("serial") else data[1:]
-    else:
-        common.exit(
-            f"[bright_red]Error[/] Unexpected data structure returned from {import_file.name}\n"
-            "Use [cyan]cencli batch archive --example[/] to see expected format."
-        )
+    serials = [x.get("serial") or x.get("serial_num") for x in data]
 
     render.econsole.print(f"[red]Archiv{'e' if not yes else 'ing'}[/] the [bright_green]{len(serials)}[/] devices found in {import_file.name}")
     render.confirm(yes)
