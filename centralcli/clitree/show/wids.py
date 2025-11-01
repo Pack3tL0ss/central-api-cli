@@ -32,14 +32,15 @@ class WidsResponse:
 
 
     def all_caption(self) -> str:
-        caption = None
+        caption = ""
+        sections = ["rogues", "suspect", "interfering", "neighbor"]
         if self.response.raw.get("_counts"):
-            caption = f'Rogue APs: [cyan]{self.response.raw["_counts"]["rogues"]}[/cyan] '
-            caption += f'Suspected Rogue APs: [cyan]{self.response.raw["_counts"]["suspect"]}[/] '
-            caption += f'Interfering APs: [cyan]{self.response.raw["_counts"]["interfering"]}[/] '
-            caption += f'Neighbor APs: [cyan]{self.response.raw["_counts"]["neighbor"]}[/]'
+            for section in sections:
+                if section in self.response.raw["_counts"]:
+                    caption += f'{section.capitalize()} APs: [cyan]{self.response.raw["_counts"][section]}[/cyan] '
 
-        return caption
+        caption = caption.strip()
+        return caption or None
 
 def get_wids_response(
     wids_cat: Literal["rogue", "interfering", "suspect", "all"],
