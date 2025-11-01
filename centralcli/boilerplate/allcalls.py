@@ -3598,22 +3598,23 @@ class AllCalls:
 
     async def cloudauth_read_auth_cloud_identity_list_v1(
         self,
-        limit: int,
-        cursor: str = None,
         from_time: str = None,
         time_window: str = None,
+        cursor: str = None,
+        limit: int = 1000
     ) -> Response:
         """Fetch list of authentications using Cloud Identity.
 
         Args:
-            limit (int): Maximum number of authentication records to be returned. Allowed range is 1
-                to 1000.
-            cursor (str, optional): Cursor to iterate over the next set of authentication records.
             from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
                 day , hour , minute respectively; like 3h. This is ignored if Time Window is
                 specified.
             time_window (str, optional): Set Time Window to include requests started in a specific
                 time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            cursor (str | None, optional): Pagination cursor.  Should be None for first call.  Use "cursor"
+                in payload of previous call for subsequent calls to get the next page of results.
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed range is 1
+                to 1000.  Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
