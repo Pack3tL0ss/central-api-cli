@@ -67,7 +67,7 @@ def template(
         name, ("template", "dev"), device_type=device_type, group=group
     )
     if obj.is_dev:
-        _tmplt = [t for t in common.cache.templates if t["group"] == obj.group and t["model"] in obj.model]
+        _tmplt = [t for t in common.cache.templates if t["group"] == obj.group and (t["model"] in obj.model or t["model"] == "ALL")]
 
         if _tmplt and version:
             _tmplt = [t for t in _tmplt if t["version"] in ["ALL", version]]
@@ -88,7 +88,7 @@ def template(
     }
 
     payload = None
-    if not template:
+    if not template:  # pragma: no cover requires tty
         payload = utils.get_multiline_input(prompt="Paste in new template contents.")
         payload = payload.encode("utf-8")
 
@@ -625,11 +625,11 @@ def site(
     if rename_only:
         render.econsole.print("\n [italic green4]current address info being sent as it's required by API to change name[/]")
     _ = [render.econsole.print(f"  {k}: {v}", emoji=False) for k, v in address_fields.items()]
-    if render.confirm(yes):
-        resp = api.session.request(api.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
-        render.display_results(resp, exit_on_fail=True)
-        if resp:
-            api.session.request(common.cache.update_site_db, data={"name": new_name or site_now.name, "id": site_now.id, **address_fields})
+    render.confirm(yes)
+    resp = api.session.request(api.central.update_site, site_now.id, new_name or site_now.name, **address_fields)
+    render.display_results(resp, exit_on_fail=True)
+    api.session.request(common.cache.update_site_db, data=resp.raw)
+
 
 
 @app.command()
