@@ -1778,10 +1778,25 @@ def test_show_webhooks():
     assert "API" in result.stdout
 
 
-def test_show_wlans():
+@pytest.mark.parametrize(
+    "fixture,args",
+    [
+        [None, ()],
+        [None, ("-v",)],
+        [None, ("--group", test_data["ap"]["group"])],
+        [None, (test_data["tunneled_ssid"]["ssid"],)],
+        [None, ("--swarm", test_data["aos8_ap"]["name"])],
+        [None, ("--site", test_data["ap"]["site"])],
+        ["ensure_cache_label1", ("--label", "cencli_test_label1")],
+    ]
+)
+def test_show_wlans(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
     result = runner.invoke(app, [
             "show",
             "wlans",
+            *args
         ]
     )
     capture_logs(result, "test_show_wlans")
@@ -1789,122 +1804,26 @@ def test_show_wlans():
     assert "API" in result.stdout
 
 
-def test_show_wlans_verbose():
+@pytest.mark.parametrize(
+    "fixture,args,pass_condition",
+    [
+        [None, ("--site", test_data["ap"]["site"], "-v"), lambda r: "not" in r],
+        [None, ("--site", test_data["ap"]["site"], "--label", "cencli_test_label1"), lambda r: "Invalid" in r],  # too many flags
+        ["ensure_cache_group2", ("--group", "cencli_test_group2"), lambda r: "template group" in r.lower()],
+    ]
+)
+def test_show_wlans_invalid(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
     result = runner.invoke(app, [
             "show",
             "wlans",
-            "-v"
+            *args
         ]
     )
-    capture_logs(result, "test_show_wlans_verbose")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_group():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--group",
-            test_data["ap"]["group"]
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_group")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_name():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            test_data["tunneled_ssid"]["ssid"]
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_name")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_swarm():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--swarm",
-            test_data["aos8_ap"]["name"]
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_swarm")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_site():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--site",
-            test_data["ap"]["site"]
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_site")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_label(ensure_cache_label1: None):
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--label",
-            "cencli_test_label1"
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_label")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_wlans_by_site_verbose_invalid():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--site",
-            test_data["ap"]["site"],
-            "-v"
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_site_verbose_invalid", expect_failure=True)
+    capture_logs(result, "test_show_wlans_invalid", expect_failure=True)
     assert result.exit_code == 1
-    assert "not" in result.stdout
-
-
-def test_show_wlans_too_many_flags():
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--site",
-            test_data["ap"]["site"],
-            "--label",
-            "cencli_test_label1"
-        ]
-    )
-    capture_logs(result, "test_show_wlans_too_many_flags", expect_failure=True)
-    assert result.exit_code == 1
-    assert "Invalid" in result.stdout
-
-
-def test_show_wlans_by_tg_invalid(ensure_cache_group2: None):
-    result = runner.invoke(app, [
-            "show",
-            "wlans",
-            "--group",
-            "cencli_test_group2"
-        ]
-    )
-    capture_logs(result, "test_show_wlans_by_tg_invalid", expect_failure=True)
-    assert result.exit_code == 1
-    assert "template group" in result.stdout.lower()
+    assert pass_condition(result.stdout)
 
 
 def test_show_cron():
