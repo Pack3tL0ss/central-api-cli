@@ -11,6 +11,7 @@ from ...utils import Mac
 if TYPE_CHECKING:
     from centralcli.client import Session
 
+
 class MonitoringAPI:
     def __init__(self, session: Session):
         self.session = session
@@ -667,8 +668,8 @@ class MonitoringAPI:
         mac: str = None,
         public_ip_address: str = None,
         site: str = None,
-        limit: int = 1000,  # max allowed 1000
         offset: int = 0,
+        limit: int = 1000,  # max allowed 1000
     ) -> Response:
         """Get Devices from Aruba Central API Gateway
 
