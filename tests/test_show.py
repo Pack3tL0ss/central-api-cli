@@ -73,67 +73,28 @@ def test_show_bandwidth_uplink_switch():
     assert "TX" in result.stdout
 
 
-def test_show_bandwidth_client():
-    result = runner.invoke(app, ["show", "bandwidth", "client"],)
-    capture_logs(result, "test_show_bandwidth_client")
-    assert result.exit_code == 0
-    assert "All" in result.stdout
+@pytest.mark.parametrize(
+    "fixture,args,pass_condition,expect_failure",
+    [
+        [None, (), lambda r: "All" in r, False],
+        [None, (test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "ignored" in r, False],  # -S --dev --group flags are ignored
+        [None, ("-S", "--dev", test_data["aos8_ap"]["name"]), lambda r: "API" in r, False],  # aos8
+        [None, ("-S", "--dev", test_data["ap"]["name"]), lambda r: "AOS10" in r, False],  # test with aos10, swarm is only valid for AOS8...
+        [None, ("--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r, False],  # --group flag is ignored
+        [None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
+        ["ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
+        [None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
+        [None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
+    ]
+)
+def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    result = runner.invoke(app, ["show", "bandwidth", "client", *args],)
+    capture_logs(result, "test_show_bandwidth_client", expect_failure=expect_failure)
+    assert result.exit_code == (0 if not expect_failure else 1)
+    assert pass_condition(result.stdout)
 
-
-def test_show_bandwidth_client_by_client():
-    result = runner.invoke(app, ["show", "bandwidth", "client", test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
-    capture_logs(result, "test_show_bandwidth_client_by_client")
-    assert result.exit_code == 0
-    assert "ignored" in result.stdout  # -S --dev --group flags are ignored
-
-
-def test_show_bandwidth_client_swarm_no_dev():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "-S"],)
-    capture_logs(result, "test_show_bandwidth_client_swarm_no_dev", expect_failure=True)
-    assert result.exit_code == 1
-    assert "--dev" in result.stdout
-
-
-def test_show_bandwidth_client_swarm():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["aos8_ap"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_client_swarm")
-    assert result.exit_code == 0
-    assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
-
-
-def test_show_bandwidth_client_swarm_aos10():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["ap"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_client_swarm_aos10")
-    assert result.exit_code == 0
-    assert "AOS10" in result.stdout  # swarm is only valid for AOS8...
-
-
-def test_show_bandwidth_client_dev_ap():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]],)
-    capture_logs(result, "test_show_bandwidth_client_dev_ap")
-    assert result.exit_code == 0
-    assert "--group" in result.stdout  # --group flag is ignored
-
-
-def test_show_bandwidth_client_group():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "--group", test_data["ap"]["group"]],)
-    capture_logs(result, "test_show_bandwidth_client_group")
-    assert result.exit_code == 0
-    assert "TX" in result.stdout
-
-
-def test_show_bandwidth_client_label(ensure_cache_label1: None):
-    result = runner.invoke(app, ["show", "bandwidth", "client", "--label", "cencli_test_label1"],)
-    capture_logs(result, "test_show_bandwidth_client_label")
-    assert result.exit_code == 0
-    assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
-
-
-def test_show_bandwidth_client_gw():
-    result = runner.invoke(app, ["show", "bandwidth", "client", "-S", "--dev", test_data["gateway"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_client_gw")
-    assert result.exit_code == 0
-    assert "only applies" in result.stdout  # -S flag ignored as --dev is a gateway
 
 @pytest.mark.parametrize(
     "args,pass_condition",
@@ -176,60 +137,36 @@ def test_show_bandwidth_too_many_flags():
     assert "one of" in result.stdout
 
 
-def test_show_branch_health():
-    result = runner.invoke(app, ["show", "branch", "health"],)
+@pytest.mark.parametrize(
+    "args",
+    [
+        (),
+        (test_data["gateway"]["site"],),
+        ("--down",),
+        ("--wan-down",),
+    ]
+)
+def test_show_branch_health(args: tuple[str]):
+    result = runner.invoke(app, ["show", "branch", "health", *args],)
     capture_logs(result, "test_show_branch_health")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
 
-def test_show_branch_health_for_site():
-    result = runner.invoke(app, ["show", "branch", "health", test_data["gateway"]["site"]],)
-    capture_logs(result, "test_show_branch_health_for_site")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_branch_health_down():
-    result = runner.invoke(app, ["show", "branch", "health", "--down"],)
-    capture_logs(result, "test_show_branch_health_down")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_branch_health_wan_down():
-    result = runner.invoke(app, ["show", "branch", "health", "--wan-down"],)
-    capture_logs(result, "test_show_branch_health_wan_down")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_bssids():
-    result = runner.invoke(app, ["show", "bssids", "-S"],)  # also test warning for ignored -s without dev
-    capture_logs(result, "test_show_bssids")
-    assert result.exit_code == 0
-    assert "Ignoring" in result.stdout
-
-
-def test_show_bssids_yaml():
-    result = runner.invoke(app, ["show", "bssids", "--yaml"],)  # also test warning for ignored -s without dev
-    capture_logs(result, "test_show_bssids")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_bssids_by_ap():
-    result = runner.invoke(app, ["show", "bssids", test_data["ap"]["name"]],)
-    capture_logs(result, "test_show_bssids_by_ap")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_bssids_too_many_filters():
-    result = runner.invoke(app, ["show", "bssids", "--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]],)
-    capture_logs(result, "test_show_bssids_too_many_filters", expect_failure=True)
-    assert result.exit_code == 1
-    assert "one of" in result.stdout
+@pytest.mark.parametrize(
+    "args,pass_condition,expect_failure",
+    [
+        [("-S",), lambda r: "Ignoring" in r, False],  # also test warning for ignored -S (swarm) without dev
+        [("--yaml",), lambda r: "API" in r, False],
+        [(test_data["ap"]["name"],),lambda r: "API" in r, False],
+        [("--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r, True],  # too many filters
+    ]
+)
+def test_show_bssids(args: tuple[str], pass_condition: Callable, expect_failure: bool):
+    result = runner.invoke(app, ["show", "bssids", *args],)
+    capture_logs(result, "test_show_bssids", expect_failure=expect_failure)
+    assert result.exit_code == (0 if not expect_failure else 1)
+    assert pass_condition(result.stdout)
 
 
 # Output here will not be the same during mocked test run as it is outside of tests
@@ -302,52 +239,22 @@ def test_show_all_fail(pass_condition: Callable, test_name_update: str | None):
     assert pass_condition(result)
 
 
-def test_show_insights():
-    result = runner.invoke(app, ["show", "insights", "--past", "32d"],)
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--past", "32d"),
+        ("609",),
+        ("--site", test_data["ap"]["site"]),
+        ("--dev", test_data["ap"]["name"]),
+        ("--client", test_data["client"]["wireless"]["name"]),
+        ("--severity", "low"),
+    ]
+)
+def test_show_insights(args: tuple[str]):
+    result = runner.invoke(app, ["show", "insights", *args],)
     capture_logs(result, "test_show_insights")
     assert result.exit_code == 0
     assert "API" in result.stdout
-
-
-def test_show_insights_by_id():
-    result = runner.invoke(app, ["show", "insights", "609"],)
-    capture_logs(result, "test_show_insights_by_id")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_insights_by_site():
-    result = runner.invoke(app, ["show", "insights", "--site", test_data["ap"]["site"]],)
-    capture_logs(result, "test_show_insights_by_site")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_insights_by_device():
-    result = runner.invoke(app, ["show", "insights", "--dev", test_data["ap"]["name"]],)
-    capture_logs(result, "test_show_insights_by_device")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_insights_by_client():
-    result = runner.invoke(app, ["show", "insights", "--client", test_data["client"]["wireless"]["name"]],)
-    capture_logs(result, "test_show_insights_by_client")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_insights_low_severity():
-    result = runner.invoke(app, [
-            "show",
-            "insights",
-            "--severity",
-            "low"
-        ]
-    )
-    capture_logs(result, "test_show_insights_low_severity")
-    assert result.exit_code == 0
-    assert "API Rate Limit" in result.stdout
 
 
 def test_show_insights_no_dev_type():
