@@ -148,6 +148,7 @@ def swarm(
         tablefmt=tablefmt,
         title=title,
         pager=pager,
+        exit_on_fail=True,
         outfile=outfile,
         fold_cols="swarm id",
         cleaner=cleaner.get_swarm_firmware_details
@@ -189,7 +190,7 @@ def compliance(
 
     resp = api.session.request(api.firmware.get_firmware_compliance, **kwargs)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    if resp.status == 404 and resp.output.lower() == "not found":
+    if resp.status == 404:
         resp.output = (
             f"Invalid URL or No compliance set for {device_type.lower()} "
             f"{'Globally' if group is None else f'in group {group.name}'}"
@@ -207,7 +208,7 @@ def compliance(
 def _list(
     device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
     dev_type: DevTypes = typer.Option(None, help="Get firmware list for a device type", show_default=False,),
-    swarm: bool = typer.Option(False, "--swarm", "-s", help="Get available firmware for IAP cluster associated with provided device", show_default=False,),
+    swarm: bool = common.options.get("swarm", help="Get available firmware for IAP cluster associated with provided device"),
     swarm_id: str = typer.Option(None, help="Get available firmware for specified IAP cluster", show_default=False,),
     verbose: int = common.options.verbose,
     do_json: bool = common.options.do_json,
