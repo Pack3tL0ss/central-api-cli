@@ -62,9 +62,9 @@ def compliance(
 
     render.econsole.print(f'Set firmware complaince for [cyan]{_dev_msg}[/] in group [cyan]{group.name}[/] to [bright_green]{version}[/]')
 
-    if render.confirm(yes):
-        resp = api.session.request(api.firmware.set_firmware_compliance, **kwargs)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.firmware.set_firmware_compliance, **kwargs)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.callback()
