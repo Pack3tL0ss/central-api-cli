@@ -4287,6 +4287,13 @@ class Cache:
 
     @overload
     def get_dev_identifier(
+        query_str: str,
+        dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes],
+        conductor_only: Literal[True],
+    ) -> CacheDevice: ...
+
+    @overload
+    def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
