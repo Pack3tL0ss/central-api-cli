@@ -118,6 +118,7 @@ exclude_lines = [
     "if config.is_old_cfg:",
     "if match and not completion:",  # cache get_..._identifier methods multi-match requires tty
     "if len(match) > 1:",
+    "if config.is_old_cfg:",
 ]
 exclude_also = [
     # 1. Exclude an except clause of a specific form:

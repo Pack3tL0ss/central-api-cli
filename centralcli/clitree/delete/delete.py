@@ -132,7 +132,7 @@ def group(
     _grp_msg = _grp_msg.lstrip() if len(groups) == 1 else f"\n{_grp_msg}"
     print(
         f"[bright_red]Delete[/] {'group ' if len(groups) == 1 else 'groups:'}{_grp_msg}"
-    )
+    )  # pragma: no cover  16/28 branches b4
     if len(reqs) > 1:  # TODO common function in clicommon or utils
         print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 

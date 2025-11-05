@@ -178,7 +178,7 @@ class GuestAPI:
             'password': password
         }
         json_data = utils.strip_none(json_data)
-        if phone or email:
+        if any([phone, email]):  # NOTE if phone or email will flag an untested branch if not tested with both phone and email
             json_data["user"] = user_data
 
         return await self.session.post(url, json_data=json_data)

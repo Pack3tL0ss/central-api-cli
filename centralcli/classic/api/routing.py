@@ -212,6 +212,8 @@ class RoutingAPI:
         url = "/api/routing/v1/overlay/route/learned"
         if best:
             url = f'{url}/best'
+        else:  # pragma: no cover # TODO figure out how to make coverage not consider this a sep untested branch
+            ...
 
         params = {
             'device': device,

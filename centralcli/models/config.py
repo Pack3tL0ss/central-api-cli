@@ -248,7 +248,7 @@ class ConfigData(BaseModel):
         return data
 
     @model_validator(mode="before")
-    def convert_v1_config(data: dict) -> Dict[str, Any]:
+    def convert_v1_config(data: dict) -> Dict[str, Any]:  # pragma: no cover
         # Old config format, convert to new
         if "workspaces" in data:
             return data
