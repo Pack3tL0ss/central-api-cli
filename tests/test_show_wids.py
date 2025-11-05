@@ -1,90 +1,54 @@
+from typing import Callable
+
 import pendulum
+import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import capture_logs, test_data
 
 runner = CliRunner()
 
-
-def test_show_wids_group():
+now = pendulum.now()
+@pytest.mark.parametrize(
+    "fixture,args,pass_condition", [
+        [None, ("--group", test_data["ap"]["group"]), lambda r: "ogue" in r],
+        [None, ("rogues", "--site", test_data["ap"]["site"]), lambda r: "ogue" in r],
+        ["ensure_cache_label1", ("neighbors", "--label", "cencli_test_label1"), lambda r: "ogue" in r or "Empty Response" in r],
+        [None, ("interfering", "--end", f"{now.month}/{now.day}/{now.year}-{now.hour}:{now.minute}"), lambda r: "Interfering" in r],
+        [None, ("suspect",), lambda r: "Suspect" in r],
+    ]
+)
+def test_show_wids(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
     result = runner.invoke(app, [
             "show",
             "wids",
-            "--group",
-            test_data["ap"]["group"]
+            *args
         ]
     )
-    capture_logs(result, "test_show_wids_group")
+    capture_logs(result, "test_show_wids")
     assert result.exit_code == 0
-    assert "ogue" in result.stdout
+    assert pass_condition(result.stdout)
 
 
-def test_show_wids_rogues_by_site():
+@pytest.mark.parametrize(
+    "args,pass_condition,test_name_append", [
+        [("interfering", "-S", test_data["ap"]["mac"]), lambda result: result.exit_code == 1 and "AOS8" in result.stdout, None],
+        [(), lambda result: result.exit_code <= 1 and "⚠" in result.stdout, "partial"],
+    ]
+)
+def test_show_wids_fail(args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
             "show",
             "wids",
-            "rogues",
-            "--site",
-            test_data["ap"]["site"]
+            *args
         ]
     )
-    capture_logs(result, "test_show_wids_rogues_by_site")
-    assert result.exit_code == 0
-    assert "ogue" in result.stdout
-
-
-def test_show_wids_neighbors_by_label(ensure_cache_label1):
-    result = runner.invoke(app, [
-            "show",
-            "wids",
-            "neighbors",
-            "--label",
-            "cencli_test_label1"
-        ]
-    )
-    capture_logs(result, "test_show_wids_neighbors_by_label")
-    assert result.exit_code == 0
-    assert "ogue" in result.stdout or "Empty Response" in result.stdout
-
-
-def test_show_wids_interfering():
-    now = pendulum.now()
-    result = runner.invoke(app, [
-            "show",
-            "wids",
-            "interfering",
-            "--end",
-            f"{now.month}/{now.day}/{now.year}-{now.hour}:{now.minute}"
-        ]
-    )
-    capture_logs(result, "test_show_wids_interfering")
-    assert result.exit_code == 0
-    assert "Interfering" in result.stdout
-
-
-def test_show_wids_suspect():
-    result = runner.invoke(app, [
-            "show",
-            "wids",
-            "suspect"
-        ]
-    )
-    capture_logs(result, "test_show_wids_suspect")
-    assert result.exit_code == 0
-    assert "Suspect" in result.stdout
-
-
-def test_show_wids_wrong_swarm_version():
-    result = runner.invoke(app, [
-            "show",
-            "wids",
-            "interfering",
-            "-S",
-            test_data["ap"]["mac"]
-        ]
-    )
-    capture_logs(result, "test_show_wids_wrong_swarm_version", expect_failure=True)
-    assert result.exit_code != 0
-    assert "AOS8" in result.stdout
+    capture_logs(result, "test_show_wids_fail", log_output=pass_condition(result))
+    assert pass_condition(result)

@@ -1,7 +1,11 @@
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
 
+from centralcli import utils
 from centralcli.cli import app
+from centralcli.environment import env
 from centralcli.exceptions import ConfigNotFoundException
 
 from . import capture_logs, config, test_data
@@ -15,7 +19,7 @@ if config.dev.mock_tests:
         result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
         capture_logs(result, "test_update_ap_same_as_current")
         assert result.exit_code == 0
-        assert "NO CHANGES" in result.stdout.upper()
+        assert "skipped" in result.stdout
 
 
     def test_update_ap_no_change():
@@ -25,11 +29,98 @@ if config.dev.mock_tests:
         assert "NO CHANGES" in result.stdout.upper()
 
 
-    def test_update_ap():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"] - 0.1, "-y"])
-        capture_logs(result, "test_upgrade_group")
+    @pytest.mark.parametrize(
+        "fixture,args,pass_condition",
+        [
+            ["ensure_dev_cache_test_ap",
+                (
+                    test_data["mesh_ap"]["serial"],
+                    "-a",
+                    test_data["mesh_ap"]["altitude"] - 0.1
+                ),
+                None
+            ],
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["test_devices"]["ap"]["serial"],
+                    "--ip",
+                    "10.0.31.6",
+                    "--mask",
+                    "255.255.255.0",
+                    "--gateway",
+                    "10.0.31.1",
+                    "--dns",
+                    "10.0.30.51,10.0.30.52",
+                    "--domain",
+                    "consolepi.com"
+                ),
+                None
+            ],
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["mesh_ap"]["serial"],
+                    test_data["test_devices"]["ap"]["serial"],
+                    "-w",
+                    "narrow",
+                ),
+                lambda r: "skipped" in r
+            ],
+            [
+                [
+                    "ensure_dev_cache_test_flex_dual_ap",
+                    "ensure_dev_cache_test_ap",
+                ],
+                (
+                    "cencli-test-flex-dual-ap",
+                    test_data["test_devices"]["ap"]["serial"],
+                    "-e",
+                    "2.4",
+                ),
+                lambda r: "skipped" in r
+            ],
+        ]
+    )
+    def test_update_ap(fixture: str | list[str] | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(app, ["update",  "ap", *args, "-y"])
+        capture_logs(result, "test_upgrade_ap")
         assert result.exit_code == 0
         assert "200" in result.stdout
+        if pass_condition:
+            assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
+        "fixture,args",
+        [
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["test_devices"]["ap"]["serial"],
+                    "--ip",
+                    "10.0.31.6",
+                    "--mask",
+                    "255.255.255.0",
+                    "--gateway",
+                    "10.0.31.1",
+                    "--dns",
+                    "10.0.30.51,10.0.30.52",
+                    "--domain",
+                    "consolepi.com"
+                ),
+            ],
+        ]
+    )
+    def test_update_ap_fail(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        result = runner.invoke(app, ["update",  "ap", *args, "-y"])
+        capture_logs(result, env.current_test, expect_failure=True)
+        assert result.exit_code == 1
+        assert "403" in result.stdout
 
 
     def test_update_ap_invalid():
@@ -51,6 +142,67 @@ if config.dev.mock_tests:
         capture_logs(result, "test_upgrade_wlan_by_group")
         assert result.exit_code == 0
         assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
+
+    @pytest.mark.parametrize(
+        "fixture,args",
+        [
+            [None, ("cencli_test_template", test_data["template"]["template_file"],)],
+            ["ensure_cache_group2", ("cencli_test_template", "--group", "cencli_test_group2", test_data["template"]["template_file"])],
+            ["ensure_dev_cache_test_switch", ("cencli-test-sw", "--version", "16.11.0026", test_data["template"]["template_file"])],
+        ]
+    )
+    def test_update_template(ensure_cache_template, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "template",
+                *args,
+                "--yes",
+            ]
+        )
+        capture_logs(result, "test_update_template")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_variable():
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "variables",
+                test_data["test_devices"]["switch"]["serial"],
+                "mac_auth_ports",
+                "=",
+                "5",
+                "-y"
+            ]
+        )
+        capture_logs(result, "test_update_variable")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+    def test_update_webhook():
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "webhook",
+                "851cb87d-8e10-49f9-84a6-a256bad891ea",
+                "cencli_test",
+                "https://wh.consolepi.com",
+                "--yes",
+            ]
+        )
+        capture_logs(result, "test_update_webhook")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+else:  # pragma: no cover
+    ...
 
 
 def test_update_cloned_group(ensure_cache_group_cloned):
@@ -124,31 +276,6 @@ def test_update_site_no_data(ensure_cache_site4):
     assert "⚠" in result.stdout
 
 
-# TODO need cencli update command
-@pytest.mark.parametrize(
-    "args",
-    [
-        (["enabled=True", "reset=True"]),
-        (["enabled=False"]),
-    ]
-)
-def test_update_mpsk(ensure_cache_mpsk, args: list[str]):
-    result = runner.invoke(
-        app,
-        [
-            "test",
-            "method",
-            "update_named_mpsk",
-            "1EBTWK86LPQ86S0B",
-            "4e650830-d4d6-4a19-b9af-e0f776c69d24",
-            *args
-        ]
-    )
-    capture_logs(result, "test_update_mpsk")
-    assert result.exit_code == 0
-    assert "204" in result.stdout
-
-
 def test_update_guest_disable(ensure_cache_guest1):
     result = runner.invoke(
         app,
@@ -213,22 +340,6 @@ def test_update_guest_invalid():
     capture_logs(result, "test_update_guest_invalid", expect_failure=True)
     assert result.exit_code == 1
     assert "Invalid" in result.stdout
-
-
-def test_update_template(ensure_cache_template):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "template",
-            "cencli_test_template",
-            test_data["template"]["template_file"],
-            "--yes",
-        ]
-    )
-    capture_logs(result, "test_update_template")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -300,38 +411,3 @@ def test_update_cp_cert_invalid_group(ensure_cache_cert, ensure_cache_group4):
     capture_logs(result, "test_update_cp_cert_invalid_group", expect_failure=True)
     assert result.exit_code == 1
     assert "not supported" in result.stdout
-
-
-if config.dev.mock_tests:
-    def test_update_variable():
-        result = runner.invoke(
-            app,
-            [
-                "update",
-                "variables",
-                test_data["test_devices"]["switch"]["serial"],
-                "mac_auth_ports",
-                "=",
-                "5",
-                "-y"
-            ]
-        )
-        capture_logs(result, "test_update_variable")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-    def test_update_webhook():
-        result = runner.invoke(
-            app,
-            [
-                "update",
-                "webhook",
-                "851cb87d-8e10-49f9-84a6-a256bad891ea",
-                "cencli_test",
-                "https://wh.consolepi.com",
-                "--yes",
-            ]
-        )
-        capture_logs(result, "test_update_webhook")
-        assert result.exit_code == 0
-        assert "200" in result.stdout

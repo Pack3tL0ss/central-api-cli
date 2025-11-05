@@ -191,7 +191,7 @@ def test_delete_variables(ensure_inv_cache_test_switch):
     assert "200" in result.stdout
 
 
-if config.dev.mock_tests:
+if config.dev.mock_tests:  # pragma: no cover
     def test_delete_fw_compliance(ensure_cache_group2):
         result = runner.invoke(app, ["delete", "firmware",  "compliance", "ap", "cencli_test_group2", "-y"])
         capture_logs(result, "test_delete_fw_compliance")

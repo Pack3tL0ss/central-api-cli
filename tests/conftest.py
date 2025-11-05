@@ -75,7 +75,7 @@ def _cleanup_test_labels():  # pragma: no cover
 
 @pytest.hookimpl()
 def pytest_sessionfinish(session: pytest.Session):
-    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:
+    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:  # pragma: no cover
         unused = "\n".join(test_responses.unused)
         unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
         log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
@@ -215,30 +215,31 @@ def ensure_cache_group3():
 
 
 @pytest.fixture(scope="function")
-def ensure_cache_group4():
+def ensure_cache_group4(request: pytest.FixtureRequest):
+    gw_only = False if not hasattr(request, "param") else request.param
     if config.dev.mock_tests:
-        group_data = [
-            {
-                "name": "cencli_test_group4",
-                "allowed_types": ["ap", "gw"],
-                "gw_role": "wlan",
-                "aos10": True,
-                "microbranch": False,
-                "wlan_tg": False,
-                "wired_tg": False,
-                "monitor_only_sw": False,
-                "monitor_only_cx": False,
-                "cnx": True
-            }
-        ]
-        missing = [group["name"] for group in group_data if group["name"] not in cache.groups_by_name]
-        if missing:
-            assert asyncio.run(cache.update_group_db(data=group_data))
+        cache_data = {
+            "name": "cencli_test_group4",
+            "allowed_types": ["ap", "gw"] if not gw_only else ["gw"],
+            "gw_role": "wlan",
+            "aos10": True,
+            "microbranch": False,
+            "wlan_tg": False,
+            "wired_tg": False,
+            "monitor_only_sw": False,
+            "monitor_only_cx": False,
+            "cnx": True
+        }
+        if cache_data["name"] not in cache.groups_by_name:
+            assert asyncio.run(cache.update_group_db(data=cache_data))
+        elif cache.groups_by_name[cache_data["name"]].allowed_types != cache_data["allowed_types"]:  # pragma: no cover
+            update_data = {**cache.groups_by_name, **{cache_data["name"]: cache_data}}
+            assert asyncio.run(cache.update_db(cache.GroupDB, data=list(update_data.values()), truncate=True))
     yield
 
 
 @pytest.fixture(scope="function")
-def ensure_hook_proxy_started():
+def ensure_hook_proxy_started():  # pragma: no cover
     if config.dev.mock_tests and not [p.pid for p in psutil.process_iter(attrs=["name", "cmdline"]) if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]]:
         with mock_sleep:
             result = runner.invoke(app, ["start", "hook-proxy", "-y"])
@@ -339,18 +340,18 @@ def ensure_dev_cache_batch_devices():
                 "mac": "20:4C:03:81:E7:B2",
                 "serial": "CNHPKLB01P",
                 "group": "cencli_test_cloned",
-                "site": None,
+                "site": "cencli_test_site1",
                 "version": "10.7.2.1_93286",
                 "swack_id": None,
                 "switch_role": None
             }
         ]
         missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.devices_by_serial]
-        if missing:
+        if missing:  # pragma: no cover
             assert asyncio.run(cache.update_dev_db(data=devices))
     yield
 
-    if config.dev.mock_tests and missing:
+    if config.dev.mock_tests and missing:  # pragma: no cover
         doc_ids = [cache.devices_by_serial[s].doc_id for s in missing if s in cache.devices_by_serial]
         if doc_ids:
             assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=doc_ids))
@@ -377,7 +378,7 @@ def ensure_inv_cache_test_ap():
             }
         ]
         missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
+        if missing:  # pragma: no cover
             assert asyncio.run(cache.update_inv_db(data=devices))
     yield
 
@@ -398,9 +399,73 @@ def ensure_inv_cache_test_switch():
             "assigned": True,
             "archived": False
         }
-        if test_switch["serial"] not in cache.inventory_by_serial:
+        if test_switch["serial"] not in cache.inventory_by_serial:  # pragma: no cover
             assert asyncio.run(cache.update_inv_db(data=test_switch))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_test_stack():
+    if config.dev.mock_tests:
+        uuids = ["3c4babfe-b69d-11f0-a17b-8b6a99632e62", "4e72b2e6-b69d-11f0-bb4f-1756d3cebf1a", "566f25d8-b69d-11f0-a91b-db8d0e83a247", "5d5c8f84-b69d-11f0-9788-ff9e03b0bd10"]
+        now = pendulum.now()
+        _exp = now + pendulum.duration(years=5)
+        sub_exp = _exp.int_timestamp
+        test_switches = [
+            {
+                "id": uuids[idx],
+                "serial": sw["serial"],
+                "mac": sw["mac"],
+                "type": sw.get("type", "cx"),
+                "model": f'{sw.get("model", "6300")}',
+                "sku": sw.get("sku", "JL659A"),
+                "services": "advanced-switch-6300",
+                "subscription_key": "A5FMOCKE6E5MOCK289",
+                "subscription_expires": sub_exp,
+                "assigned": True,
+                "archived": False
+            } for idx, sw in enumerate(test_data["test_devices"]["stack"])
+        ]
+        missing = [dev["serial"] for dev in test_switches if dev["serial"] not in cache.inventory_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_inv_db(data=test_switches))
+            cache.InvDB.clear_cache()
+    yield
+
+    doc_ids = [cache.inventory_by_serial[dev["serial"]].doc_id for dev in test_switches if dev["serial"] in cache.inventory_by_serial]
+    if doc_ids:
+        assert asyncio.run(cache.update_inv_db(data=doc_ids, remove=True))
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_stack():
+    if config.dev.mock_tests:
+        switch_roles = [2, 3, 4, 4]
+        test_switches = [
+            {
+                "name": f"cencli-test-stack-m{idx + 1}",
+                "status": "Up",
+                "type": sw.get("type", "cx"),
+                "model": "6300M 48SR5 CL6 PoE 4SFP56 Swch (JL659A)",
+                "ip": "10.99.99.99" if idx == 0 else None,
+                "mac": sw["mac"],
+                "serial": sw["serial"],
+                "group": sw.get("group", "cencli_test_group1"),
+                "site": sw.get("site", "cencli_test_site1"),
+                "version": "10.16.1006",
+                "swack_id": "53ef49a6-b6a1-11f0-ad91-6bef8bd7be86",
+                "switch_role": switch_roles[idx]
+            } for idx, sw in enumerate(test_data["test_devices"]["stack"])
+        ]
+        missing = [dev["serial"] for dev in test_switches if dev["serial"] not in cache.devices_by_serial]
+        if missing:
+            assert asyncio.run(cache.update_dev_db(data=test_switches))
+            cache.DevDB.clear_cache()
+    yield
+
+    doc_ids = [cache.devices_by_serial[dev["serial"]].doc_id for dev in test_switches if dev["serial"] in cache.devices_by_serial]
+    if doc_ids:
+        assert asyncio.run(cache.update_dev_db(data=doc_ids, remove=True))
 
 
 @pytest.fixture(scope="function")
@@ -421,7 +486,7 @@ def ensure_dev_cache_ap():
             "switch_role": None
         }
         if cache_data["serial"] not in cache.devices_by_serial:
-            assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))
+            assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))  # pragma: no cover
         clean_cache_data = cache.devices.copy()
     yield
 
@@ -454,6 +519,59 @@ def ensure_dev_cache_test_ap():
     if test_data["test_devices"]["ap"]["serial"] in cache.devices_by_serial:
         serial = test_data["test_devices"]["ap"]["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    return
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_flex_dual_ap():
+    if config.dev.mock_tests:
+        test_ap = {
+            "name": "cencli-test-flex-dual-ap",
+            "status": "Up",
+            "type": "ap",
+            "model": "605R",
+            "ip": "10.0.31.103",
+            "mac": "f0:1a:a0:aa:bb:cc",
+            "serial": "USABC0D1EF",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.7.2.1_93286",
+            "swack_id": "USABC0D1EF",
+            "switch_role": None
+        }
+        if test_ap["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
+    yield
+
+    if test_ap["serial"] in cache.devices_by_serial:
+        serial = test_ap["serial"]
+        assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    return
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_switch():
+    if config.dev.mock_tests:
+        test_sw = {
+                "name": "cencli-test-sw",
+                "status": "Down",
+                "type": "sw",
+                "model": "2530",
+                "ip": "10.0.32.99",
+                "mac": test_data["test_devices"]["switch"]["mac"],
+                "serial": test_data["test_devices"]["switch"]["serial"],
+                "group": "cencli_test_group2",
+                "site": "cencli_test_site1",
+                "version": "16.11.0026",
+                "swack_id": None,
+                "switch_role": None
+        }
+        if test_sw["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_sw, truncate=False))
+    yield
+
+    if test_sw["serial"] in cache.devices_by_serial:
+        assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[test_sw["serial"]].doc_id]))
     return
 
 
@@ -540,7 +658,8 @@ def ensure_dev_cache_test_vsx_switch():
 
 # Ensures subscription has 0 available for certain tests
 @pytest.fixture(scope="function")
-def ensure_cache_subscription():
+def ensure_cache_subscription(request: pytest.FixtureRequest):
+    avail = 0 if not hasattr(request, "param") else request.param
     if config.dev.mock_tests:
         test_sub = {
             "id": "7658e672-2af5-5646-aa37-406af19c6d41",
@@ -548,7 +667,7 @@ def ensure_cache_subscription():
             "type": "AP",
             "key": "ENCYHFWQLJNQCWDU",
             "qty": 1000,
-            "available": 985,
+            "available": 982,
             "is_eval": True,
             "sku": "Q9Y63-EVALS",
             "start_date": 1611532800,
@@ -557,11 +676,11 @@ def ensure_cache_subscription():
             "expired": False,
             "valid": True
         }
-        if test_sub["id"] not in cache.subscriptions_by_id:
-            update_data = {**test_sub, "available": 0}
+        if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
+            update_data = {**test_sub, "available": avail}
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=False))
         else:
-            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": 0}]
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": avail}]
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
     yield
 
@@ -687,23 +806,20 @@ def ensure_cache_site3():
 @pytest.fixture(scope="function")
 def ensure_cache_site4():
     if config.dev.mock_tests:
-        sites = [
-            {
-                "id": 1105,
-                "name": "cencli_test_site4",
-                "address": "",
-                "city": "",
-                "state": "",
-                "zip": "",
-                "country": "",
-                "lat": "36.378545",
-                "lon": "-86.360740",
-                "devices": 0,
-            }
-        ]
-        missing = [site["id"] for site in sites if site["id"] not in cache.sites_by_id]
-        if missing:
-            assert asyncio.run(cache.update_site_db(data=sites))
+        cache_data = {
+            "id": 1105,
+            "name": "cencli_test_site4",
+            "address": "",
+            "city": "",
+            "state": "",
+            "zip": "",
+            "country": "",
+            "lat": "36.378545",
+            "lon": "-86.360740",
+            "devices": 0,
+        }
+        if cache_data["name"] not in cache.sites_by_name:
+            assert asyncio.run(cache.update_site_db(data=cache_data))
     yield
 
 

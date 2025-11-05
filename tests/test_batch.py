@@ -1,3 +1,5 @@
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
 
@@ -9,6 +11,7 @@ from ._test_data import (
     test_data,
     test_deploy_file,
     test_device_file,
+    test_device_file_txt,
     test_group_file,
     test_label_file,
     test_mpsk_file,
@@ -96,7 +99,10 @@ def test_batch_add_devices():
     assert "201" in result.stdout  # /configuration/v1/preassign
 
 
-def test_batch_assign_subscriptions_with_tags_yaml():
+@pytest.mark.parametrize(
+    "ensure_cache_subscription", [982], indirect=True
+)
+def test_batch_assign_subscriptions_with_tags_yaml(ensure_cache_subscription):
     result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
     if config.is_old_cfg:
         assert isinstance(result.exception, InvalidConfigException)
@@ -106,7 +112,10 @@ def test_batch_assign_subscriptions_with_tags_yaml():
         assert result.stdout.count("code: 202") == 2
 
 
-def test_batch_assign_subscriptions_csv():
+@pytest.mark.parametrize(
+    "ensure_cache_subscription", [981], indirect=True
+)
+def test_batch_assign_subscriptions_csv(ensure_cache_subscription):
     result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
     if config.is_old_cfg:
         assert isinstance(result.exception, InvalidConfigException)
@@ -122,6 +131,8 @@ if config.dev.mock_tests:
         capture_logs(result, "test_batch_move", )
         assert result.exit_code == 0
         assert "200" in result.stdout
+else:  # pragma: no cover
+    ...
 
 
 def test_batch_move_no_import_file():
@@ -152,8 +163,9 @@ def test_batch_rename_aps():
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
 
 
-def test_batch_update_aps():
-    result = runner.invoke(app, ["batch", "update",  "aps", f'{str(test_update_aps_file)}', "-Y"])
+@pytest.mark.parametrize("what", ["aps", "devices"])
+def test_batch_update_aps(what: str):
+    result = runner.invoke(app, ["batch", "update",  what, f'{str(test_update_aps_file)}', "-Y"])
     capture_logs(result, "test_batch_update_aps")
     assert result.exit_code == 0
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
@@ -180,24 +192,24 @@ def test_batch_delete_devices_no_sub_gws():
     assert "Devices updated" in result.stdout
 
 
-def test_batch_delete_devices_invalid_no_sub():
-    result = runner.invoke(app, ["batch", "delete", "devices", f'{str(test_verify_file)}', "--no-sub"])
-    capture_logs(result, "test_batch_delete_devices_invalid_no_sub", expect_failure=True)
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [(), lambda r: "⚠" in r],
+        [(f'{str(test_verify_file)}', "--dev-type", "cx"), lambda r: "⚠" in r],
+        [(f'{str(test_verify_file)}', "--no-sub"), lambda r: "Invalid" in r],
+    ]
+)
+def test_batch_delete_devices_fail(args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", "delete", "devices", *args])
+    capture_logs(result, "test_batch_delete_devices_fail", expect_failure=True)
     assert result.exit_code == 1
-    assert "Invalid" in result.stdout
+    assert pass_condition(result.stdout)
 
 
-sfl = ["batch", "delete", "devices"]
-@pytest.mark.parametrize("args", [sfl, [*sfl, f'{str(test_verify_file)}', "--dev-type", "cx"]])
-def test_batch_delete_devices_invalid(args):
-    result = runner.invoke(app, args)
-    capture_logs(result, "test_batch_delete_devices_invalid", expect_failure=True)
-    assert result.exit_code == 1
-    assert "\u26a0" in result.stdout
-
-
-def test_batch_archive():
-    result = runner.invoke(app, ["batch", "archive", str(test_device_file), "-y"])
+@pytest.mark.parametrize("file", [test_device_file, test_device_file_txt])
+def test_batch_archive(file: str):
+    result = runner.invoke(app, ["batch", "archive", str(file), "-y"])
     capture_logs(result, "test_batch_archive")
     assert result.exit_code == 0
     assert "True" in result.stdout

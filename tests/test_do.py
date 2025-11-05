@@ -1,8 +1,10 @@
+from typing import Callable
+
 import pendulum
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import common
+from centralcli import common, utils
 from centralcli.cli import app
 
 from . import capture_logs, config, test_data
@@ -461,3 +463,34 @@ if config.dev.mock_tests:
         capture_logs(result, "test_reset_overlay_connection")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "fixture,args,pass_condition",
+        [
+            [
+                [
+                    "ensure_inv_cache_test_switch",
+                    "ensure_inv_cache_test_ap",
+                    "ensure_inv_cache_test_stack",
+                    "ensure_dev_cache_test_switch",
+                    "ensure_dev_cache_test_ap",
+                    "ensure_dev_cache_test_stack",
+                    "ensure_cache_group1",
+                    "ensure_cache_site1",
+                ],
+                (test_data["test_devices"]["switch"]["serial"], *[sw["serial"] for sw in test_data["test_devices"]["stack"]], test_data["test_devices"]["ap"]["serial"]),
+                lambda r: "200" in r
+            ]
+        ]
+    )
+    def test_delete_devices(fixture: str | list[str] | None, args: list[str], pass_condition: Callable, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(app, ["delete", "device", *args, "-y"])
+        capture_logs(result, "test_delete_devices")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
+else:  # pragma: no cover  Coverage shows untested branch without this
+    ...

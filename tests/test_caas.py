@@ -1,10 +1,11 @@
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import config
+from centralcli import config, utils
 from centralcli.cli import app
 
 from . import capture_logs
+from ._test_data import test_caas_commands_file
 
 runner = CliRunner()
 
@@ -25,7 +26,6 @@ if config.dev.mock_tests:
         assert "uccess" in result.stdout
         assert "API" in result.stdout
 
-    base_args = ["caas", "send-cmds"]
     mock_commands = [
         "interface vlan 66",
         "no ip address",
@@ -36,28 +36,33 @@ if config.dev.mock_tests:
         "no vlan 66",
     ]
     @pytest.mark.parametrize(
-            "args", [
-                [*base_args, "device", "mock-gw", *mock_commands, "-Y"],
-                [*base_args, "group", "cencli_test_cloned", *mock_commands, "-Y"],
-                [*base_args, "group", "cencli_test_cloned", "-A", *mock_commands, "-Y"]
-            ]
-        )
-    def test_caas_send_cmds(ensure_cache_group_cloned_w_gw, ensure_dev_cache_batch_devices, args: list[str]):
-        result = runner.invoke(app, args)
+        "fixtures,args", [
+            ["ensure_cache_group_cloned_w_gw", ("device", "mock-gw", "commands", *mock_commands)],
+            ["ensure_cache_group_cloned_w_gw", ("group", "cencli_test_cloned", "commands", *mock_commands)],
+            ["ensure_cache_group_cloned_w_gw", ("group", "cencli_test_cloned", "-A", "command", *mock_commands)],
+            ["ensure_cache_site1", ("site", "cencli_test_site1", "commands", *mock_commands)],
+            [["ensure_cache_site1", "ensure_cache_group_cloned_w_gw"], ("file", str(test_caas_commands_file))]
+        ]
+    )
+    def test_caas_send_cmds(ensure_dev_cache_batch_devices, fixtures: str | list[str] | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixtures:
+            [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+        result = runner.invoke(app, ["caas", "send-cmds", *args, "--yes"])
         capture_logs(result, "test_caas_send_cmds")
         assert result.exit_code == 0
         assert "uccess" in result.stdout
         assert "API" in result.stdout
 
     @pytest.mark.parametrize(
-        "fixture,args", [
-            (None, ["device", "20:4c:03:26:28:4c"]),  # device doesn't exist
-            ("ensure_cache_group4", ["group", "cencli_test_group4", "-A", *mock_commands])  # no gateways in group
+        "fixtures,args", [
+            [None, ("device", "20:4c:03:26:28:4c")],  # device doesn't exist
+            ["ensure_cache_group4", ("group", "cencli_test_group4", "-A", *mock_commands)],  # no gateways in group
+            [["ensure_cache_site1", "ensure_cache_group_cloned_w_gw"], ("file", str(test_caas_commands_file), "commands", "extra", "commands")],
         ]
     )
-    def test_caas_send_cmds_invalid(fixture: str | None, args: list[str], request: pytest.FixtureRequest):
-        if fixture:
-            request.getfixturevalue(fixture)
+    def test_caas_send_cmds_invalid(fixtures: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixtures:
+            [request.getfixturevalue(f) for f in utils.listify(fixtures)]
         result = runner.invoke(
             app,
             [
@@ -69,3 +74,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_caas_send_cmds_invalid", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
+
+else:  # pragma: no cover
+    ...

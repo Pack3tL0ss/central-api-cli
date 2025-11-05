@@ -36,3 +36,6 @@ if config.classic.webhook.token:
         capture_logs(result, "test_stop_hook_proxy")
         assert result.exit_code <= 1
         assert "erminate" in result.stdout
+
+else:  # pragma: no cover
+    ...

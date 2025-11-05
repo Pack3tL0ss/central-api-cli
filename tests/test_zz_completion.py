@@ -31,7 +31,7 @@ def test_dev_completion_case_insensitive(incomplete: str = "BSmT"):
 @pytest.mark.parametrize("expected,args", [(test_data["ap"]["name"], ["show", "overlay", "summary"]), ("self", ["cencli", "show", "config"])])
 def test_dev_ap_gw_completion(expected: str, args: list[str]):
     ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
-    if expected == "self":
+    if expected == "self":  # pragma: no cover
         ctx.params = {"group_dev": "self"}
     result = [c for c in cache.dev_ap_gw_completion(ctx=ctx, incomplete=expected[0:-2], args=args)]
     if expected == "self":
@@ -289,12 +289,14 @@ def test_cert_completion(ensure_cache_cert, incomplete: str):
     "incomplete,pass_condition",
     [
         ("advanced-ap", lambda r: [sub[0] == "advanced-ap" for sub in r]),
+        ("7658e672-2af5-5646-aa37-406af19c6d", lambda r: len(r) == 1),
         ("", lambda r: len(r) > 1),
     ]
 )
 def test_sub_completion(ensure_cache_subscription, incomplete: str, pass_condition: Callable):
     result = list(cache.sub_completion(ctx, incomplete=incomplete))
     assert pass_condition(result)
+
 
 @pytest.mark.parametrize("incomplete,args", [("cencli_test_group1", ("group",)), ("cencli_test_site", ("site",)), ("", ("ap",)), ("sit", ("arg1", "arg2")), ("grou", ("arg1", "arg2"))])
 def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, incomplete: str, args: tuple[str]):
@@ -316,7 +318,7 @@ def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, incomplet
 )
 def test_workspace_name_callback(workspace: str, args: tuple[str], default: bool, pass_condition: Callable):
     ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=False)
-    if args:
+    if args:  # pragma: no cover
         sys.argv = args
     with render.econsole.capture() as cap:
         result = common.workspace_name_callback(ctx, workspace, default=default)

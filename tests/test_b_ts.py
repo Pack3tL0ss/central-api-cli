@@ -1,7 +1,10 @@
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import capture_logs, test_data
 
@@ -20,7 +23,7 @@ def test_ts_inventory():
     "args",
     [
         ([test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"]),
-        ([test_data["template_switch"]["name"], test_data["gateway"]["ip"]]),
+        ([test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-r", "3"]),
     ]
 )
 def test_ts_ping(args: list[str]):
@@ -30,11 +33,18 @@ def test_ts_ping(args: list[str]):
     assert "completed" in result.stdout
 
 
-def test_ts_clients():
-    result = runner.invoke(app, ["ts", "clients", test_data["ap"]["name"]])
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [(test_data["ap"]["name"], "--wired"), lambda r: "API" in r],
+        [(test_data["gateway"]["name"], "--wired"), lambda r: "--wired" in r],  # --wired ignored / only valid on APs
+    ]
+)
+def test_ts_clients(args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["ts", "clients", *args])
     capture_logs(result, "test_ts_clients")
     assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_ts_images():
@@ -51,11 +61,36 @@ def test_ts_clear():
     assert "API" in result.stdout
 
 
-def test_ts_command():
-    result = runner.invoke(app, ["ts", "command", test_data["ap"]["name"], "show", "ap-env"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        (test_data["ap"]["name"], "show", "ap-env"),
+        (test_data["ap"]["name"], "show ap-env"),
+        (test_data["ap"]["name"], "53")
+    ]
+)
+def test_ts_command(args: tuple[str]):
+    result = runner.invoke(app, ["ts", "command", *args])
     capture_logs(result, "test_ts_command")
     assert result.exit_code == 0
     assert "completed" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "args,test_name_append",
+    [
+        [(test_data["ap"]["name"], "show", "ap-env"), None],
+        [(test_data["ap"]["name"], "show", "ap-env"), "post"],
+        [(test_data["ap"]["name"], "invalidcommand", "invalidcommand"), "invalid_command"]
+    ]
+)
+def test_ts_command_fail(args: tuple[str], test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["ts", "command", *args])
+    capture_logs(result, "test_ts_command_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
 
 
 def test_ts_show_tech():

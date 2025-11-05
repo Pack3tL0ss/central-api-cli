@@ -80,11 +80,11 @@ def capture_logs(result: Result, test_func: str = None, log_output: bool = False
             traceback.print_exception(result.exception, file=log_file)
 
 
-def ensure_default_account():
+def ensure_default_account():  # pragma: no cover
     if "--collect-only" in sys.argv:
-        return  # pragma: no cover
+        return
 
-    if config.workspace != config.default_workspace:  # pragma: no cover
+    if config.workspace != config.default_workspace:
         raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.")
 
 
@@ -128,6 +128,8 @@ class MockSleep:
             while time.perf_counter() - start < sleep_time:
                 continue
             log.info(f"slept for {time.perf_counter() - start}, {sleep_time = }, {args = }, {kwargs = }")
+        else:  # pragma: no cover
+            ...
 
     def __enter__(self):
         self.real_sleep = True

@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import test_cert_file, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json
+from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json
 
 runner = CliRunner()
 
@@ -17,26 +17,38 @@ def ensure_not_cache_b4_adds():
         dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
         doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
         assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
+    else:  # pragma: no cover
+        ...
+
     yield
 
 
-def test_add_cert():
-    result = runner.invoke(app, ["add", "cert",  "cencli_test", str(test_cert_file), "--pem", "--svr", "-Y"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        (str(test_cert_file), "--pem", "--svr"),
+        (str(test_cert_file), "--svr"),
+        (str(test_cert_file_p12), "--svr"),
+        (str(test_cert_file_der), "--svr"),
+    ]
+)
+def test_add_cert(args: tuple[str]):
+    result = runner.invoke(app, ["add", "cert",  "cencli_test", *args, "-Y"])
     capture_logs(result, "test_add_cert")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
-def test_add_cert_no_type():
-    result = runner.invoke(app, ["add", "cert",  "cencli_test", str(test_cert_file), "--pem",])
-    capture_logs(result, "test_add_cert_no_type", expect_failure=True)
-    assert result.exit_code == 1
-    assert "must be provided" in result.stdout
-
-
-def test_add_cert_no_format():
-    result = runner.invoke(app, ["add", "cert",  "cencli_test", str(test_cert_file), "--svr",])
-    capture_logs(result, "test_add_cert_no_format", expect_failure=True)
+@pytest.mark.parametrize(
+    "args",
+    [
+        (str(test_cert_file), "--pem"),  # Missing type i.e --svr
+        ("--svr",),  # Missing cert format i.e. --pem (and no cert_file to determine format from)
+    ]
+)
+def test_add_cert_fail(args: tuple[str]):
+    result = runner.invoke(app, ["add", "cert",  "cencli_test", *args])
+    capture_logs(result, "test_add_cert_fail", expect_failure=True)
     assert result.exit_code == 1
     assert "must be provided" in result.stdout
 
@@ -163,22 +175,28 @@ def test_add_variables_invalid(ensure_cache_group2):
     assert "Missing" in result.stdout
 
 
-def test_add_label():
-    result = runner.invoke(app, ["add", "label",  "cencli_test_label1", "-Y"])
+@pytest.mark.parametrize(
+    "labels",
+    [
+        ("cencli_test_label1",),
+        ("cencli_test_label2", "cencli_test_label3"),
+    ]
+)
+def test_add_label(labels: tuple[str]):
+    result = runner.invoke(app, ["add", "label", *labels, "-Y"])
     capture_logs(result, "test_add_label")
-    assert True in [
-        result.exit_code == 0 and "test_label" in result.stdout,
-        result.exit_code == 1 and "already exist" in result.stdout
-    ]
-
-
-def test_add_label_multi():
-    result = runner.invoke(app, ["add", "label",  "cencli_test_label2", "cencli_test_label3", "-Y"])
-    capture_logs(result, "test_add_label_multi")
-    assert True in [
-        result.exit_code == 0 and "test_label" in result.stdout,
-        result.exit_code == 1 and "already exist" in result.stdout
-    ]
+    assert result.exit_code == 0
+    assert "test_label" in result.stdout
+    if config.dev.mock_tests:
+        assert result.exit_code == 0
+        assert "test_label" in result.stdout
+    else:  # pragma: no cover
+        assert any(
+            [
+                result.exit_code == 0 and "test_label" in result.stdout,
+                result.exit_code == 1 and "already exist" in result.stdout
+            ]
+        )
 
 
 def test_add_label_duplicate_name(ensure_cache_label1):
@@ -188,8 +206,15 @@ def test_add_label_duplicate_name(ensure_cache_label1):
     assert "already exist" in result.stdout
 
 
-def test_add_named_mpsk():
-    result = runner.invoke(app, ["add", "mpsk",  test_data["mpsk_ssid"], "test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing", "-D", "-Y"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing", "-D"),
+        ("test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing")
+    ]
+)
+def test_add_named_mpsk(args: tuple[str]):
+    result = runner.invoke(app, ["add", "mpsk",  test_data["mpsk_ssid"], *args, "-Y"])
     capture_logs(result, "test_add_named_mpsk")
     assert result.exit_code == 0
     assert "201" in result.stdout
@@ -263,3 +288,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_add_webhook")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+else:  # pragma: no cover
+    ...

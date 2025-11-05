@@ -125,10 +125,10 @@ class TestResponses:
         parts = key.split("_")
         method = parts[0]
         url = "_".join(parts[1:])
+        path = url.split("?")[0]
 
         if env.current_test in self.responses:
             if key in self.responses[env.current_test]:
-                path = url.split("?")[0]
                 candidates = utils.listify(self.responses[env.current_test][key])
                 return (True, [{**c, "url": path, "method": method} for c in candidates])
 
@@ -140,7 +140,7 @@ class TestResponses:
             return (False, [ok_responses[method][[k for k in ok_responses[method].keys() if key in k][0]]])
 
         res = ok_responses[method].get(key, self.responses["failed_responses"].get(method, {}).get(key))
-        return (False, []) if not res else (False, [res])
+        return (False, []) if not res else (False, [{**res, "url": path, "method": method}])
 
     @property
     def unused(self) -> list[str]:  # pragma: no cover
