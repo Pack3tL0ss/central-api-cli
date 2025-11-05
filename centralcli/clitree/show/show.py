@@ -1107,7 +1107,7 @@ def interfaces(
                 ) for d in devs
             ]
 
-    if len(batch_reqs) > 15:
+    if len(batch_reqs) > 15:  # pragma: no cover
         render.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
         render.confirm(yes)
 
@@ -1137,11 +1137,19 @@ def interfaces(
     if resp:
         try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
             ifaces = resp.output if "ethernets" not in resp.output else resp.output["ethernets"]
-            up_ifaces = len([i for i in utils.listify(ifaces) if i.get("status").lower() == "up"])  # listify as individual dev response is a dict, vs List for multi-device
-            down_ifaces = len(utils.listify(ifaces)) - up_ifaces
+            ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
+            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i["status"] is None]))
+            if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
+                word = "devices" if len(_invalid_payload) > 1 else "device"
+                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
+                ifaces = [i for i in ifaces if i["status"] is not None]
+
+            up_ifaces = [i["status"].lower() for i in ifaces].count("up")
+            down_ifaces = len(ifaces) - up_ifaces
+
             caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
         except Exception as e:  # pragma: no cover
-            log.error(f"{e.__class__.__name__} while trying to get counts from interface output")
+            log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
 
         if filters:
             resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
@@ -1266,6 +1274,7 @@ def vlans(
     Command applies to sites, gateways, or switches
     """
     # TODO cli command lacks the filtering options available from method currently.
+    # TODO verify stack_ports are part of output
     if (up or down) and not (up and down):
         status = StatusOptions.down if down else StatusOptions.up
     status = status or state
@@ -1604,10 +1613,10 @@ def groups(
     workspace: str = common.options.workspace,
 ) -> None:
     resp = api.session.request(common.cache.refresh_group_db)
-    caption = _build_groups_caption(resp.output)
+    caption = None if not resp.ok else _build_groups_caption(resp.output)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    render.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
+    render.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, exit_on_fail=True, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
 
 
 @app.command()
@@ -1708,21 +1717,17 @@ def templates(
         autocompletion=common.cache.dev_template_completion,
         show_default=False,
     ),
-    group: str = typer.Argument(None, help="Get Templates for Group", autocompletion=common.cache.group_completion, show_default=False),
+    group: str = typer.Argument(None, help=f"Get Templates for a specific Group {common.help_block('All Groups/Templates')}", autocompletion=common.cache.group_completion, show_default=False),
     _group: str = typer.Option(
         None, "--group",
-        help="Get Templates for Group",
+        help=f"Get Templates for a specific Group {common.help_block('All Groups/Templates')}",
         hidden=False,
         autocompletion=common.cache.template_group_completion,
         show_default=False,
     ),
-    device_type: DevTypes = typer.Option(
-        None, "--dev-type",
-        help="Filter by Device Type",
-        show_default=False,
-    ),
-    version: str = typer.Option(None, metavar="<version>", help="[Templates] Filter by dev version Template is assigned to", show_default=False,),
-    model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model", show_default=False,),
+    device_type: DevTypes = common.options.device_type,
+    version: str = common.options.get("version", help="[Templates] Filter by software version Template applies to."),
+    model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model Template applies to.", show_default=False,),
     #  variablised: str = typer.Option(False, "--with-vars",
     #                                  help="[Templates] Show Template with variable place-holders and vars."),
     sort_by: SortTemplateOptions = common.options.sort_by,
@@ -1770,11 +1775,11 @@ def templates(
         title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
         resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
     else:
-        title = "All Templates"
+        title = "All Templates"  # TODO get_all_templates return last failure if any occur, can return resp with passed responses and Partial failure noted in caption
         resp = api.session.request(common.cache.refresh_template_db)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse)
+    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, exit_on_fail=True)
 
 
 @app.command()
@@ -1980,7 +1985,7 @@ def run(
 
     if dev.type != "ap":
         type_to_command = {"cx": 6002, "sw": 1022, "gw": 2385}
-        clitshoot.send_cmds_by_id(dev, commands=[type_to_command[dev.type]], pager=pager, outfile=outfile, exit=True)
+        clitshoot.send_cmds_by_id(dev, commands=[type_to_command[dev.type]], pager=pager, outfile=outfile, exit_on_fail=True)
         # exits
 
     resp = api.session.request(api.configuration.get_device_configuration, dev.serial)
@@ -2014,12 +2019,6 @@ def config_(
     do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
     do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
     ap_env: bool = typer.Option(False, "-e", "--env", help="Show AP environment settings.  [italic dim]Valid for APs only[/]", show_default=False,),
-    status: bool = typer.Option(
-        False,
-        "--status",
-        help="Show config (sync) status. Applies to GWs.",
-        hidden=True,
-    ),
     file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config self[/].  Display raw file contents (i.e. cat the file)"),
     verbose: int = common.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {common.help_block('Show Config for current WorkSpace')}"),
     raw: bool = common.options.raw,
@@ -2035,7 +2034,7 @@ def config_(
     Device level configs are available for all device types, however
     AP and GW, show what Aruba Central has configured at the device level.
     Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
-    \tor the template if it's in a template group ([italic]Same as [cyan]cencli show template <SWITCH>[/cyan][/italic])).
+    \tor the config that results from the template/variables ([italic]Use [cyan]cencli show template <SWITCH>[/cyan] to see the template with variables.[/italic])).
 
     Examples:
     \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for gateways.
@@ -2055,11 +2054,13 @@ def config_(
         if device:
             log.warning(f"ignoring extra argument [red]{device}[/].  As [cyan]{group_dev.name}[/] is a device.", caption=True)
         if _group.wired_tg:
-            return templates(group_dev.serial, group=group_dev.group, device_type=group_dev.type, outfile=outfile, pager=pager)
+            resp = api.session.request(api.configuration.get_template_details_for_device, group_dev.serial, details=True)
+            render.display_results(resp, tablefmt="simple", pager=pager, outfile=outfile, exit_on_fail=True, cleaner=cleaner.get_template_details_for_device, device=group_dev)
+            common.exit(code=0)
         else:
             return run(group_dev.serial, outfile=outfile, pager=pager)
 
-    if group_dev.is_group:  # TODO group level AP config is not supported for Template Group,  Need logic to show template
+    elif group_dev.is_group:  # TODO group level AP config is not supported for Template Group,  Need logic to show template
         group = group_dev
         if device:
             device: CacheDevice = common.cache.get_dev_identifier(device)
@@ -2087,15 +2088,12 @@ def config_(
                 common.exit(f"Invalid input: [cyan]--gw[/] option conflicts with [cyan]{device.name}[/] which is an [bright_green]{device.generic_type}[/]")
 
         caasapi = caas.CaasAPI()
-        if not status:
-            func = caasapi.show_config
-            args = [group.name,]
-            if device:
-                args += [device.mac]
-            _data_key = "config"
-        else:
-            func = caasapi.get_config_status  # pragma: no cover  # TODO REMOVE this API endpoint does not work
-            args = [device.serial]
+        func = caasapi.show_config
+        args = [group.name,]
+        if device:
+            args += [device.mac]
+        _data_key = "config"
+
     elif do_ap or (device and device.generic_type == "ap"):
         func = api.configuration.get_ap_config
         if device:
@@ -2109,12 +2107,11 @@ def config_(
             else:
                 common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
     else:
-        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options", show=True)
+        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")
 
     if not device:
         args = [group.name]
 
-    # resp = api.session.request(func, *args)
     resp = api.session.request(func, *args)
 
     if resp and _data_key:
@@ -2502,7 +2499,7 @@ def clients(
 
     if past:
         kwargs["past"] = past.upper()
-        title = f'{title} (past {past.replace("h", " hours").replace("d", " days").replace("w", " weeks").replace("m", " months")})'
+        title = f'{title} (past {past.replace("h", " hours").replace("d", " day").replace("w", " week").replace("1M", "1 month").replace("3M", "3 months")})'
 
     resp = api.session.request(common.cache.refresh_client_db, **kwargs)
     if not resp:
