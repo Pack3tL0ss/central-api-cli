@@ -697,8 +697,9 @@ def test_show_overlay_interfaces():
     assert "Routes" in result.stdout
 
 
-def test_show_overlay_routes():
-    result = runner.invoke(app, ["show", "overlay", "routes", test_data["gateway"]["name"].lower(), "--best"],)
+@pytest.mark.parametrize("args", [(test_data["gateway"]["name"].lower(), "--best"), (test_data["gateway"]["name"].lower(),)])
+def test_show_overlay_routes(args: tuple[str]):
+    result = runner.invoke(app, ["show", "overlay", "routes", *args],)
     capture_logs(result, "test_show_overlay_routes")
     assert result.exit_code == 0
     assert "Routes" in result.stdout
