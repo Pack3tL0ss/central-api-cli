@@ -293,7 +293,7 @@ def send_cmds(
             nodes = cache.get_group_identifier(nodes)
             action = f"group level gateway config for {nodes.name} group."
     elif kw1 == "site":
-        s = cache.get_group_identifier(nodes)
+        s = cache.get_site_identifier(nodes)
         nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["site"] == s.name]
         action = f"all devices in site: {s.name}"
     elif kw1 == "file":  # TODO break this out into sep func
@@ -307,7 +307,7 @@ def send_cmds(
         else:
             devices = file_data.get("devices", file_data.get("gateways"))
             if devices:
-                nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in file_data["devices"]]
+                nodes = [cache.get_identifier(d.strip(), ["dev", "group", "site"], device_type="gw") for d in devices]
             elif "groups" in file_data:
                 nodes = [CacheDevice(d) for d in cache.devices if d["type"] == "gw" and d["group"] in file_data["groups"]]
             elif "sites" in file_data:
