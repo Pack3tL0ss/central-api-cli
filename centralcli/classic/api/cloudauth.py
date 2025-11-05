@@ -45,7 +45,6 @@ def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str:
         "M": "month"
     }
 
-    time_window = time_window if not hasattr(time_window, "value") else time_window.value
     if time_window not in valid:
         raise ValueError(f"Invalid value for time_window {time_window}.  Valid values: {', '.join(valid)}")
 
