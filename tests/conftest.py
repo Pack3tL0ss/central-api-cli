@@ -1016,7 +1016,7 @@ def ensure_cache_template():
             "template_hash": "0976d6fef0f24e2d7cd38886f608757a"
         }
         if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
-            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data))
+            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data, truncate=False))
     yield
 
 
