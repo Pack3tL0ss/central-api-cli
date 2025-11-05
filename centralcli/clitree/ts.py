@@ -14,12 +14,12 @@ from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
 from centralcli.constants import iden_meta, lib_to_api
 
-try:  # pragma: no cover
+try:
     from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
-except Exception:
+except Exception:  # pragma: no cover
     FUZZ = False
-    pass
+
 
 api_clients = APIClients()
 api = api_clients.classic
@@ -29,18 +29,15 @@ typer.Argument = partial(typer.Argument, show_default=False)
 typer.Option = partial(typer.Option, show_default=False)
 
 
-def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, Any]] | dict[str, Any], pager: bool = False, outfile: Path = None, exit: bool = False) -> None:
+def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, Any]] | dict[str, Any], pager: bool = False, outfile: Path = None, exit_on_fail: bool = False) -> None:
     _type = lib_to_api(device.type, "tshoot")
     commands = utils.listify(commands)
 
     resp = api.session.request(api.tshooting.start_ts_session, device.serial, device_type=_type, commands=commands)
-    render.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action", exit_on_fail=exit_on_fail)
 
     if not resp:
-        if not exit:
-            return
-        else:
-            common.exit()
+        return
 
     complete = False
     while not complete:
@@ -65,12 +62,13 @@ def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, An
                 render.econsole.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
 
-        if not complete:
+        if not complete:  # pragma: no cover requires tty
             render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{device.name}[/]')
             if not render.confirm(prompt="Continue to wait/retry?", abort=False):
                 render.display_results(ts_resp, tablefmt="action", pager=pager, outfile=outfile)
                 break
-    if exit:
+
+    if exit_on_fail:
         common.exit(code=0 if complete else 1)
 
 def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: bool,) -> None:
@@ -85,7 +83,7 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
     dev: CacheDevice = common.cache.get_dev_identifier(device)
     dev_type = lib_to_api(dev.type, "tshoot")
     if all(c.isdigit() for c in cmd):  # allows user to enter cmd id from show ts commands output.
-        send_cmds_by_id(dev, commands=[int(c) for c in cmd], pager=pager, outfile=outfile, exit=True)
+        send_cmds_by_id(dev, commands=[int(c) for c in cmd], pager=pager, outfile=outfile, exit_on_fail=True)
     if len(cmd) == 1:
         cmd = cmd[0].split()
     cmd = " ".join(cmd)
@@ -93,22 +91,26 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
     resp = api.session.request(api.tshooting.get_ts_commands, dev_type)
     if not resp:
         render.econsole.print('[dark_orange3]:warning:[/]  [bright_red]Unable to get troubleshooting command list')
-        render.display_results(resp)
+        render.display_results(resp, exit_on_fail=True)
     else:
         cmd_list = resp.output
         cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == cmd]
         if not cmd_id:
-            if FUZZ:
+            if FUZZ:  # pragma: no cover requires tty
                 fuzz_match, fuzz_confidence = process.extract(cmd, [c["command"].strip() for c in cmd_list], limit=1)[0]
                 render.econsole.print(f"[bright_red]{cmd}[/] is not a valid troubleshooting command (supported by API) for {dev.type}.")
                 if fuzz_confidence >= 70 and render.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
                     cmd_id = [c["command_id"] for c in cmd_list if c["command"].strip() == fuzz_match]
 
         if not cmd_id:
-            caption = f'[bright_red]Error[/]: [cyan]{cmd}[/] not found in available troubleshooting commands for {dev.type}. See available commands above.'
+            caption = [
+                f'[dark_orange3]\u26a0[/]  [bright_red]Error[/]: [cyan]{cmd}[/] not found in available troubleshooting commands for [cyan]{dev.type}[/].',
+                '[bright_green]See available commands above.[/]'
+            ]
             render.display_results(resp, caption=caption, title=f"Available troubleshooting commands for {dev.type}", cleaner=cleaner.show_ts_commands)
+            common.exit(code=1)
         else:
-            send_cmds_by_id(dev, commands=cmd_id, pager=pager, outfile=outfile)
+            send_cmds_by_id(dev, commands=cmd_id, pager=pager, outfile=outfile, exit_on_fail=True)
 
 @app.command()
 def overlay(
@@ -461,10 +463,8 @@ def clear(
 
 @app.callback()
 def callback():
-    """
-    Run Troubleshooting commands on devices
-    """
-    pass
+    """Run Troubleshooting commands on devices."""
+    ...
 
 
 if __name__ == "__main__":
