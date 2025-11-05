@@ -1054,9 +1054,7 @@ def display_results(
                     print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
                     print(f" [{fg}]Response[reset]:")
 
-
-            conditions = [tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")).capitalize() == "False")]
-            if any(conditions):
+            if any(conditions[1:]):
                 # raw output (unformatted response from Aruba Central API GW)
                 if tablefmt in ["raw", "clean"]:
                     status_code = f"[{fg}]status code: {r.status}[/{fg}]"
@@ -1082,17 +1080,12 @@ def display_results(
                         print()
                         write_file(outfile, r.raw if tablefmt != "clean" else r.output)
 
-                # prints the Response objects __str__ method which includes status_code
-                # and formatted contents of any payload. example below
-                # status code: 201
-                # Success
                 else:
+                    # prints the Response objects __str__ method which includes status_code
+                    # and formatted contents of any payload. example below
+                    # status code: 201
+                    # Success
                     console.print(r, emoji=False)
-                    # if not r.url.path == "/caasapi/v1/exec/cmd":
-                    #     cli.console.print(r, emoji=False)
-                    # else:
-                    #     cli.console.print(Text.from_ansi(clean.parse_caas_response(r.output)), emoji=False)  # TODO still need to covert everything from cleaners to rich MarkUp so we can use rich print consistently vs typer.echo
-                        # TODO make __rich__ renderable method in Response object with markups
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
                 if rl_str and idx + 1 == len(resp):
