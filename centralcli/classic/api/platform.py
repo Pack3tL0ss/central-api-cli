@@ -142,84 +142,64 @@ class PlatformAPI:
         """
         url = "/platform/device_inventory/v1/devices"
         license_kwargs = []
-
-        if license:
-            license_kwargs = [{"serials": [serial], "services": utils.listify(license)}]
-        if serial and mac:
-            if device_list:
-                raise ValueError("serial and mac are not expected when device_list is being provided.")
-
-            to_group = None if not group else {group: [serial]}
-            # to_site = None if not site else {site: [serial]}
-
-            mac = utils.Mac(mac)
-            if not mac:
-                raise ValueError(f"mac {mac} appears to be invalid.")
-
-            json_data = [
-                {
-                    "mac": mac.cols,
-                    "serial": serial
-                }
-            ]
-            if part_num:
-                json_data[0]["partNumber"] = part_num
-
-        elif device_list:
-            if not isinstance(device_list, list) and not all(isinstance(d, dict) for d in device_list):
+        if not (serial and mac) and not device_list:
+            raise ValueError("mac and serial or device_list is required")
+        if device_list:
+            if not isinstance(device_list, list) or not (isinstance(device_list, list) and all(isinstance(d, dict) for d in device_list)):
                 raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
 
-            json_data = []
-            for d in device_list:
-                mac = d.get("mac", d.get("mac_address"))
+        device_list = device_list or []
+        if serial or mac:
+            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "license": license}]
+
+        json_data = []
+        for d in device_list:
+            mac = d.get("mac", d.get("mac_address"))
+            if not mac:
+                raise ValueError(f"No Mac Address found for entry {d}")
+            else:
+                mac = utils.Mac(mac)
                 if not mac:
-                    raise ValueError(f"No Mac Address found for entry {d}")
-                else:
-                    mac = utils.Mac(mac)
-                    if not mac:
-                        raise ValueError(f"Mac Address {mac} appears to be invalid.")
-                serial = d.get("serial", d.get("serial_num"))
-                _this_dict = {"mac": mac.cols, "serial": serial}
-                part_num = d.get("part_num", d.get("partNumber"))
-                if part_num:
-                    _this_dict["partNumber"] = part_num
+                    raise ValueError(f"Mac Address {mac} appears to be invalid.")
+            serial = d.get("serial", d.get("serial_num"))
+            _this_dict = {"mac": mac.cols, "serial": serial}
+            part_num = d.get("part_num", d.get("partNumber"))
+            if part_num:
+                _this_dict["partNumber"] = part_num
 
-                json_data += [_this_dict]
+            json_data += [_this_dict]
 
-            to_group = {d.get("group"): [] for d in device_list if "group" in d and d["group"]}
-            for d in device_list:
-                if "group" in d and d["group"]:
-                    to_group[d["group"]].append(d.get("serial", d.get("serial_num")))
+        to_group = {d.get("group"): [] for d in device_list if "group" in d and d["group"]}
+        for d in device_list:
+            if "group" in d and d["group"]:
+                to_group[d["group"]].append(d.get("serial", d.get("serial_num")))
 
-            # to_site = {d.get("site"): [] for d in device_list if "site" in d and d["site"]}
-            # for d in device_list:
-            #     if "site" in d and d["site"]:
-            #         to_site[d["site"]].append(d.get("serial", d.get("serial_num")))
+        # to_site = {d.get("site"): [] for d in device_list if "site" in d and d["site"]}
+        # for d in device_list:
+        #     if "site" in d and d["site"]:
+        #         to_site[d["site"]].append(d.get("serial", d.get("serial_num")))
 
-            # Gather all serials for each license combination from device_list
-            # TODO this needs to be tested
-            _lic_kwargs = {}
-            for d in device_list:
-                if "license" not in d or not d["license"]:
-                    continue
+        # Gather all serials for each license combination from device_list
+        # TODO this needs to be tested
+        _lic_kwargs = {}
+        for d in device_list:
+            if "license" not in d or not d["license"]:
+                continue
 
-                d["license"] = utils.listify(d["license"])
-                _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
-                _serial = d.get("serial", d.get("serial_num"))
-                if not _serial:
-                    raise ValueError(f"No serial found for device: {d}")
+            d["license"] = utils.listify(d["license"])
+            _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
+            _serial = d.get("serial", d.get("serial_num"))
+            if not _serial:
+                raise ValueError(f"No serial found for device: {d}")
 
-                if _key in _lic_kwargs:
-                    _lic_kwargs[_key]["serials"] += utils.listify(_serial)
-                else:
-                    _lic_kwargs[_key] = {
-                        "services": utils.listify(d["license"]),
-                        "serials": utils.listify(_serial)
-                    }
-            license_kwargs = list(_lic_kwargs.values())
-
-        else:
-            raise ValueError("mac and serial or device_list is required")
+            if _key in _lic_kwargs:
+                _lic_kwargs[_key]["serials"] += utils.listify(_serial)
+            else:
+                _lic_kwargs[_key] = {
+                    "services": utils.listify(d["license"]),
+                    "serials": utils.listify(_serial)
+                }
+        license_kwargs = list(_lic_kwargs.values())
 
         # Perform API call(s) to Central API GW
         if to_group or license_kwargs:
@@ -245,8 +225,6 @@ class PlatformAPI:
                 reqs = [*reqs, *lic_reqs]
 
             return await self.session._batch_request(reqs, continue_on_fail=True)
-        # elif to_site:
-        #     raise ValueError("Site can only be pre-assigned if device is pre-provisioned to a group")
         else:
             return await self.session.post(url, json_data=json_data)
 
