@@ -218,11 +218,10 @@ class Session():
             if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
                 return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
 
-            return spin_txt if not self.running_spinners else self.running_spinners[0]
         except Exception as e:
             log.warning(f"DEV NOTE: {e.__class__.__name__} exception in combined spinner update")
 
-            return spin_txt if not self.running_spinners else self.running_spinners[0]
+        return spin_txt if not self.running_spinners else self.running_spinners[0]
 
     async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:  # pragma: no cover
         if not config.debugv:
