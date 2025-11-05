@@ -30,7 +30,7 @@ def compliance(
     group = [*group, *group_]
 
     if group:
-        if len(group) > 2:
+        if len(group) > 1:
             common.exit(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
         group = group[-1]
         group: CacheGroup = common.cache.get_group_identifier(group)
@@ -52,11 +52,12 @@ def compliance(
 
     render.confirm(yes)
     resp = api.session.request(api.firmware.delete_firmware_compliance, **kwargs)
-    if resp.status == 404 and resp.output.lower() == "not found":
+    if resp.status == 404:
         resp.output = (
             f"Invalid URL or No compliance set for {device_type.lower()} "
             f"{'Globally' if not group else f'in group {group.name}'}"
         )
+
     render.display_results(resp, tablefmt="action")
 
 
