@@ -33,9 +33,9 @@ def site(
     """
     site: CacheSite = common.cache.get_site_identifier(site)
     print(f"Please Confirm: rename site [red]{site.name}[/red] -> [bright_green]{new_name}[/bright_green]")
-    if render.confirm(yes):
-        print()
-        update.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, debug=debug, default=default, workspace=workspace)
+    render.confirm(yes)
+    print()
+    update.site(site.name, address=None, city=None, state=None, zip=None, country=None, new_name=new_name, lat=None, lon=None, yes=True, debug=debug, default=default, workspace=workspace)
 
 
 @app.command()
@@ -53,11 +53,11 @@ def ap(
     ap: CacheDevice = common.cache.get_dev_identifier(ap, dev_type="ap")
     print(f"Please Confirm: rename ap [bright_red]{ap.name}[/] -> [bright_green]{new_name}[/]")
     print("    [italic]Will result in 2 API calls[/italic]\n")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.update_ap_settings, ap.serial, new_name)
-        render.display_results(resp, tablefmt="action")
-        if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
-            common.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.update_ap_settings, ap.serial, new_name)
+    render.display_results(resp, tablefmt="action")
+    if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
+        common.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
 
 
 @app.command()
@@ -78,16 +78,16 @@ def group(
     group: CacheGroup = common.cache.get_group_identifier(group)
 
     render.econsole.print(f"Please Confirm: rename group [red]{group.name}[/red] -> [bright_green]{new_name}[/bright_green]")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.update_group_name, group.name, new_name)
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.update_group_name, group.name, new_name)
 
-        # API-FLAW Doesn't actually appear to be valid for any group type
-        if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):  # pragma: no cover  Don't think this message is ever returned now.
-            resp.output["description"] = f"{group.name} is an AOS_10X group, " \
-                "rename only supported on AOS_8X groups. Use clone."
+    # API-FLAW Doesn't actually appear to be valid for any group type
+    if not resp and "group already has AOS_10X version set" in resp.output.get("description", ""):  # pragma: no cover  Don't think this message is ever returned now.
+        resp.output["description"] = f"{group.name} is an AOS_10X group, " \
+            "rename only supported on AOS_8X groups. Use clone."
 
-        render.display_results(resp, tablefmt="action")
-        common.exit(code=int(not resp.ok))
+    render.display_results(resp, tablefmt="action")
+    common.exit(code=int(not resp.ok))
 
 
 @app.callback()
