@@ -141,7 +141,7 @@ def device(
         _lic_msg = [lic.value for lic in kwargs["license"]]
         _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
         _msg += [
-            f"\n  Assign License{'s' if len(kwargs['license']) > 1 else ''}: [bright_green]{_lic_msg}[/bright_green]"
+            f"\n  Assign Subscription{'s' if len(kwargs['license']) > 1 else ''}: [bright_green]{_lic_msg}[/bright_green]"
         ]
         kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
 
@@ -225,7 +225,7 @@ def group(
         _msg = f"{_msg}\n    [cyan]APs[/cyan]: [bright_green]Template Group[/bright_green]"
     if gw_role:
         _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]{gw_role.value}[/bright_green]"
-    elif gw:  # --sdwan results in gw_role being set (vpnc)
+    elif gw:  # --sdwan results in gw_role being set (vpnc)... this only hits if --gw w/out --gw-role
         _msg = f"{_msg}\n    [cyan]Gateway Role[/cyan]: [bright_green]branch[/bright_green] [dim italic]Not specified.  This is the default[/]"
     if microbranch:
         _msg = f"{_msg}\n    [cyan]AP Role[/cyan]: [bright_green]Microbranch[/bright_green]"
@@ -447,9 +447,18 @@ def cert(
 
     if not any([server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]):
         common.exit("[red1]Error[/]: Certificate Type must be provided using one of the options i.e. [cyan]--svr[/]")
-    # elif cert_file is None:   # TODO determine cert format from file
     elif not any(cert_format_params):
-        common.exit(f"[red1]Error[/]: Cert format must be provided use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
+        if cert_file:
+            if cert_file.suffix in [".p12", ".pfx"]:
+                pkcs12 = True
+            elif cert_file.suffix == ".der":
+                der = True
+            elif cert_file.suffix in [".cer", ".crt", ".pem"]:
+                pem = True
+            else:
+                common.exit(f"[red1]Error[/]: Unable to determine certificate format from file suffix {cert_file.suffix}.  Use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
+        else:
+            common.exit(f"[red1]Error[/]: Cert format must be provided use one of {utils.color(['--pem', '--der', '--pkcs12'], color_str='cyan', sep='|')}")
     else:
         cert_format = cert_formats[cert_format_params.index(True)]
 
