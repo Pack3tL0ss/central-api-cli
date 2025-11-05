@@ -17,7 +17,7 @@ from .environment import env_var
 
 ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals"]
 OptionType = Literal[
-    "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "do_json", "do_yaml", "do_csv", "do_table",
+    "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
     "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band"
 ]
@@ -210,6 +210,7 @@ class CLIOptions:
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
+        self.device_type: OptionInfo = typer.Option(None, "--dev-type",help="Filter by Device Type",show_default=False,)
         self.swarm_device: OptionInfo = typer.Option(None, "-S", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.swarm: OptionInfo = typer.Option(False, "-S", "--swarm", help="Filter by the swarm associated with the ap specified. [dim italic](device/AP Argument must be provided)[/]", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.sort_by: OptionInfo = typer.Option(
