@@ -333,10 +333,10 @@ class Utils:
     def strip_no_value(data: list[dict] | dict[dict], aggressive: bool = False) -> list[dict] | dict[dict]:
         """strip out any columns that have no value in any row
 
-        Accepts either List of dicts, or a Dict where the value for each key is a dict
+        Accepts either list of dicts, or a dict where the value for each key is a dict
 
         Args:
-            data (List[dict] | Dict[dict]): data to process
+            data (list[dict] | dict[dict]): data to process
             aggressive (bool, optional): If True will strip any key with no value, Default is to only strip if all instances of a given key have no value.
 
 
@@ -382,7 +382,7 @@ class Utils:
                 data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_keys} for id in data}
         else:
             log.error(
-                f"cleaner.strip_no_value recieved unexpected type {type(data)}. Expects List[dict], or Dict[dict]. Data was returned as is."
+                f"utils.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is."
             )
 
         return data
