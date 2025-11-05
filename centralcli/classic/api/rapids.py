@@ -251,6 +251,8 @@ class RapidsAPI:
             for f in failed:
                 if f in range(0, len(batch_res)):
                     log.error(f"{batch_res[f].method} {batch_res[f].url.path} Returned Error Status {batch_res[f].status}. {batch_res[f].output or batch_res[f].error}", show=True)
+                    if ok_res:
+                        log.error(f"Partial Failure {batch_res[f].method}:{batch_res[f].url.path} returned {batch_res[f].status} {batch_res[f].error} [italic]see logs[/]", caption=True)
         raw_keys = ["interfering_aps", "neighbor_aps", "suspect_aps"]
         if resp.ok:
             resp.raw = {"rogue_aps": resp.raw.get("rogue_aps", []), "_counts": {"rogues": resp.raw.get("total")}}  # TODO need more error handling
