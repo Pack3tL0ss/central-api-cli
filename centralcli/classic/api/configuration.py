@@ -92,8 +92,11 @@ class ConfigAPI:
                 BatchRequest(self.get_groups_properties, groups)
             ]
         )
-        if all([not r.ok for r in batch_resp]):  # if first call fails possible to only have 1 call returned.
-            return batch_resp
+        failed = [r for r in batch_resp if not r.ok]
+        if failed:
+            log.error(f"{len(failed)} API calls necessary to fetch group details failed.  See logs for more details.", caption=True)
+            return failed[-1]
+
         template_resp, props_resp = batch_resp
 
         template_by_group = {d["group"]: d["template_details"] for d in deepcopy(template_resp.output)}
@@ -235,7 +238,7 @@ class ConfigAPI:
 
         if None in allowed_types:
             raise ValueError('Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch", "sdwan')
-        elif "sdwan" in allowed_types and len(allowed_types) > 1:
+        elif "SD_WAN_Gateway" in allowed_types and len(allowed_types) > 1:
             raise ValueError('Invalid value for allowed_types.  When sdwan device type is allowed, it must be the only type allowed for the group')
         if microbranch:
             if not aos10:
@@ -698,7 +701,8 @@ class ConfigAPI:
     # >>>> TEMPLATES <<<<
 
     async def get_all_templates(
-        self, groups: List[dict] | List[str ] = None,
+        self,
+        groups: List[dict] | List[str] = None,
         template: str = None,
         device_type: constants.DeviceTypes = None,
         version: str = None,
@@ -734,7 +738,7 @@ class ConfigAPI:
 
             template_groups = [g["group"] for g in resp.output if True in g["template_details"].values()]
         elif isinstance(groups, list) and all([isinstance(g, str) for g in groups]):
-                template_groups = groups
+            template_groups = groups
         else:
             template_groups = [g["name"] for g in groups if True in [g["wired_tg"], g["wlan_tg"]]]
 
@@ -1560,7 +1564,7 @@ class ConfigAPI:
         dynamic_ant_mode: DynamicAntenna = None,
         flex_dual_exclude: RadioType = None,
         boot_partition: int = None,
-    ) -> List[BatchRequest]:
+    ) -> BatchRequest | Response:
         url = f"/configuration/v1/ap_settings_cli/{serial}"
 
         ip_address = None
@@ -1633,7 +1637,7 @@ class ConfigAPI:
                 iden = f"{current_clis[1].split()[1]}|{serial}"
             except Exception:
                 iden = serial
-            return Response(error="NO CHANGES", output=f"{iden} skipped. The Provided per ap settings match the APs current AP settings.")
+            return Response(ok=True, error="NO CHANGES", output=f"{iden} skipped. The Provided per ap settings match the APs current AP settings.")
 
         return BatchRequest(self.session.post, url, json_data={'clis': update_clis})
 
@@ -1965,7 +1969,7 @@ class ConfigAPI:
 
         updated_clis_list = [await self._add_altitude_to_config(resp.output, altitude=as_dict[iden]) for iden, resp in passed.items()]
 
-        skipped = [Response(error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        skipped = [Response(ok=True, error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
         update_resp = await self.session._batch_request(update_reqs)
