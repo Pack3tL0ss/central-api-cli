@@ -155,8 +155,8 @@ class ConfigAPI:
         resp.output = output
         if "data" in resp.raw:
             resp.raw["data"] = output
-        else:
-            log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'")
+        else:  # pragma: no cover
+            log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'", show=True)
 
         return resp
 
@@ -371,7 +371,7 @@ class ConfigAPI:
             log.error(f"Unable to perform call to update group {group} properties.  Call to get current properties failed.")
             return resp
 
-        if cur_group_props["AOSVersion"] == "AOS_10X" and aos10 is False:
+        if aos10 is False and (cur_group_props.get("AOSVersion", "") == "AOS_10X"):
             return Response(
                 error=f"{group} is currently an AOS10 group.  Upgrading to AOS10 is supported, reverting back is not.",
             )
@@ -1585,7 +1585,7 @@ class ConfigAPI:
                 flex_dual = "5GHz-and-2.4GHz"
             elif flex_dual_exclude.startswith("5"):
                 flex_dual = "2.4GHz-and-6GHz"
-            elif flex_dual_exclude.startswith("2.4") or flex_dual_exclude.startswith("24"):
+            elif flex_dual_exclude.startswith("2"):
                 flex_dual = "5GHz-and-6GHz"
             else:
                 raise ValueError(f"Invalid value {flex_dual_exclude} for flex_dual_exclude, valid values: '2.4', '5', '6'")
@@ -1700,7 +1700,7 @@ class ConfigAPI:
         if any(kwargs.values()) and not serial:
             raise ValueError("serial is required")
         if serial:
-            as_dict["serial"] = kwargs
+            as_dict[serial] = kwargs
 
         base_url = "/configuration/v1/ap_settings_cli"
 
@@ -1857,7 +1857,7 @@ class ConfigAPI:
         timezone: constants.IAP_TZ_NAMES,
         tz_offset_hr: int,
         tz_offset_min: int,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover the command that uses this is hidden see API-FLAW comment aboce
         """Update (replace) an existing swarm config.  All values are required.
 
         Args:
