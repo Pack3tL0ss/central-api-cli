@@ -29,7 +29,6 @@ from centralcli.objects import DateTime
 from centralcli.utils import ToBool
 
 from .classic.api import ClassicAPI
-from .cleaner import strip_no_value
 from .client import BatchRequest, Session
 from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
@@ -571,12 +570,12 @@ class CLICommon:
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                 data = [{"serial": k, **v} for k, v in data.items()]
         elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
-            if import_type == "devices" and utils.is_serial(data[0].keys()[-1]):  # spot check the last key to ensure it looks like a serial
+            if import_type == "devices" and utils.is_serial(data[-1]):  # spot check the last key to ensure it looks like a serial
                 data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
             if import_type == "labels":
                 data = [{"name": label} for label in data if not label.lower().startswith("label")]
 
-        data = strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
+        data = utils.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
                                                             # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
 
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
@@ -916,9 +915,8 @@ class CLICommon:
         render.console.print(f'{len(data)} Devices found in {file_str}')
         render.console.print(confirm_str.lstrip("\n"), emoji=False)
         render.console.print(f'\n{word} {len(data)} devices found in {file_str}')
-        if warn:
-            msg = ":warning:  Warnings exist"
-            msg = msg if not yes else f"{msg} [cyan]-y[/] flag ignored."
+        if warn:  # pragma: no cover  requires tty
+            msg = f":warning:  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}"
             render.econsole.print(msg)
 
         resp = None
@@ -1783,7 +1781,7 @@ class CLICommon:
             if {k: v for k, v in kwargs.items() if k != "serial" and v is not None}:
                 ap_env_by_serial[ap.serial] = kwargs
             elif not ap.gps_altitude:
-                skipped[ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  [red]No updates found[/] in import file that apply to [cyan]AP{cache_ap.model}[/].")
+                skipped[ap.serial] = Skipped(ap_iden, f"[dark_orange3]:warning:[/]  [red]No updates[/] apply to [cyan]AP{cache_ap.model}[/].")
 
         if ap_env_by_serial:
             batch_reqs += [BatchRequest(api.configuration.update_per_ap_settings, as_dict=ap_env_by_serial)]
@@ -1818,7 +1816,7 @@ class CLICommon:
 
     # Header rows used by CAS
     #DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
-    # TODO cache update if AP is renamed
+    # CACHE cache update if AP is renamed
     def batch_update_aps(self, data: list | dict, *, yes: bool = False, reboot: bool = False) -> None:
         """Update per-ap-settings (ap env) or set gps altitude by updating ap level config"""
         try:
@@ -1882,6 +1880,7 @@ class CLICommon:
             reboot_resp = self._reboot_after_changes(req_info, batch_resp=batch_resp) or []
 
         render.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
+        self.exit(code=0 if all([r.ok for r in [*batch_resp, *reboot_resp]]) else 1)
 
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
