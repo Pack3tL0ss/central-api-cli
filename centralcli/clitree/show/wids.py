@@ -53,7 +53,7 @@ def get_wids_response(
     past: str = None,
 ) -> WidsResponse:
     if device:
-        device: CacheDevice = common.cache.get_dev_identifier(device, dev_type="ap", swack=True)
+        device: CacheDevice = common.cache.get_dev_identifier(device, dev_type="ap", swack_only=True)
         if device.is_aos10:
             common.exit(f"[cyan]-S[/]|[cyan]--swarm[/] option only applies to [bright_green]AOS8[/] IAP.\n{device.summary_text} is an [red1]AOS10[/] AP.")
     if group:

@@ -2661,7 +2661,7 @@ class Cache:
         incomplete: str,
         ctx: typer.Context = None,
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes] = None,
-        conductor_only: bool = False,
+        swack: bool = False,
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
         """Completion for argument that can be either group or device.
@@ -2691,7 +2691,7 @@ class Cache:
             out += group_out
 
         if not bool([t for t in out if t[0] == incomplete]):  # group had exact match no need for dev
-            match = self.get_dev_identifier(incomplete, dev_type=dev_type, conductor_only=conductor_only, completion=True)
+            match = self.get_dev_identifier(incomplete, dev_type=dev_type, swack=swack, completion=True)
             if match:
                 out += [c for c in [m.get_completion(incomplete, args=args) for m in sorted(match, key=lambda i: i.name)] if c is not None]
 
@@ -4459,7 +4459,7 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]] = None,
         swack: Optional[bool] = False,
-        conductor_only: Optional[bool] = False,
+        swack_only: Optional[bool] = False,
         retry: Optional[bool] = True,
         completion: Optional[bool] = False,
         silent: Optional[bool] = False,
@@ -4474,9 +4474,9 @@ class Cache:
             query_str (str | Iterable[str]): The query string or list of strings to attempt to match.
             dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Literal["ap", "cx", "sw", "switch", "gw"]], optional): Limit matches to specific device type. Defaults to None (all device types).
             swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
+                Does not filter non stacks.
+            swack_only (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
                 If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
-            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
-                Does not filter non stacks, the way swack option does. Defaults to False.
             retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
             completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
             silent (bool, optional): Do not display errors / output, simply returns match if match is found. Defaults to False.
@@ -4592,16 +4592,13 @@ class Cache:
                 match = [Model(dev) for dev in match]
                 break
 
-        # swack is swarm/stack id.  We filter out all but the commander for a stack and all but the VC for a swarm
-        # For a stack a multi-match is expected when they are using hostname as all members have the same hostname.
-        # This param returns only the commander matching the name.
-        if len(match) > 1 and (swack or conductor_only):
+        if len(match) > 1 and (swack or swack_only):
             unique_swack_ids = set([d.swack_id for d in match if d.swack_id])
+            stacks = [d for d in match if d.swack_id in unique_swack_ids and (d.ip or (d.switch_role and d.switch_role == 2))]
             if swack:
-                stacks = [d for d in match if d.swack_id in unique_swack_ids and d.ip or (d.switch_role and d.switch_role == 2)]
-                match = stacks
-            elif conductor_only:
                 match = [*stacks, *[d for d in match if not d.swack_id]]
+            elif swack_only:
+                match = stacks
 
         if completion:
             return match or []

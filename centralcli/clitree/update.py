@@ -382,7 +382,7 @@ def swarm(
 
     :warning:  It is recommended to do TimeZone updates via the UI currently, as API endpoint does not automatically add the appropriate daylight saving time rule
     """
-    dev = common.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
+    dev = common.cache.get_dev_identifier(ap, dev_type="ap", swack_only=True)
     if dev.is_aos10:
         common.exit("Command is only valid for AOS8 APs")
 

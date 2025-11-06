@@ -1279,8 +1279,8 @@ class CLICommon:
             dev_idens = set(dev_idens)
             render.econsole.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
 
-        # conductor_only option, as group move will move all associated devices when device is part of a swarm or stack
-        cache_devs: list[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, include_inventory=True, conductor_only=True, silent=True, exit_on_fail=False) for d in dev_idens]
+        # swack option, as group move will move all associated devices when device is part of a swarm or stack
+        cache_devs: list[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, include_inventory=True, swack=True, silent=True, exit_on_fail=False) for d in dev_idens]
         not_found_devs: List[str] = [s for s, c in zip(dev_idens, cache_devs) if c is None]
         cache_devs: list[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
 

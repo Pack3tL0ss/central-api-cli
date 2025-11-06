@@ -165,7 +165,7 @@ def bounce(
 
     [italic dark_olive_green2]Results in 1 API call per interface[/]
     """
-    dev = common.cache.get_dev_identifier(device, conductor_only=True)
+    dev = common.cache.get_dev_identifier(device, swack=True)
     command = 'bounce_poe_port' if what == 'poe' else 'bounce_interface'
     ports = utils.get_interfaces_from_range(ports)
 
@@ -190,7 +190,7 @@ def remove(
 ) -> None:
     """Remove device(s) from a site."""
     devs = (d for d in devices if d != "site")
-    devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devs]
+    devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev, swack=True) for dev in devs]
     site: CacheSite = common.cache.get_site_identifier(site)
 
     render.econsole.print(f"Remov{'e' if not yes else 'ing'} {utils.summarize_list([dev.rich_help_text for dev in devices], color=None)}\n  from site [bright_green]{site.name}[/]")
@@ -229,7 +229,7 @@ def reboot(
 
     Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
-    devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
+    devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
 
     batch_reqs, confirm_msgs = [], []
     _confirm_pfx = "Reboot:" if not yes else "Rebooting:"

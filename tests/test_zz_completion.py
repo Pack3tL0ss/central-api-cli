@@ -326,12 +326,12 @@ def test_workspace_name_callback(workspace: str, args: tuple[str], default: bool
     assert pass_condition(result, output)
 
 @pytest.mark.parametrize(
-    "query_str,swack,conductor_only,pass_condition",
+    "query_str,swack,swack_only,pass_condition",
     [
-        (test_data["vsf_switch"]["name"], False, True, lambda r: r.name == test_data["vsf_switch"]["name"]),
         (test_data["vsf_switch"]["name"], True, False, lambda r: r.name == test_data["vsf_switch"]["name"]),
+        (test_data["vsf_switch"]["name"], False, True, lambda r: r.name == test_data["vsf_switch"]["name"]),
     ]
 )
-def test_get_dev_identifier(ensure_cache_vsf_stack, query_str: str, swack: bool, conductor_only: bool, pass_condition: Callable):
-    result = cache.get_dev_identifier(query_str, swack=swack, conductor_only=conductor_only)
+def test_get_dev_identifier(ensure_cache_vsf_stack, query_str: str, swack: bool, swack_only: bool, pass_condition: Callable):
+    result = cache.get_dev_identifier(query_str, swack=swack, swack_only=swack_only)
     assert pass_condition(result)

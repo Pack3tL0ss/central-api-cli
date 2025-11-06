@@ -24,7 +24,7 @@ def upgrade(
 ) -> None:
     """Cancel a previously initiated firmware upgrade."""
     if what == "device":
-        devs = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in dev_or_group]
+        devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in dev_or_group]
         confirm_msg = f'Cancel [cyan]Upgrade[/] on [cyan]{utils.color([d.name for d in devs], "cyan")}[/]'
         reqs = [
             BatchRequest(api.firmware.cancel_upgrade, **{"swarm_id" if dev.type == "ap" and dev.is_aos10 else "serial": dev.serial})  # swack/swarm id for aos10 AP is serial
@@ -40,7 +40,7 @@ def upgrade(
             for group in groups
         ]
     else:  # swarm
-        devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in dev_or_group]
+        devs = [common.cache.get_dev_identifier(dev, swack_only=True) for dev in dev_or_group]
         confirm_msg = f'Cancel [cyan]Upgrade[/] on swarm associated with [cyan]{utils.color([d.name for d in devs], "cyan")}[/]'
         swarm_ids = list(set([d.swack_id for d in devs if d.swack_id is not None]))
         reqs = [

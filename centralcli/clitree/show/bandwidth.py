@@ -206,7 +206,7 @@ def client(
     The larger the time-frame the more unreadable the graph will be.
     """
     # start and end datetime opjects are in UTC
-    dev: CacheDevice | None = None if not device else common.cache.get_dev_identifier(device, conductor_only=True)
+    dev: CacheDevice | None = None if not device else common.cache.get_dev_identifier(device, swack=True)
     group: CacheGroup | None = None if not group else common.cache.get_group_identifier(group)
     label: CacheLabel | None = None if not label else common.cache.get_label_identifier(label)
     client: CacheClient | None = None if not client else common.cache.get_client_identifier(client, exit_on_fail=True)
@@ -351,7 +351,7 @@ def wlan(
     # start and end datetime opjects are in UTC
     title = f'Bandwidth Usage for [cyan]{network}[/]'
     if device:
-        dev = common.cache.get_dev_identifier(device, dev_type="ap", swack=True)
+        dev = common.cache.get_dev_identifier(device, dev_type="ap", swack_only=True)
         title = f"{title} on swarm containing {dev.name}"
 
     kwargs = {

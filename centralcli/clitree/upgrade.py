@@ -34,7 +34,7 @@ def device(
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on device(s).
     """
-    devs = [common.cache.get_dev_identifier(dev, conductor_only=True) for dev in devices]
+    devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
     dev_types = list(set([dev.type for dev in devs]))
     if len([t for t in dev_types if t not in ["ap", "gw"]]) > 1:
         common.exit(f"Specifying multiple devices of different types ({utils.summarize_list(dev_types, pad=0, sep=', ')}) does not make sense.  All devices should be compatible with the same software/version.")

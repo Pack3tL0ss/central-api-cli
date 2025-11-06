@@ -30,7 +30,7 @@ device_help = f"""Show firmware details for device(s)
     """
 @app.command(help=device_help)
 def device(
-    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_gw_switch_completion, show_default=False,),
+    device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
     dev_type: FirmwareDeviceType = typer.Option(None, help="Show firmware by device type", show_default=False,),
     do_json: bool = common.options.do_json,
     do_yaml: bool = common.options.do_yaml,
@@ -44,7 +44,7 @@ def device(
     workspace: str = common.options.workspace,
 ) -> None:
     if device:
-        devs = [common.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], conductor_only=True) for dev in device]
+        devs = [common.cache.get_dev_identifier(dev, dev_type=["gw", "switch", "ap"], swack=True) for dev in device]
         batch_reqs = [BatchRequest(api.firmware.get_device_firmware_details if dev.type != "ap" else api.firmware.get_swarm_firmware_details, dev.serial if dev.type != "ap" else dev.swack_id) for dev in devs]
         if dev_type:
             log.warning(
@@ -110,7 +110,7 @@ def swarm(
     """
     title = "Firmware Details"
     if device:
-        devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, dev_type="ap", conductor_only=True) for dev in device]
+        devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, dev_type="ap", swack=True) for dev in device]
         batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]
         if len(devs) == 1:
             title = f"{title} for swarm with id {devs[0].swack_id}"
@@ -223,7 +223,7 @@ def _list(
     workspace: str = common.options.workspace,
 ):
     """Show available firmware list for a specific device or a type of device."""
-    dev: CacheDevice = device if not device else common.cache.get_dev_identifier(device, conductor_only=True,)
+    dev: CacheDevice = device if not device else common.cache.get_dev_identifier(device, swack=True,)
 
     # API-FLAW # HACK API at least for AOS10 APs returns Invalid Value for device <serial>, convert to --dev-type
     if dev is not None and dev.type == "ap":

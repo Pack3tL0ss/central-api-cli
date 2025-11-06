@@ -719,7 +719,7 @@ def stacks(
     kwargs = {}
     func = api.monitoring.get_switch_stacks
     if switches:
-        devs: list[CacheDevice] = [common.cache.get_dev_identifier(d, dev_type="switch", swack=True,) for d in switches]
+        devs: list[CacheDevice] = [common.cache.get_dev_identifier(d, dev_type="switch", swack_only=True,) for d in switches]
         if len(devs) == 1:  # if they specify a single switch we use the details call
             func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
@@ -905,7 +905,7 @@ def swarms(
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     if ap:
-        device = common.cache.get_dev_identifier(ap, dev_type="ap", swack=True)
+        device = common.cache.get_dev_identifier(ap, dev_type="ap", swack_only=True)
         if device.is_aos10:
             common.exit("This command is only valid for AOS8 APs")
         if status is not None:
@@ -1060,7 +1060,7 @@ def interfaces(
         if any([site, group]):
             warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in context_filters.items() if v])
             log.warning(f"{warn_msg} ignored as the option does not apply when a specific device is provided.", caption=True)
-        dev: CacheDevice = common.cache.get_dev_identifier(device, conductor_only=True,)
+        dev: CacheDevice = common.cache.get_dev_identifier(device, swack=True,)
         dev_type = dev.generic_type
         devs = [dev]
     else:
@@ -1279,7 +1279,7 @@ def vlans(
         status = StatusOptions.down if down else StatusOptions.up
     status = status or state
 
-    obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), conductor_only=True)
+    obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), swack=True)
     if obj.is_site:
         resp = api.session.request(api.topo.get_site_vlans, obj.id)
     elif obj.is_dev:
@@ -1462,7 +1462,7 @@ def upgrade(
     if not devices:
         common.exit("Missing required parameter [cyan]<device>[/]")
 
-    devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, conductor_only=True,) for dev in devices]
+    devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, swack=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
     batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
     batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
@@ -1808,7 +1808,7 @@ def variables(
     """Show Variables for all or a specific device"""
     dev = None
     if device and device != "all":
-        dev = common.cache.get_dev_identifier(device, include_inventory=True, conductor_only=True)
+        dev = common.cache.get_dev_identifier(device, include_inventory=True, swack=True)
 
     resp = api.session.request(api.configuration.get_variables, serial=None if not dev else dev.serial,)
     if resp.ok and dev:
@@ -1856,9 +1856,9 @@ def lldp(
 
     NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
     """
-    _devs: list[CacheDevice] = [common.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), conductor_only=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+    _devs: list[CacheDevice] = [common.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), swack=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
 
-    # in case they included 2 members of same stack on command line (by serial or mac).  conductor_only only helps if called by name
+    # in case they included 2 members of same stack on command line (by serial or mac).  swack only helps if called by name
     stack_ids = []
     devs: list[CacheDevice] = []
     for dev in _devs:
