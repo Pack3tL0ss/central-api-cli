@@ -25,7 +25,7 @@ from .objects import DateTime, ShowInterfaceFilters
 from .render import tty
 
 if TYPE_CHECKING:
-    from .cache import CacheDevice
+    from .cache import Cache, CacheDevice
     from .constants import DevTypes, LibAllDevTypes, StatusOptions
     from .typedefs import CertType, InsightSeverityType
 
@@ -390,7 +390,7 @@ def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None,
     Returns:
         list[dict[str, Any]]: Formatted data
     """
-    if not isinstance(data, list):
+    if not isinstance(data, list):  # pragma: no cover
         log.warning(f"cleaner.simple_kv_formatter expected a list but rcvd {type(data)}")
         return data
 
@@ -472,11 +472,9 @@ def get_labels(
 
 def _client_concat_associated_dev(
     data: dict[str, Any],
+    cache: Cache,
     verbose: bool = False,
-    cache=None,
 ) -> dict[str, Any]:
-    if cache is None:
-        from centralcli import cache
     strip_keys = [
         "associated_device_name",
         "associated_device",
@@ -570,7 +568,7 @@ def get_clients(
     **kwargs
 ) -> list:
     data = utils.listify(data)
-    data = [_client_concat_associated_dev(d, verbose=verbosity, cache=cache, **kwargs) for d in data]
+    data = [_client_concat_associated_dev(d, cache=cache, verbose=verbosity) for d in data]
     format = format or "rich" if not verbosity else "yaml"
 
     verbosity_keys = {
@@ -1598,7 +1596,7 @@ def show_ts_commands(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[
     strip_keys = [
         "summary"
     ]
-    # data = simple_kv_formatter(data)
+
     data = [
         dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data if "arguments" not in d.keys()
     ]
