@@ -35,7 +35,7 @@ def all(
     resp = api.session.request(
         api.device_management.kick_users,
         dev.serial,
-        kick_all=True,
+        kick_all=True if not ssid else False,
         ssid=ssid
     )
     render.display_results(resp, tablefmt="action")
@@ -82,13 +82,13 @@ def client(
                 common.exit(f"Client {client} is not online: Failure Stage: {client_resp.output[-1].get('failure_stage', '')}, Reason: {client_resp.output[-1].get('failure_reason', '')}")
 
     render.econsole.print(f'Kick client [cyan]{client.name}[/], currently connected to [cyan]{client.connected_name}[/]', emoji=False)
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.device_management.kick_users,
-            client.connected_serial,
-            mac=client.mac
-        )
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(
+        api.device_management.kick_users,
+        client.connected_serial,
+        mac=client.mac
+    )
+    render.display_results(resp, tablefmt="action")
 
 @app.callback()
 def callback():
