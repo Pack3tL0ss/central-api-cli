@@ -867,6 +867,10 @@ class CacheClient(CentralObject):
             f"[bright_green]{self.name}[/]|[cyan]{self.mac}[/]|[bright_green]{self.ip}[/]|[cyan]{f's:{self.site}' if self.site else f'g:{self.group}'}[/]|[dark_olive_green2]{self.connected_name}[/]"
         )
 
+    @property
+    def summary_text(self) -> str:
+        return self.__rich__()
+
 
 class CacheMpskNetwork(CentralObject):
     db: Table | None = None
