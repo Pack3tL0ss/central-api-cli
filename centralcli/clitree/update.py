@@ -218,12 +218,13 @@ def group(
         "monitor_only_sw": mo_sw,
     }
 
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.configuration.update_group_properties,
-            **kwargs
-        )
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(
+        api.configuration.update_group_properties,
+        **kwargs
+    )
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    #CACHE Needs cache update
 
 
 config_help = f"""Update group or device level config (ap or gw).
@@ -463,7 +464,7 @@ def ap(
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
     gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [dim italic]Must be set for 6Ghz SP[/]", show_default=False,),
     reboot: bool = typer.Option(False, "--reboot", "-R", help="Automatically reboot device if IP or VLAN is changed [dim italic]Reboot is required for changes to take effect when IP or VLAN settings are changed[/]"),
-    # partition is hidden as it appears to not be a supported env setting.  Had not impact, keeping it (but hidden) for now until I can test further
+    # partition is hidden as it appears to not be a supported env setting.  Had no impact, keeping it (but hidden) for now until I can test further
     partition: int = typer.Option(None, "-p", "--partition", help="Update ap boot partition", min=0, max=1, show_default=False, hidden=True),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,

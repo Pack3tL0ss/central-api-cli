@@ -131,7 +131,7 @@ def group(
     _grp_msg = "\n".join([f"  [cyan]{g.name}[/]" for g in groups])
     _grp_msg = _grp_msg.lstrip() if len(groups) == 1 else f"\n{_grp_msg}"
     print(
-        f"[bright_red]Delete[/] {'group ' if len(groups) == 1 else 'groups:'}{_grp_msg}"
+        f"[bright_red]Delet{'ing' if yes else 'e'}[/] {'group ' if len(groups) == 1 else 'groups:'}{_grp_msg}"
     )  # pragma: no cover  16/28 branches b4
     if len(reqs) > 1:  # TODO common function in clicommon or utils
         print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
@@ -275,12 +275,14 @@ def guest(
     portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
     guest: CacheGuest = common.cache.get_guest_identifier(guest, portal_id=portal.id)
 
-    _msg = f"[red]:warning:  Delet{'e' if not yes else 'ing'}[/] Guest: [cyan]{guest.name}[/] from portal: [cyan]{portal.name}[/]"
-    print(_msg)
-    if render.confirm(yes):
-        resp = api.session.request(api.guest.delete_guest, portal_id=portal.id, guest_id=guest.id)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
-        _ = api.session.request(common.cache.update_guest_db, guest.doc_id, remove=True)
+    render.econsole.print(
+        f"[red]:warning:  Delet{'e' if not yes else 'ing'}[/] Guest: [cyan]{guest.name}[/] from portal: [cyan]{portal.name}[/]"
+    )
+    render.confirm(yes)
+
+    resp = api.session.request(api.guest.delete_guest, portal_id=portal.id, guest_id=guest.id)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
+    _ = api.session.request(common.cache.update_guest_db, guest.doc_id, remove=True)
 
 
 
