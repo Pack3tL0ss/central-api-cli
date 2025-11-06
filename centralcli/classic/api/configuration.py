@@ -489,9 +489,7 @@ class ConfigAPI:
         if gw_role and "Gateways" in allowed_types:
             grp_props["GwNetworkRole"] = gw_role
         if "AccessPoints" in allowed_types or "AccessPoints" in cur_group_props["AllowedDevTypes"]:
-            if microbranch is not None:
-                grp_props["ApNetworkRole"] = \
-                    "Standard" if not microbranch else "Microbranch"
+            grp_props["ApNetworkRole"] = "Microbranch" if microbranch else (cur_group_props.get("ApNetworkRole") or "Standard")
 
         tmplt_info = {
             "Wired": wired_tg,
