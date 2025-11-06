@@ -179,6 +179,13 @@ def test_show_cloud_auth_registered_macs():
     assert "MAC" in result.stdout
 
 
+def test_show_cloud_auth_registered_macs_fail():
+    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", "--sort", "mac"],)
+    capture_logs(result, "test_show_cloud_auth_registered_macs_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Response" in result.stdout
+
+
 def test_show_cluster():
     result = runner.invoke(app, ["show", "cluster", test_data["tunneled_ssid"]["group"], test_data["tunneled_ssid"]["ssid"], "--sort", "invalid-sort-field"])  # also testing invalid sort field
     capture_logs(result, "test_show_cluster")
