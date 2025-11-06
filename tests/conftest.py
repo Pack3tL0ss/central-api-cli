@@ -804,7 +804,7 @@ def _ensure_cache_site2():
 
 
 @pytest.fixture(scope="function")
-def ensure_cache_site2():
+def ensure_cache_site2():  # pragma: no cover  Not used by itself currently, but keeping it for consistency so it's available
     _ensure_cache_site2()
     yield
 
