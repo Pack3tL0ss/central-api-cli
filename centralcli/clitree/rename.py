@@ -55,7 +55,7 @@ def ap(
     print("    [italic]Will result in 2 API calls[/italic]\n")
     render.confirm(yes)
     resp = api.session.request(api.configuration.update_ap_settings, ap.serial, new_name)
-    render.display_results(resp, tablefmt="action")
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
     if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
         common.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
 
