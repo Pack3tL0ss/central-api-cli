@@ -31,6 +31,7 @@ from .classic.api import ClassicAPI
 from .client import BatchRequest, Session
 from .cnx.models.cache import Inventory as GlpInventory
 from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
+from .environment import env
 from .exceptions import CentralCliException
 from .models import cache as models
 from .objects import DateTime
@@ -4156,6 +4157,10 @@ class Cache:
         query_str: str = None,
         query_type: str = "device",
     ) -> List[Dict[str, Any]]:  # pragma: no cover  required tty, not part of automated testing
+        if env.is_pytest:
+            log.error(f"handle_multi_match called from pytest run during test: {env.current_test}.  Check fixtures/cache. {match =}", show=True)
+            raise typer.Exit(1)
+
         typer.echo()
         set_width_cols = {}
         if query_type == "site":
