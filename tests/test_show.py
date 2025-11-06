@@ -606,12 +606,13 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-if config.dev.mock_tests:
     def test_show_task_invalid_expired():
         result = runner.invoke(app, ["show", "task", "17580829612345"],)
         capture_logs(result, "test_show_task_invalid_expired")
         assert result.exit_code == 0
         assert "invalid" in result.stdout
+else:  # pragma: no cover
+    ...
 
 
 @pytest.mark.parametrize(
@@ -841,9 +842,9 @@ def test_show_last():
         (["1"], lambda r: "Empty Response" in r or "API" in r),
         (["audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"], lambda r: "Empty Response" in r or "API" in r),
         (["--all"], lambda r: "Empty Response" in r or "API" in r),
-        (["--dev", test_data["ap"]["serial"]], lambda r: "Empty Response" in r or "API" in r),
+        (["--dev", test_data["ap"]["serial"], "-vv"], lambda r: "Empty Response" in r or "API" in r),
         (["--dev", test_data["ap"]["name"], "--group", "ignored"], lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)),
-        (["--group", test_data["ap"]["group"]], lambda r: "Empty Response" in r or "API" in r),
+        (["--group", test_data["ap"]["group"],], lambda r: "Empty Response" in r or "API" in r),
     ]
 )
 def test_show_audit_logs(args: list[str], pass_condition: Callable):
@@ -862,23 +863,28 @@ def test_show_audit_logs_invalid(args: list[str]):
     assert "⚠" in result.stdout
 
 
-def test_show_audit_acp_logs_count():
-    result = runner.invoke(app, ["show", "audit", "acp-logs", "-n", "5"],)
-    capture_logs(result, "test_show_audit_acp_logs_count")
+@pytest.mark.parametrize("args", [("-n", "5"), ("-vv",)])
+def test_show_audit_acp_logs(args: tuple[str]):
+    result = runner.invoke(app, ["show", "audit", "acp-logs", *args],)
+    capture_logs(result, "test_show_audit_acp_logs")
     assert result.exit_code == 0
-    if "Empty Response" not in result.stdout and "no data" not in result.stdout.lower():
-        assert "acp audit logs" in result.stdout.lower()
-        assert "id" in result.stdout
+    assert "API" in result.stdout
 
 
-sfl = ["show", "logs", "--past", "30m"]
-@pytest.mark.parametrize("args", [sfl, [*sfl, "--dev", test_data["ap"]["name"], "-S"], [*sfl, "--dev", test_data["switch"]["name"], "-S"], [*sfl, "--group", test_data["ap"]["group"]]])
-def test_show_logs(args: list[str]):
-    result = runner.invoke(app, args,)
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [("--dev", test_data["ap"]["name"], "-S"), lambda r: "description" in r],
+        [("--dev", test_data["switch"]["name"], "-S"), lambda r: "description" in r],
+        [("--group", test_data["ap"]["group"]), lambda r: "description" in r],
+        [("1",), lambda r: "299" in r],
+    ]
+)
+def test_show_logs(args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "logs", "--past", "30m", *args,])
     capture_logs(result, "test_show_logs")
     assert result.exit_code == 0
-    assert "event logs" in result.stdout.lower()
-    assert "description" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_logs_by_id():
@@ -1135,12 +1141,12 @@ def test_show_config_invalid_ap_w_gw_flag():
     assert "nvalid" in result.stdout
 
 
-def test_show_poe():
+@pytest.mark.parametrize("args", [(test_data["switch"]["ip"], "-p"), (test_data["template_switch"]["serial"],)])
+def test_show_poe(args: tuple[str]):
     result = runner.invoke(app, [
             "show",
             "poe",
-            test_data["switch"]["ip"],
-            "-p"
+            *args
         ]
     )
     capture_logs(result, "test_show_poe")

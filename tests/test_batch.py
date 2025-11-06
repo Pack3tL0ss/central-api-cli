@@ -54,6 +54,14 @@ def test_batch_delete_labels(ensure_cache_batch_labels):
     assert "200" in result.stdout
 
 
+@pytest.mark.parametrize("args", [(str(test_label_file), "--no-devs"), ()])
+def test_batch_delete_labels_invalid(args: tuple[str]):
+    result = runner.invoke(app, ["batch", "delete",  "labels", *args])
+    capture_logs(result, "test_batch_delete_labels_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
+
+
 def test_batch_add_mpsk():
     result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
     capture_logs(result, "test_batch_add_mpsk")

@@ -91,10 +91,15 @@ if config.dev.mock_tests:
         assert resp.status == 200
 
 
-    def test_visualrf_bldgs_for_campus_paged():
+    def test_visualrf_get_bldgs_for_campus_paged():
         resp = api.session.request(api.visualrf.get_buildings_for_campus, "5000692__default")
         assert resp.status == 200
         assert len(resp.raw["buildings"]) > 100
+
+    def test_visualrf_get_bldgs_for_campus_fail():
+        resp = api.session.request(api.visualrf.get_buildings_for_campus, "5000692__default")
+        assert resp.ok is False
+
 else:  # pragma: no cover
     ...
 

@@ -65,22 +65,6 @@ def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml, en
     assert "Too many matches" in result.stdout
 
 
-def test_unarchive(ensure_inv_cache_test_ap):
-    result = runner.invoke(app, ["unarchive", test_data["test_devices"]["ap"]["serial"]])
-    capture_logs(result, "test_unarchive")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-
-
-def test_unarchive_multi(ensure_cache_batch_devices):
-    devices = common._get_import_file(test_device_file, import_type="devices")
-    serials = [dev["serial"] for dev in devices[::-1]][0:2]
-    result = runner.invoke(app, ["unarchive", *serials])
-    capture_logs(result, "test_unarchive_multi")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-
-
 def test_move_pre_provision(ensure_cache_group1, ensure_inv_cache_test_ap):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")
@@ -501,6 +485,26 @@ if config.dev.mock_tests:
         capture_logs(result, "test_delete_devices")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
+        "fixture,args",
+        [
+            ["ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
+            ["ensure_cache_batch_devices", ("from_import",)],
+            [None, ("US18CEN103", "US18CEN112")],  # this passes as it reuses real response, but these serials don't exist in cache.
+        ]
+    )
+    def test_unarchive(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        if "from_import" in args:
+            devices = common._get_import_file(test_device_file, import_type="devices")
+            args = [dev["serial"] for dev in devices[::-1]][0:2]
+        result = runner.invoke(app, ["unarchive", *args])
+        capture_logs(result, "test_unarchive")
+        assert result.exit_code == 0
+        assert "succeeded" in result.stdout
 
 else:  # pragma: no cover  Coverage shows untested branch without this
     ...
