@@ -4222,7 +4222,6 @@ class Cache:
         swack: bool = False,
         conductor_only: bool = False,
         group: str | List[str] = None,
-        all: bool = False,
         completion: bool = False,
     ) -> Union[CentralObject, List[CentralObject]]:
         """Get Identifier when iden type could be one of multiple types.  i.e. device or group
@@ -4238,7 +4237,6 @@ class Cache:
                 Does not filter non stacks, the way swack option does. Defaults to False.
             group (str, List[str], optional): applies to get_template_identifier, Only match if template is in provided group(s).
                 Defaults to None.
-            all (bool, optional): For use in completion, adds keyword "all" to valid completion.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
                 When called for completion it will fail silently and will return multiple when multiple matches are found.
 
@@ -4248,7 +4246,6 @@ class Cache:
         Returns:
             CentralObject or list[CentralObject, ...]
         """
-        # match = None
         device_type = utils.listify(device_type)
         default_kwargs = {"retry": False, "completion": completion, "silent": True}
         if "dev" in qry_funcs:  # move dev query last
@@ -4284,10 +4281,6 @@ class Cache:
                 )
 
         if completion:
-            if all:
-                if "all".startswith(qry_str.lower()):
-                    match = utils.listify(match)
-                    match += CentralObject("dev", {"name": "all", "help_text": "All Devices"})
             return match
 
         if not match:
