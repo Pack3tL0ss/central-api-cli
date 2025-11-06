@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 
 from centralcli import common, utils
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import capture_logs, config, test_data
 from ._test_data import test_device_file, test_j2_file
@@ -186,66 +187,66 @@ def test_bounce_poe_multiport_invalid_range_across_members():
 
 
 @pytest.mark.parametrize(
-    "args",
+    "fixture,args,pass_condition",
     [
-        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"]),
-        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "-Y"]),
-
+        [None, (test_data["aos8_ap"]["group"], "cencli_test_cloned"), lambda r: "Created" in r],
+        ["ensure_cache_group_cloned_w_gw", ("cencli_test_cloned", "cencli_test_cloned_upgdaos10", "--aos10"), lambda r: "⚠" in r],
     ]
 )
-def test_clone_group(args: list[str]):
-    result = runner.invoke(app, ["clone", "group", *args])
+def test_clone_group(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    result = runner.invoke(app, ["clone", "group", *args, "-y"])
     capture_logs(result, "test_clone_group")
     assert result.exit_code == 0
     assert "201" in result.stdout
-    assert "Created" in result.stdout
+    assert pass_condition(result.stdout)
 
 
-def test_kick_client():
-    result = runner.invoke(app, ["kick",  "client", test_data["client"]["wireless"]["name"][0:-2], "--refresh", "--yes"])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"]),
+    ]
+)
+def test_clone_group_fail(args: list[str]):
+    result = runner.invoke(app, ["clone", "group", *args])
+    capture_logs(result, "test_clone_group_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("client", test_data["client"]["wireless"]["name"][0:-2], "--refresh"),
+        ("all", test_data["ap"]["serial"]),
+        ("all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"]),
+    ]
+)
+def test_kick(args: tuple[str]):
+    result = runner.invoke(app, ["kick", *args, "--yes"])
     capture_logs(result, "test_kick_client")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
-def test_kick_invalid_client():
-    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.1122", "--yes"])
-    capture_logs(result, "test_kick_invalid_client", expect_failure=True)
-    assert result.exit_code == 1
-    assert "nable to gather" in result.stdout
-
 @pytest.mark.parametrize(
-    "args,expected",
+    "fixture,args,expected,test_name_append",
     [
-        (["aabb.ccdd.eeff", "-R", "--yes"], "not connected")
+        ["ensure_cache_client_not_connected", ("aabb.ccdd.eeff", "-R"), "not connected", None],
+        ["ensure_cache_client_not_connected", ("aabb.ccdd.eeff",), "failure", "refresh"],
+        [None, ("aabb.ccdd.1122",), "nable to gather", None],
     ]
 )
-def test_kick_client_fail(ensure_cache_client_not_connected, args: list[str], expected: str):
-    result = runner.invoke(app, ["kick", "client", *args],)
-    capture_logs(result, "test_kick_client_fail", expect_failure=True)
+def test_kick_fail(fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    if fixture:
+        request.getfixturevalue(fixture)
+    result = runner.invoke(app, ["kick", "client", *args, "--yes"],)
+    capture_logs(result, env.current_test, expect_failure=True)
     assert result.exit_code == 1
     assert expected in result.stdout
-
-
-def test_kick_client_not_connected(ensure_cache_client_not_connected):
-    result = runner.invoke(app, ["kick",  "client", "aabb.ccdd.eeff", "--yes"])
-    capture_logs(result, "test_kick_client_not_connected")
-    assert result.exit_code == 0
-    assert "API" in result.stdout  # This passes as we use previous mock response, but hits logic in kick otherwise not hit
-
-
-def test_kick_all():
-    result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], "--yes"])
-    capture_logs(result, "test_kick_all")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_kick_all_by_ssid():
-    result = runner.invoke(app, ["kick",  "all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"], "--yes"])
-    capture_logs(result, "test_kick_all_by_ssid")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
 
 
 def test_save():
@@ -430,11 +431,18 @@ if config.dev.mock_tests:
         assert "secure_token" in result.stdout
 
 
-    def test_rename_ap(ensure_dev_cache_ap):
-        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["name"], test_data["ap"]["name"][0:-5], "--yes"])
+    @pytest.mark.parametrize(
+        "new_name,pass_condition",
+        [
+            [test_data["ap"]["name"][0:-5], lambda r: "200" in r],
+            [test_data["ap"]["name"], lambda r: "299" in r]
+        ]
+    )
+    def test_rename_ap(ensure_dev_cache_ap, new_name: str, pass_condition: Callable):
+        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, "test_rename_ap")
         assert result.exit_code == 0
-        assert "200" in result.stdout
+        assert pass_condition(result.stdout)
 
 
     def test_rename_group(ensure_cache_group3):
@@ -487,6 +495,8 @@ if config.dev.mock_tests:
     def test_delete_devices(fixture: str | list[str] | None, args: list[str], pass_condition: Callable, request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        else:  # pragma: no cover
+            ...
         result = runner.invoke(app, ["delete", "device", *args, "-y"])
         capture_logs(result, "test_delete_devices")
         assert result.exit_code == 0

@@ -268,3 +268,32 @@ def test_cloud_auth_fail(kwargs: dict[str, str | bool]):
     else:  # pragma: no cover
         raise AssertionError(f"test_cloud_auth_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}")
 
+
+@pytest.mark.parametrize(
+    "kwargs,expected_exception",
+    [
+        [{"ip": "10.0.31.5"}, ValueError],  # No serial
+        [{"as_dict": {test_data["test_devices"]["ap"]["serial"]: {"ip": "10.0.31.5"}}}, ValueError], # IP without mask, gateway, etc.
+        [{"as_dict": {test_data["test_devices"]["ap"]["serial"]: {"flex_dual_exclude": "9"}}}, ValueError], # Invalid value for flex_dual_exclude
+    ]
+)
+def test_configuration_update_per_ap_settings_exceptions(ensure_dev_cache_test_ap, kwargs: dict[str, str | bool], expected_exception: Exception):
+    try:
+        api.session.request(api.configuration.update_per_ap_settings, **kwargs)
+    except expected_exception:
+        ...
+    else:  # pragma: no cover
+        raise AssertionError(f"test_configuration_update_per_ap_settings should have raised a {expected_exception} due to invalid params, but did not.  {kwargs =}")
+
+
+@pytest.mark.parametrize(
+    "kwargs,pass_condition",
+    [
+        [{"serial": test_data["test_devices"]["ap"]["serial"]}, lambda resp: "No Values" in "\n".join([str(r) for r in resp])], # No values
+    ]
+)
+def test_configuration_update_per_ap_settings_fail(ensure_dev_cache_test_ap, kwargs: dict[str, str | bool], pass_condition: Callable):
+    resp = api.session.request(api.configuration.update_per_ap_settings, **kwargs)
+    assert not any([r.ok for r in resp])
+    assert pass_condition(resp)
+

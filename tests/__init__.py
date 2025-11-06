@@ -69,7 +69,7 @@ class NonDefaultWorkspaceException(CentralCliException): ...
 def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):
     test_func = test_func or "UNDEFINED"
     _msg = 'returned error' if not expect_failure else 'Passed when failure was expected'
-    if result.exit_code != (0 if not expect_failure else 1) or log_output:
+    if result.exit_code != (0 if not expect_failure else 1) or log_output:  # pragma: no cover
         log.error(f"{test_func} {_msg if not log_output else 'output'}:\n{escape(f'{result.stdout = }')}", show=True)
         if "unable to gather device" in result.stdout:  # pragma: no cover
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
@@ -151,6 +151,10 @@ if __name__ in ["tests", "__main__"]:
         pytest.MonkeyPatch().setattr("time.sleep", mock_sleep)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
         pytest.MonkeyPatch().setattr("centralcli.render.write_file", mock_write_file)
+    else:  # pragma: no cover
+        ...
     ensure_default_account()
     if "--collect-only" not in sys.argv:
         log.info(f"{' Test Run START ':{'-'}^{140}}")
+    else:  # pragma: no cover
+        ...

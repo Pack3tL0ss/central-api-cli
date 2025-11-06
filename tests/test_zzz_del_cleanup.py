@@ -74,7 +74,6 @@ def test_del_group_multi(ensure_cache_group3, ensure_cache_group4):
         ])
     capture_logs(result, "test_del_group_multiple")
     assert result.exit_code == 0
-    assert "Success" in result.stdout
     assert result.stdout.count("Success") == 2
 
 
@@ -102,7 +101,7 @@ def test_del_site4(ensure_cache_site4):
     assert "uccess" in result.stdout
 
 
-def test_del_template(ensure_cache_template):
+def test_del_template(ensure_cache_template, ensure_cache_group2):
     result = runner.invoke(app, [
         "delete",
         "template",

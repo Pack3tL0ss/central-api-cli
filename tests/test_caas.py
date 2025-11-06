@@ -45,8 +45,7 @@ if config.dev.mock_tests:
         ]
     )
     def test_caas_send_cmds(ensure_dev_cache_batch_devices, fixtures: str | list[str] | None, args: tuple[str], request: pytest.FixtureRequest):
-        if fixtures:
-            [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
         result = runner.invoke(app, ["caas", "send-cmds", *args, "--yes"])
         capture_logs(result, "test_caas_send_cmds")
         assert result.exit_code == 0

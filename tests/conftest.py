@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from centralcli import cache, common, config, log
 from centralcli.cli import app
+from centralcli.typedefs import PrimaryDeviceTypes
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
@@ -433,7 +434,7 @@ def ensure_inv_cache_test_stack():
     yield
 
     doc_ids = [cache.inventory_by_serial[dev["serial"]].doc_id for dev in test_switches if dev["serial"] in cache.inventory_by_serial]
-    if doc_ids:
+    if doc_ids:  # pragma: no cover
         assert asyncio.run(cache.update_inv_db(data=doc_ids, remove=True))
 
 
@@ -464,7 +465,7 @@ def ensure_dev_cache_test_stack():
     yield
 
     doc_ids = [cache.devices_by_serial[dev["serial"]].doc_id for dev in test_switches if dev["serial"] in cache.devices_by_serial]
-    if doc_ids:
+    if doc_ids:  # pragma: no cover
         assert asyncio.run(cache.update_dev_db(data=doc_ids, remove=True))
 
 
@@ -537,6 +538,33 @@ def ensure_dev_cache_test_flex_dual_ap():
             "site": "WadeLab",
             "version": "10.7.2.1_93286",
             "swack_id": "USABC0D1EF",
+            "switch_role": None
+        }
+        if test_ap["serial"] not in cache.devices_by_serial:
+            assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
+    yield
+
+    if test_ap["serial"] in cache.devices_by_serial:
+        serial = test_ap["serial"]
+        assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    return
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_test_dyn_ant_ap():
+    if config.dev.mock_tests:
+        test_ap = {
+            "name": "cencli-test-dyn-ant-ap",
+            "status": "Up",
+            "type": "ap",
+            "model": "679",
+            "ip": "10.0.31.105",
+            "mac": "50:e4:e0:aa:bb:cc",
+            "serial": "USABC0D1EG",
+            "group": "WadeLab",
+            "site": "WadeLab",
+            "version": "10.7.2.1_93286",
+            "swack_id": "USABC0D1EG",
             "switch_role": None
         }
         if test_ap["serial"] not in cache.devices_by_serial:
@@ -895,11 +923,12 @@ def ensure_cache_batch_labels():
     yield
 
 
-def _ensure_cache_group_cloned(allow_gw: bool = False):
+def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"]):
+    allowed_types = sorted(allowed_types)
     if config.dev.mock_tests:
         cache_data = {
                 "name": "cencli_test_cloned",
-                "allowed_types": ["ap"] if not allow_gw else ["ap", "gw"],
+                "allowed_types": allowed_types,
                 "gw_role": "branch",
                 "aos10": False,
                 "microbranch": False,
@@ -911,11 +940,13 @@ def _ensure_cache_group_cloned(allow_gw: bool = False):
         }
         if cache_data["name"] not in cache.groups_by_name:
             assert asyncio.run(cache.update_group_db(data=cache_data))
-        elif allow_gw and "gw" not in cache.groups_by_name[cache_data["name"]]:
+        elif allowed_types and sorted(cache.groups_by_name[cache_data["name"]]["allowed_types"]) != allowed_types:
             cache_group = cache.groups_by_name[cache_data["name"]]
-            cache_group["allowed_types"] = [*cache_group["allowed_types"], "gw"]
+            cache_group["allowed_types"] = allowed_types
             update_data = {**cache.groups_by_name, cache_data["name"]: cache_group}
             assert asyncio.run(cache.update_db(cache.GroupDB, data=list(map(dict, update_data.values())), truncate=True))
+        else:  # pragma: no cover
+            ...
 
     yield
 
@@ -927,7 +958,12 @@ def ensure_cache_group_cloned():
 
 @pytest.fixture(scope="function")
 def ensure_cache_group_cloned_w_gw():
-    yield from _ensure_cache_group_cloned(allow_gw=True)
+    yield from _ensure_cache_group_cloned(allowed_types=["ap", "gw"])
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group_cloned_cx_only():
+    yield from _ensure_cache_group_cloned(allowed_types=["cx"])
 
 
 @pytest.fixture(scope="function")
@@ -996,8 +1032,8 @@ def ensure_cache_guest1():
             "company": "central-api-cli test company",
             "enabled": True,
             "status": "Active",
-            "created": 1755552751,
-            "expires": 1755811951
+            "created": 1758568643,
+            "expires": 1761161342
         }
         if cache_data["id"] not in cache.guests_by_id:
             assert asyncio.run(cache.update_guest_db(data=[cache_data]))

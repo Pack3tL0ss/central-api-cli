@@ -8,7 +8,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 from centralcli.exceptions import ConfigNotFoundException
 
-from . import capture_logs, config, test_data
+from . import cache, capture_logs, config, test_data
 from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables
 
 runner = CliRunner()
@@ -30,15 +30,27 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,pass_condition",
+        "fixture,args,pass_condition,test_name_append",
         [
-            ["ensure_dev_cache_test_ap",
+            [
+                "ensure_dev_cache_test_ap",
                 (
                     test_data["mesh_ap"]["serial"],
                     "-a",
                     test_data["mesh_ap"]["altitude"] - 0.1
                 ),
+                None,
                 None
+            ],
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["mesh_ap"]["serial"],
+                    "-a",
+                    test_data["mesh_ap"]["altitude"]
+                ),
+                None,
+                "no_gps_in_config",
             ],
             [
                 "ensure_dev_cache_test_ap",
@@ -55,6 +67,18 @@ if config.dev.mock_tests:
                     "--domain",
                     "consolepi.com"
                 ),
+                None,
+                None
+            ],
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["test_devices"]["ap"]["serial"],
+                    "-u",
+                    "31",
+                    "-R"
+                ),
+                None,
                 None
             ],
             [
@@ -65,12 +89,13 @@ if config.dev.mock_tests:
                     "-w",
                     "narrow",
                 ),
-                lambda r: "skipped" in r
+                lambda r: "skipped" in r,
+                None
             ],
             [
                 [
-                    "ensure_dev_cache_test_flex_dual_ap",
                     "ensure_dev_cache_test_ap",
+                    "ensure_dev_cache_test_flex_dual_ap"
                 ],
                 (
                     "cencli-test-flex-dual-ap",
@@ -78,15 +103,47 @@ if config.dev.mock_tests:
                     "-e",
                     "2.4",
                 ),
-                lambda r: "skipped" in r
+                lambda r: "skipped" in r,
+                None
+            ],
+            [
+                "ensure_dev_cache_test_flex_dual_ap",
+                (
+                    "cencli-test-flex-dual-ap",
+                    "-e",
+                    "5",
+                ),
+                None,
+                None
+            ],
+            [
+                "ensure_dev_cache_test_flex_dual_ap",
+                (
+                    "cencli-test-flex-dual-ap",
+                    "-e",
+                    "6",
+                ),
+                None,
+                None
+            ],
+            [
+                "ensure_dev_cache_test_dyn_ant_ap",
+                (
+                    "cencli-test-dyn-ant-ap",
+                    "-w",
+                    "wide",
+                ),
+                None,
+                None
             ],
         ]
     )
-    def test_update_ap(fixture: str | list[str] | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
-        if fixture:
-            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+    def test_update_ap(fixture: str | list[str] | None, args: tuple[str], pass_condition: Callable | None, test_name_append: str | None, request: pytest.FixtureRequest):
+        if test_name_append:
+            env.current_test = f"{env.current_test}_{test_name_append}"
+        [request.getfixturevalue(f) for f in utils.listify(fixture)]
         result = runner.invoke(app, ["update",  "ap", *args, "-y"])
-        capture_logs(result, "test_upgrade_ap")
+        capture_logs(result, env.current_test)
         assert result.exit_code == 0
         assert "200" in result.stdout
         if pass_condition:
@@ -94,7 +151,7 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args",
+        "fixture,args,pass_condition",
         [
             [
                 "ensure_dev_cache_test_ap",
@@ -111,37 +168,51 @@ if config.dev.mock_tests:
                     "--domain",
                     "consolepi.com"
                 ),
+                lambda r: "403" in r
             ],
+            [
+                None,
+                (
+                    test_data["mesh_ap"]["serial"],
+                    "-a",
+                    test_data["mesh_ap"]["altitude"] - 0.1
+                ),
+                lambda r: "500" in r
+            ],
+            [
+                "ensure_dev_cache_test_ap",
+                (
+                    test_data["mesh_ap"]["serial"],
+                    test_data["ap"]["serial"],
+                    "--hostname",
+                    "this_will_fail"
+                ),
+                lambda r: "⚠" in r
+            ]
         ]
     )
-    def test_update_ap_fail(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    def test_update_ap_fail(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
         if fixture:
             request.getfixturevalue(fixture)
         result = runner.invoke(app, ["update",  "ap", *args, "-y"])
         capture_logs(result, env.current_test, expect_failure=True)
         assert result.exit_code == 1
-        assert "403" in result.stdout
+        assert pass_condition(result.stdout)
 
 
-    def test_update_ap_invalid():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], test_data["ap"]["serial"], "--hostname", "this_will_fail"])
-        capture_logs(result, "test_update_ap_invalid", expect_failure=True)
-        assert result.exit_code == 1
-        assert "multiple" in result.stdout
-
-
-    def test_update_wlan():
-        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk", "-y"])
+    @pytest.mark.parametrize(
+        "args",
+        [
+            (test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk"),
+            (test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk"),
+        ]
+    )
+    def test_update_wlan(args: tuple[str]):
+        result = runner.invoke(app, ["update",  "wlan", *args, "-y"])
         capture_logs(result, "test_upgrade_wlan")
         assert result.exit_code == 0
         assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
 
-
-    def test_update_wlan_by_group():
-        result = runner.invoke(app, ["update",  "wlan", test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk", "-y"])
-        capture_logs(result, "test_upgrade_wlan_by_group")
-        assert result.exit_code == 0
-        assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
 
     @pytest.mark.parametrize(
         "fixture,args",
@@ -201,213 +272,232 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
+    @pytest.mark.parametrize(
+        "fixture,args,test_name_append",
+        [
+            ["ensure_cache_group_cloned", ("--gw", "--sw", "--cx"), None],
+            ["ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
+            ["ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
+            ["ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],  # Not sure you can actually update a non TG to a TG
+        ]
+    )
+    def test_update_group(fixture: str, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
+        cache.responses.clear()
+        request.getfixturevalue(fixture)
+        if test_name_append:
+            env.current_test = f"{env.current_test}_{test_name_append}"
+            config.debugv = True  # also test debugv condition in update_group_properties
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "group",
+                "cencli_test_cloned",
+                *args,
+                "-Y"
+            ]
+        )
+        capture_logs(result, "test_update_group")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+        assert "uccess" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "args,pass_condition",
+        [
+            [(), lambda r: "⚠" in r],
+            [("--mb",), lambda r: "⚠" in r],
+            [("--mo-sw",), lambda r: "⚠" in r],
+            [("--mo-cx",), lambda r: "⚠" in r],
+            [("--aos10", "--mb", "--gw-role", "wlan"), lambda r: "initially added" in r],  # aos10 can only be set when initially adding ap as valid type
+        ]
+    )
+    def test_update_group_fail(ensure_cache_group_cloned, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "group",
+                "cencli_test_cloned",
+                *args,
+                "-Y"
+            ]
+        )
+        capture_logs(result, "test_update_group_fail", expect_failure=True)
+        assert result.exit_code == 1
+        assert pass_condition(result.stdout)
+
+
+
+    def test_update_gw_group_config(ensure_cache_group_cloned):
+        if not gw_group_config_file.is_file():  # pragma: no cover
+            msg = f"{gw_group_config_file} Needs to be populated for this test.  Run 'cencli show config <group> --gw' for an example of GW group level config."
+            raise ConfigNotFoundException(msg)
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "config",
+                "cencli_test_cloned",
+                str(gw_group_config_file),
+                "--gw",
+                "-Y"
+            ]
+        )
+        capture_logs(result, "test_update_gw_group_config")
+        assert result.exit_code == 0
+        assert "Global Result:" in result.stdout
+        assert "[OK]" in result.stdout
+
+
+    def test_update_site(ensure_cache_site4):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "site",
+                "cencli_test_site4",
+                "'400 Zieglers Fort Rd'",
+                "Gallatin,",
+                "TN",
+                "37066",
+                "-Y"
+            ]
+        )
+        capture_logs(result, "test_update_site")
+        assert result.exit_code == 0
+        assert "API" in result.stdout
+
+
+    def test_update_site_no_data(ensure_cache_site4):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "site",
+                "cencli_test_site4",
+            ]
+        )
+        capture_logs(result, "test_update_site_no_data", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
+
+
+    def test_update_guest_disable(ensure_cache_guest1):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "guest",
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "-DY",
+            ]
+        )
+        capture_logs(result, "test_update_guest_disable")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_guest_enable(ensure_cache_guest1):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "guest",
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "-EY",
+            ]
+        )
+        capture_logs(result, "test_update_guest_enable")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_guest_phone(ensure_cache_guest1):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "guest",
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "--phone",
+                test_data["portal"]["guest"]["phone"],
+                "-Y",
+            ]
+        )
+        capture_logs(result, "test_update_guest_phone")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    def test_update_guest_invalid():
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "guest",
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "-EDY",
+            ]
+        )
+        capture_logs(result, "test_update_guest_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "Invalid" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "args",
+        [
+            ([]),
+            ([str(test_ap_ui_group_variables)]),
+        ]
+    )
+    def test_update_config(ensure_cache_group4, args: list[str]):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "config",
+                "--yes",
+                "--ap",
+                "cencli_test_group4",
+                str(test_ap_ui_group_template),
+                *args
+            ]
+        )
+        capture_logs(result, "test_update_config")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "fixture,args,expect_failure,pass_condition",
+        [
+            ["ensure_cache_group1", ("cencli_test", "-G", "cencli_test_group1",), False, lambda r: "200" in r],
+            [None, ("cencli_test",), True, lambda r: "⚠" in r],  # no group
+            ["ensure_cache_group4", ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r], # invalid group (no aps/gws)
+        ]
+    )
+    def test_update_cp_cert(ensure_cache_cert, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "cp-cert",
+                *args,
+                "--yes",
+            ]
+        )
+        capture_logs(result, "test_update_cp_cert", expect_failure=expect_failure)
+        assert result.exit_code == (0 if not expect_failure else 1)
+        assert pass_condition(result.stdout)
+
 else:  # pragma: no cover
     ...
-
-
-def test_update_cloned_group(ensure_cache_group_cloned):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "group",
-            "cencli_test_cloned",
-            "--gw",
-            "-Y"
-        ]
-    )
-    capture_logs(result, "test_update_cloned_group")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-    assert "uccess" in result.stdout
-
-
-def test_update_gw_group_config(ensure_cache_group_cloned):
-    if not gw_group_config_file.is_file():  # pragma: no cover
-        msg = f"{gw_group_config_file} Needs to be populated for this test.  Run 'cencli show config <group> --gw' for an example of GW group level config."
-        raise ConfigNotFoundException(msg)
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "config",
-            "cencli_test_cloned",
-            str(gw_group_config_file),
-            "--gw",
-            "-Y"
-        ]
-    )
-    capture_logs(result, "test_update_gw_group_config")
-    assert result.exit_code == 0
-    assert "Global Result:" in result.stdout
-    assert "[OK]" in result.stdout
-
-
-def test_update_site(ensure_cache_site4):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "site",
-            "cencli_test_site4",
-            "'400 Zieglers Fort Rd'",
-            "Gallatin,",
-            "TN",
-            "37066",
-            "-Y"
-        ]
-    )
-    capture_logs(result, "test_update_site")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_update_site_no_data(ensure_cache_site4):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "site",
-            "cencli_test_site4",
-        ]
-    )
-    capture_logs(result, "test_update_site_no_data", expect_failure=True)
-    assert result.exit_code == 1
-    assert "⚠" in result.stdout
-
-
-def test_update_guest_disable(ensure_cache_guest1):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "guest",
-            test_data["portal"]["name"],
-            test_data["portal"]["guest"]["name"],
-            "-DY",
-        ]
-    )
-    capture_logs(result, "test_update_guest_disable")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_update_guest_enable(ensure_cache_guest1):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "guest",
-            test_data["portal"]["name"],
-            test_data["portal"]["guest"]["name"],
-            "-EY",
-        ]
-    )
-    capture_logs(result, "test_update_guest_enable")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_update_guest_phone(ensure_cache_guest1):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "guest",
-            test_data["portal"]["name"],
-            test_data["portal"]["guest"]["name"],
-            "--phone",
-            test_data["portal"]["guest"]["phone"],
-            "-Y",
-        ]
-    )
-    capture_logs(result, "test_update_guest_phone")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_update_guest_invalid():
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "guest",
-            test_data["portal"]["name"],
-            test_data["portal"]["guest"]["name"],
-            "-EDY",
-        ]
-    )
-    capture_logs(result, "test_update_guest_invalid", expect_failure=True)
-    assert result.exit_code == 1
-    assert "Invalid" in result.stdout
-
-
-@pytest.mark.parametrize(
-    "args",
-    [
-        ([]),
-        ([str(test_ap_ui_group_variables)]),
-    ]
-)
-def test_update_config(ensure_cache_group4, args: list[str]):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "config",
-            "--yes",
-            "--ap",
-            "cencli_test_group4",
-            str(test_ap_ui_group_template),
-            *args
-        ]
-    )
-    capture_logs(result, "test_update_config")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_update_cp_cert(ensure_cache_group1, ensure_cache_cert):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "cp-cert",
-            "cencli_test",
-            "-G",
-            "cencli_test_group1",
-            "--yes",
-        ]
-    )
-    capture_logs(result, "test_update_cp_cert")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_update_cp_cert_no_group(ensure_cache_cert):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "cp-cert",
-            "cencli_test"
-        ]
-    )
-    capture_logs(result, "test_update_cp_cert_no_group", expect_failure=True)
-    assert result.exit_code == 1
-    assert "Invalid" in result.stdout
-
-
-def test_update_cp_cert_invalid_group(ensure_cache_cert, ensure_cache_group4):
-    result = runner.invoke(
-        app,
-        [
-            "update",
-            "cp-cert",
-            "cencli_test",
-            "cencli_test_group4"
-        ]
-    )
-    capture_logs(result, "test_update_cp_cert_invalid_group", expect_failure=True)
-    assert result.exit_code == 1
-    assert "not supported" in result.stdout

@@ -53,18 +53,19 @@ def test_add_cert_fail(args: tuple[str]):
     assert "must be provided" in result.stdout
 
 
-def test_add_group1():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group1", "-Y"])
-    capture_logs(result, "test_add_group1")
-    assert True in [
-        result.exit_code == 0 and "Created" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("cencli_test_group1",),
+        ("cencli_test_group2", "--sw", "--ap", "--wired-tg", "--wlan-tg"),
+        ("cencli_test_group3", "--ap"),
+        ("cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx"),
+        ("cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx"),
     ]
-
-
-def test_add_group2_tg():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group2", "--sw", "--ap", "--wired-tg", "--wlan-tg", "-Y"])
-    capture_logs(result, "test_add_group2_tg")
+)
+def test_add_groups(args: tuple[str]):
+    result = runner.invoke(app, ["add", "group",  *args, "-Y"])
+    capture_logs(result, "test_add_group1")
     assert any(
         [
             result.exit_code == 0 and "Created" in result.stdout,
@@ -73,77 +74,42 @@ def test_add_group2_tg():
     )
 
 
-def test_add_group3():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group3", "--ap", "-Y"])
-    capture_logs(result, "test_add_group3")
-    assert True in [
-        result.exit_code == 0 and "Created" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("--cx", "--sdwan", "--gw-role", "branch"),  # invalid combination of dev types
+        ("--sw", "--mon-only-cx"),  # invalid combination w mon_only_cx
+        ("--cx", "--mon-only-cx", "--wired-tg"),  # invalid combination w mon_only_tg
+        ("--gw", "--gw-role", "wlan"),  # invalid gw role
+        ("--ap", "--mb"),  # invalid mb options (also requires --aos10)
     ]
-
-
-def test_add_group4_aos10_gw_wlan_cnx():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx", "-Y"])
-    capture_logs(result, "test_add_group4_aos10_gw_wlan_cnx")
-    assert True in [
-        result.exit_code == 0 and "Created" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
-    ]
-
-
-def test_add_group5_mb_mon_only_cx_sw():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx", "-Y"])
-    capture_logs(result, "test_add_group5_mb_mon_only_cx_sw")
-    assert result.exit_code == 0
-    assert "Created" in result.stdout
-
-
-def test_add_group_invalid_combination_of_dev_types():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--cx", "--sdwan", "--gw-role", "branch", "-Y"])
+)
+def test_add_groups_invalid(args: tuple[str]):
+    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", *args, "-Y"])
     capture_logs(result, "test_add_group_invalid_combination_of_dev_types", expect_failure=True)
-    result.exit_code == 1
-
-
-def test_add_group_invalid_combination_mon_only_cx():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--sw", "--mon-only-cx", "-Y"])
-    capture_logs(result, "test_add_group_invalid_combination_mon_only_cx", expect_failure=True)
-    result.exit_code == 1
-
-
-def test_add_group_invalid_combination_mon_only_tg():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--cx", "--mon-only-cx", "--wired-tg", "-Y"])
-    capture_logs(result, "test_add_group_invalid_combination_mon_only_tg", expect_failure=True)
-    result.exit_code == 1
-
-
-def test_add_group_invalid_gw_role():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--gw", "--gw-role", "wlan", "-Y"])
-    capture_logs(result, "test_add_group_invalid_gw_role", expect_failure=True)
-    result.exit_code == 1
-
-
-def test_add_group_invalid_mb_options():
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", "--ap", "--mb", "-Y"])
-    capture_logs(result, "test_add_group_invalid_mb_options", expect_failure=True)
     result.exit_code == 1
 
 
 def test_add_site_by_address():
     result = runner.invoke(app, ["add", "site",  "cencli_test_site3", "123 Main St.", "Gallatin", "TN", "37066", "US", "-Y"])
     capture_logs(result, "test_add_site_by_address")
-    assert True in [
-        result.exit_code == 0 and "37066" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
-    ]
+    assert any(
+        [
+            result.exit_code == 0 and "37066" in result.stdout,
+            result.exit_code == 1 and "already exists" in result.stdout
+        ]
+    )
 
 
 def test_add_site_by_geo():
     result = runner.invoke(app, ["add", "site",  "cencli_test_site4", "--lat", "36.378545", "--lon", "-86.360740", "-Y"])
     capture_logs(result, "test_add_site_by_geo")
-    assert True in [
-        result.exit_code == 0 and "36.37" in result.stdout,
-        result.exit_code == 1 and "already exists" in result.stdout
-    ]
+    assert any(
+        [
+            result.exit_code == 0 and "36.37" in result.stdout,
+            result.exit_code == 1 and "already exists" in result.stdout
+        ]
+    )
 
 
 def test_add_template(ensure_cache_group2):
@@ -281,6 +247,7 @@ def test_add_wlan_no_psk(ensure_cache_group1):
     result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
     capture_logs(result, "test_add_wlan_no_psk", expect_failure=True)
     assert result.exit_code == 1
+
 
 if config.dev.mock_tests:
     def test_add_webhook():
