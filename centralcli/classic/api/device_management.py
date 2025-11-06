@@ -146,7 +146,7 @@ class DeviceManagementAPI:
         serial: str,
         host: str = "ndt-iupui-mlab1-den04.mlab-oti.measurement-lab.org",
         options: str = None
-    ) -> Response:
+    ) -> Response:  # pragma: no cover  Useless given API flaw noted ts.py / speed_test
         """Run speedtest from device (gateway only)
 
         Args:
