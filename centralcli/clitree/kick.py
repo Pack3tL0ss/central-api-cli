@@ -30,14 +30,15 @@ def all(
     dev = common.cache.get_dev_identifier(device)
     _ssid_msg = "" if not ssid else f" on SSID [cyan]{ssid}[/]"
     render.econsole.print(f'Kick [bright_red]ALL[/] users connected to [cyan]{dev.name}[/]{_ssid_msg}', emoji=False)
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.device_management.kick_users,
-            dev.serial,
-            kick_all=True,
-            ssid=ssid
-            )
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+
+    resp = api.session.request(
+        api.device_management.kick_users,
+        dev.serial,
+        kick_all=True,
+        ssid=ssid
+    )
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(short_help="Disconnect a WLAN client",)
@@ -69,7 +70,7 @@ def client(
         else:
             client_resp = api.session.request(common.cache.refresh_client_db, mac=client.mac)
             if not client_resp:
-                render.econsole.print(f"client {client} is not online according to cache, Failure occured attempting to fetch client details from API.")
+                render.econsole.print(f"[dark_orange3]:warning:[/]  {client.summary_text} is not online according to cache.\nThe following [red]failure[/] occured attempting to fetch current client details from API.\n")
                 render.display_results(client_resp, exit_on_fail=True)
 
             _clients = [CacheClient(c) for c in Clients(client_resp.output)]
