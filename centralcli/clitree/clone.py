@@ -14,7 +14,7 @@ app = typer.Typer()
 def group(
     clone_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CLONE]", autocompletion=common.cache.group_completion),
     new_group: str = typer.Argument(..., metavar="[NAME OF GROUP TO CREATE]"),
-    aos10: bool = typer.Option(None, "--aos10", help="Upgrade new cloned group to AOS10"),
+    aos10: bool = typer.Option(False, "--aos10", help="Upgrade new cloned group to AOS10"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -25,25 +25,24 @@ def group(
     [dark_orange3]:warning:[/]  Tunneled SSIDs are not included in clone operation.
     """
     color = utils.color
-    render.econsole.print(f"Clone group: {color(clone_group)} to new group {color(new_group)}")
+    cache_group = common.cache.get_group_identifier(clone_group)
+    render.econsole.print(f"Clone group: {color(cache_group.name)} to new group {color(new_group)}")
     if aos10:
-        render.econsole.print(f"    Upgrade cloned group to AOS10: {color(True)}")
-        render.econsole.print(
-            "\n    [dark_orange3]:warning:[/dark_orange3]  [italic]Upgrade doesn't always work despite "
-            f"returning {color('success')},\n    Group is cloned if {color('success')} is returned "
-            "but upgrade to AOS10 may not occur.\n    API method appears to have some caveats."
-            "\n    Use [cyan]cencli show groups[/] after clone to verify."
-        )
+        if "gw" not in cache_group.allowed_types:
+            common.exit(f"Clone + Upgrade to AOS10 only applies to gateways, Gateways don't appear to be allowed in group {cache_group.name}.  Currently Allowed (according to cache) {cache_group.allowed_types}")
+        elif "ap" in cache_group.allowed_types:
+            render.econsole.print(
+                f"\n:warning:  Clone + Upgrade to AOS10 will result in 'ap' device type being [red]removed/not-cloned[/] from the resulting group [cyan]{new_group}[/], as upgrade to AOS10 for APs is not supported\n"
+                f"[cyan]{new_group}[/] can be updated to re-add APs as an allowed device type once it is cloned."
+            )
 
     render.confirm(yes)
-    # API-FLAW clone and upgrade to aos10 does not work via the API
-    resp = api.session.request(api.configuration.clone_group, clone_group, new_group)
+    resp = api.session.request(api.configuration.clone_group, cache_group.name, new_group, upgrade_aos10=aos10)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    groups = common.cache.groups_by_name
 
-    if groups:
-        new_data = {**dict(groups[clone_group]), "name": new_group} if not aos10 else {**groups[clone_group], "name": new_group, "AOSVersion": "AOS10", "Architecture": "AOS10"}
-        api.session.request(common.cache.update_group_db, new_data)
+    # cache update
+    new_data = {**dict(cache_group), "name": new_group} if not aos10 else {**dict(cache_group), "name": new_group, "aos10": True}
+    api.session.request(common.cache.update_group_db, new_data)
 
 
 
