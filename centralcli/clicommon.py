@@ -1800,8 +1800,12 @@ class CLICommon:
     def _reboot_after_changes(self, req_info: APRequestInfo, batch_resp: list[Response]) -> list[Response] | None:
         reboot_reqs: List[BatchRequest] = []
         skipped_reboots: List[CacheDevice] = []
-        for req, resp in zip(req_info.reqs, batch_resp):
-            serial = req.kwargs["serial"]
+        for idx, (req, resp) in enumerate(zip(req_info.reqs, batch_resp)):
+            if "as_dict" in req.kwargs:
+                serial = list(req.kwargs["as_dict"].keys())[idx]
+            else:
+                serial = req.kwargs["serial"]
+
             if req.func == api.configuration.update_per_ap_settings and serial in req_info.requires_reboot:
                 if resp.ok:
                     reboot_reqs += [BatchRequest(api.device_management.send_command_to_device, serial=serial, command="reboot")]
@@ -1852,7 +1856,7 @@ class CLICommon:
             render.econsole.print(f"    Adding/Updating [cyan]gps-altitude[/] to {req_info.gps_update_aps} AP{utils.singular_plural_sfx(req_info.gps_update_aps)}")
 
         render.econsole.print("\n[bold magenta]Summary of Changes to be Applied[/]")
-        if len(req_info.ap_data) > 12:
+        if len(req_info.ap_data) > 12:  # pragma: no cover
             render.econsole.print(f"    [dim italic]Summary showing 12 of the {len(req_info.ap_data)} devices being updated.")
         render.econsole.print(utils.summarize_list([ap.__rich__() for ap in req_info.ap_data], color=None, max=12, pad=4), emoji=False)
 
