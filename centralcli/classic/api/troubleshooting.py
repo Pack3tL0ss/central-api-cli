@@ -37,7 +37,7 @@ class TroubleShootingAPI:
         self,
         serial: str,
         device_type: constants.DeviceTypes,
-        commands: int | list[int, dict] | dict,
+        commands: int | dict | list[int, dict],
     ) -> Response:
         """Start Troubleshooting Session.
 
@@ -56,7 +56,7 @@ class TroubleShootingAPI:
         for cmd in commands:
             if isinstance(cmd, int):
                 cmds += [{"command_id": cmd}]
-            elif isinstance(cmd, dict):
+            else:  # dict
                 cmds += [
                     {
                         "command_id": cid,
