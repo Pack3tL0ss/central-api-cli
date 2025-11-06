@@ -564,23 +564,23 @@ def unarchive(
 
     Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
     """
-    serials: list[CentralObject] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
+    _serials: list[CacheDevice | CacheInvDevice | str] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
     _msg = "[bright_green]Unarchive devices[/]:"
-    if serials and any([isinstance(d, CentralObject) for d in serials]):
-        if len(serials) > 1:
-            _dev_msg = '\n    '.join([dev if not isinstance(dev, CentralObject) else dev.rich_help_text for dev in serials])
+    if _serials and any([isinstance(d, CentralObject) for d in _serials]):
+        if len(_serials) > 1:
+            _dev_msg = '\n    '.join([dev if not isinstance(dev, CentralObject) else dev.rich_help_text for dev in _serials])
             _msg = f"{_msg}\n    {_dev_msg}\n"
         else:
-            dev = serials[0]
+            dev = _serials[0]
             _msg = f"{_msg} {dev if not isinstance(dev, CentralObject) else dev.rich_help_text}"
-        serials: list[str] = [d if not isinstance(d, CentralObject) else d.serial for d in serials]
+        _serials: list[str] = [d if not isinstance(d, CentralObject) else d.serial for d in _serials]
     else:
-        _dev_msg = '\n    '.join(serials)
+        _dev_msg = '\n    '.join(_serials)
         _msg = f"{_msg}\n    {_dev_msg}\n"
     render.econsole.print(_msg, emoji=False)
 
-    resp = api.session.request(api.platform.unarchive_devices, serials)
+    resp = api.session.request(api.platform.unarchive_devices, _serials)
     render.display_results(resp, tablefmt="action")
 
 
