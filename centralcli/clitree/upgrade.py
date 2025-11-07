@@ -22,7 +22,7 @@ app = typer.Typer()
 
 @app.command()
 def device(
-    devices: list[str] = common.arguments.devices,
+    devices: list[str] = common.arguments.get("devices", default=None),
     version: str = common.arguments.version,
     at: datetime = common.options.at,
     in_: str = common.options.in_,
@@ -34,6 +34,16 @@ def device(
 ) -> None:
     """Upgrade [dim italic](or Downgrade)[/] firmware on device(s).
     """
+    if version and not devices:  # If only 1 device and no version is provided typer puts the value in version not devices
+        devices = [version]
+        version = None
+    elif not version and not devices:  # TODO find if way to call help text
+        common.exit(
+            "Missing required Argument [cyan]devices[/] (multiple allowed)\n\n"
+            "[yellow]Usage:[/] cencli upgrade device [OPTIONS]  DEVICE... [italic](multiple allowed)[/] [VERSION]\n"
+            "Try [cyan]cencli upgrade device ?[/] for help."
+        )
+
     devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
     dev_types = list(set([dev.type for dev in devs]))
     if len([t if t not in ["ap", "gw"] else "apgw" for t in dev_types]) > 1:  # ap and gw can be upgraded together
