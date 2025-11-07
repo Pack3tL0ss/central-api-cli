@@ -36,8 +36,8 @@ def device(
     """
     devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
     dev_types = list(set([dev.type for dev in devs]))
-    if len([t for t in dev_types if t not in ["ap", "gw"]]) > 1:
-        common.exit(f"Specifying multiple devices of different types ({utils.summarize_list(dev_types, pad=0, sep=', ')}) does not make sense.  All devices should be compatible with the same software/version.")
+    if len([t if t not in ["ap", "gw"] else "apgw" for t in dev_types]) > 1:  # ap and gw can be upgraded together
+        common.exit(f"Specifying multiple devices of different types ({utils.summarize_list(dev_types, pad=0, sep=', ')}) does not make sense (other than APs and GWs).  All devices should be compatible with the same software/version.")
 
     batch_reqs = []
     ap_version = None
