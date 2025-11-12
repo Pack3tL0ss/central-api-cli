@@ -2162,7 +2162,7 @@ class Cache:
     def get_guest_identifier(
         self,
         query_str: str,
-        portal_id: str | List[str] = None,
+        portal_id: str = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
@@ -2171,7 +2171,7 @@ class Cache:
     def get_guest_identifier(
         self,
         query_str: str,
-        portal_id: str | List[str] = None,
+        portal_id: str = None,
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
@@ -2220,11 +2220,11 @@ class Cache:
                 if _phone:
                     self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()]).startswith(_phone))
 
-            # phone with only last 10 digits (strip country code)
-            if not match:
-                match = self.GuestDB.search(
-                    self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()][::-1][0:10][::-1]).startswith("".join([d for d in query_str if d.isdigit()][::-1][0:10][::-1])))
-                )
+                    # phone with only last 10 digits (strip country code)
+                    if not match:
+                        match = self.GuestDB.search(
+                            self.Q.phone.test(lambda v: v and "".join([d for d in v if d.isdigit()][::-1][0:10][::-1]).startswith("".join(_phone[::-1][0:10][::-1])))
+                        )
 
             if match and portal_id:
                 all_match: List[Document] = match.copy()
@@ -2234,10 +2234,6 @@ class Cache:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
                 if FUZZ and self.guests and not silent:
                     match = self.fuzz_lookup(query_str, db=self.GuestDB, portal_id=portal_id)
-                    # fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.guests if portal_id is None or g["portal_id"] == portal_id], limit=1)[0]
-                    # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                    # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
-                    #     match = self.GuestDB.search(self.Q.name == fuzz_match)
                 if not match:
                     if not portal_id:
                         econsole.print(f"[red]:warning:[/]  Unable to gather guest from provided identifier {query_str}.  Use [cyan]cencli show guest <PORTAL>[/] to update cache.")
@@ -2261,8 +2257,8 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"Unable to gather guest from provided identifier {query_str}", show=not silent, log=silent)
+        log.error(f"Unable to gather guest from provided identifier {query_str}", show=not silent, log=silent)
+        if retry:
             if all_match:
                 first_five = [f"[bright_green]{m['name']}[/]" for m in all_match[0:5]]
                 all_match_msg = f"{', '.join(first_five)}{', ...' if len(all_match) > 5 else ''}"
@@ -2271,9 +2267,6 @@ class Cache:
                     show=True,
                 )
             raise typer.Exit(1)
-        else:
-            if not completion and not silent:
-                log.warning(f"Unable to gather guest from provided identifier {query_str}", show=True)
 
     def guest_completion(
         self,
@@ -2381,12 +2374,10 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"[red]Unable to gather certificate[/] from provided identifier [cyan]{query_str}[/]", show=not silent, log=silent)
+        log.error(f"[red]Unable to gather certificate[/] from provided identifier [cyan]{query_str}[/]", show=not silent, log=silent)
+        if retry:
             raise typer.Exit(1)
-        else:
-            if not completion and not silent:
-                log.warning(f"Unable to gather certificate from provided identifier {query_str}", show=False)
+
 
     def cert_completion(
         self,
@@ -2438,7 +2429,7 @@ class Cache:
                 elif m.id.startswith(incomplete) and m.id not in args:
                     out += [tuple([m.id, m.help_text])]
                 elif m.name not in args:
-                    out += [tuple([m.name, m.help_text])]  # failsafe, shouldn't hit
+                    out += [tuple([m.name, m.help_text])]
 
         for m in out:
             yield m
@@ -2671,7 +2662,7 @@ class Cache:
             incomplete (str): The last partial or full command before completion invoked.
             dev_type: (str, optional): One of "ap", "cx", "sw", "switch", or "gw"
                 where "switch" is both switch types.  Defaults to None (all device types)
-            conductor_only (bool, optional): If there are multiple matches (stack) return only the conductor as a match.
+            swack (bool, optional): If there are multiple matches (stack) return only the conductor as a match.
             args (List[str], optional): The previous arguments/commands on CLI. Defaults to None.
 
         Yields:
@@ -4220,10 +4211,10 @@ class Cache:
         qry_funcs: Sequence[str],
         device_type: Union[str, List[str]] = None,
         swack: bool = False,
-        conductor_only: bool = False,
+        swack_only: bool = False,
         group: str | List[str] = None,
         completion: bool = False,
-    ) -> Union[CentralObject, List[CentralObject]]:
+    ) -> CentralObject | list[CentralObject]:
         """Get Identifier when iden type could be one of multiple types.  i.e. device or group
 
         Args:
@@ -4231,10 +4222,10 @@ class Cache:
             qry_funcs (Sequence[str]): Sequence of strings "dev", "group", "site", "template"
             device_type (Union[str, List[str]], optional): Restrict matches to specific dev type(s).
                 Defaults to None.
-            swack (bool, optional): Restrict matches to only the stack commanders matching query (filter member switches).
-                Defaults to False.
-            conductor_only (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
+            swack (bool, optional): Similar to swack, but only filters member switches of stacks, but will also return any standalone switches that match.
                 Does not filter non stacks, the way swack option does. Defaults to False.
+            swack_only (bool, optional): Restrict matches to only the stack commanders matching query (filter member switches).
+                Defaults to False.
             group (str, List[str], optional): applies to get_template_identifier, Only match if template is in provided group(s).
                 Defaults to None.
             completion (bool, optional): If function is being called for AutoCompletion purposes. Defaults to False.
@@ -4257,8 +4248,8 @@ class Cache:
                 kwargs = default_kwargs.copy()
                 if q == "dev":
                     kwargs["dev_type"] = device_type
+                    kwargs["swack_only"] = swack_only
                     kwargs["swack"] = swack
-                    kwargs["conductor_only"] = conductor_only
                 elif q == "template":
                     kwargs["group"] = group
                 this_match = getattr(self, f"get_{q}_identifier")(qry_str, **kwargs) or []
@@ -4291,8 +4282,8 @@ class Cache:
     def get_dev_identifier(
         query_str: str,
         dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes],
-        conductor_only: Literal[True],
-    ) -> CacheDevice: ...
+        swack: Literal[True],
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4300,11 +4291,11 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
-    ) -> list[CacheDevice]: ...
+    ) -> list[CacheDevice]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4312,23 +4303,14 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: list[constants.LibAllDevTypes],
         completion: Literal[True],
-    ) -> list[CacheDevice]: ...
+    ) -> list[CacheDevice]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
         completion: Literal[True],
-    ) -> list[CacheDevice]: ...
-
-    @overload
-    def get_dev_identifier(
-        self,
-        query_str: str | Iterable[str],
-        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
-        conductor_only: Optional[bool],
-        completion: Literal[True],
-    ) -> list[CacheDevice]: ...
+    ) -> list[CacheDevice]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4336,18 +4318,27 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        completion: Literal[True],
+    ) -> list[CacheDevice]: ...  # pragma: no cover
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
+        dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes] | None],
+        swack: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
         exit_on_fail: Literal[False]
-    ) -> list[CacheDevice | None]: ...
+    ) -> list[CacheDevice | None]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         query_str: str,
         completion: Literal[True]
-    ) -> list[CacheDevice]: ...
+    ) -> list[CacheDevice]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4357,7 +4348,7 @@ class Cache:
         completion: bool,
         silent: bool,
         exit_on_fail: Literal[False]
-    ) -> list[CacheDevice | None]: ...
+    ) -> list[CacheDevice | None]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4365,13 +4356,13 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         completion: bool,
         silent: Optional[bool],
         include_inventory: bool,
         exit_on_fail: bool
-    ) -> list[CacheDevice | CacheInvDevice | None]: ...
+    ) -> list[CacheDevice | CacheInvDevice | None]: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4379,35 +4370,35 @@ class Cache:
         query_str: str,
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
         swack: bool,
-    ) -> CacheDevice: ...
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str,
         dev_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes],
-    ) -> CacheDevice: ...
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str,
-        conductor_only: bool,
-    ) -> CacheDevice: ...
+        swack: bool,
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str,
         include_inventory: bool,
-        conductor_only: bool,
-    ) -> CacheDevice: ...
+        swack: bool,
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
         self,
         query_str: str,
-    ) -> CacheDevice: ...
+    ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4415,7 +4406,7 @@ class Cache:
         query_str: str,
         silent: Literal[True],
         exit_on_fail: Literal[False]
-    ) -> CacheDevice | None: ...
+    ) -> CacheDevice | None: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4423,10 +4414,10 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         silent: Optional[bool],
-    ) -> CacheDevice: ...
+    ) -> CacheDevice: ...  # pragma: no cover
 
 
     @overload
@@ -4435,11 +4426,11 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         silent: Optional[bool],
         include_inventory: Literal[True],
-    ) -> CacheDevice | CacheInvDevice: ...
+    ) -> CacheDevice | CacheInvDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4447,12 +4438,12 @@ class Cache:
         query_str: str | Iterable[str],
         dev_type: Optional[constants.LibAllDevTypes | List[constants.LibAllDevTypes]],
         swack: Optional[bool],
-        conductor_only: Optional[bool],
+        swack_only: Optional[bool],
         retry: Optional[bool],
         silent: Optional[bool],
         include_inventory: Optional[bool] = False,
         exit_on_fail: bool = False,
-    ) -> CacheDevice | CacheInvDevice | None: ...
+    ) -> CacheDevice | CacheInvDevice | None: ...  # pragma: no cover
 
     def get_dev_identifier(
         self,
@@ -4752,8 +4743,8 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"Unable to gather inventory info from provided identifier {query_str}", show=not silent)
+        log.error(f"Unable to gather inventory info from provided identifier {query_str}", show=not silent)
+        if retry:
             if all_match:
                 _all_match_summary = [m.get('type', m.get('serial')) for m in all_match[0:5]]
                 all_match_msg = f"{utils.color(_all_match_summary)}{', ...' if len(all_match) > 5 else ''}"
@@ -4808,20 +4799,20 @@ class Cache:
         silent: Optional[bool],
         exit_on_fail: Optional[bool],
     ) -> list[CacheSite]:
-        ...
+        ...  # pragma: no cover
 
     @overload
     def get_site_identifier(
         self,
         query_str: str | Sequence[str],
         completion: Literal[True]
-    ) -> list[CacheSite]: ...
+    ) -> list[CacheSite]: ...  # pragma: no cover
 
     @overload
     def get_site_identifier(
         self,
         query_str: str | Sequence[str],
-    ) -> CacheSite: ...
+    ) -> CacheSite: ...  # pragma: no cover
 
     @overload
     def get_site_identifier(
@@ -4831,7 +4822,7 @@ class Cache:
         completion: Optional[bool],
         silent: Optional[bool],
         exit_on_fail: bool,
-    ) -> CacheSite | None: ...
+    ) -> CacheSite | None: ...  # pragma: no cover
 
     def get_site_identifier(
         self,
@@ -4930,8 +4921,8 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"Unable to gather site info from provided identifier {query_str}", show=not silent)
+        log.error(f"Unable to gather site info from provided identifier {query_str}", show=not silent)
+        if retry:
             if exit_on_fail:
                 raise typer.Exit(1)
             else:
@@ -4943,7 +4934,7 @@ class Cache:
         query_str: str,
         dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes],
         completion: bool,
-    ) -> list[CacheGroup]: ...
+    ) -> list[CacheGroup]: ...  # pragma: no cover
 
     @overload
     def get_group_identifier(
@@ -4952,7 +4943,7 @@ class Cache:
         dev_type: Optional[List[constants.DeviceTypes] | constants.DeviceTypes] = None,
         retry: Optional[bool] = True,
         silent: Optional[bool] = False,
-    ) -> CacheGroup: ...
+    ) -> CacheGroup: ...  # pragma: no cover
 
     @overload
     def get_group_identifier(
@@ -4962,7 +4953,7 @@ class Cache:
         retry: Optional[bool],
         silent: Optional[bool],
         exit_on_fail: bool,
-    ) -> CacheGroup | None: ...
+    ) -> CacheGroup | None: ...  # pragma: no cover
 
     def get_group_identifier(
         self,
@@ -5028,7 +5019,7 @@ class Cache:
                 all_match: List[Document] = match.copy()
                 match = [d for d in all_match if bool([t for t in d.get("allowed_types", []) if t in dev_type])]
 
-            if not match and retry and api.configuration.get_all_groups not in self.updated:  # TODO self.responses.group is None
+            if not match and retry and self.responses.group is None:
                 dev_type_sfx = "" if not dev_type else f" [grey42 italic](Device Type: {utils.unlistify(dev_type)})[/]"
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/]{dev_type_sfx}.")
                 if FUZZ and self.groups and not silent:    # pragma: no cover  Requires tty
@@ -5056,8 +5047,8 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"Unable to gather group data from provided identifier {query_str}", show=not silent)
+        log.error(f"Unable to gather group data from provided identifier {query_str}", show=not silent)
+        if retry:
             if all_match:
                 _dev_type_str = escape(str(utils.unlistify(dev_type)))
                 all_match_msg = utils.summarize_list([f"{m['name']}|allowed types: {m['allowed_types']}" for m in all_match], pad=0)
@@ -5073,14 +5064,10 @@ class Cache:
                 raise typer.Exit(1)
             else:
                 return
-        else:
-            if not completion:
-                log.error(
-                    f"Unable to gather group data from provided identifier {query_str}", show=not silent
-                )
+
 
     @overload
-    def get_template_identifier(self, query_str: str, completion: Literal[True]) -> list[CacheTemplate]: ...
+    def get_template_identifier(self, query_str: str, completion: Literal[True]) -> list[CacheTemplate]: ...  # pragma: no cover
 
     def get_template_identifier(
         self,
@@ -5134,10 +5121,10 @@ class Cache:
                 match = [CacheTemplate(tmplt) for tmplt in match]
                 break
 
-        if match:
-            if completion:
-                return match
+        if completion:
+            return match or []
 
+        if match:
             if len(match) > 1:  # pragma: no cover  Requires tty
                 match = self.handle_multi_match(
                     match,
@@ -5147,8 +5134,8 @@ class Cache:
 
             return match[0]
 
-        elif retry:
-            log.error(f"Unable to gather template from provided identifier {query_str}", show=not silent, log=silent)
+        log.error(f"Unable to gather template from provided identifier {query_str}", show=not silent, log=silent)
+        if retry:
             if all_match:
                 first_five = [f"[bright_green]{m['name']}[/] from group [cyan]{m['group']}[/]" for m in all_match[0:5]]
                 all_match_msg = f"{', '.join(first_five)}{', ...' if len(all_match) > 5 else ''}"
@@ -5157,15 +5144,12 @@ class Cache:
                     show=True,
                 )
             raise typer.Exit(1)
-        else:
-            if not completion and not silent:
-                log.warning(f"Unable to gather template from provided identifier {query_str}", show=False)
 
     @overload
-    def get_client_identifier(self, query_str: str, completion: Literal[False]) -> CacheClient: ...
+    def get_client_identifier(self, query_str: str, completion: Literal[False]) -> CacheClient: ...  # pragma: no cover
 
     @overload
-    def get_client_identifier(self, query_str: str, exit_on_fail: bool = Literal[True]) -> CacheClient: ...
+    def get_client_identifier(self, query_str: str, exit_on_fail: bool = Literal[True]) -> CacheClient: ...  # pragma: no cover
 
     def get_client_identifier(
         self,
@@ -5245,12 +5229,11 @@ class Cache:
 
             return match[0]
 
-        elif retry:
+        if retry:
             log.error(f"Unable to gather client info from provided identifier {query_str}", show=not silent)
             if exit_on_fail:
                 raise typer.Exit(1)
-            else:
-                return None
+
 
     def get_audit_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
@@ -5306,7 +5289,7 @@ class Cache:
         retry: bool = True,
         completion: bool = True,
         silent: bool = False,
-    ) -> list[CacheMpskNetwork]: ...
+    ) -> list[CacheMpskNetwork]: ...  # pragma: no cover
 
     @overload
     def get_mpsk_network_identifier(
@@ -5315,7 +5298,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheMpskNetwork: ...
+    ) -> CacheMpskNetwork: ...  # pragma: no cover
 
     def get_mpsk_network_identifier(
         self,
@@ -5346,12 +5329,11 @@ class Cache:
 
             # case insensitive ignore -_
             if not match:
-                if "_" in query_str or "-" in query_str:
-                    match = self.MpskNetDB.search(
-                        self.Q.name.test(
-                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
-                        )
+                match = self.MpskNetDB.search(
+                    self.Q.name.test(
+                        lambda v: v.lower().replace("_", "-") == query_str.lower().replace("_", "-")
                     )
+                )
 
             # case insensitive startswith search for mspk id
             if not match:
@@ -5377,22 +5359,18 @@ class Cache:
             return match or []
 
         if match:
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover requires tty
                 match = self.handle_multi_match(match, query_str=query_str, query_type="mpsk",)
 
             return match[0]
 
-        elif retry:
-            log.error(f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=True)
+        log.error(f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=not silent or _ == 1)
+        if retry:
             valid_mpsk = "\n".join([f'[cyan]{m["name"]}[/]' for m in self.mpsk_networks])
             econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{query_str}[/] appears to be invalid")
             econsole.print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
             raise typer.Exit(1)
-        else:
-            if not completion:
-                log.error(
-                    f"Central API CLI Cache unable to gather MPSK Network data from provided identifier {query_str}", show=not silent
-                )
+
 
     @staticmethod
     def _handle_sub_multi_match(match: list[CacheSub], *, end_date: dt.datetime, best_match: bool = False, all_match: bool = False) -> list[CacheSub]:
@@ -5536,10 +5514,9 @@ class Cache:
             econsole.print(f"\n[bright_green]Valid Names[/]:\n--\n{valid}\n--\n")
             raise typer.Exit(1)
         else:
-            if not completion:
-                log.error(
-                    f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
-                )
+            log.error(
+                f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
+            )
 
 
     @lru_cache
@@ -5656,16 +5633,15 @@ class Cache:
             econsole.print(f"\n[bright_green]Available Subscriptions[/]:\n--\n{valid}\n--\n")
             raise typer.Exit(1)
         else:
-            if not completion:
-                log.error(
-                    f"Central API CLI Cache unable to gather Subscription data from provided identifier {query_str}", show=not silent
-                )
+            log.error(
+                f"Central API CLI Cache unable to gather Subscription data from provided identifier {query_str}", show=not silent
+            )
 
     @overload
     def get_label_identifier(
         self,
         query_str: str,
-    ) -> CacheLabel: ...
+    ) -> CacheLabel: ...  # pragma: no cover
 
     @overload
     def get_label_identifier(
@@ -5674,7 +5650,7 @@ class Cache:
         retry: Optional[bool],
         completion: Optional[Literal[False]],
         silent: Optional[bool],
-    ) -> CacheLabel: ...
+    ) -> CacheLabel: ...  # pragma: no cover
 
     @overload
     def get_label_identifier(
@@ -5683,7 +5659,7 @@ class Cache:
         retry: Optional[bool],
         completion: Literal[True],
         silent: Optional[bool],
-    ) -> list[CacheLabel]: ...
+    ) -> list[CacheLabel]: ...  # pragma: no cover
 
     def get_label_identifier(
         self,
