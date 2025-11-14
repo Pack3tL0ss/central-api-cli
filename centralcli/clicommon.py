@@ -531,7 +531,9 @@ class CLICommon:
         return md5.hexdigest()
 
     def _parse_subscription_data(self, data: dict[str, list | str] | list[dict[str, Any]]) -> list[dict[str, Any]]:
-        if not isinstance(data, dict):
+        # possible to send dict keyed by device serial as with most device operations
+        # We also accept dict keyed by subscription with a list or single device id as the value
+        if not isinstance(data, dict) or all([isinstance(v, dict) for v in data.values()]):
             return data
 
         devices = []
@@ -561,7 +563,6 @@ class CLICommon:
 
         if subscriptions:
             data = self._parse_subscription_data(data)
-
 
         import_type = import_type or ""
         if isinstance(data, dict) and all([isinstance(v, dict) for v in data.values()]):
@@ -1474,7 +1475,7 @@ class CLICommon:
                     )
                 ]
             else:
-                cache_update_reqs += [br(self.cache.refresh_inv_db_classic)]
+                cache_update_reqs += [br(self.cache.refresh_inv_db)]
         # Update cache remove deleted items
         if cache_update_reqs:
             _ = api.session.batch_request(cache_update_reqs)

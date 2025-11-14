@@ -199,7 +199,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
 
     # Put together counts caption string
     if status:
-        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{status.capitalize()} {t if t != "ap" else "APs"}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t if t != "ap" else "APs"}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
     elif inventory:
         _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
         _cnt_str = _cnt_str + ", ".join(
@@ -215,12 +215,12 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
             if clients:
                 _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
-        except AttributeError as e:
+        except AttributeError as e:  # pragma: no cover
             log.exception(f"AttribueError occured in _build_caption\n{resp.output = }\n{e}", exc_info=True)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
-    caption = f"[reset]{'Counts' if not status else f'{status} Devices'}: {_cnt_str}"
+    caption = f"[reset]{'Counts' if not status else f'{status.capitalize()} Devices'}: {_cnt_str}"
     if inventory and not inventory_only:
         caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
@@ -307,7 +307,7 @@ def _get_details_for_specific_devices(
         # Fetch results from API
         batch_res = api.session.batch_request(reqs)
         if include_inventory:  # Combine results with inventory results
-            _ = api.session.request(common.cache.refresh_inv_db_classic, device_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
             for r, dev in zip(batch_res, devs):
                 r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
 
@@ -390,7 +390,7 @@ def show_devices(
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = api.session.request(common.cache.refresh_inv_db_classic, dev_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
             resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
@@ -429,6 +429,8 @@ def show_devices(
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     if not resp.output.get("logo"):
         common.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
+    if not path.is_dir() and not path.parent.is_dir():
+        common.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
 
     import base64
     file = path / resp.output["logo_name"] if path.is_dir() else path
@@ -438,7 +440,7 @@ def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     img_data = base64.b64decode(resp.output["logo"].split(",")[1])
     if file.write_bytes(img_data):
         common.exit(f"Logo saved to {file}", code=0)
-    else:
+    else:  # pragma: no cover
         common.exit(
             f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
         )
@@ -3158,17 +3160,15 @@ def portals(
             if not logo or len(portal) > 2:
                 common.exit("Too many Arguments")
             path = Path(portal[-1])
-            if not path.is_dir() and not path.parent.is_dir():
-                common.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
         portal = portal[0]
 
     if portal is None:
-        resp: Response = api.session.request(common.cache.refresh_portal_db)
         _cleaner = cleaner.get_portals
+        resp: Response = api.session.request(common.cache.refresh_portal_db)
     else:
+        _cleaner = cleaner.get_portal_profile
         p: CachePortal = common.cache.get_name_id_identifier("portal", portal)
         resp: Response = api.session.request(api.guest.get_portal_profile, p.id)
-        _cleaner = cleaner.get_portal_profile
         if logo and resp.ok:
             download_logo(resp, path, p)  # this will exit CLI after writing to file
 
