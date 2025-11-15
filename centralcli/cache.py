@@ -176,12 +176,6 @@ class CentralObject(MutableMapping):
         if "type" in self.data:
             return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
 
-    @property
-    def is_aos10(self) -> bool:
-        if self.data.get("type", "") == "ap" and self.data.get("version", "").startswith("10"):
-            return True
-        else:
-            return False
 
     def _get_help_text_parts(self):
         parts = []
@@ -1904,8 +1898,10 @@ class Cache:
 
         if status:
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["status"] == status.capitalize()}
+            _all_serials = list(_dev_by_ser.keys())
+        else:
+            _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
 
-        _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
         combined = [
             {
                 **_inv_by_ser.get(serial, {}),
@@ -3671,20 +3667,19 @@ class Cache:
         else:
             return await self.update_db(self.GroupDB, doc_ids=data)
 
-
     async def refresh_group_db(self) -> Response:
-        if self.responses.group:
+        if self.responses.group:  # pragma: no cover
             log.info("Update Group DB already refreshed in this session, returning previous group response")
             return self.responses.group
 
         resp = await api.configuration.get_all_groups()
-        if hasattr(resp, "ok") and resp.ok:  # resp can be a list of responses if failures occured
+        if resp.ok:
             groups = models.Groups(resp.output)
             resp.output = groups.model_dump()
 
             self.responses.group = resp
-
             _ = await self.update_db(self.GroupDB, data=resp.output, truncate=True)
+
         return resp
 
     async def update_label_db(self, data: List[Dict[str, Any]] | Dict[str, Any] | List[int], remove: bool = False) -> Response:
@@ -3719,7 +3714,7 @@ class Cache:
         return resp
 
     async def refresh_template_db(self) -> Response:
-        if self.responses.template is not None:
+        if self.responses.template is not None:  # pragma: no cover
             log.warning("cache.refresh_template_db called, but template cache has already been fetched this session.  Returning stored response.")
             return self.responses.template
 
@@ -3905,7 +3900,7 @@ class Cache:
         if not mpsk_id:
             net_resp = await self.refresh_mpsk_networks_db()
             if not net_resp.ok:
-                log.error(f"Unable to refresh named mpsks as call to fetch mpsk networks failed {net_resp.error}", show=True)
+                log.error("Unable to refresh named mpsks as call to fetch mpsk networks failed", show=True)
                 return net_resp
             mpsk_networks = {net["id"]: net["ssid"] for net in net_resp.output}
             named_reqs = [
@@ -3914,19 +3909,24 @@ class Cache:
             ]
             batch_resp = await api.session._batch_request(named_reqs)
 
+            passed: list[Response] = []
+            failed: list[Response] = []
             for resp, network in zip(batch_resp, mpsk_networks.values()):
-                if not resp.ok:
-                    log.error(f"skipping cache update for MPSKs associated with {network} due to failure {resp.error}", show=True)
-                    continue
-                resp.output = [
-                    {"ssid": network, **inner}
-                    for inner in resp.output
-                ]
-            combined_output = [inner for r in batch_resp for inner in r.output if r.ok]
-            last_resp = sorted([r for r in batch_resp if r.ok], key=lambda r: r.rl)[0] or batch_resp[-1]  # the or comes into play if all have failed.
-            resp.rl = last_resp.rl
-            if resp.ok:
-                resp.output = combined_output
+                if resp.ok:
+                    passed += [resp]
+                    resp.output = [
+                        {"ssid": network, **inner}
+                        for inner in resp.output
+                    ]
+                else:
+                    failed += [resp]
+                    log.error(f"Skipping cache update for MPSKs associated with {network} due to failure {resp.error}", show=True)
+
+            if not passed:
+                return failed[-1]
+            resp = passed[-1]
+            resp.rl = min([r.rl for r in batch_resp])
+            resp.output = [inner for r in passed for inner in r.output]
         else:
             resp = await api.cloudauth.get_named_mpsk(mpsk_id, name=name, role=role, status=status)
             if resp.ok:
@@ -3934,14 +3934,14 @@ class Cache:
                 if ssid:
                     resp.output = [{"ssid": ssid.name, **inner} for inner in resp.output]
 
-        truncate = True if not mpsk_id and not any([name, role, status]) else False
-
+        # cache update
         if resp.ok:
             self.responses.mpsk = resp
-            if resp.output:
+            if resp.output:  # necessary in case there are no named mpsks defined
                 _update_data = models.Mpsks(resp.output)
                 _update_data = _update_data.model_dump()
 
+                truncate = True if not mpsk_id and not any([name, role, status]) else False
                 _ = await self.update_db(self.MpskDB, data=_update_data, truncate=truncate)
 
         return resp
