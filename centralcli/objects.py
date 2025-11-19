@@ -10,6 +10,7 @@ import pendulum
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
 
+
 class DateTime():
     """DateTime object with a number of timestamp to string converters for various representations used by the CLI.
     """

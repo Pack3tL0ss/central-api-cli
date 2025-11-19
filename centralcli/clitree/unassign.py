@@ -96,10 +96,10 @@ def subscription(
     _msg = f"{_msg} from device:" if len(res_ids) == 1 else f"{_msg} from the following {len(res_ids)} devices:"
     _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
     render.econsole.print(_msg)
-    if render.confirm(yes):
-        resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=None)
-        render.display_results(resp, tablefmt="action")
-        # CACHE update available subs in sub cache
+    render.confirm(yes)
+    resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=None)
+    render.display_results(resp, tablefmt="action")
+    # CACHE update available subs in sub cache
 
 
 @app.command()
@@ -134,10 +134,10 @@ def label(
         if devs:
             reqs += [br(api.central.remove_label_from_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
-    if render.confirm(yes):
-        resp = api.session.batch_request(reqs)
-        render.display_results(resp, tablefmt="action")
-        # we don't cache device/label associations (monitoring/.../aps doesn't provide it)
+    render.confirm(yes)
+    resp = api.session.batch_request(reqs)
+    render.display_results(resp, tablefmt="action")
+    # we don't cache device/label associations (monitoring/.../aps doesn't provide it)
 
 
 @app.callback()

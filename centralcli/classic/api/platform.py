@@ -164,7 +164,7 @@ class PlatformAPI:
             serial = d.get("serial", d.get("serial_num"))
             _this_dict = {"mac": mac.cols, "serial": serial}
             part_num = d.get("part_num", d.get("partNumber"))
-            if part_num:
+            if part_num:  # pragma: no cover CoP only.  CoP is not currently tested
                 _this_dict["partNumber"] = part_num
 
             json_data += [_this_dict]

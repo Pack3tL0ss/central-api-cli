@@ -16,11 +16,11 @@ if TYPE_CHECKING:
     from ...client import Session
 
 @overload
-def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str: ...
+def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str: ...  # pragma: no cover
 
 
 @overload
-def parse_time_window(time_window: None) -> None: ...
+def parse_time_window(time_window: None) -> None: ...  # pragma: no cover
 
 
 def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str:

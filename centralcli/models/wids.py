@@ -1,9 +1,12 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, RootModel, Field, ConfigDict, AliasChoices, field_serializer
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_serializer
+
 from ..objects import DateTime
+
 
 class WidsItem(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -41,10 +44,10 @@ class Wids(RootModel):
         super().__init__([WidsItem(**w) for w in data])
 
     def __iter__(self):
-        return iter(self.root)
+        return iter(self.root)  # pragma: no cover
 
     def __getitem__(self, item):
-        return self.root[item]
+        return self.root[item]  # pragma: no cover
 
     def __len__(self) -> int:
-        return len(self.model_dump())
+        return len(self.model_dump())  # pragma: no cover

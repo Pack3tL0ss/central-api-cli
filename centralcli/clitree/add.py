@@ -146,11 +146,10 @@ def device(
         kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
 
     render.econsole.print("".join(_msg), emoji=False)
-
-    if render.confirm(yes):
-        resp = api.session.request(api.platform.add_devices, **kwargs)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, license=subscription)
+    render.confirm(yes)
+    resp = api.session.request(api.platform.add_devices, **kwargs)  # TOGLP
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, license=subscription)
 
 @app.command()
 def group(

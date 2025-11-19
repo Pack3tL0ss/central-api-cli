@@ -260,9 +260,10 @@ class Config:
         if base_dir and isinstance(base_dir, str):
             base_dir = Path(base_dir)  # pragma: no cover
         self.base_dir = base_dir or Path(__file__).parent.parent
+        # no cover: start
         try:
             self.cwd = Path.cwd()
-        except FileNotFoundError:  # pragma:: no cover In the very rare event the user launches a command from a directory that they've deleted in another session.
+        except FileNotFoundError:  # pragma: no cover In the very rare event the user launches a command from a directory that they've deleted in another session.
             self.cwd = Path.home()
 
         self.file = _get_config_file(self.cwd)
@@ -297,6 +298,7 @@ class Config:
             if not self.file.exists() and sys.stdin.isatty() and not self.is_completion:
                 if not any([a in BYPASS_FIRST_RUN_FLAGS for a in sys.argv]):
                     self.first_run()
+        # no cover: stop
 
         self.log_dir = self.base_dir / "logs"
         self.log_dir.mkdir(parents=True, exist_ok=True)
@@ -366,7 +368,7 @@ class Config:
         return self._workspace
 
     @workspace.setter
-    def workspace(self, workspace: str):
+    def workspace(self, workspace: str):  # pragma: no cover
         self._workspace = workspace
         self.set_attributes()
 

@@ -53,6 +53,8 @@ def results(
             del resp.output["output"]
             render.display_results(resp, tablefmt="action")
             resp.output = _output
+        else:  # pragma: no cover
+            ...
 
         render.display_results(resp, pager=pager, outfile=outfile, tablefmt="simple" if not clean else "clean")
 
