@@ -46,7 +46,7 @@ def device(
 
     devs = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
     dev_types = list(set([dev.type for dev in devs]))
-    if len([t if t not in ["ap", "gw"] else "apgw" for t in dev_types]) > 1:  # ap and gw can be upgraded together
+    if len(set([t if t not in ["ap", "gw"] else "apgw" for t in dev_types])) > 1:  # ap and gw can be upgraded together
         common.exit(f"Specifying multiple devices of different types ({utils.summarize_list(dev_types, pad=0, sep=', ')}) does not make sense (other than APs and GWs).  All devices should be compatible with the same software/version.")
 
     batch_reqs = []
@@ -132,7 +132,10 @@ def group(
         if "sw" not in group.allowed_types:
             common.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] AOS-SW is not configured as an allowed device type for this group.")
         elif "sw" not in [d["type"] for d in common.cache.devices if d["group"] == group.name]:
-            common.exit(f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\nIf local cache is stale, run command again with hidden [cyan]-U[/] option to update the cache.")
+            common.exit(
+                f"[cyan]--model[/] only applies to AOS-SW [cyan]{group.name}[/] does not appear to contain any AOS-SW switches.\n"
+                "If local cache is stale, Use [cyan]cencli refresh cache[/] to perform a full cache update."
+            )
         ver_msg += [f"model [bright_green]{model}[/]"]
 
     ver_msg += [f"in group [bright_green]{group.name}[/]"]
@@ -144,10 +147,7 @@ def group(
     ver_msg += _version
     ver_msg = " ".join(ver_msg)
 
-    if reboot:
-        ver_msg = f"{ver_msg} and :recycle:  reboot"
-    else:
-        ver_msg = f"{ver_msg} ('-R' not specified, device will not be rebooted)"
+    ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
     render.econsole.print(ver_msg)
     if render.confirm(yes):
@@ -187,7 +187,7 @@ def swarm(
     if in_:
         at = common.delta_to_start(in_, past=False).int_timestamp
 
-    dev = common.cache.get_dev_identifier(device, dev_type="ap")
+    dev = common.cache.get_dev_identifier(device, dev_type="ap", swack_only=True)
     swarm = dev.swack_id
 
     if not at:
