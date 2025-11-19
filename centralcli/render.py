@@ -975,7 +975,7 @@ def display_results(
     suppress_rl: bool = False,
     output_by_key: str | List[str] = "name",
     group_by: str = None,
-    exit_on_fail: bool = False,  # TODO make default True so failed calls return a failed return code to the shell.  Need to validate everywhere it needs to be set to False
+    exit_on_fail: bool = True,
     cache_update_pending: bool = False,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
@@ -1122,7 +1122,6 @@ def display_results(
             if cache_update_pending:
                 econsole.print(":warning:  [italic]Cache update skipped due to failed API response(s)[/].")
             sys.exit(1)
-            # common.exit(code=1)
 
     elif data:
         _display_results(
