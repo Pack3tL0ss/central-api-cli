@@ -201,8 +201,10 @@ def compliance(
         tablefmt=tablefmt,
         title=f"{'Global ' if not group else f'{group.name} '}Firmware Compliance",
         pager=pager,
-        outfile=outfile
+        outfile=outfile,
+        exit_on_fail=False
     )
+    common.exit(code=0 if any([resp.ok, resp.status == 404]) else 1)
 
 @app.command("list")
 def _list(
