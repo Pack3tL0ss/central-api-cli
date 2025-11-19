@@ -96,7 +96,7 @@ class Skipped:
     reason: str
 
     def __str__(self):
-        return f"{self.iden}: {self.reason}"
+        return f"{self.iden}: {self.reason}"  # pragma: no cover
 
     def __rich__(self):
         return f"[bright_green]{self.iden}[/]: [dim red1]{self.reason}[/]"
@@ -143,7 +143,7 @@ class CLICommon:
         self.options = CLIOptions(cache)
         self.arguments = CLIArgs(cache)
 
-    class WorkSpaceMsg:
+    class WorkSpaceMsg:  # pragma: no cover  Testing is only allowed on default workspace to avoid unintentionally mucking with customer workspace
         def __init__(self, workspace: str = None, msg: MsgType = None) -> None:
             self.workspace = workspace
             self.msg = msg
@@ -197,7 +197,7 @@ class CLICommon:
         def previous_short(self):
             return f":information:  Using previously specified workspace: [bright_green]{self.workspace}[/].\n"
 
-    def workspace_name_callback(self, ctx: typer.Context, workspace: str | None, default: bool = False) -> str:
+    def workspace_name_callback(self, ctx: typer.Context, workspace: str | None, default: bool = False) -> str:  # pragma: no cover
         """Responsible for workspace messaging.  Actual workspace is determined in config.
 
         Workspace has to be collected prior to CLI for completion to work specific to the workspace.
@@ -309,11 +309,10 @@ class CLICommon:
 
         try:
             current = version("centralcli")
-        except PackageNotFoundError:
-            # self.exit(str(e))
+        except PackageNotFoundError:  # pragma: no cover
             current = "0.0.0"
 
-        if current == "0.0.0":
+        if current == "0.0.0":  # pragma: no cover
             try:
                 file = Path(__file__).parent / "pyproject.toml"
                 data = file.read_text()
@@ -333,10 +332,10 @@ class CLICommon:
                     "  Documentation: https://central-api-cli.readthedocs.org",
                     "  Homepage: https://github.com/Pack3tL0ss/central-api-cli",
                     "  Repository: https://github.com/Pack3tL0ss/central-api-cli",
-                    "  issues: https://github.com/Pack3tL0ss/central-api-cli/issues"
+                    "  issues: https://github.com/Pack3tL0ss/central-api-cli/issues",
                 ]
             )
-            msg += f'\n\nVersion: {current}'
+            msg += f'\n\nVersion: {current}\n[dark_orange3]:warning:[/]  [italic]Unable to verify if version is current.  Call to pypi failed [dim](see logs for details)[/dim][/italic].'
         else:  # TODO there is a version key in the response.  should be resp.output["info"]["version"]
             major = max([int(str(k).split(".")[0]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2])
             minor = max([int(str(k).split(".")[1]) for k in resp.output["releases"].keys() if "a" not in k and k.count(".") == 2 and int(str(k).split(".")[0]) == major])
@@ -356,6 +355,7 @@ class CLICommon:
                     log.error(f"{e.__class__.__name__} cliself.version_callback Failed to find centralcli package path")
 
         render.econsole.print(msg)
+        self.exit(code=0 if resp.ok else 1)
 
     @staticmethod
     def send_cmds_node_callback(ctx: typer.Context, commands: Union[str, Tuple[str]]):
@@ -461,7 +461,7 @@ class CLICommon:
                         ]
                     )
                 )
-        except ValueError:
+        except ValueError:  # pragma: no cover
             self.exit(f"[cyan]{'--past' if past else '--in'}[/] [bright_red]{delta}[/] Does not appear to be valid")
 
         return start
@@ -496,7 +496,7 @@ class CLICommon:
             if end:
                 self.exit(f"[cyan]--start[/] and [cyan]--end[/] provided span {delta.days} days.  Max allowed is 90 days.")
             else:
-                log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is 90 days.  Output constrained to 90 days.", caption=True)
+                log.info(f"[cyan]--past[/] option spans {delta.days} days.  Max allowed is {max_days} days.  Output constrained to {max_days} days.", caption=True)
                 return self.delta_to_start("2_159h"), _end  # 89 days and 23 hours to avoid timing issue with API endpoint
 
         return start, _end
@@ -625,6 +625,33 @@ class CLICommon:
         this_req = br(caasapi.send_commands, node, cli_cmds=commands) if dev_type == "gw" else br(api.configuration.replace_ap_config, node, clis=commands)
         return PreConfig(name=node, config=config_out, dev_type=dev_type, request=this_req)
 
+    @staticmethod
+    def _prompt_for_config_display(pre_cfgs: list[PreConfig], confirm_msg: str, yes: bool) -> bool:  # pragma: no cover  requires tty
+        if env.is_pytest:
+            return True
+        idx = 0
+        while True:
+            if idx > 0:
+                render.econsole.print(confirm_msg, emoji=False)
+            render.econsole.print("Select [bright_green]#[/] to display config to be sent, [bright_green]go[/] to continue or [red]abort[/] to abort.")
+            ch: str = render.ask(
+                ">",
+                rich_console=render.econsole,
+                choices=[*[str(idx) for idx in range(1, len(pre_cfgs) + 1)], "abort", "go"],
+            )
+            if ch.lower() == "go":
+                yes = True
+                break
+            else:
+                pc: PreConfig = pre_cfgs[int(ch) - 1]
+                pretty_type = 'Gateway' if pc.dev_type == 'gw' else pc.dev_type.upper()
+                render.econsole.rule(f"{pc.name} {pretty_type} config")
+                with render.econsole.pager():
+                    render.econsole.print(pc.config, emoji=False)
+                render.econsole.rule(f"End {pc.name} {pretty_type} config")
+            idx += 1
+        return yes
+
     def batch_add_groups(self, import_file: Path = None, data: dict = None, yes: bool = False) -> list[Response]:
         """Batch add groups to Aruba Central
 
@@ -656,7 +683,8 @@ class CLICommon:
         try:
             groups = Groups(data)
         except (ValidationError, KeyError) as e:
-            self.exit(''.join(str(e).splitlines(keepends=True)[0:-1]))  # strip off the "for further information ... errors.pydantic.dev..."
+            _msg = utils.clean_validation_errors(e)
+            self.exit(f"Import data failed validation, refer to [cyan]cencli batch add groups --example[/] for example formats.\n{_msg}")
 
         names_from_import = [g.name for g in groups]
         if any([name in self.cache.groups_by_name for name in names_from_import]):
@@ -723,30 +751,9 @@ class CLICommon:
         if not reqs_cnt:
             self.exit("No Updates to perform...", code=0)
 
-
         render.econsole.print(confirm_msg, emoji=False)
         if pre_cfgs:
-            idx = 0
-            while True:
-                if idx > 0:
-                    render.econsole.print(confirm_msg, emoji=False)
-                render.econsole.print("Select [bright_green]#[/] to display config to be sent, [bright_green]go[/] to continue or [red]abort[/] to abort.")
-                ch: str = render.ask(
-                    ">",
-                    console=render.econsole,
-                    choices=[*[str(idx) for idx in range(1, len(pre_cfgs) + 1)], "abort", "go"],
-                )
-                if ch.lower() == "go":
-                    yes = True
-                    break
-                else:
-                    pc: PreConfig = pre_cfgs[int(ch) - 1]
-                    pretty_type = 'Gateway' if pc.dev_type == 'gw' else pc.dev_type.upper()
-                    render.econsole.rule(f"{pc.name} {pretty_type} config")
-                    with render.econsole.pager():
-                        render.econsole.print(pc.config, emoji=False)
-                    render.econsole.rule(f"End {pc.name} {pretty_type} config")
-                idx += 1
+            yes = self._prompt_for_config_display(pre_cfgs, confirm_msg=confirm_msg, yes=yes)
 
         resp = []
         if reqs and render.confirm(yes):
@@ -795,7 +802,8 @@ class CLICommon:
         try:
             verified_sites = ImportSites(data)
         except Exception as e:
-            self.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{e}")
+            _msg = utils.clean_validation_errors(e)
+            self.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{_msg}")
 
         for idx in range(2):
             already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in [s["name"] for s in self.cache.sites]]
@@ -879,6 +887,48 @@ class CLICommon:
                                 render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] does not appear to be a valid license type.")
         return data, warn
 
+    def validate_retain_config(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+        """validate device import data, warn if retain_config is set for CX.
+
+        During initial add of device retain_config does not apply.  Once the device has checked in (unprovisioned group) it
+        can be moved with the retain_config option.  Adding the device and pre-provisioning to a group will *NOT* retain the config.
+
+        Args:
+            data (List[Dict[str, Any]]): The data from the import
+
+        Returns:
+            Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating retain_config
+                was specified for CX switches in the import. As a result group pre-provisioning was ignored for those switches.
+        """
+        if not any([inner.get("retain_config") for inner in data]):
+            return data, False
+
+        def _warn_colors(key: str, value: str) -> str:
+            if key not in ["group", "retain_config"]:
+                return f"[bright_green]{key}[/]:[cyan]{value}[/]"
+            else:
+                return f"[red]{key}[/]:[dim red]{value}[/]"
+
+        warn_devs = []
+        for d in data:
+            if d.get("retain_config") and d.get("group"):
+                warn_devs += ['|'.join([_warn_colors(k, v) for k, v in d.items() if v or isinstance(v, bool)])]
+                d["group"] = d["retain_config"] = None
+
+        if warn_devs:
+            warn_devs_str = "\n".join(warn_devs)
+            render.econsole.print(
+                "[dark_orange3]\u26a0[/] [magenta]retain_config[/] is specified for some devices in import, along with a group to pre-provision the device to. "
+                "[magenta]retain_config[/] is valid for [cyan]cencli batch move devices[/].  When initially adding a device [magenta]retain_config[/] is [red]not supported[/]. "
+                "To retain the config, the device should [bold red]NOT[/] be pre-provisioned to a group. It should check-in to the unprovisioned group, then it can be "
+                "moved to the desired group with the [magenta]retain_config[/] option (The same import file can be used for both).\n\n"
+                f"[bright_green]As a result.  The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored. "
+                f"{'These devices' if len(warn_devs) > 1 else 'This device'} will [red]not[/] be pre-provisioned to a group.\n"
+                f"{warn_devs_str}\n", emoji=False
+            )
+
+        return data, bool(warn_devs)
+
     def verify_required_fields(self, data: List[Dict[str, Any]], required: List[str], optional: List[str] | None = None, example_text: str | None = None, exit_on_fail: bool = True):
         ok = True
         if not all([len(required) == len([k for k in d.keys() if k in required]) for d in data]):
@@ -891,7 +941,6 @@ class CLICommon:
                 render.econsole.print(utils.color(optional, color_str="cyan", pad_len=4, sep="\n"))
             if example_text:
                 render.econsole.print(f"\nUse [cyan]{example_text}[/] to see valid import file formats.")
-            # TODO finish full deploy workflow with config per-ap-settings variables etc allowed
             if exit_on_fail:
                 self.exit()
         return ok
@@ -908,6 +957,7 @@ class CLICommon:
             data, required=_reqd_cols, optional=['group', 'subscription'], example_text='cencli batch add devices --show-example'
         )
         data, warn = self.validate_license_type(data)
+        data, warn = self.validate_retain_config(data)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
         word = "Adding" if not warn and yes else "Add"
 
         confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
@@ -916,34 +966,35 @@ class CLICommon:
         render.console.print(f'{len(data)} Devices found in {file_str}')
         render.console.print(confirm_str.lstrip("\n"), emoji=False)
         render.console.print(f'\n{word} {len(data)} devices found in {file_str}')
-        if warn:  # pragma: no cover  requires tty
+        if warn:
             msg = f":warning:  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}"
             render.econsole.print(msg)
 
         resp = None
-        if render.confirm(yes=not warn and yes):
-            resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
-            # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
-            _data = None if not all([r.ok for r in resp]) else data
-            update_func = self.cache.refresh_inv_db
-            kwargs = {}
-            if _data:
-                try:
-                    _data = Inventory(_data).model_dump()
-                    update_func = self.cache.update_inv_db
-                    kwargs = {"data": _data}
-                except ValidationError as e:
-                    log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
-                    _data = None
+        warn = warn if not env.is_pytest else False  # bypass confirmation for test runs
+        render.confirm(yes=not warn and yes)
+        resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
+        # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+        _data = None if not all([r.ok for r in resp]) else data
+        update_func = self.cache.refresh_inv_db
+        kwargs = {}
+        if _data:
+            try:
+                _data = Inventory(_data).model_dump()
+                update_func = self.cache.update_inv_db
+                kwargs = {"data": _data}
+            except ValidationError as e:
+                log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
+                _data = None
 
-            cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
-            with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
-                time.sleep(3)
-                spin.update('Performing full device cache update after device edition.')
-                time.sleep(2)
+        cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
+        with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
+            time.sleep(3)
+            spin.update('Performing full device cache update after device edition.')
+            time.sleep(2)
 
-            # always perform full dev_db update as we don't know the other fields.
-            cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
+        # always perform full dev_db update as we don't know the other fields.
+        cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
 
         return resp or Response(error="No Devices were added")
 
@@ -1455,30 +1506,6 @@ class CLICommon:
         else:
             summarize_arch_res(arch_resp[0:2])
 
-    def update_dev_inv_cache(self, batch_resp: List[Response], cache_devs: List[CacheDevice], devs_in_monitoring: List[CacheDevice], inv_del_serials: List[str], ui_only: bool = False) -> None:
-        br = BatchRequest
-        all_ok = True if batch_resp and all(r.ok for r in batch_resp) else False
-        inventory_devs = [d for d in cache_devs if d.db.name == "inventory"]
-        cache_update_reqs = []
-        if cache_devs and all_ok:
-            cache_update_reqs += [br(self.cache.update_dev_db, [d.doc_id for d in devs_in_monitoring], remove=True)]
-        else:
-            cache_update_reqs += [br(self.cache.refresh_dev_db)]
-
-        if cache_devs or inv_del_serials and not ui_only:
-            if all_ok:  # TODO Update to pass Inv doc_ids
-                cache_update_reqs += [
-                    br(
-                        self.cache.update_inv_db,
-                        [d.doc_id for d in inventory_devs],
-                        remove=True
-                    )
-                ]
-            else:
-                cache_update_reqs += [br(self.cache.refresh_inv_db)]
-        # Update cache remove deleted items
-        if cache_update_reqs:
-            _ = api.session.batch_request(cache_update_reqs)
 
     def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
@@ -1677,7 +1704,7 @@ class CLICommon:
             batch_resp += delayed_mon_resp
             mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
 
-        if cop_del_reqs:
+        if cop_del_reqs:  # pragma: no cover  Currently do not test CoP
             batch_resp += api.session.batch_request(cop_del_reqs)
 
         if batch_resp:
