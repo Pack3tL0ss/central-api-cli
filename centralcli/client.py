@@ -36,12 +36,12 @@ econsole = Console(stderr=True)
 INIT_TS = time.monotonic()
 
 class LoggedRequests:
-    def __init__(self, url: str, method: str = "GET",):
+    def __init__(self, url: str, method: str = "GET", ok: bool = None):
         self.ts = float(f"{time.monotonic() - INIT_TS:.2f}")
         self.url = url
         self.method = method
+        self.ok = ok
         self.reason = None
-        self.ok = None
         self.status = None
         self.remain_day = None
         self.remain_sec = None
@@ -109,6 +109,14 @@ class Session():
     @cached_property
     def auth(self):
         return self.get_conn_from_file(self.workspace_name) if not self.is_cnx else self.get_glp_conn_from_file()
+
+    @classmethod
+    def requests_clear(cls):
+        cls.requests = []  # used by pytest
+
+    @classmethod
+    def requests_append(cls, requests: LoggedRequests | list[LoggedRequests]):
+        cls.requests += utils.listify(requests)
 
     @staticmethod
     def get_glp_conn_from_file() -> NewCentralBase:
@@ -302,7 +310,7 @@ class Session():
                         **kwargs
                     )
                     elapsed = time.perf_counter() - _start
-                    self.requests += [req_log.update(resp)]
+                    self.requests_append(req_log.update(resp))
 
                     try:
                         output = await resp.json()
@@ -365,8 +373,6 @@ class Session():
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
                 elif resp.status == 429:  # per second rate limit.
-                    # _msg = fail_msg.replace(f'{spin_word} Data', '').replace(' \[', ' [')
-                    # log.warning(f"Per second rate limit hit {_msg}")
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                     self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
@@ -593,8 +599,7 @@ class Session():
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
-                self.requests += [LoggedRequests("/oauth2/token", "POST")]
-                self.requests[-1].ok = True if token else False
+                self.requests_append(LoggedRequests("/oauth2/token", "POST", ok=bool(token)))
                 self.req_cnt += 1
 
                 if token:
