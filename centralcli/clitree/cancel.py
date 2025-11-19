@@ -49,9 +49,9 @@ def upgrade(
         ]
 
     render.econsole.print(confirm_msg)
-    if render.confirm(yes):
-        batch_resp = api.session.batch_request(reqs)
-        render.display_results(batch_resp, tablefmt="action")
+    render.confirm(yes)
+    batch_resp = api.session.batch_request(reqs)
+    render.display_results(batch_resp, tablefmt="action")
 
 
 @app.callback()

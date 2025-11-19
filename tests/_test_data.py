@@ -1,20 +1,14 @@
 import json
 import shutil
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 import yaml
 
-from centralcli import common, config
+from centralcli import common, config, utils
 from centralcli.exceptions import ImportException
 
-CAAS_COMMANDS = """gateways:
-  - mock-gw
-groups:
-  - cencli_test_cloned
-sites:
-  - cencli_test_site1
-cmds:
+CAAS_COMMANDS = """cmds:
   - interface vlan 66
   - no ip address
   - !
@@ -23,6 +17,35 @@ cmds:
   - no vlan-name delme-66
   - no vlan 66
 """
+
+
+caas_commands_group_data = """groups:
+  - cencli_test_group1
+  - cencli_test_group4
+  - cencli_test_cloned
+"""
+
+caas_commands_site_data = """sites:
+  - cencli_test_site1
+  - cencli_test_site4
+"""
+
+caas_commands_invalid = """invalid:
+  - invalid1
+  - invalid2
+"""
+
+caas_commands_gateways_data  = """gateways:
+  - mock-gw
+"""
+
+
+caas_file_data = {
+    "groups": caas_commands_group_data,
+    "sites": caas_commands_site_data,
+    "invalid": caas_commands_invalid,
+    "gateways": caas_commands_gateways_data
+}
 
 def get_test_data():
     test_file = Path(__file__).parent / 'test_data.yaml'
@@ -42,23 +65,28 @@ def setup_cert_file(cert_path: str, sfx: str = "pem") -> Path:
 
     return test_cert_file
 
+def _csv_dump(data: list[dict[str, Any]]) -> str:
+    all_keys = list(set([key for d in data for key in d.keys()]))
+    data = [{k: d.get(k) for k in all_keys} for d in data]
+
+    data = utils.strip_no_value(data)  # Remove columns where all rows have no value
+    return "\n".join([",".join(k for k in data[0].keys()), *[",".join(str(v) for v in inner.values()) for inner in data]])
+
 def _get_dump_func(sfx: str) -> Callable:
     dump_func = {
         "json": json.dumps,
         "yaml": yaml.safe_dump,
-        "csv": lambda data: "\n".join([",".join(k for k in data[0].keys()), *[",".join(v for v in inner.values()) for inner in data]]),
+        "csv": _csv_dump,
         "txt": lambda data: "serial\n" + "\n".join([inner["serial"] for inner in data])  # only used for devices as txt file with serial per line
     }
     return dump_func.get(sfx, json.dumps)
 
-def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -> Path:
+def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", invalid: bool = False) -> Path:
     data = test_data["batch"]
     keys = import_type.split(":")
     import_type = keys[0]
     sfx = "json" if len(keys) < 2 else keys[1]
     data = data[import_type] if sfx not in data[import_type] else data[import_type][sfx]
-    # for k in keys:
-    #     data = data[k]
 
     if isinstance(data, str):  # pragma: no cover
         seed_file = Path(data)
@@ -66,15 +94,47 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites") -
     else:
         data = data
 
+    if invalid:
+        if import_type == "devices":
+            data = [{k if k != "serial" else "invalid": v for k, v in inner.items()} for inner in data]
+        elif import_type == "sites":
+            data = [{k if k not in ["site", "site_name", "name"] else "invalid": v for k, v in inner.items()} for inner in data]
+        else:  # pragma: no cover
+            ...
+
     test_batch_file = config.cache_dir / f"test_runner_{import_type}.{sfx}"
-    res = test_batch_file.write_text(
-        _get_dump_func(sfx)(data)
-    )
+    out_str = _get_dump_func(sfx)(data)
+    res = test_batch_file.write_text(out_str)
 
     if not res:
         raise ImportException("Batch import file creation from test_data returned 0 chars written")  # pragma: no cover
 
     return test_batch_file
+
+def _create_test_ap_import_file(test_data: dict[str, str]):
+    test_batch_file = config.cache_dir / "test_runner_subscriptions_test_ap.json"
+    _x_ = "{\n"
+    _ = test_batch_file.write_text(
+        f"{_x_}\"{test_data['serial']}\": {_x_}"
+        f"  \"mac\": \"{test_data['mac']}\",\n"
+        f"  \"group\": \"{test_data['group']}\",\n"
+        "  \"type\": \"ap\"\n"
+        "  }\n"
+        "}\n"
+    )
+
+    return test_batch_file
+
+
+def _create_caas_commands_file(scope: Literal["groups", "sites", "gateways", "invalid", "empty"]) -> Path:
+    commands_file = config.cache_dir / f"test_runner_caas_{scope}.yaml"
+    if scope != "empty":
+        data = f"{caas_file_data[scope]}{CAAS_COMMANDS}"
+        commands_file.write_text(data)
+    else:
+        commands_file.touch()
+    return commands_file
+
 
 def _create_invalid_var_file(file: str) -> Path:
     var_file = Path(file)
@@ -107,7 +167,7 @@ def create_var_file(seed_file, file_type: str = "json", flat: bool = False):
     if file_type == "csv":
         all_keys = [k for item in file_data.values() for k in list(item.keys())]
         rows = [[item.get(k, "") for k in all_keys] for item in file_data.values()]
-        out = "\n".join([",".join(all_keys), *[",".join(r) for r in rows]])
+        out = "\n".join([",".join(all_keys), *[",".join([item.replace(',', '~').replace('\n', '<br>') for item in r]) for r in rows]])
         out_file.write_text(out)
     else:
         if flat:
@@ -116,19 +176,38 @@ def create_var_file(seed_file, file_type: str = "json", flat: bool = False):
         out_file.write_text(json.dumps(file_data, indent=2, sort_keys=False))
     return out_file
 
+def _create_not_exist_site_file(file: Path, none_exists: bool = False) -> Path:
+    site_data = json.loads(file.read_text())
+    if not none_exists:
+        site_data[-1]["name"] = "not_exist_site"
+        out_file = file.parent / f"{file.stem}_one_not_exist{file.suffix}"
+    else:
+        site_data = [{k: v if not k.endswith("name") else f"not_exist_site{idx}" for k, v in sites.items()} for idx, sites in enumerate(site_data, start=1)]
+        out_file = file.parent / f"{file.stem}_none_exist{file.suffix}"
+
+    out_file.write_text(json.dumps(site_data, indent=4))
+    return out_file
+
 
 test_data: dict[str, Any] = get_test_data()
+test_invalid_empty_file: Path = config.cache_dir / "test_runner_empty_file"
+test_invalid_empty_file.touch()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
+test_invalid_device_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="devices:csv", invalid=True)
 test_device_file_txt: Path = setup_batch_import_file(test_data=test_data, import_type="devices:txt")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
 test_sub_file_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:yaml")
 test_sub_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:csv")
+test_sub_file_test_ap: Path = _create_test_ap_import_file(test_data=test_data["test_devices"]["ap"])
 test_rename_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="rename_aps")
 test_update_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="update_aps")
 test_verify_file: Path = setup_batch_import_file(test_data=test_data, import_type="verify")
 test_label_file: Path = setup_batch_import_file(test_data=test_data, import_type="labels")
 test_mpsk_file: Path = setup_batch_import_file(test_data=test_data, import_type="mpsk")
 test_site_file: Path = setup_batch_import_file(test_data=test_data)
+test_site_file_one_not_exist: Path = _create_not_exist_site_file(test_site_file)
+test_site_file_none_exist: Path = _create_not_exist_site_file(test_site_file, none_exists=True)
+test_invalid_site_file: Path = setup_batch_import_file(test_data=test_data, import_type="sites:yaml", invalid=True)
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"]["pem"])
 test_cert_file_p12: Path = setup_cert_file(cert_path=test_data["certificate"]["p12"], sfx="p12")
 test_cert_file_der: Path = setup_cert_file(cert_path=test_data["certificate"]["der"], sfx="der")
@@ -138,21 +217,30 @@ test_switch_var_file_flat = create_var_file(test_data["test_devices"]["switch"][
 test_switch_var_file_csv = create_var_file(test_data["test_devices"]["switch"]["variable_file"], file_type="csv")
 test_deploy_file = setup_deploy_file(group_file=test_group_file, site_file=test_site_file, label_file=test_label_file, device_file=test_device_file)
 test_j2_file = setup_j2_file()
-test_caas_commands_file = config.cache_dir / "test_runner_caas_commands.yaml"
-test_caas_commands_file.write_text(CAAS_COMMANDS)
+test_caas_devs_commands_file = _create_caas_commands_file("gateways")
+test_caas_groups_commands_file = _create_caas_commands_file("groups")
+test_caas_sites_commands_file = _create_caas_commands_file("sites")
+test_caas_invalid_commands_file = _create_caas_commands_file("invalid")
+test_caas_empty_commands_file = _create_caas_commands_file("empty")
 # Persistent files, not deleted
 test_ap_ui_group_template = Path(test_data["template"]["ap_ui_group"]["template_file"])
 test_ap_ui_group_variables = Path(test_data["template"]["ap_ui_group"]["variable_file"])
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
 test_files = [
+    test_invalid_empty_file,
     test_device_file,
+    test_invalid_device_file_csv,
     test_group_file,
     test_sub_file_csv,
     test_sub_file_yaml,
+    test_sub_file_test_ap,
     test_rename_aps_file,
     test_verify_file,
     test_site_file,
+    test_site_file_one_not_exist,
+    test_site_file_none_exist,
+    test_invalid_site_file,
     test_cert_file,
     test_mpsk_file,
     test_invalid_var_file,
@@ -165,5 +253,9 @@ test_files = [
     test_switch_var_file_json,
     test_switch_var_file_flat,
     test_switch_var_file_csv,
-    test_caas_commands_file,
+    test_caas_devs_commands_file,
+    test_caas_groups_commands_file,
+    test_caas_sites_commands_file,
+    test_caas_invalid_commands_file,
+    test_caas_empty_commands_file,
 ]

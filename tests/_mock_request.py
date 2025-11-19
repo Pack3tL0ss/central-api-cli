@@ -14,10 +14,21 @@ from aiohttp.helpers import TimerNoop
 from jinja2 import Environment, FileSystemLoader
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.client_reqrep import ConnectionKey
+from aiohttp.http_exceptions import ContentLengthError
+from pathlib import Path
 
 from centralcli import config, log, utils
 from centralcli.environment import env
 
+
+str_to_exc = {
+    "ClientConnectorError": ClientConnectorError,
+    "ClientOSError": ClientOSError,
+    "ContentTypeError": ContentTypeError,
+    "ContentLengthError": ContentLengthError
+}
 
 # MOCKED aiohttp.client.ClientResponse object
 # vendored/customized from aioresponses
@@ -109,7 +120,7 @@ class TestResponses:
     @staticmethod
     def _get_responses_from_capture_file() -> list[dict[str, dict[str, Any]]]:
         if not config.closed_capture_file.exists():
-            return {}
+            return {}  # pragma: no cover
         else:
             now = datetime.datetime.now(tz=ZoneInfo("UTC"))
             in_five_months = now + datetime.timedelta(days=5 * 30)  # approx
@@ -129,6 +140,15 @@ class TestResponses:
 
         if env.current_test in self.responses:
             if key in self.responses[env.current_test]:
+                if isinstance(self.responses[env.current_test][key], str):
+                    if self.responses[env.current_test][key] == "ClientConnectorError":
+                        con_key = ConnectionKey(host=Path(config.base_url).name, port=443, proxy=None, proxy_auth=None, is_ssl=True, ssl=True, proxy_headers_hash=None)
+                        raise ClientConnectorError(connection_key=con_key, os_error=OSError())
+                    elif self.responses[env.current_test][key] == "ContentLengthError":
+                        raise ContentLengthError("mock content length error")
+                    else:  # pragma: no cover
+                        raise str_to_exc[self.responses[env.current_test][key]]
+
                 candidates = utils.listify(self.responses[env.current_test][key])
                 return (True, [{**c, "url": path, "method": method} for c in candidates])
 
@@ -162,7 +182,7 @@ class TestResponses:
             res_hash = hash(str(resp))
             if res_hash not in self.used_responses:
                 self.used_responses += [res_hash]
-                log.info(f"{env.current_test} - returning {resp['status']} MOCK response")
+                log.info(f"{env.current_test} - returning {resp['status']} MOCK response{'.' if not has_per_test_res else ' (per test deffinition).'}")
                 return resp
 
         if resp_candidates:  # pragma: no cover
@@ -170,7 +190,13 @@ class TestResponses:
             return resp_candidates[-1]
 
         log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed (418) response.")  # pragma: no cover
-        return {"url": url, "status": 418, "reason": f"No Mock Response Found for {key}"}  # pragma: no cover
+        return {
+            "url": url,
+            "method": method,
+            "status": 418,
+            "reason": f"No Mock Response Found for {key}",
+            "payload": {"description": f"No Mock Response Found for {key}"}
+        }  # pragma: no cover
 
 test_responses = TestResponses()
 

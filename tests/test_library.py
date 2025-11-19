@@ -12,8 +12,11 @@ from typing import Callable
 import pytest
 from typer.testing import CliRunner
 
+from centralcli import utils
 from centralcli.cache import api
 from centralcli.cli import app
+from centralcli.constants import ShowArgs, arg_to_what
+from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
 
 from . import capture_logs, config, test_data
@@ -102,6 +105,55 @@ if config.dev.mock_tests:
 
 else:  # pragma: no cover
     ...
+
+
+
+@pytest.mark.parametrize(
+    "kwargs,exception,pass_condition",
+    [
+        [{"client_type": "wired", "band": "5Ghz"}, ValueError, None],  # wired client_type w/ wlan filter
+        [{"client_type": "wireless", "stack_id": "some-stack-id"}, ValueError, None],  # wireless client_type w/ wired filter
+        [{"client_type": "wireless", "mac": "aa:bb:cc:gg:hh:01"}, None, lambda r: "invalid" in r.output], # invalid mac
+    ]
+)
+def test_monitoring_get_clients_fail(kwargs: dict[str, str | bool], exception: Exception, pass_condition: Callable):
+    if exception:
+        try:
+            api.session.request(api.monitoring.get_clients, **kwargs)
+        except ValueError:
+            ...  # Test Passes
+        else:  # pragma: no cover
+            raise AssertionError(f"test_monitoring_get_clients_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}")
+    else:
+        result = api.session.request(api.monitoring.get_clients, **kwargs)
+        assert pass_condition(result)
+
+
+@pytest.mark.parametrize(
+    "_,fixture,kwargs,exception,pass_condition,test_name_append",
+    [
+        [1, "ensure_cache_group4", {"group": "cencli_test_group4", "aos10": False}, None, lambda r: "reverting back" in r.error, None],
+        [2, "ensure_cache_group4", {"group": "cencli_test_group4"}, None, lambda r: not r.ok, "fail"],
+        [3, "ensure_cache_group4", {"group": "cencli_test_group4", "microbranch": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None],
+        [4, "ensure_cache_group1", {"group": "cencli_test_group1", "monitor_only_sw": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None],
+        [5, "ensure_cache_group1", {"group": "cencli_test_group1", "monitor_only_cx": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None],
+        [6, "ensure_cache_group4", {"group": "cencli_test_group4", "allowed_types": "invalid"}, None, lambda r: "Invalid device type" in "\n".join([res.output for res in utils.listify(r)]), None],
+    ]
+)
+def test_configuration_update_group_properties(_: int, fixture: str, kwargs: dict[str, str | bool], exception: Exception, pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
+    request.getfixturevalue(fixture)
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    if exception:
+        try:
+            api.session.request(api.configuration.update_group_properties, **kwargs)
+        except ValueError:
+            ...  # Test Passes
+        else:  # pragma: no cover
+            raise AssertionError(f"{env.current_test} should have raised a ValueError due to invalid params, but did not.  {kwargs =}")
+    else:
+        result = api.session.request(api.configuration.update_group_properties, **kwargs)
+        assert pass_condition(result)
 
 
 @pytest.mark.parametrize(
@@ -302,3 +354,49 @@ def test_configuration_update_per_ap_settings_fail(ensure_dev_cache_test_ap, kwa
     assert not any([r.ok for r in resp])
     assert pass_condition(resp)
 
+
+@pytest.mark.parametrize(
+    "kwargs,pass_condition,test_name_append",
+    [
+        [{}, lambda r: r.ok, None],
+        [{}, lambda r: not r.ok, "fail_names"],
+        [{}, lambda r: not r.ok, "fail"],
+    ]
+)
+def test_configuration_get_groups_properties(kwargs: dict[str, str | bool], pass_condition: Callable, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    resp = api.session.request(api.configuration.get_groups_properties, **kwargs)
+    assert pass_condition(resp)
+
+
+def test_get_user_accounts():
+    result = runner.invoke(app, ["test", "method", "get_user_accounts"])
+    capture_logs(result, "get_user_accounts")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "cmd,key,expected",
+    [
+        ["refresh", "webhooks", "webhook"],
+        ["assign", "subscriptions", "subscription"],
+        ["unassign", "labels", "label"],
+        ["cancel", ShowArgs.groups, "group"],
+        ["update", "swarms", "swarm"],
+        ["rename", ShowArgs.sites, "site"],
+        ["delete", "guests", "guest"],
+        ["upgrade", "groups", "group"],
+        ["add", "groups", "group"],
+        ["test", "webhooks", "webhook"],
+        ["convert", "templates", "template"],
+        ["ts", "aps", "ap"],
+        ["clone", "groups", "group"],
+        ["kick", ShowArgs.clients, "client"],
+        ["bounce", "ports", "interface"],
+        ["caas", "send_cmd", "send_cmds"],
+    ]
+)
+def test_arg_to_what(cmd: str, key: str | ShowArgs, expected: str):
+    assert arg_to_what(key=key, default="", cmd=cmd) == expected

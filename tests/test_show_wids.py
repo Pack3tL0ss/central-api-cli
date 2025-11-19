@@ -50,5 +50,4 @@ def test_show_wids_fail(args: tuple[str], pass_condition: Callable, test_name_ap
             *args
         ]
     )
-    capture_logs(result, "test_show_wids_fail", log_output=pass_condition(result))
     assert pass_condition(result)

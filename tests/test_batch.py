@@ -4,20 +4,24 @@ import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
+from centralcli.environment import env
 from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config
 from ._test_data import (
     test_data,
+    test_invalid_empty_file,
     test_deploy_file,
     test_device_file,
     test_device_file_txt,
+    test_invalid_device_file_csv,
     test_group_file,
     test_label_file,
     test_mpsk_file,
     test_rename_aps_file,
     test_site_file,
     test_sub_file_csv,
+    test_sub_file_test_ap,
     test_sub_file_yaml,
     test_update_aps_file,
     test_verify_file,
@@ -40,9 +44,22 @@ def test_batch_add_macs():
     assert "202" in result.stdout
 
 
-def test_batch_add_labels():
+@pytest.mark.parametrize(
+    "_,fixture,test_name_append",
+    [
+        [1, None, None],
+        [2, "ensure_cache_label5", None],
+    ]
+)
+def test_batch_add_labels(_:int, fixture: str | None, test_name_append: str | None, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    # no cover: start
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    # no cover: stop
     result = runner.invoke(app, ["batch", "add",  "labels", str(test_label_file), "-Y"])
-    capture_logs(result, "test_batch_add_labels")
+    capture_logs(result, env.current_test)
     assert result.exit_code == 0
     assert "200" in result.stdout
 
@@ -108,32 +125,58 @@ def test_batch_add_devices():
 
 
 @pytest.mark.parametrize(
-    "ensure_cache_subscription", [982], indirect=True
+    "_,args",
+    [
+        [1, ("devices", f'{str(test_invalid_device_file_csv)}')],
+        [2, ("devices", f'{str(test_invalid_empty_file)}')],
+    ]
 )
-def test_batch_assign_subscriptions_with_tags_yaml(ensure_cache_subscription):
-    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
-    if config.is_old_cfg:
-        assert isinstance(result.exception, InvalidConfigException)
-    else:
-        capture_logs(result, "test_batch_assign_subscriptions_with_tags_yaml")
-        assert result.exit_code == 0
-        assert result.stdout.count("code: 202") == 2
-
-
-@pytest.mark.parametrize(
-    "ensure_cache_subscription", [981], indirect=True
-)
-def test_batch_assign_subscriptions_csv(ensure_cache_subscription):
-    result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
-    if config.is_old_cfg:
-        assert isinstance(result.exception, InvalidConfigException)
-    else:
-        capture_logs(result, "test_batch_assign_subscriptions_csv")
-        assert result.exit_code == 0
-        assert result.stdout.count("code: 202") >= 2
+def test_batch_add_fail(_: int, args: tuple[str]):
+    result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
+    capture_logs(result, "test_batch_add_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
 
 
 if config.dev.mock_tests:
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [982], indirect=True
+    )
+    def test_batch_assign_subscriptions_with_tags_yaml(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_with_tags_yaml")
+            assert result.exit_code == 0
+            assert result.stdout.count("code: 202") == 2
+
+
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [981], indirect=True
+    )
+    def test_batch_assign_subscriptions_csv(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_csv")
+            assert result.exit_code == 0
+            assert result.stdout.count("code: 202") >= 2
+
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [980], indirect=True
+    )
+    def test_batch_assign_subscriptions_w_sub(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_test_ap)}', "--sub", "advanced-ap", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_w_sub")
+            assert result.exit_code == 0
+            assert "code: 202" in result.stdout
+
+
     def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1):
         result = runner.invoke(app, ["batch", "move",  "devices", f"{str(test_device_file)}", "-y"])
         capture_logs(result, "test_batch_move", )
@@ -164,7 +207,7 @@ def test_batch_move_too_many_args():
     assert "oo many" in result.stdout
 
 
-def test_batch_rename_aps():
+def test_batch_rename_aps(ensure_dev_cache_no_last_rename_ap):
     result = runner.invoke(app, ["batch", "rename",  "aps", f'{str(test_rename_aps_file)}', "-Y"])
     capture_logs(result, "test_batch_rename_aps")
     assert result.exit_code == 0

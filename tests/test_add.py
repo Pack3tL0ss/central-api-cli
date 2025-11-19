@@ -1,4 +1,5 @@
 import asyncio
+from typing import Callable
 
 import pytest
 from typer.testing import CliRunner
@@ -186,55 +187,122 @@ def test_add_named_mpsk(args: tuple[str]):
     assert "201" in result.stdout
 
 
-def test_add_guest():
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [
+            (
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "--email",
+                test_data["portal"]["guest"]["email"],
+                "--company",
+                "central-api-cli test company",
+                "--password",
+                "cencli so awesome",
+                "--notify-to",
+                "email",
+                "--phone",
+                "615.555.1212",
+            ),
+            lambda r: "cache update ERROR" not in r and "xception" not in r
+        ],
+        [
+            (
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "--password",
+                "cencli so awesome",
+            ),
+            lambda r: "cache update ERROR" not in r and "xception" not in r
+        ],
+    ]
+)
+def test_add_guest(ensure_no_cache_guest, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(
         app,
         [
             "add",
             "guest",
-            test_data["portal"]["name"],
-            test_data["portal"]["guest"]["name"],
-            "--email",
-            test_data["portal"]["guest"]["email"],
-            "--company",
-            "central-api-cli test company",
-            "--password",
-            "cencli so awesome",
-            "--notify-to",
-            "email",
-            "--phone",
-            "615.555.1212",
+            *args,
             "--yes"
         ]
     )
     capture_logs(result, "test_add_guest")
     assert result.exit_code == 0
     assert "200" in result.stdout
-    assert "cache update ERROR" not in result.stdout
-    assert "xception" not in result.stdout
+    assert pass_condition(result.stdout)
 
 
-def test_add_guest_invalid_notify():
-    result = runner.invoke(app, ["add", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--email", test_data["portal"]["guest"]["email"], "--company", "central-api-cli test company", "--notify-to", "email", "--yes"])
-    capture_logs(result, "test_add_guest_invalid_notify", expect_failure=True)
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [
+            (
+                test_data["portal"]["name"],
+                test_data["portal"]["guest"]["name"],
+                "--email",
+                test_data["portal"]["guest"]["email"],
+                "--company",
+                "central-api-cli test company",
+                "--notify-to",
+                "email"
+            ),
+            lambda r: "--password" in r
+        ],
+        [
+            (
+                test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--phone", "615555121"
+            ),
+            lambda r: "invalid" in r
+        ],
+    ]
+)
+def test_add_guest_invalid(args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["add", "guest",  *args, "--yes"])
+    capture_logs(result, "test_add_guest_invalid", expect_failure=True)
     assert result.exit_code == 1
-    assert "--password" in result.stdout
+    assert pass_condition(result.stdout)
 
 
-def test_add_guest_invalid_phone():
-    result = runner.invoke(app, ["add", "guest",  test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--phone", "615555121", "--yes"])
-    capture_logs(result, "test_add_guest_invalid_notify", expect_failure=True)
-    assert result.exit_code == 1
-    assert "invalid" in result.stdout
-
-
-def test_add_device(ensure_cache_group2):
-    result = runner.invoke(app, ["add", "device",  "serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap", "--yes"])
+@pytest.mark.parametrize(
+    "_,fixture,args,pass_condition",
+    [
+        [
+            1,
+            "ensure_cache_group2",
+            (
+                "serial",
+                test_data["test_devices"]["ap"]["serial"],
+                "mac",
+                test_data["test_devices"]["ap"]["mac"],
+                "group",
+                test_data["test_devices"]["ap"]["group"],
+                "-s",
+                "foundation-ap"
+            ),
+            lambda r: "200" in r and "cache update ERROR" not in r
+        ],
+        [
+            2,
+            None,
+            (
+                "serial",
+                test_data["test_devices"]["ap"]["serial"],
+                "mac",
+                test_data["test_devices"]["ap"]["mac"],
+            ),
+            lambda r: "200" in r
+        ],
+    ]
+)
+def test_add_device(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    result = runner.invoke(app, ["add", "device",  *args, "--yes"])
     capture_logs(result, "test_add_device")
     assert result.exit_code == 0
-    assert "200" in result.stdout
-    assert "cache update ERROR" not in result.stdout
-    assert "xception" not in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_add_wlan(ensure_cache_group1):

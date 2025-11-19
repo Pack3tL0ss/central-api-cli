@@ -215,6 +215,26 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
+        "_,fixture,args,pass_condition,test_name_append",
+        [
+            [1, None, (test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk"), lambda r: "Response" in r, None],
+            [2, None, (test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk"), lambda r: "⚠" in r, "no_groups_w_ssid"],
+            [3, None, (test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk"), lambda r: "⚠" in r, None],
+            [4, "ensure_cache_group1", (test_data["update_wlan"]["ssid"], "cencli_test_group1", "--psk", "cencli_test_psk"), lambda r: "Response" in r, None],
+        ]
+    )
+    def test_update_wlan_fail(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        if test_name_append:
+            env.current_test = f"{env.current_test}_{test_name_append}"
+        result = runner.invoke(app, ["update",  "wlan", *args, "-y"])
+        capture_logs(result, "test_upgrade_wlan_fail", expect_failure=True)
+        assert result.exit_code == 1
+        assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
         "fixture,args",
         [
             [None, ("cencli_test_template", test_data["template"]["template_file"],)],
@@ -273,15 +293,15 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
     @pytest.mark.parametrize(
-        "fixture,args,test_name_append",
+        "_,fixture,args,test_name_append",
         [
-            ["ensure_cache_group_cloned", ("--gw", "--sw", "--cx"), None],
-            ["ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
-            ["ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
-            ["ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],  # Not sure you can actually update a non TG to a TG
+            [1, "ensure_cache_group_cloned", ("--gw", "--sw", "--cx"), None],
+            [2, "ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
+            [3, "ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
+            [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],
         ]
     )
-    def test_update_group(fixture: str, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
+    def test_update_group(_: int, fixture: str, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
         cache.responses.clear()
         request.getfixturevalue(fixture)
         if test_name_append:
@@ -304,16 +324,17 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "args,pass_condition",
+        "_,args,pass_condition",
         [
-            [(), lambda r: "⚠" in r],
-            [("--mb",), lambda r: "⚠" in r],
-            [("--mo-sw",), lambda r: "⚠" in r],
-            [("--mo-cx",), lambda r: "⚠" in r],
-            [("--aos10", "--mb", "--gw-role", "wlan"), lambda r: "initially added" in r],  # aos10 can only be set when initially adding ap as valid type
+            [1 ,(), lambda r: "⚠" in r],
+            [2 ,("--mb",), lambda r: "⚠" in r],
+            [3 ,("--mo-sw",), lambda r: "⚠" in r],  # --mo-sw without --sw
+            [4 ,("--mo-cx",), lambda r: "⚠" in r],  # --mo-cx without --cx
+            [5 ,("--mo-cx", "--wired-tg"), lambda r: "⚠" in r],  # --mo-cx and tg
+            [6 ,("--aos10", "--mb", "--gw-role", "wlan"), lambda r: "initially added" in r],  # aos10 can only be set when initially adding ap as valid type
         ]
     )
-    def test_update_group_fail(ensure_cache_group_cloned, args: tuple[str], pass_condition: Callable):
+    def test_update_group_fail(ensure_cache_group_cloned, _: int, args: tuple[str], pass_condition: Callable):
         result = runner.invoke(
             app,
             [
@@ -451,28 +472,56 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "args",
+        "idx,fixture,args",
         [
-            ([]),
-            ([str(test_ap_ui_group_variables)]),
+            [1, "ensure_cache_group4", ("cencli_test_group4", "--ap")],
+            [2, "ensure_cache_group4", ("cencli_test_group4", str(test_ap_ui_group_variables), "--ap")],
+            [3, "ensure_dev_cache_test_ap", ("cencli-test-ap", str(test_ap_ui_group_variables))],
         ]
     )
-    def test_update_config(ensure_cache_group4, args: list[str]):
+    def test_update_config(fixture: str | None, idx: int, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
         result = runner.invoke(
             app,
             [
                 "update",
                 "config",
-                "--yes",
-                "--ap",
-                "cencli_test_group4",
+                args[0],
                 str(test_ap_ui_group_template),
-                *args
+                *args[1:],
+                "--yes",
             ]
         )
-        capture_logs(result, "test_update_config")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "idx,fixture,args",
+        [
+            [1, None, (test_data["ap"]["serial"], "--gw")],
+            [2, None, (test_data["gateway"]["serial"], "--ap")],
+            [3, "ensure_cache_group4", ("cencli_test_group4",)],
+        ]
+    )
+    def test_update_config_invalid(fixture: str | None, idx: int, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "config",
+                args[0],
+                str(test_ap_ui_group_template),
+                *args[1:],
+            ]
+        )
+        capture_logs(result, f"{env.current_test}{idx}")
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
 
 
     @pytest.mark.parametrize(

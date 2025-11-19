@@ -46,6 +46,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import pendulum
 from click.testing import Result
 from rich.console import Console
 from rich.markup import escape
@@ -62,6 +63,13 @@ from ._test_data import test_data as test_data
 install(show_locals=True)  # rich.traceback hook
 api_clients = APIClients()
 econsole = Console(stderr=True)
+in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
+_2_days_ago = pendulum.now() - pendulum.duration(days=2)
+_180_days_ago = pendulum.now() - pendulum.duration(days=180)
+at_str = in_45_mins.to_datetime_string().replace(" ", "T")[0:-3]
+end_2_days_ago = _2_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
+now_str = pendulum.now().to_datetime_string().replace(" ", "T")[0:-3]
+start_180_days_ago = _180_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 
 class NonDefaultWorkspaceException(CentralCliException): ...
 

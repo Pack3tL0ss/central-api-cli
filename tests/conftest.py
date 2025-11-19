@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 from centralcli import cache, common, config, log
 from centralcli.cli import app
 from centralcli.typedefs import PrimaryDeviceTypes
+from centralcli.client import Session
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
@@ -138,6 +139,7 @@ def clear_lru_caches():
     for db in cache._tables:
         db.clear_cache()
     cache.responses.clear()
+    Session.requests_clear()
     yield
 
 
@@ -237,6 +239,26 @@ def ensure_cache_group4(request: pytest.FixtureRequest):
             update_data = {**cache.groups_by_name, **{cache_data["name"]: cache_data}}
             assert asyncio.run(cache.update_db(cache.GroupDB, data=list(update_data.values()), truncate=True))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_mpsk_network():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "cencli-test-mpsknet",
+            "id": "1ABCDE23FGH45I6K"
+        }
+        if cache_data["name"] not in [m["name"] for m in cache.mpsk_networks]:  # pragma: no cover
+            assert asyncio.run(cache.update_db(cache.MpskNetDB, data=cache_data, truncate=False))
+    yield
+
+    if config.dev.mock_tests:
+        doc_ids = [m.doc_id for m in cache.mpsk_networks if m["name"] == cache_data["name"]]
+        if doc_ids:  # pragma: no cover
+            assert asyncio.run(cache.update_mpsk_net_db(data=doc_ids, remove=True))
+        doc_ids = [m.doc_id for m in cache.mpsk if m["ssid"] == cache_data["name"]]
+        if doc_ids:  # pragma: no cover
+            assert asyncio.run(cache.update_db(cache.MpskDB, doc_ids=doc_ids))
 
 
 @pytest.fixture(scope="function")
@@ -428,7 +450,7 @@ def ensure_inv_cache_test_stack():
             } for idx, sw in enumerate(test_data["test_devices"]["stack"])
         ]
         missing = [dev["serial"] for dev in test_switches if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
+        if missing:  # pragma: no cover
             assert asyncio.run(cache.update_inv_db(data=test_switches))
             cache.InvDB.clear_cache()
     yield
@@ -459,7 +481,7 @@ def ensure_dev_cache_test_stack():
             } for idx, sw in enumerate(test_data["test_devices"]["stack"])
         ]
         missing = [dev["serial"] for dev in test_switches if dev["serial"] not in cache.devices_by_serial]
-        if missing:
+        if missing:  # pragma: no cover
             assert asyncio.run(cache.update_dev_db(data=test_switches))
             cache.DevDB.clear_cache()
     yield
@@ -489,10 +511,14 @@ def ensure_dev_cache_ap():
         if cache_data["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=cache_data, truncate=False))  # pragma: no cover
         clean_cache_data = cache.devices.copy()
+    else:  # pragma: no cover
+        ...
     yield
 
     if config.dev.mock_tests and cache_data["name"] not in [ap["name"] for ap in cache.devices if ap["type"] == "ap"]:
         assert asyncio.run(cache.update_db(cache.DevDB, data=clean_cache_data, truncate=True))
+    else:  # pragma: no cover
+        ...
     return
 
 
@@ -515,12 +541,32 @@ def ensure_dev_cache_test_ap():
         }
         if test_data["test_devices"]["ap"]["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
+    else:  # pragma: no cover
+        ...
+
     yield
+
 
     if test_data["test_devices"]["ap"]["serial"] in cache.devices_by_serial:
         serial = test_data["test_devices"]["ap"]["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    else:  # pragma: no cover
+        ...
+
     return
+
+
+@pytest.fixture(scope="function")
+def ensure_dev_cache_no_last_rename_ap():
+    if config.dev.mock_tests:
+        if "CNP7KZ2422" in cache.devices_by_serial:
+            doc_id = cache.devices_by_serial["CNP7KZ2422"].doc_id
+            assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=doc_id))
+    else:  # pragma: no cover
+        ...
+
+    yield
+
 
 
 @pytest.fixture(scope="function")
@@ -542,11 +588,17 @@ def ensure_dev_cache_test_flex_dual_ap():
         }
         if test_ap["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
+    else:  # pragma: no cover
+        ...
+
     yield
 
     if test_ap["serial"] in cache.devices_by_serial:
         serial = test_ap["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    else:  # pragma: no cover
+        ...
+
     return
 
 
@@ -569,11 +621,16 @@ def ensure_dev_cache_test_dyn_ant_ap():
         }
         if test_ap["serial"] not in cache.devices_by_serial:
             assert asyncio.run(cache.update_db(cache.DevDB, data=test_ap, truncate=False))
+    else:  # pragma: no cover
+        ...
+
     yield
 
     if test_ap["serial"] in cache.devices_by_serial:
         serial = test_ap["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    else:  # pragma: no cover
+        ...
     return
 
 
@@ -600,6 +657,9 @@ def ensure_dev_cache_test_switch():
 
     if test_sw["serial"] in cache.devices_by_serial:
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[test_sw["serial"]].doc_id]))
+    else:  # pragma: no cover
+        ...
+
     return
 
 
@@ -681,6 +741,9 @@ def ensure_dev_cache_test_vsx_switch():
     if config.dev.mock_tests and test_switch["serial"] in cache.devices_by_serial:
         serial = test_switch["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
+    else:  # pragma: no cover
+        ...
+
     return
 
 
@@ -707,7 +770,7 @@ def ensure_cache_subscription(request: pytest.FixtureRequest):
         if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
             update_data = {**test_sub, "available": avail}
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=False))
-        else:
+        else:  # pragma: no cover
             update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": avail}]
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
     yield
@@ -735,6 +798,8 @@ def ensure_cache_test_portal():
 
         if test_portal["id"] not in cache.portals_by_id:
             assert asyncio.run(cache.update_portal_db(data=[test_portal]))
+        else:  # pragma: no cover
+            ...
     yield
 
 
@@ -848,6 +913,9 @@ def ensure_cache_site4():
         }
         if cache_data["name"] not in cache.sites_by_name:
             assert asyncio.run(cache.update_site_db(data=cache_data))
+        else:  # pragma: no cover
+            ...
+
     yield
 
 
@@ -868,6 +936,8 @@ def ensure_cache_client_not_connected():
         }
         if cache_data["mac"] not in cache.clients_by_mac:
             assert asyncio.run(cache.update_db(cache.ClientDB, cache_data, truncate=False))
+        else:  # pragma: no cover
+            ...
     yield
 
     client = cache.get_client_identifier(cache_data["mac"])
@@ -875,14 +945,133 @@ def ensure_cache_client_not_connected():
 
 
 @pytest.fixture(scope="function")
+def ensure_cache_portal():
+    if config.dev.mock_tests:
+        cache_data =   {
+            "name": "cencli-test",
+            "id": "58039716-efb9-4397-9fe1-4b13e30df928",
+            "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/delme/capture",
+            "auth_type": "Anonymous",
+            "is_aruba_cert": False,
+            "is_default": False,
+            "is_editable": True,
+            "is_shared": True,
+            "reg_by_email": False,
+            "reg_by_phone": False
+        }
+        if cache_data["id"] not in cache.portals_by_id:
+            asyncio.run(cache.update_db(cache.PortalDB, data=cache_data, truncate=False))
+    else:  # pragma: no cover
+        ...
+
+    yield
+
+
+    if config.dev.mock_tests and cache_data["id"] in cache.portals_by_id:
+        doc_id = cache.portals_by_id[cache_data["id"]].doc_id
+        asyncio.run(cache.update_db(cache.PortalDB, doc_ids=[doc_id]))
+    else:  # pragma: no cover
+        ...
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_no_defined_portals():
+    if config.dev.mock_tests:
+        defined = [p for p in cache.portals if p["name"] != "default"]
+        doc_ids = [p.doc_id for p in defined]
+        if doc_ids:
+            asyncio.run(cache.update_portal_db(doc_ids, remove=True))
+    else:  # pragma: no cover
+        ...
+
+    yield
+
+    if config.dev.mock_tests:
+        cache_data = [
+            {
+                "name": "BR1-Guest-Portal",
+                "id": "c3919492-1927-4029-81d7-cab8dc5f18c4",
+                "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/BR1-Guest-Portal/capture",
+                "auth_type": "Anonymous",
+                "is_aruba_cert": False,
+                "is_default": False,
+                "is_editable": True,
+                "is_shared": True,
+                "reg_by_email": False,
+                "reg_by_phone": False
+            },
+            {
+                "name": "delme",
+                "id": "58039716-efb9-4397-9fe1-4b13e30df928",
+                "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/delme/capture",
+                "auth_type": "Anonymous",
+                "is_aruba_cert": False,
+                "is_default": False,
+                "is_editable": True,
+                "is_shared": True,
+                "reg_by_email": False,
+                "reg_by_phone": False
+            },
+            {
+                "name": "gwu-guest",
+                "id": "403c53ff-b414-4e77-9ad7-9be25236f429",
+                "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/gwu-guest/capture",
+                "auth_type": "Username/Password, Self-Registration",
+                "is_aruba_cert": False,
+                "is_default": False,
+                "is_editable": True,
+                "is_shared": True,
+                "reg_by_email": False,
+                "reg_by_phone": True
+            },
+            {
+                "name": "Kabrew",
+                "id": "e5538808-0e05-4ecd-986f-4bdce8bf52a4",
+                "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/Kabrew/capture",
+                "auth_type": "Username/Password, Self-Registration",
+                "is_aruba_cert": False,
+                "is_default": False,
+                "is_editable": True,
+                "is_shared": True,
+                "reg_by_email": True,
+                "reg_by_phone": False
+            }
+        ]
+        assert asyncio.run(cache.update_portal_db(cache_data))
+    else:  # pragma: no cover
+        ...
+
+
+@pytest.fixture(scope="function")
 def ensure_cache_label1():
     if config.dev.mock_tests and "cencli_test_label1" not in cache.labels_by_name:
         asyncio.run(cache.update_db(cache.LabelDB, data={"id": 1106, "name": "cencli_test_label1", "devices": 0}, truncate=False))
+    else:  # pragma: no cover
+        ...
+
     yield
 
     if config.dev.mock_tests and "cencli_test_label1" in cache.labels_by_name:
         doc_id = cache.labels_by_name["cencli_test_label1"].doc_id
         asyncio.run(cache.update_db(cache.LabelDB, doc_ids=[doc_id]))
+    else:  # pragma: no cover
+        ...
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_label5():
+    if config.dev.mock_tests and "cencli_test_label5" not in cache.labels_by_name:
+        asyncio.run(cache.update_db(cache.LabelDB, data={"id": 1110, "name": "cencli_test_label5", "devices": 0}, truncate=False))
+    else:  # pragma: no cover
+        ...
+
+    yield
+
+    if config.dev.mock_tests and "cencli_test_label5" in cache.labels_by_name:
+        doc_id = cache.labels_by_name["cencli_test_label5"].doc_id
+        asyncio.run(cache.update_db(cache.LabelDB, doc_ids=[doc_id]))
+    else:  # pragma: no cover
+        ...
 
 
 @pytest.fixture(scope="function")
@@ -1038,6 +1227,22 @@ def ensure_cache_guest1():
         if cache_data["id"] not in cache.guests_by_id:
             assert asyncio.run(cache.update_guest_db(data=[cache_data]))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_cache_guest():
+    def remove_test_guest():
+        doc_ids = [g.doc_id for g in cache.guests if g["name"] == test_data["portal"]["guest"]["name"]]
+        if doc_ids:
+            assert asyncio.run(cache.update_db(cache.GuestDB, doc_ids=doc_ids))
+
+    if config.dev.mock_tests:
+        remove_test_guest()
+    yield
+
+    if config.dev.mock_tests:
+        remove_test_guest()
+    return
 
 
 @pytest.fixture(scope="function")

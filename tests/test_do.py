@@ -1,6 +1,5 @@
 from typing import Callable
 
-import pendulum
 import pytest
 from typer.testing import CliRunner
 
@@ -8,7 +7,7 @@ from centralcli import common, utils
 from centralcli.cli import app
 from centralcli.environment import env
 
-from . import capture_logs, config, test_data
+from . import capture_logs, config, test_data, at_str
 from ._test_data import test_device_file, test_j2_file
 
 runner = CliRunner()
@@ -171,58 +170,67 @@ def test_bounce_poe_multiport_invalid_range_across_members():
 
 
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
-        [None, (test_data["aos8_ap"]["group"], "cencli_test_cloned"), lambda r: "Created" in r],
-        ["ensure_cache_group_cloned_w_gw", ("cencli_test_cloned", "cencli_test_cloned_upgdaos10", "--aos10"), lambda r: "⚠" in r],
+        [1, None, (test_data["aos8_ap"]["group"], "cencli_test_cloned"), lambda r: "Created" in r],
+        [2, "ensure_cache_group_cloned_w_gw", ("cencli_test_cloned", "cencli_test_cloned_upgdaos10", "--aos10"), lambda r: "⚠" in r],
+        [3, None, ("bsmt-staging", "cencli_test_cloned_cx"), lambda r: "Created" in r],
     ]
 )
-def test_clone_group(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+def test_clone_group(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["clone", "group", *args, "-y"])
-    capture_logs(result, "test_clone_group")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "201" in result.stdout
     assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
-    "args",
+    "idx,args",
     [
-        ([test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y"]),
+        [1, (test_data["aos8_ap"]["group"], "cencli_test_cloned", "--aos10", "-Y")],
     ]
 )
-def test_clone_group_fail(args: list[str]):
+def test_clone_group_fail(idx: int, args: list[str]):
     result = runner.invoke(app, ["clone", "group", *args])
-    capture_logs(result, "test_clone_group_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert "⚠" in result.stdout
 
+
 @pytest.mark.parametrize(
-    "args",
+    "_,fixture,args,expected,test_name_append",
     [
-        ("client", test_data["client"]["wireless"]["name"][0:-2], "--refresh"),
-        ("all", test_data["ap"]["serial"]),
-        ("all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"]),
+        [1, None, ("client", test_data["client"]["wireless"]["name"][0:-2], "--refresh"), "200", None],
+        [2, None, ("all", test_data["ap"]["serial"]), "200", None],
+        [3, None, ("all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"]), "200", None],
+        [4, "ensure_cache_client_not_connected", ("client", "aabb.ccdd.eeff",), "200", None],
     ]
 )
-def test_kick(args: tuple[str]):
+def test_kick(_:int, fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    if fixture:
+        request.getfixturevalue(fixture)
     result = runner.invoke(app, ["kick", *args, "--yes"])
     capture_logs(result, "test_kick_client")
     assert result.exit_code == 0
-    assert "200" in result.stdout
+    assert expected in result.stdout
 
 
 @pytest.mark.parametrize(
-    "fixture,args,expected,test_name_append",
+    "_,fixture,args,expected,test_name_append",
     [
-        ["ensure_cache_client_not_connected", ("aabb.ccdd.eeff", "-R"), "not connected", None],
-        ["ensure_cache_client_not_connected", ("aabb.ccdd.eeff",), "failure", "refresh"],
-        [None, ("aabb.ccdd.1122",), "nable to gather", None],
+        [1, "ensure_cache_client_not_connected", ("aabb.ccdd.eeff", "-R"), "not connected", None],
+        [2, "ensure_cache_client_not_connected", ("aabb.ccdd.eeff",), "failure", "refresh"],
+        [3, "ensure_cache_client_not_connected", ("aabb.ccdd.eeff", "-R"), "400", "refresh"],
+        [4, None, ("aabb.ccdd.1122",), "nable to gather", None],
+        [5, "ensure_cache_client_not_connected", ("aabb.ccdd.eeff",), "⚠", "not_online"],
     ]
 )
-def test_kick_fail(fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
+def test_kick_fail(_:int, fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     if fixture:
@@ -310,25 +318,53 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_upgrade_ap(ensure_dev_cache_test_ap):
-        result = runner.invoke(app, ["upgrade",  "device", test_data["ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "10.7.1.0-beta_91138", "-y"])
+    @pytest.mark.parametrize(
+        "_,fixture,args",
+        [
+            [1, "ensure_dev_cache_test_ap", ("device", test_data["ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "10.7.1.0-beta_91138")],
+            [2, "ensure_dev_cache_test_ap", ("device", test_data["test_devices"]["ap"]["serial"], "10.7.1.0-10.7.1.0-beta_91138")],
+            [3, None, ("device", test_data["ap"]["serial"], test_data["gateway"]["name"], "10.7.2.2_94048")],
+            [4, None, ("device", test_data["switch"]["serial"], "10.16.1006", "--at", "9/6/2025-05:00", "-R")],
+            [5, None, ("device", test_data["switch"]["serial"], "--in", "10m")],
+            [6, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-beta_91138", "--in", "10m")],
+            [7, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-10.7.1.0-beta_91138")],
+            [8, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.2.2_94048")],
+            [9, None, ("group", test_data["upgrade_group"], "--dev-type", "ap")],
+            [10, None, ("group", test_data["template_switch"]["group"], "--dev-type", "sw", "16.11.0027", "--model", "2930F")],
+            [11, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688")],
+            [12, None, ("swarm", test_data["aos8_ap"]["name"],)],
+            [13, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-8.13.1.0-beta_93688", "--in", "1h")],
+            [14, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688", "--at", at_str)],
+        ]
+    )
+    def test_upgrade(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(app, ["upgrade",  *args, "-y"])
         capture_logs(result, "test_upgrade_ap")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
 
-    def test_upgrade_switch_scheduled():
-        result = runner.invoke(app, ["upgrade",  "device", test_data["switch"]["serial"], "10.16.1006", "--at", "9/6/2025-05:00", "-Ry"])
-        capture_logs(result, "test_upgrade_switch")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
+    @pytest.mark.parametrize(
+        "_,fixture,args",
+        [
+            [1, None, ("group", test_data["upgrade_group"], "--model", "2930F", "--dev-type", "sw", "--in", "1M")],
+            [2, None, ("device", test_data["switch"]["serial"], test_data["ap"]["serial"], "10.16.1006")],
+            [3, None, ("device", test_data["switch"]["serial"], "--in", "1Z")],
+            [4, None, ("device",)],
+            [5, "ensure_cache_group3", ("group", "cencli_test_group3", "--dev-type", "sw", "16.11.0026", "--model", "2930F", "--in", "1w")],
+            [6, ["ensure_cache_group2", "ensure_dev_cache_test_ap"], ("group", "cencli_test_group2", "--dev-type", "sw", "16.11.0026", "--model", "2930F")],
+        ]
+    )
+    def test_upgrade_invalid(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(app, ["upgrade",  *args, "-y"])
+        capture_logs(result, "test_upgrade_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
 
-
-    def test_upgrade_group():
-        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-beta_91138", "--in", "10m", "-y"])
-        capture_logs(result, "test_upgrade_group")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
 
     def test_upgrade_group_by_model_invalid():
         result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--model", "2930F", "--dev-type", "sw", "-y"])
@@ -371,8 +407,6 @@ if config.dev.mock_tests:
         assert "dev-type" in result.stdout
 
 
-    in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
-    at_str = in_45_mins.to_datetime_string().replace(" ", "T")[0:-3]
     @pytest.mark.parametrize(
         "args",
         [
@@ -426,6 +460,19 @@ if config.dev.mock_tests:
         result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, "test_rename_ap")
         assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
+        "new_name,pass_condition",
+        [
+            [test_data["ap"]["name"][0:-5], lambda r: "call to fetch" in r],
+        ]
+    )
+    def test_rename_ap_fail(ensure_dev_cache_ap, new_name: str, pass_condition: Callable):
+        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
+        capture_logs(result, env.current_test, expect_failure=True)
+        assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
 

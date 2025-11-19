@@ -1,3 +1,5 @@
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
 
@@ -5,7 +7,7 @@ from centralcli import utils
 from centralcli.cli import app
 
 from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_site_file
+from ._test_data import test_data, test_device_file, test_group_file, test_site_file_none_exist, test_site_file_one_not_exist, test_invalid_site_file
 
 runner = CliRunner()
 
@@ -39,6 +41,13 @@ if config.dev.mock_tests:
         assert "devices updated" in result.stdout.lower()
 
 
+    def test_batch_del_devices_invalid():
+        result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_device_file)}', "--no-sub"])
+        capture_logs(result, "test_batch_del_devices_invalid", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
+
+
     def test_batch_del_groups(ensure_cache_batch_del_groups):
         result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
         capture_logs(result, "test_batch_del_groups")
@@ -48,11 +57,25 @@ if config.dev.mock_tests:
 
 
     def test_batch_del_sites(ensure_cache_batch_del_sites):
-        result = runner.invoke(app, ["batch", "delete",  "sites", str(test_site_file), "-Y"])
+        result = runner.invoke(app, ["batch", "delete",  "sites", str(test_site_file_one_not_exist), "-Y"])
         capture_logs(result, "test_batch_del_sites")
         assert result.exit_code == 0
         assert "success" in result.stdout
-        assert result.stdout.count("success") == len(test_data["batch"]["sites"])
+        assert "kipping" in result.stdout  # Skipping ... site does not exist in Central
+
+
+    @pytest.mark.parametrize(
+        "_,args,pass_condition",
+        [
+            [1, ("sites", str(test_site_file_none_exist)), lambda r: "No sites" in r],
+            [2, ("sites", str(test_invalid_site_file)), lambda r: "failed validation" in r],
+        ]
+    )
+    def test_batch_del_fail(_: int, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(app, ["batch", "delete",  *args, "-Y"])
+        capture_logs(result, "test_batch_del_fail", expect_failure=True)
+        assert result.exit_code == 1
+        assert pass_condition(result.stdout)
 
 
     def test_del_group(ensure_cache_group1):
@@ -202,6 +225,13 @@ if config.dev.mock_tests:
         capture_logs(result, "test_delete_fw_compliance_invalid", expect_failure=True)
         assert result.exit_code == 1
         assert "\u26a0" in result.stdout
+
+
+    def test_delete_fw_compliance_fail(ensure_cache_group1):
+        result = runner.invoke(app, ["delete", "firmware",  "compliance", "ap", "cencli_test_group1", "--yes"])
+        capture_logs(result, "test_delete_fw_compliance_fail", expect_failure=True)
+        assert result.exit_code == 1
+        assert "404" in result.stdout
 
 
     def test_delete_webhook():

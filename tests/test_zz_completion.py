@@ -1,9 +1,11 @@
 """We need this module to run near the end so cache is fully up to date for completion tests."""
 import sys
+from datetime import datetime as dt
 from typing import Callable
 
 import pytest
 from click import Command, Context
+from typer import Exit
 from typer.testing import CliRunner
 
 from centralcli import cache, common, log, render, utils
@@ -118,6 +120,11 @@ def test_dev_gw_switch_completion(incomplete: str = test_data["switch"]["name"].
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+def test_dev_gw_completion(incomplete: str = test_data["gateway"]["name"].swapcase()):
+    result = [c for c in cache.dev_gw_completion(incomplete, ("show", "firmware", "device"))]
+    assert len(result) > 0
+    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 def test_dev_ap_gw_sw_completion(ensure_dev_cache_test_ap, incomplete: str = "cencli_test_ap"):  # tests underscore/hyphen logic in get_dev_identifier
     result = [c for c in cache.dev_ap_gw_sw_completion(ctx, incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
@@ -133,11 +140,13 @@ def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_mpsk_completion_partial_name(ctx=ctx, incomplete: str = test_data["mpsk_ssid"].capitalize()[0:-3]):
-    _ = cache.get_mpsk_network_identifier(incomplete)
-    result = [c for c in cache.mpsk_network_completion(ctx, incomplete)]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+def test_mpsk_completion():
+    mpsk = cache.get_mpsk_network_identifier(test_data["mpsk_ssid"])
+    for incomplete in {mpsk.name, mpsk.id}:
+        result = [c for c in cache.mpsk_network_completion(ctx, incomplete[0:-2])]
+        assert len(result) > 0
+        assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_dev_template_completion_partial_name(ensure_cache_template_by_name, incomplete: str = test_data["template"]["name"].capitalize()[0:-2]):
     result = list(cache.dev_template_completion(incomplete))
@@ -286,16 +295,64 @@ def test_cert_completion(ensure_cache_cert, incomplete: str):
 
 
 @pytest.mark.parametrize(
-    "incomplete,pass_condition",
+    "fixture,incomplete,pass_condition",
     [
-        ("advanced-ap", lambda r: [sub[0] == "advanced-ap" for sub in r]),
-        ("7658e672-2af5-5646-aa37-406af19c6d", lambda r: len(r) == 1),
-        ("", lambda r: len(r) > 1),
+        ("ensure_cache_subscription", "advanced-ap", lambda r: [sub[0] == "advanced-ap" for sub in r]),
+        ("ensure_cache_subscription", "7658e672-2af5-5646-aa37-406af19c6d", lambda r: len(r) == 1),
+        ("ensure_cache_subscription", "", lambda r: len(r) > 1),
+        (None, "no_match_no_match", lambda r: len(r) == 0),
     ]
 )
-def test_sub_completion(ensure_cache_subscription, incomplete: str, pass_condition: Callable):
+def test_sub_completion(fixture: str | None, incomplete: str, pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
     result = list(cache.sub_completion(ctx, incomplete=incomplete))
     assert pass_condition(result)
+
+
+@pytest.mark.parametrize(
+    "fixture,iden_func,query_str,kwargs,pass_condition,exception",
+    [
+        (None, cache.get_sub_identifier, "no_match-no_match", {}, None, Exit),
+        (None, cache.get_sub_identifier, "no_match-no_match", {"retry": False}, lambda r: r is None, None),
+        (None, cache.get_sub_identifier, "foundation-switch-6100", {"end_date": dt(2026, 9, 6)}, lambda r: (dt.fromtimestamp(r.end_date) - dt(2026, 9, 6)).seconds < 86400, None),
+        (None, cache.get_group_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_group_identifier, "no-match_no-match", {"retry": False, "dev_type": "switch"}, lambda r: r is None, None),
+        (None, cache.get_site_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_site_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
+        (None, cache.get_inv_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_inv_identifier, "no-match_no-match", {"retry": False, "dev_type": "switch"}, lambda r: r is None, None),
+        ("ensure_inv_cache_test_ap", cache.get_inv_identifier, test_data["test_devices"]["ap"]["mac"][0:-2], {"retry": False, "dev_type": "switch"}, lambda r: r is None, None),
+        (None, cache.get_dev_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_dev_identifier, "no-match_no-match", {"retry": False, "dev_type": "switch"}, lambda r: r is None, None),
+        ("ensure_dev_cache_test_ap", cache.get_inv_identifier, test_data["test_devices"]["ap"]["mac"][0:-2], {"retry": False, "dev_type": "switch"}, lambda r: r is None, None),
+        (None, cache.get_identifier, "no-match_no-match", {"qry_funcs": ["dev", "group"]}, None, Exit),
+        (None, cache.get_identifier, "no-match_no-match", {"qry_funcs": ["site", "template"]}, None, Exit),
+        (None, cache.get_cert_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_cert_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
+        (None, cache.get_guest_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_guest_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
+        ("ensure_cache_guest1", cache.get_guest_identifier, "+16155551212", {}, lambda r: "6155551212" in r.phone, None),
+        ("ensure_cache_guest1", cache.get_guest_identifier, "+16155551212", {"portal_id": "6f534424-855a-4cbe-a6e7-6c561f5c1b4e"}, None, Exit),
+        (None, cache.get_client_identifier, "no-match_no-match", {}, None, Exit),
+        (None, cache.get_client_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
+        ("ensure_cache_template", cache.get_template_identifier, "cencli_test_template", {"group": test_data["template_switch"]["group"]}, None, Exit),
+        (None, cache.get_template_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
+    ]
+)
+def test_get_identifier_funcs(fixture: str | None, iden_func: Callable, query_str: str, kwargs: dict[str, str | bool], pass_condition: Callable | None, exception: Exception, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    if exception:
+        try:
+            result = iden_func(query_str, **kwargs)
+        except exception:
+            ...
+        else:
+            log.error(f"test_get_identifier_funcs was expected to raise {exception}, but did not.")
+    else:
+        result = iden_func(query_str, **kwargs)
+        assert pass_condition(result)
 
 
 @pytest.mark.parametrize("incomplete,args", [("cencli_test_group1", ("group",)), ("cencli_test_site", ("site",)), ("", ("ap",)), ("sit", ("arg1", "arg2")), ("grou", ("arg1", "arg2"))])
