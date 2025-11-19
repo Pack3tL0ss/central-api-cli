@@ -1321,12 +1321,11 @@ class CacheResponses:
         self._device_type = utils.listify(device_type)
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
-        """Returns provided Response object with the RateLimit info from the most recent API call.
-        """
+        """Returns provided Response object with the RateLimit info from the most recent API call."""
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert] if r is not None])  # , key=lambda k: k.remain_day)
+        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert] if r is not None])
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -1452,7 +1451,7 @@ class CacheResponses:
         self._device_type = utils.listify(device_type)
 
     def clear(self) -> None:
-        """Clears response cache.  Primarily used for pytest runs."""
+        """Clears response cache.  Used for pytest runs."""
         self._dev = None
         self._inv = None
         self._sub = None
@@ -1708,11 +1707,11 @@ class Cache:
         return {c["mac"]: c for c in self.clients}
 
     @property
-    def mpsk_networks(self) -> list:
+    def mpsk_networks(self) -> list[Document]:
         return self.MpskNetDB.all()
 
     @property
-    def mpsk(self) -> list:
+    def mpsk(self) -> list[Document]:
         return self.MpskDB.all()
 
     @property
@@ -3876,6 +3875,7 @@ class Cache:
 
     # Not tested or used yet, until we have commands that add/del MPSK networks
     async def update_mpsk_net_db(self, data: List[Dict[str, Any]], remove: bool = False) -> bool:  # pragma: no cover
+        data = utils.listify(data)
         if remove:
             return await self.update_db(self.MpskNetDB, doc_ids=data)
 
@@ -4150,7 +4150,7 @@ class Cache:
     ) -> List[Dict[str, Any]]:  # pragma: no cover  required tty, not part of automated testing
         if env.is_pytest:
             log.error(f"handle_multi_match called from pytest run during test: {env.current_test}.  Check fixtures/cache. {match =}", show=True)
-            raise typer.Exit(1)
+            raise typer.Exit(91)
 
         typer.echo()
         set_width_cols = {}
@@ -4283,6 +4283,13 @@ class Cache:
         query_str: str,
         dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes],
         swack: Literal[True],
+    ) -> CacheDevice: ...  # pragma: no cover
+
+    @overload
+    def get_dev_identifier(
+        query_str: str,
+        dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes],
+        swack_only: Literal[True],
     ) -> CacheDevice: ...  # pragma: no cover
 
     @overload
