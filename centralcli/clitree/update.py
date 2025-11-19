@@ -263,15 +263,16 @@ def config_(
     else:  # group_dev is a device iden
         device = group_dev
 
+    if do_gw and (device and device.type != "gw"):
+        common.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
+    if do_ap and (device and device.type != "ap"):
+        common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+
     if do_gw or (device and device.generic_type == "gw"):
-        if device and device.generic_type != "gw":
-            common.exit(f"Invalid input: --gw option conflicts with {device.name} which is an {device.generic_type}")
         use_caas = True
         caasapi = CaasAPI()
         node_iden = group_dev.name if group_dev.is_group else group_dev.mac
     elif do_ap or (device and device.generic_type == "ap"):
-        if device and device.generic_type != "ap":
-            common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.swack_id  # cache is populated with serial for swack_id for aos_10 so this works for both aos8 and aos10
 
@@ -656,36 +657,35 @@ def wlan(
     """Update configuration options of an existing WLAN/SSID."""
     if groups:
         _groups = [common.cache.get_group_identifier(group, dev_type="ap") for group in groups]
-        batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
-    else:  # TODO coppied from show wlans -v make common func
+    else:
         _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
-        groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
-        batch_req = [BatchRequest(api.configuration.get_wlan, group=group, wlan_name=wlan) for group in groups]
+        _groups = [CacheGroup(g) for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
 
+    batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
     api.session.silent = True
-    batch_resp = api.session.batch_request(batch_req)
+    batch_resp = api.session.batch_request(batch_req, continue_on_fail=True)
     api.session.silent = False
 
     failed, passed = [], []
     config_b4_dict = {}
-    for group, res in zip(groups, batch_resp):
+    for group, res in zip(_groups, batch_resp):
         if res.ok:
             passed += [res]
-            config_b4_dict[group] = res.output.get("wlan", res.output)
+            config_b4_dict[group.name] = res.output.get("wlan", res.output)
         else:
             failed += [res]
 
     if failed:
         unexpected_failures = [
             f for f in failed
-            if "cannot find" not in f.output.get("description", "").lower() and f.output.get("description", "") != "Invalid configuration ID"
+            if not isinstance(f.output, dict) or ("cannot find" not in f.output.get("description", "").lower() and f.output.get("description", "") != "Invalid configuration ID")
         ]
         if unexpected_failures:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Unexpected error while querying groups for existense of {wlan}")
-            render.display_results(unexpected_failures, exit_on_fail=False)
+            render.display_results(unexpected_failures, exit_on_fail=False if passed else True)
 
     if not config_b4_dict:
-        common.exit("Nothing to do", code=0)
+        common.exit(f"WLAN [dark_olive_green2]{wlan}[/] not found in group{'s' if len(_groups) > 1 else ''} {utils.color([g.name for g in _groups], color_str='cyan')}")
 
     # TODO check if provided values differ from what's there already
     update_req = []
@@ -706,9 +706,7 @@ def wlan(
             "bandwidth_limit_peruser_down": config_b4_dict[group]["bandwidth_limit_peruser_down"],
             "access_rules": config_b4_dict[group]["access_rules"],
         }
-        update_req += [
-            BatchRequest(api.configuration.update_wlan, **kwargs)
-        ]
+        update_req += [BatchRequest(api.configuration.update_wlan, **kwargs)]
 
     options = {
         "SSID name": ssid,
@@ -721,9 +719,9 @@ def wlan(
     if hide is not None:
         render.econsole.print(f"  [bright_green]-[/] Update [cyan]Visability[/] -> [bright_green]{'Visable (not hidden)' if not hide else 'hidden'}[/]")
 
-    if render.confirm(yes):
-        update_res = api.session.batch_request(update_req)
-        render.display_results(update_res)
+    render.confirm(yes)
+    update_res = api.session.batch_request(update_req)
+    render.display_results(update_res, tablefmt="action")
 
 
 @app.command()
