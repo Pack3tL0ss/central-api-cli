@@ -152,11 +152,18 @@ def test_show_bandwidth_wlan_w_dev():
     assert "API" in result.stdout or "TX" in result.stdout  # Empty response in mock data
 
 
-def test_show_bandwidth_too_many_flags():
-    result = runner.invoke(app, ["show", "bandwidth", "wlan", test_data["tunneled_ssid"]["ssid"], "-S", test_data["ap"]["name"], "--site", test_data["ap"]["site"]],)
-    capture_logs(result, "test_show_bandwidth_too_many_flags", expect_failure=True)
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("wlan", test_data["tunneled_ssid"]["ssid"], "-S", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r],
+        [2, ("ap", "--swarm", test_data["ap"]["name"]), lambda r: "--swarm" in r],
+    ]
+)
+def test_show_bandwidth_invalid(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "bandwidth", *args],)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "one of" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
