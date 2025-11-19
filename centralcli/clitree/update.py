@@ -205,25 +205,26 @@ def group(
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-SW: [bright_green]{mo_sw is True}[/bright_green]"
     if mo_cx is not None:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX: [bright_green]{mo_cx is True}[/bright_green]"
-    render.econsole.print(f"{_msg}\n")
 
     kwargs = {
         "group": group.name,
+        "allowed_types": allowed_types,
         "wired_tg": wired_tg,
         "wlan_tg": wlan_tg,
-        "allowed_types": allowed_types,
         "aos10": aos10,
         "microbranch": mb,
         "gw_role": gw_role,
         "monitor_only_sw": mo_sw,
+        "monitor_only_cx": mo_cx,
     }
 
+    render.econsole.print(f"{_msg}\n")
     render.confirm(yes)
     resp = api.session.request(
         api.configuration.update_group_properties,
         **kwargs
     )
-    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    render.display_results(resp, tablefmt="action")
     #CACHE Needs cache update
 
 
@@ -257,7 +258,7 @@ def config_(
 
     if group_dev.is_group:
         device = None
-        if not do_ap and not do_gw:
+        if not any([do_ap, do_gw]):
             common.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
     else:  # group_dev is a device iden
         device = group_dev
