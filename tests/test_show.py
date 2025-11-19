@@ -1311,7 +1311,7 @@ def test_show_guests(_: int, args: tuple[str]):
 def test_show_guests_fail(_: int, fixture: str | None, args: tuple[str], exit_code: int, pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
-    if test_name_append:
+    if test_name_append:  # pragma: no cover
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
             "show",
