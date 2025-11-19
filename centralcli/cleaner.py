@@ -292,8 +292,8 @@ def ensure_common_keys(data: list[dict]) -> list[dict]:
         common_keys = []  # This preserves field order vs using set/intersection
         _ = [common_keys.append(k) for inner in data for k in inner.keys() if k not in common_keys]
         res = [{k: iface.get(k) for k in common_keys} for iface in data]
-    except Exception as e:
-        log.exception(f"{e.__class__.__name__} occured in cleaner.ensure_common_keys.\n{e}")
+    except Exception as e:  # pragma: no cover
+        log.exception(f"{repr(e)} occured in cleaner.ensure_common_keys.\n{e}")
         return data
 
     return res
@@ -315,8 +315,8 @@ def strip_outer_keys(data: dict) -> list[dict[str, Any]] | dict[str, Any]:
     _keys = [k for k in STRIP_KEYS if k in data]
     if len(_keys) == 1:
         return data[_keys[0]]
-    elif _keys:
-        print(f"More wrapping keys than expected from return {_keys}")
+    elif _keys:  # pragma: no cover
+        log.warning(f"cleaner.strip_outer_keys(): More wrapping keys than expected from return {_keys}", show=True)
     return data
 
 
@@ -325,28 +325,6 @@ def pre_clean(data: dict) -> dict:
         if data.get("fan_speed", "") == "Fail":
             if data.get("model", "") in _NO_FAN:
                 data["fan_speed"] = "N/A"
-    return data
-
-
-# TODO moved to utils
-def _unlist(data: Any):
-    """Remove unnecessary outer lists.
-
-    Returns:
-        [] = ''
-        ['single_item'] = 'single item'
-        [[item1], [item2], ...] = [item1, item2, ...]
-    """
-    if isinstance(data, list):
-        if not data:
-            data = ""
-        elif len(data) == 1:
-            data = data[0] if not isinstance(data[0], str) else data[0].replace("_", " ")
-        elif all([isinstance(d, list) and len(d) == 1 for d in data]):
-            out = [i for ii in data for i in ii if not isinstance(i, list)]
-            if out:
-                data = out
-
     return data
 
 
@@ -367,12 +345,12 @@ def short_value(key: str, value: Any):
     elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
         if key in ["sites", "labels"]:
             value = _extract_names_from_id_name_dict(value)
-        elif key in ["events_details"]:
+        elif key in ["events_details"]:  # pragma: no cover  TODO get_event_logs no longer includes fetching this, may be safe to remnove
             value = _extract_event_details(value)
     elif key in _short_value and value is not None:
         value = _short_value[key](value)
 
-    return short_key(key), _unlist(value)
+    return short_key(key), utils.unlistify(value)
 
 def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None, strip_keys: list[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True, filter: Callable = None) -> list[dict[str, Any]]:
     """Default simple formatter
@@ -502,7 +480,7 @@ def _client_concat_associated_dev(
             "serial": data.get("gateway_serial", ""),
         }
         if verbose:
-            data["gateway"] = _unlist(utils.strip_no_value([_gateway]))
+            data["gateway"] = utils.unlistify(utils.strip_no_value([_gateway]))
         else:
             data["gateway"] = None if not _gw else _gw.name or data["gateway_serial"]
     _connected = {
@@ -513,7 +491,7 @@ def _client_concat_associated_dev(
         "interface": data.get("interface_port"),
         "interface mac": data.get("interface_mac"),
     }
-    data["connected device"] = _unlist(utils.strip_no_value([_connected])) if verbose else f"{_connected['name']}"
+    data["connected device"] = utils.unlistify(utils.strip_no_value([_connected])) if verbose else f"{_connected['name']}"
 
     # collapse radio details into sub dict
     _radio = {}
@@ -550,11 +528,11 @@ def _client_concat_associated_dev(
     data = {k: v for k, v in data.items() if k not in strip_keys}
 
     if _radio:
-        data["radio"] = _unlist(utils.strip_no_value([_radio]))
+        data["radio"] = utils.unlistify(utils.strip_no_value([_radio]))
     if _signal:
-        data["signal"] = _unlist(utils.strip_no_value([_signal]))
+        data["signal"] = utils.unlistify(utils.strip_no_value([_signal]))
     if _fingerprint:
-        data["fingerprint"] = _unlist(utils.strip_no_value([_fingerprint]))
+        data["fingerprint"] = utils.unlistify(utils.strip_no_value([_fingerprint]))
 
 
     return data
@@ -663,11 +641,11 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
         for inner in data:
             if any([v in [None, "--"] for v in [inner.get("mem_total"), inner.get("mem_free")]]):  # testing for pre-cleaned data for sake of pytest (cache.responses.dev is already populated)
                 mem_pct = inner["mem_total"] = inner["mem_free"] = None
-            if inner["mem_total"] and inner["mem_free"]:
-                mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
-            elif inner["mem_total"] and inner["mem_total"] <= 100 and not inner["mem_free"]:  # CX send mem pct as mem total
-                mem_pct = inner["mem_total"]
-                inner["mem_total"], inner["mem_free"] = "--", "--"
+            elif inner["mem_total"] and inner["mem_free"]:
+                if inner["mem_total"] + inner["mem_free"] == 100:  # CX shows mem total / free as percentages
+                    mem_pct = inner["mem_total"]
+                else:
+                    mem_pct = round(((float(inner["mem_total"]) - float(inner["mem_free"])) / float(inner["mem_total"])) * 100, 2)
             else:
                 mem_pct = 0
             inner["mem_pct"] = f'{mem_pct}%'
@@ -1044,7 +1022,7 @@ def get_vlans(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         strip_keys += ["type"]
 
     data = [
-        {short_keys.get(k, k.replace("_", " ")): _unlist(d[k]) for k in d if k not in strip_keys} for d in utils.strip_no_value(data)
+        {short_keys.get(k, k.replace("_", " ")): utils.unlistify(d[k]) for k in d if k not in strip_keys} for d in utils.strip_no_value(data)
     ]
 
     return data
@@ -1077,7 +1055,7 @@ def wids(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def get_dhcp(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    data = _unlist(data)
+    data = utils.unlistify(data)
     if "free_ip_addr_percent" in data[-1]:
         field_order = [
             "pool_name",
@@ -1781,40 +1759,11 @@ def cloudauth_get_namedmpsk(data: list[dict[str, Any]], verbosity: int = 0,) -> 
     return data
 
 
-def show_all_ap_lldp_neighbors_for_site(data):
-    data = utils.unlistify(data)
-    # TODO circular import if placed at top review import logic
-    # from centralcli import cache
-    # aps_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] == "ap"]
-    aps_in_site = [dev.get("serial") for dev in data["devices"] if dev["role"] == "IAP"]
-    ap_connections = [edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_site]
-    data = [
-        {
-            "ap": x["toIf"].get("deviceName", "--"),
-            "ap_ip": x["toIf"].get("ipAddress", "--"),
-            "ap_serial": x["toIf"].get("serial", "--"),
-            "ap_port": x["toIf"].get("portNumber", "--"),
-            # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
-            # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
-            "switch": x["fromIf"].get("deviceName", "--"),
-            "switch_ip": x["fromIf"].get("ipAddress", "--"),  # TODO lldp res often has unKnown for switch ip when we know what it is, could get it from cache.
-            "switch_serial": x["fromIf"].get("serial", "--"),
-            "switch_port": x["fromIf"].get("name", "--"),
-            "untagged_vlan": x["fromIf"].get("untaggedVlan", "--"),
-            "tagged_vlans": ",".join([str(v) for v in sorted(x["fromIf"].get("taggedVlans") or []) if v != x["fromIf"].get("untaggedVlan", 9999)]),
-            "healthy": "✅" if x.get("health", "") == "good" else "❌"
-        } for x in ap_connections
-    ]
-
-    return simple_kv_formatter(data)
-
-
-def show_all_ap_lldp_neighbors_for_sitev2(data, filter: Literal["up", "down"] = None):
+def show_all_ap_lldp_neighbors_for_site(data, filter: Literal["up", "down"] = None):
     data = utils.unlistify(data)
     # TODO circular import if placed at top review import logic
     from centralcli import cache
 
-    # switches_in_cache = [dev["serial"] for dev in cache.devices if dev["type"] in ["cx", "sw"]]
     if filter is None:
         aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP"}
     else:
