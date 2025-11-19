@@ -286,7 +286,7 @@ class GuestAPI:
         url = "/guest/v1/summary"
         ssids = utils.listify(ssids)
         ssids = ",".join(ssids)
-        if days and days not in [1, 7, 28]:
+        if days not in [1, 7, 28]:
             raise ValueError(f"days must be one of 1, 7, or 28.  {days} is invalid")
 
         params = {
