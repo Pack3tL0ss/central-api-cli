@@ -620,7 +620,7 @@ class Session():
 
         return token is not None
 
-    def refresh_token(self, token_data: dict = None, silent: bool = False) -> None:
+    def refresh_token(self, token_data: dict = None, silent: bool = False) -> None:  # pragma: no cover mocked
         """Refresh Aruba Central API tokens.  Get new set of access/refresh token.
 
         This method calls into _refresh_token which performs the API call.

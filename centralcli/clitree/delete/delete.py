@@ -56,15 +56,15 @@ def site(
     sites: List[CacheSite] = [common.cache.get_site_identifier(s) for s in sites]
 
     _del_msg = utils.summarize_list([s.summary_text for s in sites], max=7, color=None)
-    render.econsole.print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")
+    render.econsole.print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {len(sites)} site{'s' if len(sites) > 1 else ''}:\n{_del_msg}")  # pragma: no cover
 
-    if render.confirm(yes):
-        del_list = [s.id for s in sites]
-        resp: List[Response] = api.session.request(api.central.delete_site, del_list)
-        render.display_results(resp, tablefmt="action")
-        if len(sites) == len(resp):  # resp will be a single failed Response if the first one fails, otherwise all should be there.
-            cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
-            api.session.request(common.cache.update_site_db, data=cache_del_list, remove=True)
+    render.confirm(yes)
+    del_list = [s.id for s in sites]
+    resp: List[Response] = api.session.request(api.central.delete_site, del_list)
+    render.display_results(resp, tablefmt="action")
+    if len(sites) == len(resp):  # resp will be a single failed Response if the first one fails, otherwise all should be there.
+        cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
+        api.session.request(common.cache.update_site_db, data=cache_del_list, remove=True)
 
 
 @app.command(name="label")
@@ -99,15 +99,15 @@ def portal(
     reqs = [BatchRequest(api.guest.delete_portal_profile, p.id) for p in cache_portals]
 
     portal_names = utils.summarize_list([p.name for p in cache_portals])
-    _sfx = "portal profile:" if len(portals) == 1 else f"{len(cache_portals)} portal profiles:"
+    _sfx = "portal profile:" if len(portals) == 1 else f"{len(cache_portals)} portal profiles:"  # pragma: no cover
     render.econsole.print(f'[red]Delet{"e" if not yes else "ing"}[/] {_sfx} {portal_names}')
 
-    if render.confirm(yes):
-        batch_resp = api.session.batch_request(reqs)
-        render.display_results(batch_resp, tablefmt="action")
-        if len(batch_resp) == len(cache_portals):
-            doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
-            api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
+    render.confirm(yes)
+    batch_resp = api.session.batch_request(reqs)
+    render.display_results(batch_resp, tablefmt="action")
+    if len(batch_resp) == len(cache_portals):
+        doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
+        api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
 
 
 
@@ -130,18 +130,18 @@ def group(
 
     _grp_msg = "\n".join([f"  [cyan]{g.name}[/]" for g in groups])
     _grp_msg = _grp_msg.lstrip() if len(groups) == 1 else f"\n{_grp_msg}"
-    print(
+    render.econsole.print(
         f"[bright_red]Delet{'ing' if yes else 'e'}[/] {'group ' if len(groups) == 1 else 'groups:'}{_grp_msg}"
-    )  # pragma: no cover  16/28 branches b4
+    )  # pragma: no cover
     if len(reqs) > 1:  # TODO common function in clicommon or utils
         print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-    if render.confirm(yes):
-        resp = api.session.batch_request(reqs)
-        render.display_results(resp, tablefmt="action")
-        if resp:
-            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-            api.session.request(common.cache.update_group_db, data=doc_ids, remove=True)
+    render.confirm(yes)
+    resp = api.session.batch_request(reqs)
+    render.display_results(resp, tablefmt="action")
+    if resp:
+        doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+        api.session.request(common.cache.update_group_db, data=doc_ids, remove=True)
 
 
 @app.command(short_help="Delete a WLAN (SSID)")
@@ -154,10 +154,12 @@ def wlan(
     workspace: str = common.options.workspace,
 ) -> None:
     group: CacheGroup = common.cache.get_group_identifier(group)
-    print(f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.delete_wlan, group.name, name)
-        render.display_results(resp, tablefmt="action")
+    render.econsole.print(
+        f"[bright_red]Delet{'e' if not yes else 'ing'}[/] SSID [cyan]{name}[/] configured in group [cyan]{group.name}[/]"
+    )  # pragma: no cover
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.delete_wlan, group.name, name)
+    render.display_results(resp, tablefmt="action")
 
 
 # CACHE cache webhook name/id so they can be deleted by name
@@ -174,10 +176,10 @@ def webhook(
     This command requires the webhook id, which is not cached.
     Use [cyan]cencli show webhooks[/] to get the webhook id ([bright_green]wid[/]).
     """
-    render.econsole.print(f"\u26a0  Delet{'e' if not yes else 'ing'} Webhook {wid}", emoji=False)
-    if render.confirm(yes):
-        resp = api.session.request(api.central.delete_webhook, wid)
-        render.display_results(resp, tablefmt="action")
+    render.econsole.print(f"\u26a0  Delet{'e' if not yes else 'ing'} Webhook {wid}", emoji=False)  # pragma: no cover
+    render.confirm(yes)
+    resp = api.session.request(api.central.delete_webhook, wid)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(no_args_is_help=True)
@@ -205,11 +207,11 @@ def template(
 
     render.econsole.print(
         f"[bright_red]Delet{'e' if not yes else 'ing'}[/] Template [cyan]{template.name}[/] from group [cyan]{template.group}[/]"
-    )
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.delete_template, template.group, template.name)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        _ = api.session.request(common.cache.update_template_db, doc_ids=template.doc_id)
+    )  # pragma: no cover
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.delete_template, template.group, template.name)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    _ = api.session.request(common.cache.update_template_db, doc_ids=template.doc_id)
 
 
 @app.command(no_args_is_help=True)
@@ -225,10 +227,10 @@ def variables(
 
     render.econsole.print(
         f"[bright_red]Delet{'e' if not yes else 'ing'}[/] All template variables associated with device [cyan]{dev.summary_text}[/]"
-    )
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.delete_device_template_variables, dev.serial)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    )  # pragma: no cover
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.delete_device_template_variables, dev.serial)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
 # TOGLP
@@ -277,9 +279,8 @@ def guest(
 
     render.econsole.print(
         f"[red]:warning:  Delet{'e' if not yes else 'ing'}[/] Guest: [cyan]{guest.name}[/] from portal: [cyan]{portal.name}[/]"
-    )
+    )  # pragma: no cover
     render.confirm(yes)
-
     resp = api.session.request(api.guest.delete_guest, portal_id=portal.id, guest_id=guest.id)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
     _ = api.session.request(common.cache.update_guest_db, guest.doc_id, remove=True)
