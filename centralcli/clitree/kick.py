@@ -66,7 +66,7 @@ def client(
     client: CacheClient = common.cache.get_client_identifier(client, exit_on_fail=True)
     if not client.last_connected:
         if refresh:
-            common.exit(f"Client {client} is not connected.")
+            common.exit(f"{client.summary_text} is not connected.")
         else:
             client_resp = api.session.request(common.cache.refresh_client_db, mac=client.mac)
             if not client_resp:
@@ -74,12 +74,12 @@ def client(
                 render.display_results(client_resp, exit_on_fail=True)
 
             _clients = [CacheClient(c) for c in Clients(client_resp.output)]
-            online_client =  [c for c in _clients if c.last_connected is not None]
+            online_client =  [c for c in _clients if c.last_connected]
             if online_client:
                 client = online_client[-1]
             else:
                 client = _clients[-1]
-                common.exit(f"Client {client} is not online: Failure Stage: {client_resp.output[-1].get('failure_stage', '')}, Reason: {client_resp.output[-1].get('failure_reason', '')}")
+                common.exit(f"{client.summary_text} is not online.\nFailure Stage: {client_resp.output[-1].get('failure_stage', '')}, Reason: {client_resp.output[-1].get('failure_reason', '')}")
 
     render.econsole.print(f'Kick client [cyan]{client.name}[/], currently connected to [cyan]{client.connected_name}[/]', emoji=False)
     render.confirm(yes)
