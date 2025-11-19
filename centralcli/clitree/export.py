@@ -76,16 +76,16 @@ def configs(
     gw_reqs, ap_reqs, ap_env_reqs, gw_grp_reqs, ap_grp_reqs, aps, gws, ap_groups, gw_groups, ap_template_reqs = [], [], [], [], [], [], [], [], [], []
 
     if do_switch:
-        do_cx = True
-        do_sw = True
+        do_cx = do_sw = True
 
     # Default to all device types if none are specified
     if not any([do_gw, do_ap, do_cx, do_sw]):
-        do_ap, do_gw, do_cx, do_sw = True, True, True, True
+        do_ap = do_gw = do_cx = do_sw = True
 
     group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
     site: CacheSite = None if not site else common.cache.get_site_identifier(site)
     outdir = outdir or config.export_dir
+    outdir.mkdir(exist_ok=True)
 
     template_db = True if any([do_cx, do_sw, do_switch]) else False
 
@@ -348,7 +348,7 @@ def configs(
             render.write_file(outfile, outdata)
         else:
             _config_header("[bold]Combined Variables file[reset]")
-            render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+            render.display_results(variable_resp, tablefmt="json", pager=pager, outfile=outfile)
 
     common.exit(code=exit_code)
 
