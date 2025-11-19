@@ -673,6 +673,9 @@ class ArgToWhat:
         self.bssids = self.bssid = "bssids"
         self.labels = self.label = "labels"
 
+    def _init_export(self):
+        self.configs = self.config = "configs"
+
     def _init_refresh(self):
         self.token = self.tokens = "token"
         self.webhook = self.webhooks = "webhook"
