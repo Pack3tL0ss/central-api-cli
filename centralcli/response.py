@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
+from functools import cached_property
 from typing import Any, Dict, List, Literal, Union
 
 from aiohttp import ClientResponse
@@ -506,6 +508,36 @@ class Response:
     def status_code(self) -> int:
         """Make attributes used for status code for both aiohttp and requests valid."""
         return self.status
+
+
+@dataclass
+class BatchResponse:
+    batch_resp: list[Response]
+
+    def __bool__(self):  # pragma: no cover
+        return self.ok
+
+    @cached_property
+    def passed(self):
+        return [r for r in self.batch_resp if r.ok]
+
+    @cached_property
+    def failed(self):
+        return [r for r in self.batch_resp if not r.ok]
+
+    @cached_property
+    def last_rl(self):
+        rl_objs = [r.rl for r in self.batch_resp if r.rl.has_value]
+        return self.batch_resp[-1].rl if not rl_objs else min(rl_objs)
+
+    @property
+    def ok(self):
+        return True if self.passed and not self.failed else False
+
+    @property
+    def exit_code(self):
+        return 0 if self.ok else 1
+
 
 
 class CombinedResponse(Response):
