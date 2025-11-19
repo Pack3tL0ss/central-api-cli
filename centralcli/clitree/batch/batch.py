@@ -413,7 +413,7 @@ def verify(
 
         if file_key:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s][file_key].replace("-", "_") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
+            if file_by_serial[s][file_key].replace("_", "-") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
