@@ -2059,15 +2059,13 @@ class ConfigAPI:
 
         updated_clis_list = [await self._update_cp_cert_in_config(resp.output, cp_cert_md5=as_dict[group]) for group, resp in passed.items()]
 
-        # skipped = [Response(error="No CHANGES", output=f"Certificate Update skipped for {group}. cp-cert-checksum {as_dict[group]} exists in current configuration as desired.") for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         skipped = [group for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         if skipped:
             skipped_msg = f"Certificate Update skipped for groups: {', '.join(skipped)}. cp-cert-checksum already configured as desired."
-        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
-
-        update_resp = await self.session._batch_request(update_reqs)
-        if skipped:
             log.info(skipped_msg, caption=True, log=False)
+
+        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+        update_resp = await self.session._batch_request(update_reqs)
 
         return [*update_resp, *list(failed.values())]
 
