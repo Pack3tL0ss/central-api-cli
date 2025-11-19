@@ -207,6 +207,19 @@ class ShowInventoryArgs(str, Enum):
     switch = "switch"
 
 
+class SortGuestOptions(str, Enum):
+    portal = "portal"
+    id = "id"
+    name = "name"
+    email = "email"
+    phone = "phone"
+    created = "created"
+    expires = "expires"
+    remaining = "remaining"
+    enabled = "enabled"
+    status = "status"
+
+
 class SortSwarmOptions(str, Enum):
     version = "version"
     group = "group"
