@@ -69,6 +69,7 @@ from centralcli.constants import (
     SortVlanOptions,
     SortWebHookOptions,
     SortWlanOptions,
+    SortGuestOptions,
     StatusOptions,
     SubscriptionArgs,
     TimeRange,
@@ -595,7 +596,7 @@ def aps(
         tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
         cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
-        render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_sitev2, **cleaner_kwargs)
+        render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site, **cleaner_kwargs)
     else:
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label, status=status,
@@ -725,7 +726,7 @@ def stacks(
         if len(devs) == 1:  # if they specify a single switch we use the details call
             func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
-        else: # if the specify multiple switches we grab info for all stacks and filter in the cleaner
+        else: # if they specify multiple switches we grab info for all stacks and filter in the cleaner
             cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
             if group:
                 kwargs = {"group": group.name}
@@ -734,10 +735,9 @@ def stacks(
     resp = api.session.request(func, *args, **kwargs)
 
     title = "Switch stack details"
-    caption = ""
-    if resp:
-        if "count" in resp.raw:
-            caption = f"Total # of Stacks Returned: [cyan]{resp.raw['count']}[/]"
+    caption = None
+    if resp and "count" in resp.raw:
+        caption = f"Total # of Stacks Returned: [cyan]{resp.raw['count']}[/]"
 
     render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
 
@@ -776,7 +776,7 @@ def inventory(
             dev_type=dev_type, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
-        common.exit(code=0 if all([r.ok for r in api.session.requests if r.reason != "Unauthorized" and not r.url.startswith("/oauth2")]) else 1)
+        common.exit(code=0 if all([r.ok for r in api.session.requests if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -1210,19 +1210,22 @@ def poe(
             _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
             caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
             try:
-                total_draw = round(sum(p['power_drawn_in_watts'] for p in resp.output), 1)
-                reserved = round(sum(p['reserved_power_in_watts'] for p in resp.output), 1)
-                allocated = round(sum(p['pse_allocated_power'] for p in resp.output), 1)
+                total_draw = round(sum(p.get('power_drawn_in_watts', 0) for p in resp.output), 1)
+                # aos_sw is always 0 for power_drawn_in_watts (if it has the field).  cx has amperage_drawn_in_milliamps field but it's always 0 so shouldn't hurt on non poe switch were power_drawn_in_watts still sums to 0
+                total_draw = total_draw or round(sum([round(p.get("amperage_drawn_in_milliamps", 0) / 1000 * p.get("port_voltage_in_volts", 0), 2) for p in resp.output]), 2)
+                reserved = round(sum(p.get('reserved_power_in_watts', 0) for p in resp.output), 1)
+                allocated = round(sum(p.get('pse_allocated_power', 0) for p in resp.output), 1)
                 denied = len([p for p in resp.output if p.get("power_denied_count")])
                 counts_caption = [f"Total PoE [dark_olive_green2]Draw[/]: [cyan]{total_draw}[/], [dark_olive_green2]Reserved[/]: [cyan]{reserved}[/], [dark_olive_green2]Allocated[/]: [cyan]{allocated}[/]"]
+
                 if denied:
                     counts_caption += [f"[dark_orange3]\u26a0[/]  {denied} interfaces have a power denied count > 0"]
-                counts_caption = '\n '.join(counts_caption)
+                counts_caption = '\n'.join(counts_caption)
                 caption = f"{caption}\n {counts_caption}"
             except Exception as e:  # pragma: no cover
                 log.exception(f"{repr(e)} in show poe while gathering poe counts")
         if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
-            caption = f"{caption}\n  Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
+            caption = f"{caption}\n Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
             caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
             caption = f"{caption}, In use: [cyan]{resp.output[0]['poe_slots'].get('power_in_use_in_watts', '?')}[/]"
 
@@ -2706,7 +2709,7 @@ def logs(
     end: datetime = common.options.end,
     past: str = common.options.past,
     device: str = common.options.device,
-    swarm: bool = common.options.get("swarm", help="Filter logs for IAP cluster associated with provided device [cyan]--dev[/] required.",),
+    swarm: bool = common.options.get("swarm", help=f"Filter logs for IAP cluster associated with provided device.  {common.help_block('--dev', 'requires')}",),
     level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
     client: str = common.options.client,
     bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
@@ -2773,6 +2776,7 @@ def logs(
         if swarm:
             if device.type != "ap":
                 log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}", caption=True)
+                dev_id = device.serial
             else:
                 swarm_id = device.swack_id
         else:
@@ -2872,12 +2876,10 @@ def alerts(
     dev = None if not device else common.cache.get_dev_identifier(device)
     _group = None if not group else common.cache.get_group_identifier(group)
     _site = None if not site else common.cache.get_site_identifier(site)
-    if label:
-        if _group:
-            log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
-            label = None
-        else:
-            label: CacheLabel = common.cache.get_label_identifier(label)
+    _label = None if not label else common.cache.get_label_identifier(label)
+    if _label and _group:
+        log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
+        _label = None
 
     if alert_type:
         alert_type = "user_management" if alert_type == "user" else alert_type
@@ -2890,7 +2892,7 @@ def alerts(
 
     kwargs = {
         "group": None if not _group else _group.name,
-        "label": None if not label else label.name,
+        "label": None if not _label else _label.name,
         "from_time": start,
         "to_time": end,
         "serial": None if not dev else dev.serial,
@@ -2906,10 +2908,7 @@ def alerts(
     caption = common.get_time_range_caption(start, end, default="in past 24 hours.")
     caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
     cleaner_func = cleaner.get_alerts if not verbose else None
-
-
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
-
     title = "Alerts/Notifications (Configured Notification Rules)"
     if dev:
         title = f"{title} [reset]for[cyan] {dev.generic_type.upper()} {dev.name}|{dev.serial}[reset]"
@@ -2919,8 +2918,8 @@ def alerts(
             title = f"{title} group: [cyan]{_group.name}[/]"
         if _site:
             title = f"{title} site: [cyan]{_site.name}[/]"
-        if label:
-            title = f"{title} label: [cyan]{_site.name}[/]"
+        if _label:
+            title = f"{title} label: [cyan]{_label.name}[/]"
 
     render.display_results(
         resp,
@@ -3176,12 +3175,11 @@ def portals(
     render.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
 
 
-# TODO add sort_by completion, portal completion
 @app.command()
 def guests(
     portal: str = typer.Argument(None, help=f"portal name {common.help_block('Guests for all defined User/Pass portals')}", autocompletion=common.cache.portal_completion, show_default=False,),
     refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
-    sort_by: str = common.options.sort_by,
+    sort_by: SortGuestOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
     do_yaml: bool = common.options.do_yaml,
@@ -3197,6 +3195,7 @@ def guests(
     """Show Guests configured for a Portal"""
     caption = None
     title="Guest Users"
+    failed = None
     if portal:
         portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
         resp = api.session.request(common.cache.refresh_guest_db, portal.id, )
@@ -3231,6 +3230,8 @@ def guests(
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_guests, output_format=tablefmt)
+    if failed:
+        common.exit()
 
 def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
     try:
@@ -3318,18 +3319,21 @@ def radios(
 
     params = {k: v for k, v in params.items() if v is not None}
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    failed = None
 
     if aps:
         aps: List[CacheDevice] = [common.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
         resp = api.session.batch_request([BatchRequest(api.monitoring.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
         passed = [r for r in resp if r.ok]
         failed = [r for r in resp if not r.ok]
-        if passed:
-            combined = [ap for r in passed for ap in r.output]
-            resp = sorted(passed, key=lambda ap: ap.rl)[0]
-            resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
-        if failed:
-            render.display_results(failed, tablefmt="action")
+        if failed and not passed:
+            render.display_results(failed, tablefmt="action")  # will exit
+        elif failed:
+            [log.error(f"Partial Failure.  Call to fetch radio details for {ap.summary_text} failed ({r.error})", caption=True) for r, ap in zip(resp, aps) if not r.ok]
+
+        combined = [ap for r in passed for ap in r.output]
+        resp = sorted(passed, key=lambda ap: ap.rl)[0]
+        resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
     else:
         resp = api.session.request(common.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
@@ -3347,6 +3351,8 @@ def radios(
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
     render.display_results(resp, tablefmt=tablefmt, title=title, reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+    if failed:
+        common.exit()
 
 
 @app.command()
