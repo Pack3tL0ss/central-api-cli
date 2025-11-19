@@ -1060,7 +1060,7 @@ def ensure_cache_label1():
 
 @pytest.fixture(scope="function")
 def ensure_cache_label5():
-    if config.dev.mock_tests and "cencli_test_label5" not in cache.labels_by_name:
+    if config.dev.mock_tests and "cencli_test_label5" not in cache.labels_by_name:  # pragma: no cover
         asyncio.run(cache.update_db(cache.LabelDB, data={"id": 1110, "name": "cencli_test_label5", "devices": 0}, truncate=False))
     else:  # pragma: no cover
         ...
