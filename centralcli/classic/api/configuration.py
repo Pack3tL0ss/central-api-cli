@@ -155,7 +155,7 @@ class ConfigAPI:
         resp.output = output
         if "data" in resp.raw:
             resp.raw["data"] = output
-        else:  # pragma: no cover
+        elif passed:  # pragma: no cover
             log.warning("raw attr in resp from get_groups_properties lacks expected outer key 'data'", show=True)
 
         return resp
@@ -382,7 +382,7 @@ class ConfigAPI:
                 return [
                     resp,
                     Response(
-                        error=f"{utils.color('AOS10')} can only be set when APs or GWs are initially added to allowed_types of group"
+                        error=f"{utils.color('AOS10')} can only be set when APs or GWs are initially added as allowed device types for the group"
                         f"\n{utils.color(group)} can be cloned with option to upgrade during clone.",
                     )
                 ]
@@ -397,7 +397,7 @@ class ConfigAPI:
                         "when initially adding APs to allowed_types of group",
                     )
                 ]
-        if monitor_only_sw is False and "AOS_S" in cur_group_props["AllowedSwitchTypes"]:
+        if monitor_only_sw is not None and "AOS_S" in cur_group_props["AllowedSwitchTypes"]:
             resp.output = f"This call fetched current properties for group {group}"
             return [
                 resp,
@@ -406,7 +406,7 @@ class ConfigAPI:
                     "when initially adding AOS-SW to allowed_types of group",
                 )
             ]
-        if monitor_only_cx is False and "AOS_CX" in cur_group_props["AllowedSwitchTypes"]:
+        if monitor_only_cx is not None and "AOS_CX" in cur_group_props["AllowedSwitchTypes"]:
             resp.output = f"This call fetched current properties for group {group}"
             return [
                 Response(
@@ -454,29 +454,30 @@ class ConfigAPI:
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
         combined_allowed = [*allowed_types, *cur_group_props["AllowedDevTypes"]]
 
+        fail_resp = None
         if None in allowed_types:
-            return Response(
+            fail_resp = Response(
                 error='Invalid device type for allowed_types valid values: "ap", "gw", "sw", "cx", "switch"',
-                rl_str=resp.rl,
             )
-        if microbranch and not aos10:
-            return Response(
+        elif microbranch and not aos10:
+            fail_resp = Response(
                 error="Invalid combination, Group must be configured as AOS10 group to support Microbranch",
-                rl_str=resp.rl,
             )
-        if microbranch and "AccessPoints" not in combined_allowed:
-            return Response(
+        elif microbranch and "AccessPoints" not in combined_allowed:
+            fail_resp = Response(
                 error=f"Invalid combination, {utils.color('Microbranch')} "
                       f"can not be enabled in group {utils.color(group)}.  "
                       "APs must be added to allowed devices.\n"
                       f"[reset]Current Allowed Devices: {utils.color(combined_allowed)}",
-                rl_str=resp.rl,
             )
-        if wired_tg and monitor_only_sw:
-            return Response(
+        elif wired_tg and monitor_only_sw:
+            fail_resp = Response(
                 error="Invalid combination, Monitor Only is not valid for Template Group",
-                rl_str=resp.rl,
             )
+
+        if fail_resp is not None:
+            fail_resp.rl = resp.rl
+            return fail_resp
 
         grp_props = {
             "AllowedDevTypes": combined_allowed,
@@ -1528,7 +1529,7 @@ class ConfigAPI:
         if None in _json_data.values():
             resp: Response = await self.get_ap_settings(serial)
             if not resp:
-                log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).")
+                log.error(f"Unable to update AP settings for AP {serial}, API call to fetch current settings failed (all settings are required).", caption=True, log=True)
                 return resp
 
             json_data = utils.strip_none(_json_data)
