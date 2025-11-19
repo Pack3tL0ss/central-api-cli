@@ -2876,10 +2876,9 @@ def alerts(
     dev = None if not device else common.cache.get_dev_identifier(device)
     _group = None if not group else common.cache.get_group_identifier(group)
     _site = None if not site else common.cache.get_site_identifier(site)
-    _label = None if not label else common.cache.get_label_identifier(label)
-    if _label and _group:
+    _label = None if not label or _group is not None else common.cache.get_label_identifier(label)
+    if label and _group:
         log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
-        _label = None
 
     if alert_type:
         alert_type = "user_management" if alert_type == "user" else alert_type
