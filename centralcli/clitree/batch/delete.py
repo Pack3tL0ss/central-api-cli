@@ -3,9 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pydantic import ValidationError
 import typer
 
-from centralcli import common, config, render, utils
+from centralcli import common, config, render, utils, log
 from centralcli.cache import CacheSite, api
 from centralcli.constants import AllDevTypes
 from centralcli.models.imports import ImportSites
@@ -25,8 +26,9 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> list[Response
 
     try:
         verified_sites = ImportSites(data)
-    except Exception as e:
-        common.exit(f"Import data failed validation, refer to [cyan]cencli batch delete sites --example[/] for example formats.\n{repr(e)}")
+    except ValidationError as e:
+        _msg = utils.clean_validation_errors(e)
+        common.exit(f"Import data failed validation, refer to [cyan]cencli batch delete sites --example[/] for example formats.\n{_msg}")
 
     cache_sites: list[CacheSite | None] = [common.cache.get_site_identifier(s.site_name, silent=True, exit_on_fail=False) for s in verified_sites]
     not_in_central = [model.site_name for model, data in zip(verified_sites, cache_sites) if data is None]
@@ -41,12 +43,18 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> list[Response
 
     site_names = utils.summarize_list([s.summary_text for s in sites], max=7)
     render.econsole.print(f"The following {len(del_list)} sites will be [bright_red]deleted[/]:\n{site_names}", emoji=False)
-    if render.confirm(yes):
-        resp: list[Response] = api.session.request(api.central.delete_site, del_list)
-        if len(resp) == len(sites):
-            doc_ids = [s.doc_id for s, r in zip(sites, resp) if r.ok]
-            api.session.request(common.cache.update_site_db, data=doc_ids, remove=True)
-        return resp
+    render.confirm(yes)
+    resp: list[Response] = api.session.request(api.central.delete_site, del_list)
+
+    # cache update
+    try:
+        doc_ids = [s.doc_id for s, r in zip(sites, resp) if r.ok]
+        api.session.request(common.cache.update_site_db, data=doc_ids, remove=True)
+    except Exception as e:  # pragma: no cover
+        log.error(f"{repr(e)} occured during attempt to update sites cache", caption=True, log=True)
+        log.exception(e)
+
+    return resp
 
 
 @app.command()
