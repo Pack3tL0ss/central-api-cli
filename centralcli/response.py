@@ -512,23 +512,33 @@ class Response:
 
 @dataclass
 class BatchResponse:
-    batch_resp: list[Response]
+    responses: list[Response]
 
     def __bool__(self):  # pragma: no cover
         return self.ok
 
     @cached_property
     def passed(self):
-        return [r for r in self.batch_resp if r.ok]
+        return [r for r in self.responses if r.ok]
 
     @cached_property
     def failed(self):
-        return [r for r in self.batch_resp if not r.ok]
+        return [r for r in self.responses if not r.ok]
+
+    @cached_property
+    def last(self):
+        resp = [*self.failed, *self.passed][-1]
+        resp.rl = self.last_rl
+        return resp
 
     @cached_property
     def last_rl(self):
-        rl_objs = [r.rl for r in self.batch_resp if r.rl.has_value]
-        return self.batch_resp[-1].rl if not rl_objs else min(rl_objs)
+        rl_objs = [r.rl for r in self.responses if r.rl.has_value]
+        return self.responses[-1].rl if not rl_objs else min(rl_objs)
+
+    @cached_property
+    def raw(self) -> dict[str, Any]:
+        return {res.url.path: res.raw for res in self.responses}
 
     @property
     def ok(self):
