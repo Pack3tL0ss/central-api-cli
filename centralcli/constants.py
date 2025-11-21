@@ -140,6 +140,26 @@ class DevTypes(str, Enum):
     # sdwan = "sdwan"
 
 
+class ExportDevType(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+
+    @property
+    def header(self):
+        return "Gateway" if self.value == "gw" else self.value.upper()
+
+    @property
+    def path(self):
+        if self.value in ["cx", "sw"]:
+            return "switches"
+        elif self.value == "gw":
+            return "gateways"
+        else:
+            return "aps"
+
+
 class GroupDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"

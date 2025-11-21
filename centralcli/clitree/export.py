@@ -3,7 +3,7 @@
 import asyncio
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, List
+from typing import Callable, List
 
 import typer
 from rich import print
@@ -11,24 +11,108 @@ from rich.console import Console
 from rich.markup import escape
 
 from centralcli import caas, cache, common, config, log, render, utils
-from centralcli.cache import CacheDevice, api
+from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
+from centralcli.constants import ExportDevType
 from centralcli.render import Spinner
-from centralcli.response import RateLimit, Response
+from centralcli.response import BatchResponse, RateLimit, Response
 from centralcli.strings import Warnings
-
-if TYPE_CHECKING:
-    from ..cache import CacheDevice, CacheGroup, CacheSite
 
 app = typer.Typer()
 console = Console(emoji=False)
+
 
 def _config_header(header_text: str, console: Console = None) -> None:
     console = console or Console()
     console.rule()
     console.print(header_text)
     console.rule()
+
+
+def _output_config_results(response: Response, header: str, outfile: Path, show: bool = False, pager: bool = False) -> None:
+    if not show:
+        outdata = render.output(response.output)
+        render.write_file(outfile, outdata.file)
+    else:
+        _config_header(header)
+        render.display_results(response, tablefmt=None, pager=pager, outfile=outfile)
+
+
+def _process_dev_config_requests(cache_items: list[CacheDevice | CacheGroup], reqs: list[BatchRequest], outdir: Path, flat: bool = False, show: bool = False, pager: bool = False) -> BatchResponse:
+    batch_resp = BatchResponse(api.session.batch_request(reqs))
+
+    for d, r in zip(cache_items, batch_resp.responses):
+        if not r.ok:
+            log.error(f"Failed to retrieve configuration for {d.name}... {r.error}", show=True)
+            continue
+
+        if isinstance(r.output, dict) and "config" in r.output:  # config response for gateways {"config": [...]}
+            r.output = r.output["config"]
+
+        if flat:
+            _outdir = outdir
+        else:
+            dev_type = ExportDevType(d.type)
+            _outdir = outdir / d.group / dev_type.path
+
+        _outdir.mkdir(parents=True, exist_ok=True)
+        outfile = _outdir / f"{d.name}_dev.cfg"
+
+        _output_config_results(r, header=f"[bold]Config for {d.rich_help_text}[reset]", outfile=outfile, show=show, pager=pager)
+
+    return batch_resp
+
+
+def _process_group_config_requests(groups: list[str], reqs: list[BatchRequest], dev_type: ExportDevType, outdir: Path, flat: bool = False, show: bool = False, pager: bool = False) -> BatchResponse:
+    batch_resp = BatchResponse(api.session.batch_request(reqs))
+
+    for g, r in zip(groups, batch_resp.responses):
+        if not r.ok:
+            log.error(f"Failed to retrieve Group level {dev_type.value} configuration for group [cyan]{g}[/]... {r.error}", show=True)
+            continue
+        if isinstance(r.output, dict) and "config" in r.output:
+            r.output = r.output["config"]
+
+        _outdir = outdir if flat else outdir / g / dev_type.path
+        _outdir.mkdir(parents=True, exist_ok=True)
+        outfile = _outdir / "group.cfg" if not flat else _outdir / f"{g}_{dev_type.value}_group.cfg"
+
+        _output_config_results(r, header=f"[bold]{dev_type.header} group level config for [cyan]{g}[/] group[reset]", outfile=outfile, show=show, pager=pager)
+
+    return batch_resp
+
+
+def _process_template_requests(reqs_dict: dict[str, list[BatchRequest]], dev_type: ExportDevType, outdir: Path, flat: bool = False, show: bool = False, pager: bool = False) -> BatchResponse:
+    group_tname_list = list(map(lambda k: k.split("~|~"), reqs_dict.keys()))
+    batch_resp = BatchResponse(api.session.batch_request(list(reqs_dict.values())))
+
+    for (group, name), r in zip(group_tname_list, batch_resp.responses):
+        if not r.ok:
+            log.error(f"Failed to retrieve template contents for {dev_type.value} template: {name} in group {group}... {r.error}", show=True)
+            continue
+
+        _outdir = outdir if flat else outdir / group / dev_type.path
+        _outdir.mkdir(parents=True, exist_ok=True)
+        outfile = _outdir / f"{name}.cen" if not flat else _outdir / f"{group}_{name}_{dev_type.value}.cen"
+
+        _output_config_results(r, header=f"[bold]{dev_type.upper()} Template Group: {group}, Name: {name}[reset]", outfile=outfile, show=show, pager=pager)
+
+    return batch_resp
+
+
+def _build_template_requests(dev_type: ExportDevType, group: CacheGroup | None = None, site: CacheSite | None = None, group_match: str | None = None) -> dict[str, BatchRequest]:
+    return {
+        f'{t["group"]}~|~{t["name"]}': BatchRequest(api.configuration.get_template, group=t["group"], template=t["name"])
+        for t in common.cache.templates if t["device_type"] == dev_type.value and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
+    }
+
+def _build_group_config_requests(groups: list[str], func: Callable, group_match: str | None) -> list[BatchRequest]:
+    if group_match:
+        groups = [group for group in groups if group_match in group]
+
+    return [BatchRequest(func, group) for group in groups]
+
 
 @app.command()
 def configs(
@@ -49,7 +133,6 @@ def configs(
     refresh: bool = typer.Option(False, "-R", "--refresh", help="Only applies if device configs are being exported. By default configs are pulled for devices in the cache.  Use this option to update the device cache prior to the export.", show_default=False,),
     yes: bool = common.options.yes,
     raw: bool = common.options.raw,
-    outfile: Path = common.options.outfile,
     pager: bool = common.options.pager,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -128,31 +211,17 @@ def configs(
 
     # build group level ap/gw config requests
     if gw_groups:
-        if group_match:
-            gw_groups = [group for group in gw_groups if group_match in group]
-
-        gw_grp_reqs = [br(caasapi.show_config, group) for group in gw_groups]
+        gw_grp_reqs = _build_group_config_requests(gw_groups, func=caasapi.show_config, group_match=group_match)
 
     if ap_groups:
-        if group_match:
-            ap_groups = [group for group in ap_groups if group_match in group]
-
-        ap_grp_reqs = [br(api.configuration.get_ap_config, group) for group in ap_groups]
+        ap_grp_reqs = _build_group_config_requests(ap_groups, func=api.configuration.get_ap_config, group_match=group_match)
 
     # build template requests
-    ap_template_reqs = {} if not do_ap else {
-        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
-        for t in common.cache.templates if t["device_type"] == "ap" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
-        }
-    cx_template_reqs = {} if not do_cx else {
-        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
-        for t in common.cache.templates if t["device_type"] == "cx" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
-        }
-    sw_template_reqs = {} if not do_sw else {
-        f'{t["group"]}~|~{t["name"]}': br(api.configuration.get_template, group=t["group"], template=t["name"])
-        for t in common.cache.templates if t["device_type"] == "sw" and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
-        }
+    ap_template_reqs = {} if not do_ap else _build_template_requests(ExportDevType.ap, group=group, site=site, group_match=group_match)
+    cx_template_reqs = {} if not do_cx else _build_template_requests(ExportDevType.cx, group=group, site=site, group_match=group_match)
+    sw_template_reqs = {} if not do_cx else _build_template_requests(ExportDevType.sw, group=group, site=site, group_match=group_match)
 
+    # below is faster than sum(map(len, [...]))
     req_cnt = len(gw_reqs) + len(ap_reqs) + len(ap_env_reqs) + len(gw_grp_reqs) + len(ap_grp_reqs) + len(ap_template_reqs) + len(cx_template_reqs) + len(sw_template_reqs)
     req_cnt = req_cnt if not do_variables else req_cnt + 1
     if req_cnt == 0:
@@ -166,88 +235,20 @@ def configs(
 
     exit_code = 0
     if gw_grp_reqs:
-        gw_grp_res = api.session.batch_request(gw_grp_reqs)
-
-        for g, r in zip(gw_groups, gw_grp_res):
-            if not r.ok:
-                log.error(f"Failed to retrieve Group level gateway configuration for group [cyan]{g}[/]... {r.error}", show=True)
-                exit_code = 1
-                continue
-            if isinstance(r.output, dict) and "config" in r.output:
-                r.output = r.output["config"]
-
-            _outdir: Path = outdir if flat else outdir / g / "gateways"
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / "group.cfg" if not flat else _outdir / f"{g}_gw_group.cfg"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]Gateway group level config for [cyan]{g}[/] group[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        gw_grp_res = _process_group_config_requests(gw_groups, gw_grp_reqs, dev_type=ExportDevType.gw, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or gw_grp_res.exit_code
 
     if ap_grp_reqs:
-        ap_grp_res = api.session.batch_request(ap_grp_reqs)
-
-        for g, r in zip(ap_groups, ap_grp_res):
-            if not r.ok:
-                log.error(f"Failed to retrieve Group level AP configuration for group [cyan]{g}[/]... {r.error}", show=True)
-                exit_code = 1
-                continue
-
-            _outdir = outdir if flat else outdir/ g / "aps"
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / "group.cfg" if not flat else _outdir / f"{g}_ap_group.cfg"
-
-            if not show:
-                outdata = render.output(r.output, tablefmt="simple")
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]AP group level config for [cyan]{g}[/] group[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        ap_grp_res = _process_group_config_requests(ap_groups, ap_grp_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or ap_grp_res.exit_code
 
     if gw_reqs:
-        gw_res = api.session.batch_request(gw_reqs)
-
-        for d, r in zip(gws, gw_res):
-            if not r.ok:
-                log.error(f"Failed to retrieve configuration for {d.name}... {r.error}", show=True)
-                exit_code = 1
-                continue
-            if isinstance(r.output, dict) and "config" in r.output:
-                r.output = r.output["config"]
-
-            _outdir = outdir / d.group / "gateways" if not flat else outdir
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / f"{d.name}_dev.cfg"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]Config for {d.rich_help_text}[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        gw_res = _process_dev_config_requests(gws, gw_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or gw_res.exit_code
 
     if ap_reqs:
-        ap_res = api.session.batch_request(ap_reqs)
-
-        for d, r in zip(aps, ap_res):
-            if not r.ok:
-                log.error(f"Failed to retrieve configuration for {d.name}... {r.error}", show=True)
-                exit_code = 1
-                continue
-
-            _outdir = outdir / d.group / "aps" if not flat else outdir
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / f"{d.name}_dev.cfg"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]Config for {d.rich_help_text}[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        ap_res = _process_dev_config_requests(aps, ap_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or ap_res.exit_code
 
         if ap_env_reqs:
             ap_env_res = api.session.batch_request(ap_env_reqs)
@@ -274,81 +275,32 @@ def configs(
                 render.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
 
     if ap_template_reqs:
-        ap_template_resp = api.session.batch_request(list(ap_template_reqs.values()))
-
-        for (group, name), r in zip(map(lambda k: k.split("~|~"), ap_template_reqs.keys()), ap_template_resp):
-            if not r.ok:
-                log.error(f"Failed to retrieve template contents for AP template: {name} in group {group}... {r.error}", show=True)
-                exit_code = 1
-                continue
-
-            _outdir = outdir / group / "aps" if not flat else outdir
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / f"{name}.cen" if not flat else _outdir / f"{group}_{name}_ap.cen"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]AP Template Group: {group}, Name: {name}[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        ap_template_resp = _process_template_requests(ap_template_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or ap_template_resp.exit_code
 
     if cx_template_reqs:
-        cx_template_resp = api.session.batch_request(list(cx_template_reqs.values()))
-
-        for (group, name), r in zip(map(lambda k: k.split("~|~"), cx_template_reqs.keys()), cx_template_resp):
-            if not r.ok:
-                log.error(f"Failed to retrieve template contents for CX template: {name} in group {group}... {r.error}", show=True)
-                exit_code = 1
-                continue
-
-            _outdir = outdir / group / "switch" if not flat else outdir
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / f"{name}.cen" if not flat else _outdir / f"{group}_{name}_cx.cen"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]CX Template Group: {group}, Name: {name}[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
+        cx_template_resp = _process_template_requests(cx_template_reqs, dev_type=ExportDevType.cx, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or cx_template_resp.exit_code
 
     if sw_template_reqs:
-        sw_template_resp = api.session.batch_request(list(sw_template_reqs.values()))
+        sw_template_resp = _process_template_requests(sw_template_reqs, dev_type=ExportDevType.sw, outdir=outdir, flat=flat, show=show, pager=pager)
+        exit_code = exit_code or sw_template_resp.exit_code
 
-        for (group, name), r in zip(map(lambda k: k.split("~|~"), sw_template_reqs.keys()), sw_template_resp):
-            if not r.ok:
-                log.error(f"Failed to retrieve template contents for AOS-SW template: {name} in group {group}... {r.error}", show=True)
-                exit_code = 1
-                continue
-
-            _outdir = outdir / group / "switch" if not flat else outdir
-            _outdir.mkdir(parents=True, exist_ok=True)
-            outfile = _outdir / f"{name}.cen" if not flat else _outdir / f"{group}_{name}_sw.cen"
-
-            if not show:
-                outdata = render.output(r.output)
-                render.write_file(outfile, outdata.file)
-            else:
-                _config_header(f"[bold]AOS-SW Template Group: {group}, Name: {name}[reset]")
-                render.display_results(r, tablefmt=None, pager=pager, outfile=outfile)
-
-    if do_variables:  # This block will exit on failure, will need to be changed if more is added below
+    if do_variables:
         variable_resp = api.session.request(api.configuration.get_variables)
         if not variable_resp.ok:
             log.error(f"Failed to retrieve variables... {variable_resp.error}", show=True)
-            render.display_results(variable_resp, tablefmt="action", exit_on_fail=True)
-            common.cache.get_dev_identifier()
-
-        _outdir = outdir
-        outfile = _outdir / "variables.json"
-
-        if not show:
-            outdata = json.dumps(variable_resp.output, indent=2)
-            render.write_file(outfile, outdata)
+            exit_code = 1
+            # render.display_results(variable_resp, tablefmt="action", exit_on_fail=False)
         else:
-            _config_header("[bold]Combined Variables file[reset]")
-            render.display_results(variable_resp, tablefmt="json", pager=pager, outfile=outfile)
+            outfile = outdir / "variables.json"
+
+            if not show:
+                outdata = json.dumps(variable_resp.output, indent=2)
+                render.write_file(outfile, outdata)
+            else:
+                _config_header("[bold]Combined Variables file[reset]")
+                render.display_results(variable_resp, tablefmt="json", pager=pager, outfile=outfile)
 
     common.exit(code=exit_code)
 
