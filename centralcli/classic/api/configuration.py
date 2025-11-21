@@ -447,9 +447,8 @@ class ConfigAPI:
             mon_only_switches += ["AOS_CX"]
 
         arch = None
-        if microbranch is not None:
-            if aos10 is not None:
-                arch = "Instant" if not aos10 else "AOS10"
+        if "AccessPoints" in allowed_types:
+            arch = "AOS10" if aos10 else "Instant"
 
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
         combined_allowed = [*allowed_types, *cur_group_props["AllowedDevTypes"]]
@@ -2037,10 +2036,10 @@ class ConfigAPI:
         if group:
             group = utils.listify(group)
             if not cp_cert_md5:
-                raise ValueError("altitude is required when iden is provided")
+                raise ValueError("cp_cert_md5 is required when group is provided")
             as_dict = {**as_dict, **{g: cp_cert_md5 for g in group}}
         if not as_dict:
-            raise ValueError("Missing required parameter: iden and altitude and/or as_dict is required")
+            raise ValueError("Missing required parameter: group and cp_cert_md5 and/or as_dict is required")
 
         base_url = "/configuration/v1/ap_cli"
         current_reqs = [BatchRequest(self.session.get, f"{base_url}/{g}") for g in as_dict]
