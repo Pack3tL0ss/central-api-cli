@@ -81,20 +81,6 @@ def test_show_archived():
     assert "API" in result.stdout
 
 
-def test_show_bandwidth_uplink_gw():
-    result = runner.invoke(app, ["show", "bandwidth", "uplink", test_data["gateway"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_uplink_gw")
-    assert result.exit_code == 0
-    assert "TX" in result.stdout
-
-
-def test_show_bandwidth_uplink_switch():
-    result = runner.invoke(app, ["show", "bandwidth", "uplink", test_data["switch"]["name"]],)
-    capture_logs(result, "test_show_bandwidth_uplink_switch")
-    assert result.exit_code == 0
-    assert "TX" in result.stdout
-
-
 @pytest.mark.parametrize(
     "fixture,args,pass_condition,expect_failure",
     [
@@ -119,21 +105,24 @@ def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condi
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        (["switch", test_data["switch"]["mac"]], lambda r: "TX" in r),
-        (["switch", test_data["switch"]["mac"], "--uplink"], lambda r: "TX" in r),
-        (["switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]], lambda r: "TX" in r),
-        (["ap", test_data["ap"]["name"]], lambda r: "TX" in r),
-        (["ap", "--ssid", "ignored"], lambda r: "--ssid" in r and "TX" in r),
-        (["ap", "--band", "5"], lambda r: "--band" in r and "TX" in r),
-        (["ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]], lambda r: "--group" in r and "TX" in r),
-        (["ap", test_data["aos8_ap"]["name"], "--swarm"], lambda r: "TX" in r),
+        [1, ("switch", test_data["switch"]["mac"]), lambda r: "TX" in r],
+        [2, ("switch", test_data["switch"]["mac"], "--uplink"), lambda r: "TX" in r],
+        [3, ("switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]), lambda r: "TX" in r],
+        [4, ("ap", test_data["ap"]["name"]), lambda r: "TX" in r],
+        [5, ("ap", "--ssid", "ignored"), lambda r: "--ssid" in r and "TX" in r],
+        [6, ("ap", "--band", "5"), lambda r: "--band" in r and "TX" in r],
+        [7, ("ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r and "TX" in r],
+        [8, ("ap", test_data["aos8_ap"]["name"], "--swarm"), lambda r: "TX" in r],
+        [9, ("uplink", test_data["gateway"]["name"]), lambda r: "TX" in r],
+        [10, ("uplink", test_data["gateway"]["name"], "--yaml"), lambda r: "TX" in r],
+        [11, ("uplink", test_data["switch"]["name"]), lambda r: "TX" in r],
     ]
 )
-def test_show_bandwidth(args: list[str], pass_condition: Callable):
+def test_show_bandwidth(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "bandwidth", *args],)
-    capture_logs(result, "test_show_bandwidth")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 

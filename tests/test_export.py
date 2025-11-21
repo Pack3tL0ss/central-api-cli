@@ -4,6 +4,7 @@ import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import capture_logs, test_data
 
@@ -11,18 +12,37 @@ runner = CliRunner()
 
 
 @pytest.mark.parametrize(
-    "args",
+    "idx,fixture,args",
     [
-        ("--pnc", "-M", "6"),
-        ("--no-mask",),
-        ("--yaml",)
+        [1, None, ("--pnc", "-M", "6")],
+        [2, None, ("--no-mask",)],
+        [3, None, ("--no-update", "--yaml",)],
+        [4, "ensure_cache_all_floor_plan", ("--no-update",)],
     ]
 )
-def test_export_redsky_bssids(args: tuple[str]):
+def test_export_redsky_bssids(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
     result = runner.invoke(app, ["export", "redsky-bssids", *args, "-y"])
-    capture_logs(result, "test_export_redsky_bssids")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "idx,args,test_name_append",
+    [
+        [1, (), None],
+        [2, (), "floors"],
+    ]
+)
+def test_export_redsky_bssids_fail(idx: int, args: tuple[str], test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["export", "redsky-bssids", *args, "-y"])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Response" in result.stdout
 
 
 def test_export_redsky_bssids_too_many_filters():
@@ -58,15 +78,18 @@ def test_export_configs(_: int, args: tuple[str], expect: str | None):
 
 
 @pytest.mark.parametrize(
-    "_,args",
+    "idx,args,test_name_append",
     [
-        [1, ("--match", "XXYYNO_MATCH_ZZ")],
-        [2, ("--match", "VPNC", "--gw", "-G")],
-        [3, ("--ap", "--groups-only")],
+        [1, ("--match", "XXYYNO_MATCH_ZZ"), None],
+        [2, ("--match", "VPNC", "--gw", "-G"), None],
+        [3, ("--ap", "--groups-only"), None],
+        [4, ("--gw", "--group", test_data["gateway"]["group"]), "one_gw"],
     ]
 )
-def test_export_configs_fail(_: int, args: tuple[str]):
+def test_export_configs_fail(idx: int, args: tuple[str], test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, ["export", "configs", *args, "-Y"])
-    capture_logs(result, "test_export_configs_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert "⚠" in result.stdout

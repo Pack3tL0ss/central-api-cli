@@ -174,7 +174,7 @@ def test_configuration_update_group_properties(
     request.getfixturevalue(fixture)
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
-    if exception:
+    if exception:  # pragma: no cover
         try:
             api.session.request(api.configuration.update_group_properties, **kwargs)
         except ValueError:

@@ -1111,6 +1111,42 @@ def ensure_cache_batch_labels():
             assert asyncio.run(cache.update_label_db(data=batch_del_labels))
     yield
 
+# Need to add APs to FloorPlanAPDB
+#   {
+#     "id": "5000692__74:9E:75:C9:FF:16",
+#     "name": "zrm.655.ff16",
+#     "serial": "CNP7KZ2422",
+#     "mac": "74:9E:75:C9:FF:16",
+#     "floor_id": "5000692__3ca044b0-5bd3-40fe-ae40-f7cad0263575",
+#     "building_id": "5000692__7",
+#     "level": 2
+#   }
+@pytest.fixture(scope="function")
+def ensure_cache_all_floor_plan():
+    if config.dev.mock_tests:
+        serials = ['CNC7J0T0GK', 'CNDDK2R9GJ', 'CNGQKGX0H3', 'CNKYKV1070', 'CNQVL8M0MH', 'PHS4LX101T', 'PHS4LX101V']
+        cache_aps = {serial: cache.devices_by_serial[serial] for serial in serials}
+        update_data = [
+            {
+                "id": f"5000692__{ap['mac']}",
+                "name": ap['name'],
+                "serial": ap['serial'],
+                "mac": ap['mac'],
+                "floor_id": "5000692__3ca044b0-5bd3-40fe-ae40-f7cad0263575",
+                "building_id": "5000692__7",
+                "level": 2
+            }
+            for ap in cache_aps.values()
+        ]
+
+        doc_ids = cache.FloorPlanAPDB.insert_multiple(update_data)
+        assert len(doc_ids) == len(serials)
+
+    yield
+
+    if config.dev.mock_tests:
+        assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=doc_ids))
+
 
 def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"]):
     allowed_types = sorted(allowed_types)

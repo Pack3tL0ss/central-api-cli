@@ -151,9 +151,10 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,pass_condition",
+        "idx,fixture,args,pass_condition,test_name_append",
         [
             [
+                1,
                 "ensure_dev_cache_test_ap",
                 (
                     test_data["test_devices"]["ap"]["serial"],
@@ -168,18 +169,33 @@ if config.dev.mock_tests:
                     "--domain",
                     "consolepi.com"
                 ),
-                lambda r: "403" in r
+                lambda r: "403" in r,
+                None
             ],
             [
+                2,
                 None,
                 (
                     test_data["mesh_ap"]["serial"],
                     "-a",
                     test_data["mesh_ap"]["altitude"] - 0.1
                 ),
-                lambda r: "500" in r
+                lambda r: "500" in r,
+                None
             ],
             [
+                3,
+                None,
+                (
+                    test_data["mesh_ap"]["serial"],
+                    "-a",
+                    test_data["mesh_ap"]["altitude"] - 0.1
+                ),
+                lambda r: "500" in r,
+                "get"
+            ],
+            [
+                4,
                 "ensure_dev_cache_test_ap",
                 (
                     test_data["mesh_ap"]["serial"],
@@ -187,15 +203,18 @@ if config.dev.mock_tests:
                     "--hostname",
                     "this_will_fail"
                 ),
-                lambda r: "⚠" in r
+                lambda r: "⚠" in r,
+                None
             ]
         ]
     )
-    def test_update_ap_fail(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    def test_update_ap_fail(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
+        if test_name_append:
+            env.current_test = f"{env.current_test}_{test_name_append}"
         if fixture:
             request.getfixturevalue(fixture)
         result = runner.invoke(app, ["update",  "ap", *args, "-y"])
-        capture_logs(result, env.current_test, expect_failure=True)
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
@@ -299,6 +318,7 @@ if config.dev.mock_tests:
             [2, "ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
             [3, "ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
             [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],
+            [5, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--mb"), "cx_only"],
         ]
     )
     def test_update_group(_: int, fixture: str, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
@@ -545,6 +565,29 @@ if config.dev.mock_tests:
             ]
         )
         capture_logs(result, "test_update_cp_cert", expect_failure=expect_failure)
+        assert result.exit_code == (0 if not expect_failure else 1)
+        assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
+        "idx,fixture,args,expect_failure,pass_condition",
+        [
+            [1, "ensure_cache_group1", ("cencli_test", "-G", "cencli_test_group1",), True, lambda r: "Response" in r],
+        ]
+    )
+    def test_update_cp_cert_fail(ensure_cache_cert, idx: int, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "cp-cert",
+                *args,
+                "--yes",
+            ]
+        )
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=expect_failure)
         assert result.exit_code == (0 if not expect_failure else 1)
         assert pass_condition(result.stdout)
 
