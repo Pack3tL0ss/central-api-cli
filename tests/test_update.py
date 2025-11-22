@@ -545,14 +545,16 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,expect_failure,pass_condition",
+        "idx,fixture,args,expect_failure,pass_condition",
         [
-            ["ensure_cache_group1", ("cencli_test", "-G", "cencli_test_group1",), False, lambda r: "200" in r],
-            [None, ("cencli_test",), True, lambda r: "⚠" in r],  # no group
-            ["ensure_cache_group4", ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r], # invalid group (no aps/gws)
+            [1, ["ensure_cache_cert", "ensure_cache_group1"], ("cencli_test", "-G", "cencli_test_group1",), False, lambda r: "200" in r],
+            [2, "ensure_cache_cert", ("cencli_test",), True, lambda r: "⚠" in r],  # no group
+            [3, ["ensure_cache_cert", "ensure_cache_group4"], ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r], # invalid group (no aps/gws)
+            [4, ["ensure_cache_cert_same_as_existing", "ensure_cache_group1"], ("cencli_test-existing-cert", "-G", "cencli_test_group1",), True, lambda r: "skipped" in r], # cert same as existing
+            [5, ["ensure_cache_cert_expired", "ensure_cache_group1"], ("cencli-test-expired-cert", "-G", "cencli_test_group1",), True, lambda r: "xpired" in r], # cert expired
         ]
     )
-    def test_update_cp_cert(ensure_cache_cert, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):
+    def test_update_cp_cert(idx: int, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
         result = runner.invoke(
@@ -564,7 +566,7 @@ if config.dev.mock_tests:
                 "--yes",
             ]
         )
-        capture_logs(result, "test_update_cp_cert", expect_failure=expect_failure)
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=expect_failure)
         assert result.exit_code == (0 if not expect_failure else 1)
         assert pass_condition(result.stdout)
 

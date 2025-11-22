@@ -5,12 +5,13 @@ from pathlib import Path
 import pendulum
 import psutil
 import pytest
+from rich.traceback import install
 from typer.testing import CliRunner
 
 from centralcli import cache, common, config, log
 from centralcli.cli import app
-from centralcli.typedefs import PrimaryDeviceTypes
 from centralcli.client import Session
+from centralcli.typedefs import PrimaryDeviceTypes
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
@@ -19,6 +20,17 @@ from ._test_data import test_device_file, test_files, test_group_file
 runner = CliRunner()
 
 cache_bak_file = config.cache_file.parent / f"{config.cache_file.name}.pytest.bak"
+
+
+def pytest_configure(config):
+    """
+    Installs the rich traceback handler for all uncaught exceptions during pytest runs.
+    """
+    install(show_locals=True, suppress=[
+        "pytester", # Suppress internal pytest frames
+        "pytest",   # Suppress pytest frames
+        # Add other modules to suppress if needed, e.g., "my_library"
+    ])
 
 
 def stash_cache_file():  # pragma: no cover
@@ -151,6 +163,28 @@ def ensure_cache_cert():
 
     if config.dev.mock_tests and "cencli-test" in cache.certs_by_name:
         doc_id = cache.certs_by_name["cencli-test"].doc_id
+        asyncio.run(cache.update_db(cache.CertDB, doc_ids=[doc_id]))
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_cert_same_as_existing():
+    if config.dev.mock_tests and "cencli-test-existing-cert" not in cache.certs_by_name:
+        asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test-existing-cert", "type": "SERVER_CERT", "md5_checksum": "43e0c762fc2bc47d8c6847a4b7b27af4", "expired": False, "expiration": 2071936577}, truncate=False))
+    yield
+
+    if config.dev.mock_tests and "cencli-test-existing-cert" in cache.certs_by_name:
+        doc_ids = [c.doc_id for c in cache.certs if c["name"] == "cencli-test-existing-cert"]
+        asyncio.run(cache.update_db(cache.CertDB, doc_ids=doc_ids))
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_cert_expired():
+    if config.dev.mock_tests and "cencli-test-expired-cert" not in cache.certs_by_name:
+        asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test-expired-cert", "type": "SERVER_CERT", "md5_checksum": "6bf2b4afbbe379f44589e4be994fa4c1", "expired": True, "expiration": 1736493627}, truncate=False))
+    yield
+
+    if config.dev.mock_tests and "cencli-test-expired-cert" in cache.certs_by_name:
+        doc_id = cache.certs_by_name["cencli-test-expired-cert"].doc_id
         asyncio.run(cache.update_db(cache.CertDB, doc_ids=[doc_id]))
 
 

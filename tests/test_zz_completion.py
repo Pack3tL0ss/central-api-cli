@@ -9,7 +9,6 @@ from typer import Exit
 from typer.testing import CliRunner
 
 from centralcli import cache, common, log, render, utils
-from centralcli.cli import app  # type: ignore # NoQA
 
 from . import clean_mac, test_data
 
@@ -70,70 +69,73 @@ def test_site_completion(incomplete: str = "barn"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_site_completion_empty_string(incomplete: str = ""):
     result = [c for c in cache.site_completion(ctx, incomplete, ("show", "site",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_template_group_completion(ensure_cache_group2, incomplete: str = "cencli"):
-    result = [c for c in cache.template_group_completion(incomplete)]
-    assert len(result) > 0
-    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
 
-def test_template_completion(ensure_cache_template, incomplete: str = "cencli"):
-    result = [c for c in cache.template_completion(incomplete, ("show", "templates",))]
+@pytest.mark.parametrize(
+    "idx,fixtures,complete_func,incomplete,args",
+    [
+        [1, "ensure_cache_template", cache.template_completion, "cencli", ("show", "templates")],
+        [2, "ensure_cache_group2", cache.template_group_completion, "cencli", ()],
+        [3, "ensure_cache_template", cache.template_completion, "", ("show", "templates")],
+        [4, ["ensure_cache_group2", "ensure_cache_template"], cache.dev_template_completion, "cencl", ("show", "templates")],
+        [5, ["ensure_cache_group2", "ensure_cache_template", "ensure_dev_cache_test_ap"], cache.dev_template_completion, "", ("show", "templates")],
+        [6, "ensure_cache_template_by_name", cache.dev_template_completion, test_data["template"]["name"].capitalize()[0:-2], ()],
+    ]
+)
+def test_template_completion(idx: int, fixtures: str | list[str] | None, complete_func: Callable, incomplete: str, request: pytest.FixtureRequest, args: tuple[str]):
+    if fixtures:
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    result = [c for c in complete_func(incomplete, args)]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_template_completion_empty_string(ensure_cache_template, incomplete: str = ""):
-    result = [c for c in cache.template_completion(incomplete, ("show", "templates",))]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-
-def test_dev_template_completion(ensure_cache_group2, ensure_cache_template, incomplete: str = "cencl"):
-    result = [c for c in cache.dev_template_completion(incomplete, ("show", "templates",))]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-
-def test_dev_template_completion_empty_string(ensure_cache_group2, ensure_cache_template, ensure_dev_cache_test_ap, incomplete: str = ""):
-    result = [c for c in cache.dev_template_completion(incomplete, ("show", "templates",))]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 def test_dev_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
     result = [c for c in cache.dev_switch_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_dev_cx_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
     result = [c for c in cache.dev_cx_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 def test_dev_sw_completion(incomplete: str = test_data["template_switch"]["name"].swapcase()):
     result = [c for c in cache.dev_sw_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_dev_gw_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):
     result = [c for c in cache.dev_gw_switch_completion(ctx, incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 def test_dev_gw_completion(incomplete: str = test_data["gateway"]["name"].swapcase()):
     result = [c for c in cache.dev_gw_completion(incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_dev_ap_gw_sw_completion(ensure_dev_cache_test_ap, incomplete: str = "cencli_test_ap"):  # tests underscore/hyphen logic in get_dev_identifier
     result = [c for c in cache.dev_ap_gw_sw_completion(ctx, incomplete, ("show", "firmware", "device"))]
     assert len(result) > 0
     assert all([m.lower().replace("_", "-").startswith(incomplete.lower().replace("_", "-")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_dev_gw_switch_site_completion(incomplete: str = "barn"):
     result = [c for c in cache.dev_gw_switch_site_completion(ctx, incomplete, ("show", "vlans",))]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     result = [c for c in cache.dev_ap_completion(incomplete, ("show", "aps",))]
@@ -148,10 +150,6 @@ def test_mpsk_completion():
         assert len(result) > 0
         assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
-def test_dev_template_completion_partial_name(ensure_cache_template_by_name, incomplete: str = test_data["template"]["name"].capitalize()[0:-2]):
-    result = list(cache.dev_template_completion(incomplete))
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 @pytest.mark.parametrize("expected,do_args", [(test_data["switch"]["name"], True), (test_data["switch"]["group"], False), ("self", True), ("self", False)])
 def test_group_dev_completion(expected: str, do_args: bool):
@@ -161,6 +159,7 @@ def test_group_dev_completion(expected: str, do_args: bool):
     assert len(result) > 0
     assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 @pytest.mark.parametrize("expected,do_args", [(test_data["ap"]["name"], True), (test_data["ap"]["group"], False), ("self", True), ("self", False)])
 def test_group_dev_ap_gw_completion(expected: str, do_args: bool):
     ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
@@ -169,11 +168,13 @@ def test_group_dev_ap_gw_completion(expected: str, do_args: bool):
     assert len(result) == 1
     assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 @pytest.mark.parametrize("expected", [test_data["switch"]["name"]])
 def test_dev_switch_gw_completion(expected: str):
     result = list(cache.dev_switch_gw_completion(incomplete=expected[0:-2],))
     assert len(result) == 1
     assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 @pytest.mark.parametrize(
         "incomplete,params,expected",

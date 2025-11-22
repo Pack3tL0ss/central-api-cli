@@ -187,13 +187,17 @@ def test_configuration_update_group_properties(
 
 
 @pytest.mark.parametrize(
-    "func,kwargs,expected_exception",
+    "_,func,kwargs,expected_exception",
     [
-        (api.configuration.update_existing_template, {"group": test_data["template_switch"]["group"], "name": "cencli-test-template", "template": "NoExistFile"}, FileNotFoundError),
-        (api.configuration.update_existing_template, {"group": test_data["template_switch"]["group"], "name": "cencli-test-template"}, ValueError),
+        (1, api.configuration.update_existing_template, {"group": test_data["template_switch"]["group"], "name": "cencli-test-template", "template": "NoExistFile"}, FileNotFoundError),
+        (2, api.configuration.update_existing_template, {"group": test_data["template_switch"]["group"], "name": "cencli-test-template"}, ValueError),
+        (3, api.configuration.update_cx_properties, {"serial": "USZYX123ABC45", "group": "fake-group"}, ValueError),
+        (4, api.configuration.update_cx_properties, {"serial": "USZYX123ABC45", "admin_user": "fake-user"}, ValueError),
+        (5, api.configuration.update_group_cp_cert, {"group": "fake-group"}, ValueError),
+        (6, api.configuration.update_group_cp_cert, {}, ValueError),
     ],
 )
-def test_configuration_classic_fail(func: Callable, kwargs: dict[str, str], expected_exception: Exception):
+def test_configuration_classic_fail(_: int, func: Callable, kwargs: dict[str, str], expected_exception: Exception):
     try:
         api.session.request(func, **kwargs)
     except expected_exception:
