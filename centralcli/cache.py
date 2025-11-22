@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import time
-from collections.abc import Generator, Iterator, KeysView, MutableMapping
+from collections.abc import Iterator, KeysView, MutableMapping
 from copy import deepcopy
 from enum import Enum
 from functools import cached_property, lru_cache, wraps
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from tinydb.table import Document, Table
 
     from .config import Config
-    from .typedefs import CacheSiteDict, CertType, MPSKStatus, PortalAuthTypes, SiteData
+    from .typedefs import CacheSiteDict, CertType, MPSKStatus, PortalAuthTypes, SiteData, ClientType
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -68,9 +68,6 @@ console = Console()
 TinyDB.default_table_name = "devices"
 
 
-CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
-
-
 def ensure_config(func):
     """Prevents exception during completion when config missing or invalid."""
     @wraps(func)
@@ -83,6 +80,9 @@ def ensure_config(func):
     return wrapper
 
 
+CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
+
+
 class CentralObject(MutableMapping):
     _doc_id = None
 
@@ -91,7 +91,7 @@ class CentralObject(MutableMapping):
         db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
         data: Document | dict[str, Any] | list[Document | dict[str, Any]],
     ):
-        self.is_dev, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False
+        self.is_dev, self.is_inv, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False, False
         data: dict | list[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -104,6 +104,7 @@ class CentralObject(MutableMapping):
                 data = data[0]
 
         self.data = data
+        self._help_text_parts = list(data.values())
 
         # When building Central Object from Inventory this is necessary
         # TODO maybe pydantic model
@@ -117,20 +118,11 @@ class CentralObject(MutableMapping):
                 self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
                 self.serial: str = self.data.get("serial")
 
-    def __rich__(self):
-        return self.summary_text
-
     def __bool__(self):
         return bool(self.data)
 
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
-
-    def __str__(self):
-        if isinstance(self.data, dict):
-            return "\n".join([f"  {k}: {v}" for k, v in self.data.items()])
-
-        return str(self.data)
 
     def __getitem__(self, key):
         return self.data[key]
@@ -150,95 +142,45 @@ class CentralObject(MutableMapping):
     def keys(self) -> KeysView:
         return self.data.keys()
 
-    def get(self, item: str, default = None):
-        return self.data.get(item, default)
+    @cached_property
+    def text(self) -> Text:
+        parts = [p for p in self._help_text_parts if p]
+        def _get_color(idx: int, item: str):
+            if idx == 0:
+                return "dark_olive_green2"
+            if str(item).lower() in ["up", "enabled", "active"]:
+                return "bright_green"
+            if str(item).lower() in ["down", "disabled", "inactive"]:
+                return "red1"
+            if idx % 2 == 0:
+                return "turquoise4"
+            return "cyan"
 
-    # def __getattr__(self, name: str) -> Any:
-    #     # import sys
-    #     # print("CentralObject __getattr__", name, file=sys.stderr)
-    #     if name == "data":
-    #         return self.data
-
-    #     if hasattr(self, "data") and self.data:
-    #         if name in self.data:
-    #             return self.data[name]
-
-    #     if hasattr(self, "data") and hasattr(self.data, name):
-    #         return getattr(self.data, name)
-
-    #     raise AttributeError(f"'{self.__module__}.{type(self).__name__}' object has no attribute '{name}'")
-
-    def __fields__(self) -> List[str]:
-        return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
-
-    @property
-    def generic_type(self):
-        if "type" in self.data:
-            return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
-
-
-    def _get_help_text_parts(self):
-        parts = []
-        if self.cache == "site":
-            parts = [
-                "Site",
-                *[a for a in [self.city, self.state, self.zip] if a]
-            ]
-        elif self.cache == "template":
-            parts = [
-                self.device_type,
-                self.model,
-                f"g:{self.group}",
-            ]
-        elif self.cache == "dev":
-            parts = [
-                self.name,
-                self.generic_type.upper(),
-                self.serial,
-                self.mac,
-                self.ip,
-            ]
-            # TODO Inventory only devices don't have group attribute
-            if "group" in self.data.keys():
-                parts += [self.group]
-            if "site" in self.data.keys():
-                parts += [self.site]
-
-            parts = utils.strip_none(parts, strip_empty_obj=True)
-            if self.site:
-                parts[-1] = f"s:{parts[-1]}"
-            if "group" in self.data.keys() and self.group:
-                parts[-2 if self.site else -1] = f"g:{parts[-2 if self.site else -1]}"
-        elif self.cache == "group":
-            parts = ["Group", self.name]
-        elif self.cache == "label":
-            parts = [self.data.get("name"), f"id: {self.data.get('id', 'ERROR')}"]
-
-        return parts
-
-    @property
-    def help_text(self):
-        parts = self._get_help_text_parts()
-        return "|".join(
+        ignore_emoji = [":cd:", ":ab:"]
+        text = "|".join(
             [
-                typer.style(p, fg="blue" if not idx % 2 == 0 else "cyan") for idx, p in enumerate(parts)
+                f"[{_get_color(idx, p)}]{p}[/]" for idx, p in enumerate(parts)
             ]
         )
+        return Text.from_markup(text, emoji=not any([e not in text.lower() for e in ignore_emoji]))
+
+    def __str__(self) -> str:
+        return self.text.plain
+
+    def __rich__(self) -> str:
+        return self.text.markup
 
     @property
     def rich_help_text(self):
-        parts = self._get_help_text_parts()
-        return "[reset]|".join(
-            [
-                f'{"[green]" if not idx % 2 == 0 else "[cyan]"}{p}[/]' for idx, p in enumerate(parts)
-            ]
-        )
+        return self.text.markup
 
+    @property
+    def help_text(self):
+        return render.rich_capture(self.text.markup)
 
-    @property  # TODO # DEPRECATED Each object the inherits from CentralObject should have it's own summary_text property
-    def summary_text(self):
-        return str(self)
-
+    @property
+    def summary_text(self) -> str:
+        return self.text.markup
 
 
 class CacheInvDevice(CentralObject):
@@ -258,6 +200,12 @@ class CacheInvDevice(CentralObject):
         self.subscription_expires: int | float = data.get("subscription_expires")
         self.assigned: bool = data.get("assigned")  # glp only
         self.archived: bool = data.get("archived")  # glp only
+        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
+        self._help_text_parts = [self.serial, self.mac, self.type, self.sku, id_str]
+
+    @property
+    def generic_type(self):
+        return "switch" if self.type in ["cx", "sw"] else self.type
 
     @classmethod
     def set_db(cls, db: Table):
@@ -293,20 +241,6 @@ class CacheInvDevice(CentralObject):
     def __rich__(self) -> str:
         return f'[bright_green]Inventory Device[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
 
-    @property
-    def rich_help_text(self) -> str:
-        return self.summary_text
-
-    @property
-    def summary_text(self) -> str:
-        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
-        parts = [p for p in [self.serial, self.mac, self.type, self.sku, id_str] if p]
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[turquoise4]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
-
 
 class CacheDevice(CentralObject):
     db: Table | None = None
@@ -326,11 +260,12 @@ class CacheDevice(CentralObject):
         self.version: str = data["version"]
         self.swack_id: str | None = data["swack_id"]
         self.switch_role: str | None = data["switch_role"]
+        self._help_text_parts = [self.name, self.type, self.status, self.serial, self.mac, self.ip, self.model]
 
     def __eq__(self, value):
         if hasattr(value, "serial"):
             return value.serial == self.serial
-        return value == self.serial
+        return value == self.serial  # pragma: no cover
 
     def __hash__(self):
         return hash(self.serial)
@@ -362,26 +297,9 @@ class CacheDevice(CentralObject):
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Device[/]:[cyan]{self.name}[/]|({utils.color(self.status, "green_yellow")})'
-
     @property
-    def summary_text(self) -> str:
-        def _get_color(idx: int, item: str):
-            if item.lower() == "up":
-                return "bright_green"
-            if item.lower() == "down":
-                return "red1"
-            if idx % 2 == 0:
-                return "bright_cyan"
-            return "cyan"
-
-        parts = [p for p in [self.name, self.status, self.serial, self.mac, self.type, self.model] if p]
-        return "[reset]" + "|".join(
-            [
-                f"[{_get_color(idx, p)}]{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
+    def generic_type(self):
+        return "switch" if self.data["type"].lower() in ["cx", "sw"] else self.data["type"].lower()
 
     def get_ts_session_id(self, exit_on_fail: bool = True) -> int | Response:
         resp = api.session.request(api.tshooting.get_ts_session_id, self.serial)
@@ -453,6 +371,7 @@ class CacheInvMonDevice(CentralObject):
         self.version: str = None if monitoring is None else monitoring.data["version"]
         self.swack_id: str | None = None if monitoring is None else monitoring.data["swack_id"]
         self.switch_role: str | None = None if monitoring is None else monitoring.data["switch_role"]
+        self._help_text_parts = [self.name, self.type, self.status, self.serial, self.mac, self.ip, self.model, self.sku]
 
     def __fields__(self) -> List[str]:
         return [k for k in self.__dir__() if not k.startswith("_") and not callable(k)]
@@ -467,35 +386,9 @@ class CacheInvMonDevice(CentralObject):
     def __hash__(self):
         return hash(self.serial)
 
-    def __rich__(self) -> str:
-        return f'[bright_green]{self.type}[/]:[bright_green]{self.serial}[/]|[cyan]{self.mac}[/]'
-
     @property
     def assigned(self) -> bool:
         return bool(self._assigned)
-
-    def get_help_text_parts(self) -> Generator[str, None, None]:
-        _status = render.get_pretty_status(self.status)
-        mon_parts = [p for p in [self.name, self.type, _status, self.serial, self.mac, self.ip, self.model] if p]
-        inv_parts = [] if not self.sku else [self.sku]
-        parts = [*mon_parts, *inv_parts]
-
-        for idx, part in enumerate(parts):
-            if "[/" in part:
-                yield part
-            elif idx % 2 == 0:
-                yield f"[cyan]{part}[/]"
-            else:
-                yield f"[turquoise4]{part}[/]"
-
-    @property
-    def rich_help_text(self) -> str:
-        return "|".join(self.get_help_text_parts())
-
-    @property
-    def summary_text(self) -> str:
-        id_str = None if not self.id else f"[dim]glp id: {self.id}[/dim]"
-        return f"{self.rich_help_text}{'' if not id_str else f'|{id_str}'}"
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
@@ -514,6 +407,17 @@ class CacheGroup(CentralObject):
         self.monitor_only_sw: bool = data["monitor_only_sw"]
         self.monitor_only_cx: bool = data["monitor_only_cx"]
         self.cnx: bool = data.get("cnx")
+        _allowed_types_str = f"[magenta]allowed types[/]: {utils.color(self.allowed_types)}"
+        _mon_only = [f"[magenta]monitor only {_type}[/]: \u2705" for _type, _mon_only in zip(["sw", "cx"], [self.monitor_only_sw, self.monitor_only_cx]) if _mon_only]
+        _template_group = [f"[magenta]{_type} TG[/]: \u2705" for _type, _tg in zip(["wired", "wlan"], [self.wired_tg, self.wlan_tg]) if _tg]
+        _other = []
+        if "ap" in self.allowed_types:
+            _other += ["AOS10" if self.aos10 else "AOS8"]
+        if "gw" in self.allowed_types or "sdwan" in self.allowed_types:
+            _other += [f"[magenta]GW Role[/]: {self.gw_role}"]
+        if self.cnx:
+            _other += ["[magenta]New Central Managed[/]: \u2705"]
+        self._help_text_parts = [self.name, _allowed_types_str, *_mon_only, *_template_group, *_other]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -536,39 +440,6 @@ class CacheGroup(CentralObject):
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Group[/]:[cyan]{self.name}[/]|({utils.color(self.allowed_types, "green_yellow")})'
-
-    def get_help_text_parts(self) -> Generator[str, None, None]:
-        _allowed_types_str = f"[magenta]allowed types[/]: {utils.color(self.allowed_types)}"
-        _mon_only = [f"[magenta]{_type}[/]: \u2705" for _type, _mon_only in zip(["sw", "cx"], [self.monitor_only_sw, self.monitor_only_cx]) if _mon_only]
-        _template_group = [f"[magenta]{_type}[/]: \u2705" for _type, _tg in zip(["wired", "wlan"], [self.wired_tg, self.wlan_tg]) if _tg]
-        _other = []
-        if "ap" in self.allowed_types:
-            _other += ["AOS10" if self.aos10 else "AOS8"]
-        if "gw" in self.allowed_types or "sdwan" in self.allowed_types:
-            _other += [f"[magenta]GW Role[/]: {self.gw_role}"]
-        if self.cnx:
-            _other += ["[magenta]New Central Managed[/]: \u2705"]
-
-
-        parts = [p for p in [self.name, _allowed_types_str, *_mon_only, *_template_group, *_other] if p]
-
-        for idx, part in enumerate(parts):
-            if "[/" in part:
-                yield part
-            elif idx % 2 == 0:
-                yield f"[cyan]{part}[/]"
-            else:
-                yield f"[turquoise4]{part}[/]"
-
-    @cached_property
-    def rich_help_text(self) -> str:
-        return "|".join(self.get_help_text_parts())
-
-    @property
-    def summary_text(self) -> str:
-        return self.rich_help_text
 
 class CacheSite(CentralObject):
     db: Table | None = None
@@ -586,6 +457,8 @@ class CacheSite(CentralObject):
         self.lon: Optional[str] = data.get("lon", data.get("longitude"))
         self.lat: Optional[str] = data.get("lat", data.get("latitude"))
         self.devices: int = data.get("devices")
+        parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
+        self._help_text_parts = parts if len(parts) > 1 else [*parts, self.lat, self.lon]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -609,20 +482,6 @@ class CacheSite(CentralObject):
         self._doc_id = doc_id
 
 
-    def __rich__(self) -> str:
-        return self.summary_text
-
-    @property
-    def summary_text(self):
-        parts = [a for a in [self.name, self.city, self.state, self.zip] if a]
-        parts = parts if len(parts) > 1 else [*parts, self.lat, self.lon]
-        return "[reset]" + "|".join(
-            [
-                f"{'[cyan]' if idx % 2 == 0 else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)
-            ]
-        )
-
-
 class CacheLabel(CentralObject):
     db: Table | None = None
 
@@ -632,6 +491,7 @@ class CacheLabel(CentralObject):
         self.name: str = data["name"]
         self.id: int = data["id"]
         self.devices: int = data.get("devices", data.get("associated_device_count", 0))
+        self._help_text_parts = [self.name, f"[magenta]id[/]: {self.id}"]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -654,9 +514,6 @@ class CacheLabel(CentralObject):
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
-
     def get_completion(self, pfx: str = "'") -> tuple[str, str]:
         quoted = f"'{self.name}'" if pfx == "'" else f'"{self.name}"'
         return (self.name if " " not in self.name else quoted, self.help_text)
@@ -678,7 +535,7 @@ class CachePortal(CentralObject):
         self.is_shared: bool = data["is_shared"]
         self.reg_by_email: bool = data["reg_by_email"]
         self.reg_by_phone: bool = data["reg_by_phone"]
-
+        self._help_text_parts = [self.name, self.auth_type, f"[magenta]id[/]: {self.id}"]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -710,16 +567,10 @@ class CachePortal(CentralObject):
     def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Portal Profile[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
-
-    @property
-    def help_text(self):
-        return render.rich_capture(self.__rich__())
-
 
 class CacheGuest(CentralObject):
     db: Table | None = None
+    _cache: Cache | None = None
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
@@ -734,11 +585,18 @@ class CacheGuest(CentralObject):
         self.status: str = data["status"]
         self.created: int = data["created"]
         self.expires: int = data["expires"]
+        email_str = None if not self.email or self.email == self.name else f"|[dark_olive_green2]{self.email}[/]"
+        self._help_text_parts = [self.name, f"[magenta]portal[/]: [cyan]{self.portal}[/]", self.status,  email_str, f"[dim][magenta]id[/]: [cyan]{self.id}[/][/dim]"]
 
 
     @classmethod
-    def set_db(cls, db: Table):
-        cls.db: Table = db
+    def set_db(cls, db: Table, cache: Cache = None):
+        cls.db = db
+        cls._cache = cache
+
+    @cached_property
+    def portal(self):
+        return self._cache.portals_by_id[self.portal_id]["name"]
 
     @property
     def doc_id(self) -> int | None:
@@ -757,13 +615,6 @@ class CacheGuest(CentralObject):
     def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Guest[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]| portal id:[cyan]{self.portal_id}[/]'
-
-    @property
-    def help_text(self):
-        return render.rich_capture(self.__rich__())
-
 
 class CacheTemplate(CentralObject):
     db: Table | None = None
@@ -775,9 +626,9 @@ class CacheTemplate(CentralObject):
         self.device_type: constants.DeviceTypes = data["device_type"]
         self.group: str = data["group"]
         self.model: str = data["model"]  # model as in sku here =
-        self.name: str = data["name"]
         self.template_hash: str = data["template_hash"]
         self.version: str = data["version"]
+        self._help_text_parts = [self.name, self.group, self.device_type, self.model, f"[magenta]version[/]: {self.version}"]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -800,17 +651,11 @@ class CacheTemplate(CentralObject):
     def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Label[/]:[bright_green]{self.name}[/]|[cyan]{self.id}[/]'
-
-
-ClientType = Literal["wired", "wireless"]
 
 class CacheClient(CentralObject):
     db: Table | None = None
     cache: Cache | None = None
 
-    # mac, name, ip, type, network_port, connected_serial, connected_name, site, group, last_connected
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.data = data
         super().__init__('client', data)
@@ -824,6 +669,7 @@ class CacheClient(CentralObject):
         self.site: str = data["site"]
         self.group: str = data["group"]
         self.last_connected: int | float = data.get("last_connected")
+        self._help_text_parts = [self.name, self.ip, self.mac, f'[magenta]s[/]:{self.site}' if self.site else f'[magenta]g[/]:{self.group}', self.type, self.connected_name]
 
     @classmethod
     def set_db(cls, db: Table, cache: Cache = None):
@@ -853,19 +699,6 @@ class CacheClient(CentralObject):
     def get_site(self) -> CacheSite:
         return None if self.cache is None else self.cache.get_site_identifier(self.site)
 
-    def __rich__(self) -> str:
-        return f'[bright_green]Client[/]:[cyan]{self.name}[/]|({utils.color([self.type, self.ip, self.mac, self.connected_name],  "green_yellow", sep="|")}|s:[green_yellow]{self.site})[/]'
-
-    @property
-    def help_text(self) -> str:
-        return render.rich_capture(
-            f"[bright_green]{self.name}[/]|[cyan]{self.mac}[/]|[bright_green]{self.ip}[/]|[cyan]{f's:{self.site}' if self.site else f'g:{self.group}'}[/]|[dark_olive_green2]{self.connected_name}[/]"
-        )
-
-    @property
-    def summary_text(self) -> str:
-        return self.__rich__()
-
 
 class CacheMpskNetwork(CentralObject):
     db: Table | None = None
@@ -876,6 +709,7 @@ class CacheMpskNetwork(CentralObject):
         super().__init__('mpsk_network', data)
         self.name: str = data["name"]
         self.id: int = data["id"]
+        self._help_text_parts = [self.name, f"[magenta]id[/]: {self.id}"]
 
     @classmethod
     def set_db(cls, db: Table, cache: Cache = None):
@@ -899,23 +733,6 @@ class CacheMpskNetwork(CentralObject):
     def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]MPSK Network[/]: [cyan]{self.name}[/]|[green_yellow]{self.id}[/]'
-
-    @property
-    def rich_help_text(self) -> str:
-        return self.__rich__()
-
-    @property
-    def help_text(self) -> str:
-        return "|".join(
-            [
-                typer.style(self.name, fg="green"),
-                typer.style(self.id, fg="cyan"),
-            ]
-        )
-
-
 
 class CacheMpsk(CentralObject):
     db: Table | None = None
@@ -926,6 +743,9 @@ class CacheMpsk(CentralObject):
         self.name: str = data["name"]
         self.id: int = data["id"]
         self.role: str = data["role"]
+        self.ssid: str = data["ssid"]
+        self.status: Literal["enabled", "disabled"] = data["status"]
+        self._help_text_parts = [self.name, self.ssid, self.role, self.status, f"[magenta]id[/]: {self.id}"]
 
     @classmethod
     def set_db(cls, db: Table):
@@ -948,9 +768,6 @@ class CacheMpsk(CentralObject):
     def doc_id(self, doc_id: int | None) -> None:
         self._doc_id = doc_id
 
-    def __rich__(self) -> str:
-        return f'[bright_green]MPSK[/]:[cyan]{self.name}[/]|[green_yellow]{self.id})[/]'
-
 
 class CacheCert(CentralObject):  #, Text):
     db: Table | None = None
@@ -961,6 +778,8 @@ class CacheCert(CentralObject):  #, Text):
         self.expired = expired
         self._expiration = expiration
         self.md5_checksum = md5_checksum
+        expired_str = f'[magenta]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]'
+        self._help_text_parts = [self.name, expired_str, f'[magenta]expiration[/]: [cyan]{"" if self.expiration is None else DateTime(self.expiration, "date-string")}[/]', f'[magenta]md5[/]: [cyan]{self.md5_checksum}[/]']
 
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} (Certificate|{self.name}|{'OK' if not self.expired else 'EXPIRED'}) object at {hex(id(self))}>"
@@ -985,13 +804,6 @@ class CacheCert(CentralObject):  #, Text):
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
-    @property
-    def text(self) -> Text:
-        return Text.from_markup(
-            f'Certificate: [bright_green]{self.name}[/]|[magenta]expired[/]: {"[bright_red]" if self.expired is True else "[bright_green]"}{self.expired}[/]|'
-            f'[magenta]expiration[/]: [cyan]{"" if self.expiration is None else DateTime(self.expiration, "date-string")}[/]|[magenta]md5[/]: [cyan]{self.md5_checksum}[/]'
-        )
-
     def ok(self) -> bool:
         return not self.expired
 
@@ -1007,20 +819,6 @@ class CacheCert(CentralObject):  #, Text):
             self._expiration = DateTime(pendulum.from_format(expiration.rstrip("Z"), "YYYYMMDDHHmmss").timestamp(), "date-string")
 
         self._expiration = DateTime(expiration, "date-string")
-
-    def __str__(self) -> str:
-        return self.text.plain
-
-    def __rich__(self) -> str:
-        return self.text.markup
-
-    @property
-    def summary_text(self) -> str:
-        return self.text.markup
-
-    @property
-    def help_text(self):
-        return render.rich_capture(self.text.markup)
 
 
 class SubscriptionTier(str, Enum):
@@ -1047,6 +845,10 @@ class CacheSub(CentralObject, Text):
         self.expired: bool = data["expired"]
         self.valid: bool = data["valid"]
         self.expire_string: DateTime = DateTime(self.end_date, format="date-string")
+        _expired_str = f"[red1]EXPIRED[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires {self.expire_string.expiration}"
+        _glp_str = "" if not config.debug else f"[dim][magenta]glp id[/]: {self.id}[/dim]"
+        _key_str = "" if not self.key else f"[dim turquoise2]{self.key}[/]"
+        self._help_text_parts = [self.name, _glp_str, _key_str, _expired_str, f'[magenta]Qty Available[/][dim]:[/dim] [cyan]{self.available}[/cyan]']
 
     @classmethod
     def set_db(cls, db: Table):
@@ -1092,15 +894,6 @@ class CacheSub(CentralObject, Text):
         return SubscriptionTier.OTHER
 
     @property
-    def text(self) -> Text:
-        _expired_str = f"[red1]EXPIRED[/] as of [cyan]{self.expire_string}[/]" if self.expired else f"expires {self.expire_string.expiration}"
-        glp_str = "" if not config.debug else f"|[dim]glp id: {self.id}[/dim]"
-        key_str = "" if not self.key else f"|[dim cadet_blue]{self.key}[/dim cadet_blue]"
-        return Text.from_markup(
-            f'[bright_green]{self.name}[/]{glp_str}{key_str}|{_expired_str}|[magenta]Qty Available[/][dim]:[/dim] [cyan]{self.available}[/cyan]'
-        )
-
-    @property
     def status(self) -> str:
         if self.valid:
             return "[bright_green]OK[/]"
@@ -1116,20 +909,6 @@ class CacheSub(CentralObject, Text):
     def ok(self) -> bool:
         return self.valid
 
-    def __str__(self) -> str:
-        return self.text.plain
-
-    def __rich__(self) -> str:
-        return self.text.markup
-
-    @property
-    def summary_text(self) -> str:
-        return self.text.markup
-
-    @property
-    def help_text(self):
-        return render.rich_capture(self.text.markup)
-
 
 class CacheBuilding(CentralObject, Text):
     db: Table | None = None
@@ -1140,6 +919,7 @@ class CacheBuilding(CentralObject, Text):
         self.campus_id: str = data["campus_id"]
         self.lat: int = data["lat"]
         self.lon: int = data["lon"]
+        self._help_text_parts = [self.name, self.lat, self.lon]
 
     @classmethod
     def set_db(cls, db: Table, building_db: Table = None):
@@ -1174,31 +954,10 @@ class CacheBuilding(CentralObject, Text):
     def __hash__(self):
         return hash(self.id)
 
-    @property
-    def text(self) -> Text:
-        return Text.from_markup(
-            f'Building [bright_green]{self.name}[/]'
-        )
 
-    def __str__(self) -> str:
-        return self.text.plain
-
-    def __rich__(self) -> str:
-        return self.text.markup
-
-    @property
-    def summary_text(self) -> str:
-        return self.text.markup
-
-    @property
-    def help_text(self):
-        return render.rich_capture(self.text.markup)
-
-
-class CacheFloorPlanAP(Text):
+class CacheFloorPlanAP(CentralObject, Text):
     db: Table | None = None
     building_db: Table | None = None
-    _building_object: CacheBuilding = None
 
     def __init__(self, data: Document | Dict[str, Any]) -> None:
         self.id: str = data["id"]
@@ -1208,12 +967,17 @@ class CacheFloorPlanAP(Text):
         self.floor_id: int = data["floor_id"]
         self.building_id: str = data["building_id"]
         self.level: int | float = data["level"]
+        self._help_text_parts = [self.name, self.serial, self.mac, f"[magenta]building[/]: {self.building.name}", f"[magenta]floor[/]: {self.level}"]
 
     @classmethod
     def set_db(cls, db: Table, building_db: Table = None):
-        cls.db: Table = db
-        if building_db:
-            cls.building_db = building_db
+        cls.db = db
+        cls.building_db = building_db
+
+    @cached_property
+    def building(self) -> CacheBuilding:
+        bldg = [b for b in self.building_db.all() if b["id"] == self.building_id]
+        return CacheBuilding(bldg[0])
 
     @property
     def doc_id(self) -> int:
@@ -1242,29 +1006,42 @@ class CacheFloorPlanAP(Text):
     def __hash__(self):
         return hash(self.id)
 
-    @property
-    def text(self) -> Text:
-        return Text.from_markup(
-            f'[bright_green]{self.name}[/]|[cyan]{self.serial}[/]|[bright_green]{self.mac}[/]'
-        )
+    # def __rich__(self):
+    #     return f'[bright_green]{self.name}[/]|[cyan]{self.serial}[/]|[bright_green]{self.mac}[/]'
 
-    def __str__(self) -> str:
-        return self.text.plain
+    # @cached_property
+    # def text(self) -> Text:
+    #     return Text.from_markup(self.__rich__())
 
-    def __rich__(self) -> str:
-        return self.text.markup
+    # @property
+    # def rich_help_text(self):
+    #     return self.text.markup
 
-    @property
-    def summary_text(self) -> str:
-        return self.text.markup
+    # @property
+    # def summary_text(self):
+    #     return self.text.markup
 
-    @property
-    def help_text(self):
-        return render.rich_capture(self.text.markup)
+    # @property
+    # def help_text(self) -> str:
+    #     return self.text.plain
 
-    @property
-    def building(self) -> CacheBuilding | None:
-        return self.get_building()
+    # def __str__(self) -> str:
+    #     return self.text.plain
+
+    # def __rich__(self) -> str:
+    #     return self.text.markup
+
+    # @property
+    # def summary_text(self) -> str:
+    #     return self.text.markup
+
+    # @property
+    # def help_text(self):
+    #     return render.rich_capture(self.text.markup)
+
+    # @property
+    # def building(self) -> CacheBuilding | None:
+    #     return self.get_building()
 
     @property
     def location(self) -> dict[str, str]:
@@ -1275,14 +1052,14 @@ class CacheFloorPlanAP(Text):
             "floor": self.level
         }
 
-    def get_building(self) -> CacheBuilding | None:
-        if self._building_object is None:
-            query = Query()
-            match = self.building_db.search(query.id == self.building_id)
-            if not match:
-                return
-            self._building_object = CacheBuilding(match[0])
-        return self._building_object
+    # def get_building(self) -> CacheBuilding | None:
+    #     if self._building_object is None:
+    #         query = Query()
+    #         match = self.building_db.search(query.id == self.building_id)
+    #         if not match:
+    #             return
+    #         self._building_object = CacheBuilding(match[0])
+    #     return self._building_object
 
 
 class CacheResponses:
@@ -2896,7 +2673,6 @@ class Cache:
 
         for m in out:
             yield m
-
 
     @ensure_config
     def label_completion(
@@ -5072,7 +4848,6 @@ class Cache:
             else:
                 return
 
-
     @overload
     def get_template_identifier(self, query_str: str, completion: Literal[True]) -> list[CacheTemplate]: ...  # pragma: no cover
 
@@ -5241,7 +5016,6 @@ class Cache:
             if exit_on_fail:
                 raise typer.Exit(1)
 
-
     def get_audit_log_identifier(self, query: str) -> str:
         if "audit_trail" in query:
             return query
@@ -5377,7 +5151,6 @@ class Cache:
             econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{query_str}[/] appears to be invalid")
             econsole.print(f"\n[bright_green]Valid MPSK Networks[/]:\n--\n{valid_mpsk}\n--\n")
             raise typer.Exit(1)
-
 
     @staticmethod
     def _handle_sub_multi_match(match: list[CacheSub], *, end_date: dt.datetime, best_match: bool = False, all_match: bool = False) -> list[CacheSub]:
@@ -5524,7 +5297,6 @@ class Cache:
             log.error(
                 f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
             )
-
 
     @lru_cache
     def get_sub_identifier(
@@ -5685,6 +5457,7 @@ class Cache:
         silent: bool = False,
     ) -> CachePortal | list[CachePortal]:
         return self.get_name_id_identifier("portal", query_str, retry=retry, completion=completion, silent=silent)
+
 
 class CacheAttributes:
     def __init__(self, name: Literal["dev", "site", "template", "group", "label", "portal", "mpsk", "mpsk_network"], db: Table, cache_update_func: Callable) -> None:
