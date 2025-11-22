@@ -269,7 +269,7 @@ if config.valid:
     CacheClient.set_db(cache.ClientDB, cache=cache)
     CacheLabel.set_db(cache.LabelDB)
     CachePortal.set_db(cache.PortalDB)
-    CacheGuest.set_db(cache.GuestDB)
+    CacheGuest.set_db(cache.GuestDB, cache=cache)
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
