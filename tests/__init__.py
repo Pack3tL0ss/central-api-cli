@@ -40,7 +40,7 @@ Bottom Line.
 """
 import sys
 import time
-import traceback
+from traceback import print_exception
 from functools import partial
 from pathlib import Path
 from unittest import mock
@@ -50,17 +50,18 @@ import pendulum
 from click.testing import Result
 from rich.console import Console
 from rich.markup import escape
-from rich.traceback import install
 
 from centralcli import cache, config, log
 from centralcli.cache import CacheDevice
 from centralcli.clicommon import APIClients
 from centralcli.exceptions import CentralCliException
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.http_exceptions import ContentLengthError
 
 from ._mock_request import mock_request
 from ._test_data import test_data as test_data
 
-install(show_locals=True)  # rich.traceback hook
+expected_exceptions = [SystemExit, ClientConnectorError, ClientOSError, ContentTypeError, ContentLengthError]
 api_clients = APIClients()
 econsole = Console(stderr=True)
 in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
@@ -82,10 +83,9 @@ def capture_logs(result: Result, test_func: str = None, log_output: bool = False
         if "unable to gather device" in result.stdout:  # pragma: no cover
             cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
             log.error(f"{repr(cache)} devices\n{cache_devices}")
-    if result.exception and not isinstance(result.exception, SystemExit):  # pragma: no cover
-        log.exception(f"{test_func} {repr(result.exception)}", exc_info=True)
+    if result.exception and not any([isinstance(result.exception, exc) for exc in expected_exceptions]):  # pragma: no cover
         with log.log_file.open("a") as log_file:
-            traceback.print_exception(result.exception, file=log_file)
+            print_exception(result.exception, file=log_file)
 
 
 def ensure_default_account():  # pragma: no cover
