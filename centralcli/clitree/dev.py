@@ -10,6 +10,7 @@ import typer
 
 from centralcli import common, config, render
 from centralcli.typedefs import StrPath
+from centralcli.constants import HelpObject
 
 app = typer.Typer()
 
@@ -246,7 +247,7 @@ def colors(
             f"1234567890!? {escape('[bold]')} [bold]Pack my box with five dozen liquor jugs[/bold][/]"
         )
         table.add_row(
-            f"[{color}{'' if color not in ['black', 'gray0', 'gray7', 'gray11'] else ' on white'}]{color}[/]", color_cell, example_cell
+            f"[{color}{'' if color not in ['black', 'gray0', 'gray3', 'gray7', 'gray11', 'navy_blue'] else ' on white'}]{color}[/]", color_cell, example_cell
         )
 
     console.print(table)
@@ -343,6 +344,52 @@ def clear_raw(
     render.confirm(yes)
     func()
     render.console.print("[bright_green]Done[/]")
+
+
+@app.command()
+def help_text(
+    cache_object: list[HelpObject] = typer.Argument(None, help="The cache object to show summary text for. Defaults to all.", show_default=False),
+) -> None:
+    """Show help / summary text for all Cache Objects"""
+    from centralcli.cache import CacheGroup, CacheDevice, CacheInvDevice, CacheInvMonDevice, CacheSite, CacheClient, CacheBuilding, CacheFloorPlanAP, CacheGuest, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSub, CacheTemplate, CacheCert
+    from centralcli import utils, cache
+    groups = list(map(CacheGroup, cache.GroupDB.all()))
+    sites = list(map(CacheSite, cache.SiteDB.all()))
+    devices = list(map(CacheDevice, cache.DevDB.all()))
+    inventory = list(map(CacheInvDevice, cache.InvDB.all()))
+    serials = set([*list(cache.inventory_by_serial.keys()), *list(cache.devices_by_serial.keys())])
+    invmondevs = [CacheInvMonDevice(None if s not in cache.inventory_by_serial else CacheInvDevice(cache.inventory_by_serial[s]), None if s not in cache.devices_by_serial else CacheDevice(cache.devices_by_serial[s])) for s in serials]
+    clients = list(map(CacheClient, cache.ClientDB.all()))
+    buildings = list(map(CacheBuilding, cache.BuildingDB.all()))
+    floor_aps = list(map(CacheFloorPlanAP, cache.FloorPlanAPDB.all()))
+    guests = list(map(CacheGuest, cache.GuestDB.all()))
+    labels = list(map(CacheLabel, cache.LabelDB.all()))
+    mpsks = list(map(CacheMpsk, cache.MpskDB.all()))
+    mpsk_nets = list(map(CacheMpskNetwork, cache.MpskNetDB.all()))
+    portals = list(map(CachePortal, cache.PortalDB.all()))
+    subs = list(map(CacheSub, cache.SubDB.all()))
+    certs = [CacheCert(**c) for c in cache.CertDB.all()]
+    templates = list(map(CacheTemplate, cache.TemplateDB.all()))
+    ignore_emoji = [":cd:", ":ab:"]
+
+    def show(tables: str | list[str] = None):
+        cache_name = ["groups", "sites", "devices", "inventory", "invmondevs", "certs", "clients", "buildings", "floor-aps", "guests", "labels", "mpsks", "mpsk-nets", "portals", "subs", "certs", "templates"]
+        cache_list = [groups, sites, devices, inventory, invmondevs, certs, clients, buildings, floor_aps, guests, labels, mpsks, mpsk_nets, portals, subs, certs, templates]
+        items = list(zip(cache_name, cache_list)) if not tables else [(t, cache_list[cache_name.index(t)]) for t in utils.listify(tables)]
+        for name, c in items:
+            render.console.rule(name)
+            for obj in c[0:4 if not tables else len(c)]:
+                render.console.print(f"{'typer':>14}: ", end="")
+                typer.echo(obj.help_text)
+                render.console.print(f"{'rich.Text':>14}: ", end="")
+                render.console.print(obj.text)
+                render.console.print(f"{'rich_help_text':>14}: ", end="")
+                render.console.print(obj.rich_help_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
+                render.console.print(f"{'summary_ext':>14}: ", end="")
+                render.console.print(obj.summary_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
+
+    show(None if not cache_object else [c.value for c in cache_object])
+    ...
 
 
 @app.callback()

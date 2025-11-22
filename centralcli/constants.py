@@ -653,6 +653,27 @@ class SubscriptionArgs(str, Enum):
     names = "names"
     auto = "auto"
 
+
+class HelpObject(str, Enum):
+    groups = "groups"
+    sites = "sites"
+    devices = "devices"
+    inventory = "inventory"
+    serials = "serials"
+    invmondevs = "invmondevs"
+    certs = "certs"
+    clients = "clients"
+    buildings = "buildings"
+    floor_aps = "floor-aps"
+    guests = "guests"
+    labels = "labels"
+    mpsks = "mpsks"
+    mpsk_nets = "mpsk-nets"
+    portals = "portals"
+    subs = "subs"
+    templates = "templates"
+
+
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
