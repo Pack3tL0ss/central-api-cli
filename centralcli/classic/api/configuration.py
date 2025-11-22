@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Dict, List
 from ... import config, constants, log, utils
 from ...client import BatchRequest
 from ...exceptions import CentralCliException
-from ...response import Response
+from ...response import BatchResponse, Response
 
 if TYPE_CHECKING:
     from centralcli.client import Session
@@ -2064,8 +2064,12 @@ class ConfigAPI:
             log.info(skipped_msg, caption=True, log=False)
 
         update_reqs = [BatchRequest(self.session.post, f"{base_url}/{group}", json_data={"clis": updated_clis}) for (group, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
-        update_resp = await self.session._batch_request(update_reqs)
+        if not update_reqs:
+            res = Response(error="No Update", output="No updates to process after validating current configuration")
+            res.rl = BatchResponse(current_resp).last_rl
+            return res
 
+        update_resp = await self.session._batch_request(update_reqs)
         return [*update_resp, *list(failed.values())]
 
     async def get_per_ap_config(
@@ -2176,6 +2180,7 @@ class ConfigAPI:
         return await self.session.get(url)
 
     # TODO validate IP address format / Not used by CLI yet
+    # needs testing returned 400: {"error":{"code":"BADREQ_UNSUPPORTED_REST_OP","message":"Operation not allowed"}}
     async def update_cx_properties(
         self,
         *,
@@ -2190,7 +2195,7 @@ class ConfigAPI:
         ntp_servers: List[str] = [],
         admin_user: str = None,
         admin_pass: str = None,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover.  Not sure this endpoint works see comments above
         """Update Properties (ArubaOS-CX).
 
         Args:
@@ -2238,7 +2243,7 @@ class ConfigAPI:
         if len([x for x in [admin_user, admin_pass] if x is not None]) == 1:
             raise ValueError("If either admin_user or admin_pass are bing updated, *both* should be provided.")
 
-        if len([x for x in [serial, group] if x is not None]) == 2:
+        if len([x for x in [serial, group] if x is not None]) > 1:
             raise ValueError("provide serial to update device level properties, or group to update at the group level.  Providing both is invalid.")
 
         json_data = utils.strip_none(json_data, strip_empty_obj=True)
