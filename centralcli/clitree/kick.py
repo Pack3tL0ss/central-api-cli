@@ -73,7 +73,7 @@ def client(
                 render.econsole.print(f"[dark_orange3]:warning:[/]  {client.summary_text} is not online according to cache.\nThe following [red]failure[/] occured attempting to fetch current client details from API.\n")
                 render.display_results(client_resp, exit_on_fail=True)
 
-            _clients = [CacheClient(c) for c in Clients(client_resp.output)]
+            _clients = [CacheClient(c.model_dump()) for c in Clients(client_resp.output)]
             online_client =  [c for c in _clients if c.last_connected]
             if online_client:
                 client = online_client[-1]
