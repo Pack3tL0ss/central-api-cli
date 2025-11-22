@@ -42,6 +42,7 @@ TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate", "simple", "acti
 LogType = Literal["event", "audit"]
 InsightSeverityType = Literal["high", "med", "low"]
 CloudAuthTimeWindow = Literal["3h", "1d", "1w", "1M", "3M"]
+ClientType = Literal["wired", "wireless"]
 JSON_TYPE = Union[List, Dict, str]
 
 class CacheSiteDict(TypedDict):
