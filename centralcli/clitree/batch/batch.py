@@ -493,7 +493,7 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     elif "'subscription': " in str(devices):
         devices = [{**d, "services": d["subscription"]} for d in devices]
 
-    subs = set([d["services"] for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    subs = set([utils.unlistify(d["services"]) for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
     ignored = [d for d in devices if not d.get("services")]
     devices = [d for d in devices if d.get("services")]  # filter any devs that currently do not have subscription
 
