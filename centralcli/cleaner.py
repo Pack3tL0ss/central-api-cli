@@ -78,7 +78,7 @@ def _extract_names_from_id_name_dict(id_name: dict) -> str:
         return id_name
 
 
-def _extract_event_details(details: list[dict]) -> dict:
+def _extract_event_details(details: list[dict]) -> dict:  # pragma: no cover  TODO get_event_logs no longer includes fetching this, may be safe to remnove
     data = {
         k: v for k, v in [tuple(short_value(k, v)) for d in details for k, v in d.items()]
     }
@@ -87,7 +87,6 @@ def _extract_event_details(details: list[dict]) -> dict:
 
 def _format_memory(mem: int) -> str:
     # gw and aps report memory in bytes
-    #
     gmk = [(1_073_741_824, "GB"), (1_048_576, "MB"), (1024, "KB")]
     if len(str(mem)) > 4:
         for divisor, indicator in gmk:
@@ -96,7 +95,6 @@ def _format_memory(mem: int) -> str:
 
     return f'{mem}'
 
-_NO_FAN = ["Aruba2930F-8G-PoE+-2SFP+ Switch(JL258A)"]
 
 # TODO determine all modes possible (CX)
 vlan_modes = {
@@ -133,7 +131,7 @@ _short_value = {
     "token_created": lambda x: DateTime(x, "mdyt"),
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
-    "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
+    # "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
     "firmware_scheduled_at": lambda x: DateTime(x, "mdyt"),
     "Unknown": "?",
     "HPPC": "SW",
@@ -317,14 +315,6 @@ def strip_outer_keys(data: dict) -> list[dict[str, Any]] | dict[str, Any]:
         return data[_keys[0]]
     elif _keys:  # pragma: no cover
         log.warning(f"cleaner.strip_outer_keys(): More wrapping keys than expected from return {_keys}", show=True)
-    return data
-
-
-def pre_clean(data: dict) -> dict:
-    if isinstance(data, dict):
-        if data.get("fan_speed", "") == "Fail":
-            if data.get("model", "") in _NO_FAN:
-                data["fan_speed"] = "N/A"
     return data
 
 
@@ -1142,6 +1132,11 @@ def parse_caas_response(data: dict | list[dict[str, Any]]) -> list[str]:
     data = utils.unlistify(data)
     out = []
     lines = f"[reset]{'-' * 22}"
+    _code_to_markup = {
+        0: "[bright_green]OK[/bright_green]",
+        1: "[red]ERROR[/red]",
+        2: "[dark_orange3]WARNING[/dark_orange3]"
+    }
 
     if data.get("_global_result", {}).get("status", '') == 0:
         global_res = "[bright_green]Success[/bright_green]"
@@ -1154,13 +1149,7 @@ def parse_caas_response(data: dict | list[dict[str, Any]]) -> list[str]:
         for cmd_resp in data["cli_cmds_result"]:
             for _c, _r in cmd_resp.items():
                 _r_code = _r.get("status")
-                if _r_code == 0:
-                    _r_pretty = "[bright_green]OK[/bright_green]"
-                elif _r_code == 2:
-                    _r_pretty = "[dark_orange3]WARNING[/dark_orange3]"
-                else:
-                    _r_pretty = "[red]ERROR[/red]" if _r_code == 1 else f"[red]ERROR ({_r_code})[/red]"
-
+                _r_pretty = _code_to_markup.get(_r_code, f"[red]ERROR ({_r_code})[/red]")
                 out += [f" [{_r_pretty}] {_c}"]
                 cmd_status = _r.get('status_str')
                 if cmd_status:
