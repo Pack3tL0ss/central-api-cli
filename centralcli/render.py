@@ -266,7 +266,7 @@ def _batch_invalid_msg(usage: str, provide: str = None) -> str:  # referenced in
         ]
         return "\n".join(_msg)
 
-def write_file(outfile: Path, outdata: str) -> None:
+def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this function is mocked
     """Output data to file
 
     Args:
@@ -894,10 +894,10 @@ def _display_results(
     pager: bool = False,
     outfile: Path = None,
     sort_by: str | StrEnum = None,
+    group_by: str = None,
     reverse: bool = False,
     stash: bool = True,
     output_by_key: str | List[str] = "name",
-    group_by: str = None,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -976,7 +976,6 @@ def display_results(
     output_by_key: str | List[str] = "name",
     group_by: str = None,
     exit_on_fail: bool = True,
-    cache_update_pending: bool = False,
     set_width_cols: dict = None,
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
@@ -1013,8 +1012,6 @@ def display_results(
         group_by: When provided output will be grouped by this key.  For outputs where multiple entries relate to a common device, and multiple devices exist in the output.
             i.e. interfaces for a device when the output contains multiple devices.  Results in special formatting.  Defaults to None
         exit_on_fail: (bool, optional): If provided resp indicates a failure exit after display.  Defaults to False
-        cache_update_pending: (bool, optional): If a cache update is to be performed if resp is success.
-            Results in a warning before exit if failure. Defaults to False
         set_width_cols (Dict[str: Dict[str, int]]): Passed to output function defines cols with min/max width
             example: {'details': {'min': 10, 'max': 30}, 'device': {'min': 5, 'max': 15}}.  Applies to tablefmt=rich.
         full_cols (list): columns to ensure are displayed at full length (no wrap no truncate). Applies to tablfmt=rich. Defaults to [].
@@ -1088,7 +1085,7 @@ def display_results(
                     console.print(r, emoji=False)
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
-                if rl_str and idx + 1 == len(resp):
+                if rl_str and idx + 1 == len(resp):  # FIXME caption does not print if there is no rl str with this logic
                     if caption.replace(rl_str, "").lstrip():
                         _caption = f"\n{caption.replace(rl_str, '').rstrip()}" if r.output else f'  {unstyle(caption.replace(rl_str, "")).strip()}'
                         if not r.output:  # Formats any caption directly under Empty Response msg
@@ -1106,10 +1103,10 @@ def display_results(
                     pager=pager,
                     outfile=outfile,
                     sort_by=sort_by,
+                    group_by=group_by,
                     reverse=reverse,
                     stash=stash,
                     output_by_key=output_by_key,
-                    group_by=group_by,
                     set_width_cols=set_width_cols,
                     full_cols=full_cols,
                     fold_cols=fold_cols,
@@ -1119,8 +1116,6 @@ def display_results(
                 )
 
         if exit_on_fail and not all([r.ok for r in resp]):
-            if cache_update_pending:
-                econsole.print(":warning:  [italic]Cache update skipped due to failed API response(s)[/].")
             sys.exit(1)
 
     elif data:
@@ -1132,6 +1127,7 @@ def display_results(
             pager=pager,
             outfile=outfile,
             sort_by=sort_by,
+            group_by=group_by,
             reverse=reverse,
             stash=stash,
             output_by_key=output_by_key,
@@ -1142,11 +1138,3 @@ def display_results(
             cleaner=cleaner,
             **cleaner_kwargs
         )
-
-def get_pretty_status(status: str | None) -> str:
-    if status is None:
-        return status
-    if status.lower() == "up":
-        return f"[bright_green]{status}[/bright_green]"
-    if status.lower() == "down":
-        return f"[red1]{status}[/red1]"
