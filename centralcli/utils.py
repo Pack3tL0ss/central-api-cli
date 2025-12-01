@@ -438,7 +438,7 @@ class Utils:
             color = get_color_str(color_str)
             text = f"{' ' if pad_len else '':{pad_len or 1}}[{color}]{text}[/{color}]"
             return text if not pad_len else text.lstrip()  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
-        elif isinstance(text, list) and all([isinstance(x, str) for x in text]):
+        elif isinstance(text, (list, set)) and all([isinstance(x, str) for x in text]):
             colors = [get_color_str(color_str) for _ in range(len(text))]
             text = [f"{' ' if pad_len else '':{pad_len or 1}}[{c}]{t}[/{c}]" for t, c in zip(text, colors)]
             text = text if pad_len else [t.lstrip() for t in text]  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
