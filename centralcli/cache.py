@@ -1661,16 +1661,12 @@ class Cache:
             res = [self.responses.dev or Response()]
 
         _inv_by_ser = self.inventory_by_serial if not self.responses.inv else {d["serial"]: d for d in self.responses.inv.output}
-        if self.responses.dev:
-            _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}  # Need to use the resp value not what was just stored in cache (self.devices_by_serial) as we don't store all fields
-        else:
-            _dev_by_ser = self.devices_by_serial  # TODO should be no case to ever hit this.
+        _dev_by_ser = {d["serial"]: d for d in self.responses.dev.output}  # Need to use the resp value not what was just stored in cache (self.devices_by_serial) as we don't store all fields
 
         if device_type:
             _dev_types = [device_type] if device_type != "switch" else ["cx", "sw", "mas"]
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["type"] in _dev_types}
             _inv_by_ser = {serial: _inv_by_ser[serial] for serial in _inv_by_ser if _inv_by_ser[serial]["type"] in _dev_types}
-
 
         if status:
             _dev_by_ser = {serial: _dev_by_ser[serial] for serial in _dev_by_ser if _dev_by_ser[serial]["status"] == status.capitalize()}
@@ -1686,12 +1682,11 @@ class Cache:
         ]
 
         # TODO this may be an issue if check_fresh has a failure, don't think it returns Response object
-        # resp: Response = min([r for r in res if r is not None and r.rl.has_value], key=lambda x: x.rl)
         resp: Response = min([r for r in res if r is not None], key=lambda x: x.rl)
         resp.output = combined
         # Both are None if a partial error occured in show all.  To test change url in-flight so one of the 3 calls fails
         try:
-            resp.raw = {**self.responses.dev.raw, self.responses.inv.url.path: self.responses.inv.raw}
+            resp.raw = {**self.responses.dev.raw, **self.responses.inv.raw}
         except AttributeError:
             if isinstance(resp, CombinedResponse):
                 resp.raw = {**resp.raw, **{f.url.path: f.raw for f in resp.failed}}
@@ -1706,7 +1701,7 @@ class Cache:
                 yield ws, config.data["workspaces"][ws].get("cluster") or ""  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
 
     @ensure_config
-    def method_test_completion(self, incomplete: str, args: List[str] = []):
+    def method_test_completion(self, incomplete: str, args: List[str] = []):  # pragma: no cover
         methods = list(set(
             [d for svc in api.__dir__() if not svc.startswith("_") for d in getattr(api, svc).__dir__() if not d.startswith("_")]
         ))
@@ -1735,6 +1730,7 @@ class Cache:
 
         if not args:  # HACK click 8.x work-around now pinned at click 7.2 until resolved
             args = [v for k, v in ctx.params.items() if v and k != "workspace"]  # TODO ensure k is last item when v = incomplete
+
         if args[-1].lower() == "group":
             out = [m for m in self.group_completion(incomplete, args)]
             for m in out:
@@ -1749,13 +1745,12 @@ class Cache:
             out = ["|", "<MAC ADDRESS>"]
             for m in out:
                 yield m
-
         else:
             for kw in kwds:
                 if kw not in args and kw.lower().startswith(incomplete):
                     yield kw
 
-    def null_completion(self, incomplete: str):
+    def null_completion(self, incomplete: str):  # pragma: no cover
         incomplete = "NULL_COMPLETION"
         _ = incomplete
         for m in ["|", "<cr>"]:
@@ -2020,7 +2015,7 @@ class Cache:
             if completion:
                 return match
 
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover requires tty
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
@@ -2137,7 +2132,7 @@ class Cache:
             if completion:
                 return match
 
-            if len(match) > 1:
+            if len(match) > 1:  # pragma: no cover requires tty
                 match = self.handle_multi_match(
                     match,
                     query_str=query_str,
@@ -3335,10 +3330,10 @@ class Cache:
         # -- CACHE UPDATES --
         self.responses.inv = resp
         if dev_type is None or dev_type == "all":
-            _ = await self.update_db(self.InvDB, data=resp.output, truncate=True)
+            _ = await self.update_db(self.InvDB, data=inv_model.cache_dump(), truncate=True)
         else:
             self.responses.device_type = dev_type
-            _ = await self._add_update_devices(resp.output, "inv")
+            _ = await self._add_update_devices(inv_model.cache_dump(), "inv")
 
         if sub_data:
             self.responses.sub = sub_resp
@@ -3473,7 +3468,7 @@ class Cache:
             _ = await self.update_db(self.LabelDB, data=cache_data, truncate=True)
         return resp
 
-    async def refresh_license_db(self) -> Response:
+    async def refresh_license_db(self) -> Response:  # TOGLP
         """Update License DB
 
         License DB stores the valid license names accepted by GreenLake/Central
@@ -3773,11 +3768,12 @@ class Cache:
         if remove:
             return await self.update_db(self.GuestDB, doc_ids=data)
 
-        # TODO there is no simple add unless update_db is called directly
+        # no cover: start  # TODO there is no simple add unless update_db is called directly
         guest_models = models.Guests(portal_id, data)
         data_by_id = {p.id: p.model_dump() for p in guest_models}
         update_data = {**self.guests_by_id, **data_by_id}
         return await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
+        # no cover: stop  add guest uses update_db directly, this would come into play if we add batch add guests
 
     async def refresh_guest_db(self, portal_id: str) -> Response:
             resp: Response = await api.guest.get_guests(portal_id)
@@ -3824,9 +3820,9 @@ class Cache:
             update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.refresh_license_db]
+
         if update_funcs:
             kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type": dev_type} for f in update_funcs]
-            # kwargs = {} if update_funcs[0].__name__ not in dev_update_funcs else {"dev_type": dev_type}
             db_res += [await update_funcs[0](**kwarg_list[0])]
             if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
                 db_res = utils.unlistify(db_res)
@@ -3864,6 +3860,7 @@ class Cache:
                         *db_res,
                         *await api.session._batch_request(batch_reqs)
                     ]
+
         return db_res
 
     def check_fresh(
