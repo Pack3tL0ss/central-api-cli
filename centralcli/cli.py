@@ -172,9 +172,9 @@ def bounce(
     render.econsole.print(f"Bounce [cyan]{what.value}[/] on [cyan]{dev.name}[/]: interface{'s' if len(ports) > 1 else ''} [cyan]{', '.join(ports)}[/]")
     if len(ports) > 1:
         render.econsole.print(f"[italic dark_olive_green2]{len(ports)} API calls will be performed.[/]\n")
-    if render.confirm(yes):
-        resp = api.session.batch_request([BatchRequest(api.device_management.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.batch_request([BatchRequest(api.device_management.send_bounce_command_to_device, dev.serial, command, p) for p in ports])
+    render.display_results(resp, tablefmt="action")
 
 
 # TODO Change site arg to --site option and make optional build reqs based on current site according to cache.. add -R/-U option to update cache prior if stale.
@@ -194,24 +194,24 @@ def remove(
     site: CacheSite = common.cache.get_site_identifier(site)
 
     render.econsole.print(f"Remov{'e' if not yes else 'ing'} {utils.summarize_list([dev.rich_help_text for dev in devices], color=None)}\n  from site [bright_green]{site.name}[/]")
-    if render.confirm(yes):
-        devs_by_type = {}
-        for d in devices:
-            devs_by_type = utils.update_dict(devs_by_type, key=d.generic_type, value=[d.serial])
-        reqs = [
-            BatchRequest(
-                api.central.remove_devices_from_site,
-                site.id,
-                serials=serials,
-                device_type=dev_type,
-            ) for dev_type, serials in devs_by_type.items()
-        ]
-        resp = api.session.batch_request(reqs)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True, cache_update_pending=True)
-        # central will show the stack_id and all member serials in the success output.  So we strip the stack id
-        swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
-        update_data = [{**dict(common.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
-        api.session.request(common.cache.update_dev_db, data=update_data)
+    render.confirm(yes)
+    devs_by_type = {}
+    for d in devices:
+        devs_by_type = utils.update_dict(devs_by_type, key=d.generic_type, value=[d.serial])
+    reqs = [
+        BatchRequest(
+            api.central.remove_devices_from_site,
+            site.id,
+            serials=serials,
+            device_type=dev_type,
+        ) for dev_type, serials in devs_by_type.items()
+    ]
+    resp = api.session.batch_request(reqs)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # central will show the stack_id and all member serials in the success output.  So we strip the stack id
+    swack_ids = utils.strip_none([d.get("swack_id") for d in devices if d.get("swack_id", "") != d.get("serial", "")])
+    update_data = [{**dict(common.cache.get_dev_identifier(s["device_id"])), "site": None} for r in resp for s in r.raw["success"] if s["device_id"] not in swack_ids]
+    api.session.request(common.cache.update_dev_db, data=update_data)
 
 
 
@@ -257,9 +257,9 @@ def reboot(
     if len(batch_reqs) > 1:
         render.econsole.print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
-    if render.confirm(yes):
-        batch_resp = api.session.batch_request(batch_reqs)
-        render.display_results(batch_resp, tablefmt="action")
+    render.confirm(yes)
+    batch_resp = api.session.batch_request(batch_reqs)
+    render.display_results(batch_resp, tablefmt="action")
 
 
 @app.command()
@@ -280,9 +280,9 @@ def reset(
     _msg = f"{_msg} ORO connection for [cyan]{dev.rich_help_text}[/]"
     render.console.print(_msg, emoji=False)
 
-    if render.confirm(yes):
-        resp = api.session.request(api.routing.reset_overlay_connection, dev.serial)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.routing.reset_overlay_connection, dev.serial)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -334,12 +334,12 @@ def nuke(
         else:
             conf_msg = f'the [cyan]swarm {dev.name}[/] belongs to'
 
-    _msg = "Factory Default" if not yes else "Factory Defaulting"
+    _msg = "Factory Default" if not yes else "Factory Defaulting"  # pragma: no cover  always --yes for automated testing
     _msg = f"[bright_red blink]{_msg}[/] {conf_msg}"
     render.console.print(_msg, emoji=False)
-    if render.confirm(yes):
-        resp = api.session.request(func, arg, 'erase_configuration')
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(func, arg, 'erase_configuration')
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -418,41 +418,41 @@ def start(
     def get_pid():
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
             if p.info["cmdline"] and True in [svc in x for x in p.info["cmdline"][1:]]:
-                return p.pid # if p.ppid() == 1 else p.ppid()
+                return p.pid
 
     pid = get_pid()
     if pid:
         _abort = True if not port or port == int(config.webhook.port) else False
         render.console.print(f"Webhook proxy is currently running (process id {pid}).")
         render.console.print(f"Terminat{'e' if not yes_both else 'ing'} existing process{'?' if not yes_both else '.'}")
-        if render.confirm(yes_both, abort=_abort):
+        if render.confirm(yes_both, abort=_abort):  # pragma: no cover
             terminate_process(pid)
             render.console.print("[cyan]Process Terminated")
 
     render.console.print(f"Webhook Proxy will listen on port {port or config.webhook.port}")
-    if render.confirm(yes):
-        port = port or config.webhook.port
-        cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
-        if collect:
-            cmd += ["-c"]
-        with render.Spinner("Starting Webhook Proxy..."):
-            p = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT
-            )
-            sleep(2)
+    render.confirm(yes)
+    port = port or config.webhook.port
+    cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
+    if collect:
+        cmd += ["-c"]
+    with render.Spinner("Starting Webhook Proxy..."):
+        p = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT
+        )
+        sleep(2)
 
-        with render.Spinner("Ensuring startup success...", spinner="dots2"):
-            sleep(8)
+    with render.Spinner("Ensuring startup success...", spinner="dots2"):
+        sleep(8)
 
-        proc = psutil.Process(p.pid)
-        if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
-            output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
-            render.econsole.print("\n".join(output))
-            render.econsole.print("\nWebHook Proxy Startup [red]Failed[/].")
-        else:
-            render.console.print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
+    proc = psutil.Process(p.pid)
+    if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
+        output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
+        render.econsole.print("\n".join(output))
+        render.econsole.print("\nWebHook Proxy Startup [red]Failed[/].")
+    else:
+        render.console.print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
 
 
 @app.command(hidden=not hook_enabled)
@@ -505,9 +505,9 @@ def stop(
     if proc:
         render.console.print(f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}")
         render.console.print(f"Terminat{'e' if not yes else 'ing'} existing process{'?' if not yes else '.'}")
-        if render.confirm(yes):
-            dead = terminate_process(proc[0])
-            common.exit("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.", code=0 if dead else 1)
+        render.confirm(yes)
+        dead = terminate_process(proc[0])
+        common.exit("[cyan]WebHook process terminated" if dead else "Terminate may have [bright_red]failed[/] verify process.", code=0 if dead else 1)
     else:
         common.exit("WebHook Proxy is not running.", code=0)
 
@@ -545,9 +545,10 @@ def archive(
 
 
     render.econsole.print(_msg, _emsg, sep="\n", emoji=False)
-    if render.confirm(yes):
-        resp = api.session.request(api.platform.archive_devices, serials)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.platform.archive_devices, serials)
+    render.display_results(resp, tablefmt="action")
+    # CACHE update. for glp inv cache which stores archive status
 
 
 
@@ -582,6 +583,7 @@ def unarchive(
 
     resp = api.session.request(api.platform.unarchive_devices, _serials)
     render.display_results(resp, tablefmt="action")
+    # CACHE update. for glp inv cache which stores archive status
 
 
 # TOGLP
@@ -599,7 +601,6 @@ def enable(
     Enabling auto subscribe sets the level (i.e. foundation/advanced) for all devices of the same type as the subscription provided.
     i.e. `enable auto-sub advanced-switch-6300` will enable auto subscribe for all switch tiers (6100, 6200, etc)
     """
-
     _msg = "[bright_green]Enable[/] auto-subscribe for license"
     if len(services) > 1:  # pragma: no cover
         _svc_msg = '\n    '.join([s.name for s in services])
@@ -611,11 +612,11 @@ def enable(
     render.econsole.print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
     render.econsole.print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
     render.econsole.print('Not just the 6300 models.')
-    if render.confirm(yes):
-        services = [s.name for s in services]
+    render.confirm(yes)
+    services = [s.name for s in services]
 
-        resp = api.session.request(api.platform.enable_auto_subscribe, services=services)
-        render.display_results(resp, tablefmt="action")
+    resp = api.session.request(api.platform.enable_auto_subscribe, services=services)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=True)
@@ -644,11 +645,11 @@ def disable(
     render.econsole.print('\n[dark_orange3]:warning:[/]  Disabling auto subscribe removes auto-subscribe for all models of the same type.')
     render.econsole.print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
     render.econsole.print('Not just the 6300.')
-    if render.confirm(yes):
-        services = [s.name for s in services]
+    render.confirm(yes)
+    services = [s.name for s in services]
 
-        resp = api.session.request(api.platform.disable_auto_subscribe, services=services)
-        render.display_results(resp, tablefmt="action")
+    resp = api.session.request(api.platform.disable_auto_subscribe, services=services)
+    render.display_results(resp, tablefmt="action")
 
 @app.command(hidden=True)
 def renew_license(
