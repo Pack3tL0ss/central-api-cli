@@ -583,7 +583,7 @@ class CLICommon:
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
 
-        if not data:
+        if not data:  # TODO add exit_if_no_data: bool = True to consolidate the check for all functions that use this.  (easier for coverage)
             log.warning("No data after import from file.", caption=True)
 
         return data
@@ -980,9 +980,9 @@ class CLICommon:
         kwargs = {}
         if _data:
             try:
-                _data = Inventory(_data).model_dump()
-                update_func = self.cache.update_inv_db
+                _data = Inventory(_data).cache_dump()
                 kwargs = {"data": _data}
+                update_func = self.cache.update_inv_db
             except ValidationError as e:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
                 _data = None
@@ -1324,12 +1324,12 @@ class CLICommon:
             self.exit(f"Exception gathering devices from [cyan]{import_file.name}[/]\n[red]AttributeError:[/] {e.args[0]}\nUse [cyan]cencli batch move --example[/] for example import format.)")
 
         if "INVALID" in dev_idens:
-            self.exit(f'missing required field ({utils.color(["serial", "mac", "name"])}) for {dev_idens.index("INVALID") + 1} device in import file.')
+            self.exit(f'missing required field for {dev_idens.index("INVALID") + 1} device in import file.  At least one of ({utils.color(["serial", "mac", "name"])}) is required.')
 
-        if len(set(dev_idens)) < len(dev_idens):  # Detect and filter out any duplicate entries  # TODO make seperate function and leverage in all batch_xxx_devices
-            filtered_count = len(dev_idens) - len(set(dev_idens))
-            dev_idens = set(dev_idens)
-            render.econsole.print(f"[dark_orange3]:warning:[/]  Filtering [cyan]{filtered_count}[/] duplicate device{'s' if filtered_count > 1 else ''} from update.")
+        if len(set(dev_idens)) < len(dev_idens):  # TODO make seperate function and leverage in all batch_xxx_devices
+            dup_count = len(dev_idens) - len(set(dev_idens))
+            dups = set([iden for iden in dev_idens if dev_idens.count(iden) > 1])
+            self.exit(f"Duplicates exist in import data.  Number of duplicate entries: [cyan]{dup_count}[/]. Duplicates: {utils.color(dups)}")
 
         # swack option, as group move will move all associated devices when device is part of a swarm or stack
         cache_devs: list[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, include_inventory=True, swack=True, silent=True, exit_on_fail=False) for d in dev_idens]
@@ -1720,8 +1720,7 @@ class CLICommon:
         # tags = None if not tags else {k: v if v.lower() not in ["none", "null"] else None for k, v in tags.items()}
         if subscription:
             sub_keys = ["subscription", "license", "services"]
-            sub_key = [k for k in sub_keys if k.lower() in map(str.lower, data[0].keys())]
-            sub_key = "subscription" if not sub_key else sub_key[0]
+            sub_key = [k for k in sub_keys if k.lower() in map(str.lower, data[0].keys())] or "subscription"
             _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
             data = [{**{k: v for k, v in inner.items() if k != sub_key}, "subscription": _sub.id} for inner in data]
 
