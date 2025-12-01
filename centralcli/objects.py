@@ -189,7 +189,7 @@ class DateTime():
         Returns:
             str: Date as string in format: 'May 7, 2020 3:49:24 AM' or 'May 7, 2020 03:49:24 AM' if pad_hour=True
         """
-        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def log(self) -> str:
@@ -206,7 +206,7 @@ class DateTime():
             except TypeError:
                 return self.ts
 
-        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def date_string(self) -> str:
@@ -215,7 +215,7 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Dec 10, 2019'
         """
-        return pendulum.from_timestamp(self.ts, tz=self.tz).to_formatted_date_string()
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).to_formatted_date_string()
 
 
 class Encoder(JSONEncoder):
