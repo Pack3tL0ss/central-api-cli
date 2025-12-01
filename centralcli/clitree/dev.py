@@ -392,7 +392,7 @@ def help_text(
     ...
 
 
-@app.callback()
+@app.callback(no_args_is_help=True)
 def callback():
     """
     [dark_orange3]:warning:[/]  These commands are intended for development.  Use with caution.
