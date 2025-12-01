@@ -271,13 +271,11 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
     if include_inventory:
         resp = common.cache.get_devices_with_inventory(status=status)
         caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
-    elif not common.cache.responses.dev:
-        resp = api.session.request(common.cache.refresh_dev_db, **params)
-        # resp = api.session.request(cli.cache.refresh_dev_db, **params)
-        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
     else:
-        # get_all_devices already called (to populate/update cache) grab response from cache.  This really only happens if hidden -U option is used
-        resp, caption = common.cache.responses.dev, None  # TODO should update_client_db return responses.client if get_clients already in cache.updated?
+        if common.cache.responses.dev:  # pragma: no cover
+            log.error("DEV NOTE: _get_details_for_all_devices.  common.cache.responses.dev already has value.", show=True, caption=True, log=True)
+        resp = api.session.request(common.cache.refresh_dev_db, **params)
+        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
 
     return resp, caption
 
@@ -832,7 +830,7 @@ def subscriptions(
     _cleaner_kwargs = {}
     caption = None
     _api = glp_api or api
-    if what is None or what == "details":
+    if what == "details":
         resp = _api.session.request(cache.refresh_sub_db, sub_type=service, dev_type=dev_type)
         title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
         if resp.ok:
@@ -852,7 +850,8 @@ def subscriptions(
     elif what == "auto":
         resp = api.session.request(api.platform.get_auto_subscribe)
         if resp and "services" in resp.output:
-            resp.output = [{"services": [s for s in resp.output["services"] if s != "dm"]}]
+            _auto_subs = [s for s in resp.output["services"] if s != "dm"]
+            resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
         title = "Services with auto-subscribe enabled"
     elif what == "stats":
         resp = api.session.request(api.platform.get_subscription_stats)
