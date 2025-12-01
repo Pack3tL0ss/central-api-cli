@@ -180,6 +180,11 @@ def group(
 ) -> None:
     """Add a group to Aruba Central"""
     allowed_types = []
+    if not any([ap, gw, cx, sw, sdwan]):
+        allowed_types = ['ap', 'gw', 'cx', 'sw']
+        econsole.print(f"[green]No Allowed devices provided. Allowing default device types [{utils.color(['ap', 'gw', 'cx', 'sw'], 'cyan')}]")
+        econsole.print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
+
     if ap:
         allowed_types += ["ap"]
     if sw:
@@ -190,8 +195,6 @@ def group(
         allowed_types += ["gw"]
     if not sdwan:
         _arch = "Instant" if not aos10 else "AOS10"
-        if not allowed_types:
-            allowed_types = ["ap", "gw", "cx", "sw"]
     else:
         _arch = "SD_WAN_Gateway"
         allowed_types = ["sdwan"]
@@ -210,9 +213,6 @@ def group(
         common.exit("Monitor only is not valid without '--sw' or '--cx' (Allowed Device Types)")
     if gw_role and gw_role == "wlan" and not aos10:
         common.exit("WLAN role for Gateways requires the group be configured as AOS10 via [cyan]--aos10[/] option.")
-    if all([x is None for x in [ap, sw, cx, gw, sdwan]]):
-        econsole.print(f"[green]No Allowed devices provided. Allowing default device types [{utils.color(['ap', 'gw', 'cx', 'sw'], 'cyan')}]")
-        econsole.print("[reset]  NOTE: Device Types can be added after group is created, but not removed.\n")
 
     _arch_msg = f"[bright_green]{_arch} "
     _msg = f"[cyan]Create {'' if aos10 is None else _arch_msg}[cyan]group [bright_green]{group}[/bright_green]"
@@ -316,9 +316,9 @@ def wlan(
         common.exit("psk/passphrase is currently required for this command")
 
     econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
+    render.display_results(resp, tablefmt="action")
 
 
 
@@ -376,10 +376,10 @@ def site(
 
     econsole.print(f"Add Site: [cyan]{site_name}[reset]:")
     _ = [print(f"  {k}: {v}") for k, v in address_fields.items()]
-    if render.confirm(yes):
-        resp = api.session.request(api.central.create_site, site_name, **address_fields)
-        render.display_results(resp, exit_on_fail=True)
-        api.session.request(common.cache.update_site_db, data=resp.raw)
+    render.confirm(yes)
+    resp = api.session.request(api.central.create_site, site_name, **address_fields)
+    render.display_results(resp, exit_on_fail=True)
+    api.session.request(common.cache.update_site_db, data=resp.raw)
 
 
 
@@ -408,11 +408,11 @@ def label(
                 common.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, label/site names must be unique (sites included)")
 
     batch_reqs = [BatchRequest(api.central.create_label, label) for label in labels]
-    if render.confirm(yes):
-        batch_resp = api.session.batch_request(batch_reqs)
-        render.display_results(batch_resp, tablefmt="action")
-        update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"], "devices": 0} for resp in batch_resp if resp.ok]
-        api.session.request(common.cache.update_label_db, data=update_data)
+    render.confirm(yes)
+    batch_resp = api.session.batch_request(batch_reqs)
+    render.display_results(batch_resp, tablefmt="action")
+    update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"], "devices": 0} for resp in batch_resp if resp.ok]
+    api.session.request(common.cache.update_label_db, data=update_data)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
@@ -490,15 +490,14 @@ def cert(
         econsole.print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
         if k not in  ["passphrase", "cert_data"]
     ]
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.upload_certificate, **kwargs)
-        render.display_results(resp, tablefmt="action")
-        if resp.ok:
-            try:
-                data = {"name": cert_name, "type": resp.output["cert_type"].upper(), "md5_checksum": resp.output["cert_md5_checksum"], "expired": False, "expiration": None}
-                api.session.request(common.cache.update_db, common.cache.CertDB, data=data, truncate=False)
-            except Exception as e:  # pragma: no cover
-                log.exception(f"Exception during attempt to update CertDB {repr(e)}", show=True)
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.upload_certificate, **kwargs)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    try:
+        data = {"name": cert_name, "type": resp.output["cert_type"].upper(), "md5_checksum": resp.output["cert_md5_checksum"], "expired": False, "expiration": None}
+        api.session.request(common.cache.update_db, common.cache.CertDB, data=data, truncate=False)
+    except Exception as e:  # pragma: no cover
+        log.exception(f"Exception during attempt to update CertDB {repr(e)}", show=True)
 
 
 @app.command(help="Add a WebHook")
@@ -511,9 +510,9 @@ def webhook(
     workspace: str = common.options.workspace,
 ) -> None:
     econsole.print("Adding WebHook: [cyan]{}[/cyan] with urls:\n  {}".format(name, '\n  '.join(urls)))
-    if render.confirm(yes):
-        resp = api.session.request(api.central.add_webhook, name, urls)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    render.confirm(yes)
+    resp = api.session.request(api.central.add_webhook, name, urls)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
 
 
 # TODO ?? add support for converting j2 template to central template
@@ -543,33 +542,31 @@ def template(
     econsole.print(f"    Model: [cyan]{model}[/]")
     econsole.print(f"    Version: [cyan]{version}[/]")
     render.confirm(yes)
-
     template_hash, resp = api.session.batch_request(
         [
             BatchRequest(common.get_file_hash, template),
             BatchRequest(api.configuration.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
         ]
     )
-
-    render.display_results(resp, tablefmt="action")
-    if resp.ok:
-        api_to_cli_dev_type = {
-            "ArubaSwitch": "sw",
-            "CX": "cx",
-            "IAP": "ap",
-            "MobilityController": "gw"
-        }
-        _ = api.session.request(
-            common.cache.update_template_db, data={
-                "name": name,
-                "device_type": api_to_cli_dev_type.get(dev_type, dev_type.lower()),
-                "group": group.name,
-                "model": model,
-                "version": version,
-                "template_hash": template_hash,
-            },
-            add=True
-        )
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # cache update
+    api_to_cli_dev_type = {
+        "ArubaSwitch": "sw",
+        "CX": "cx",
+        "IAP": "ap",
+        "MobilityController": "gw"
+    }
+    _ = api.session.request(
+        common.cache.update_template_db, data={
+            "name": name,
+            "device_type": api_to_cli_dev_type.get(dev_type, dev_type.lower()),
+            "group": group.name,
+            "model": model,
+            "version": version,
+            "template_hash": template_hash,
+        },
+        add=True
+    )
 
 def _get_variable_file(var_file: Path) -> dict[str, dict[str, str]]:
     var_data = config.get_file_data(var_file)
@@ -664,19 +661,19 @@ def guest(
     if password:
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
     econsole.print(_msg)
-    if render.confirm(yes):
-        resp = api.session.request(api.guest.add_guest, **kwargs)
-        password = kwargs = None
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
-        # TODO calc expiration based on portal config Kabrew portal appears to be 3 days
-        try:
-            created = pendulum.now(tz="UTC")
-            expires = created.add(days=3)
-            cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
-            _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
-        except Exception as e:  # pragma: no cover
-            log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
-            render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
+    render.confirm(yes)
+    resp = api.session.request(api.guest.add_guest, **kwargs)
+    password = kwargs = None
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # TODO calc expiration based on portal config Kabrew portal appears to be 3 days
+    try:
+        created = pendulum.now(tz="UTC")
+        expires = created.add(days=3)
+        cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
+        _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
+    except Exception as e:  # pragma: no cover
+        log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
+        render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
 
 @app.command()
@@ -702,7 +699,7 @@ def mpsk(
     if disable:
         render.econsole.print("  Create MPSK, but set as [red]disabled[/]")
 
-    render.confirm(yes)  # exits here if they don't confirm
+    render.confirm(yes)
     resp = api.session.request(api.cloudauth.add_named_mpsk, ssid.id, name=email, role=role, enabled=not disable)
     render.display_results(resp, tablefmt="action")
     # CACHE update
