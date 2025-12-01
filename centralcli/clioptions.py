@@ -434,9 +434,8 @@ class CLIOptions:
         return typer.Option(*args, **kwargs_out)
 
 
-    def __call__(self, timerange: str = None, include_mins: bool = None):
-        if timerange:
-            self.timerange = timerange
+    def __call__(self, timerange: str, include_mins: bool = None):
+        self.timerange = timerange
         if include_mins is not None:
             self.include_mins = include_mins
         return self
