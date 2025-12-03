@@ -217,13 +217,17 @@ class Session():
         if spin_txt:
             if "retry" in spin_txt:
                 return spin_txt
+            elif "DEFAULT_SPIN_TXT" in spin_txt:
+                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=config.debug)
+
 
             self.running_spinners = [*self.running_spinners, spin_txt]
-        elif not self.running_spinners:
+        elif not self.running_spinners:  # pragma: no cover
             return "missing spin text"
 
-        try:
-            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
+
+        try:  # reformat for pagination multi-call.  There will be multiple spinners with the same base text w/ Request: <num> after the base text
+            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1 and ":" in self.running_spinners[0]:
                 return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
 
         except Exception as e:
@@ -563,7 +567,7 @@ class Session():
         # No errors but the total provided by Central doesn't match the # of records
         try:
             if not url.path.startswith("/topology_external_api/vlans"):  # API-FLAW vlan endpoint total never matches the # of VLANs.  This is a bug
-                if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:
+                if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:  # pragma: no cover
                     log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
