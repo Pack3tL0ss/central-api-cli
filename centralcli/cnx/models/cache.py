@@ -89,13 +89,14 @@ class SubCounts:
         self.valid = len([s for s in subs if s.valid])
         self.expiring_soon = len([s for s in subs if s.expiring_soon])
         self.not_started = len([s for s in subs if not s.started])
-        filters = []
         sub_names = list(set([s.name for s in subs]))
-        sub_types = list(map(str.lower, set([s.type for s in subs])))
-        if len(sub_names) == 1:
-            filters += sub_names
-        if len(sub_types) == 1:
-            filters += sub_types
+        dev_types = list(set(map(str.lower, set([s.type for s in subs]))))
+
+        filters = []
+        if len(dev_types) == 1:
+            filters += dev_types
+        if len(sub_names) == 1:   # No need for dev type if filter is by sub name.
+            filters = sub_names  # filters are used for str/__rich__ output.
         self.filters = None if not filters else " & ".join(filters)
 
     def __rich__(self):
