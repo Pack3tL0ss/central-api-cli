@@ -355,7 +355,7 @@ class Config:
         extras = [k for k in c.extra if k != "snow"]
         if extras:  # pragma: no cover
             self.deprecation_warnings = self.deprecation_warnings or []
-            self.deprecation_warning += [f'The following configuration items [dim italic]({", ".join(extras)})[/] were found in the config, but are not recognized by [cyan]cencli[/]']
+            self.deprecation_warnings += [f'The following configuration items [dim italic]({", ".join(extras)})[/] were found in the config, but are not recognized by [cyan]cencli[/]']
 
     def __bool__(self):
         return len(self.data) > 0 and self.workspace in self.data
