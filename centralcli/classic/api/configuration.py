@@ -53,7 +53,7 @@ class ConfigAPI:
         if resp.ok:
             # convert list of single item lists to a single list, remove unprovisioned group, move default group to front of list.
             resp.output = [g for _ in resp.output for g in _ if g != "unprovisioned"]
-            if "default" in resp.output:
+            if "default" in resp.output:  # pragma: no cover  should always be there, but still want the check given we don't control the data
                 resp.output.insert(0, resp.output.pop(resp.output.index("default")))
 
         return resp
@@ -363,13 +363,11 @@ class ConfigAPI:
         url = f"/configuration/v2/groups/{group}/properties"
 
         resp = await self.get_groups_properties(group)
-        if resp:
-            if not isinstance(resp.output, list):
-                raise ValueError(f"Expected list of dicts from get_groups_properties got {type(resp.output)}")
-            cur_group_props = resp.output[-1]["properties"]
-        else:
-            log.error(f"Unable to perform call to update group {group} properties.  Call to get current properties failed.")
+        if not resp:
+            log.error(f"Unable to perform call to update group {group} properties.  Call to get current properties failed.", caption=True)
             return resp
+
+        cur_group_props = resp.output[-1]["properties"]
 
         if aos10 is False and (cur_group_props.get("AOSVersion", "") == "AOS_10X"):
             return Response(
@@ -469,7 +467,7 @@ class ConfigAPI:
                       "APs must be added to allowed devices.\n"
                       f"[reset]Current Allowed Devices: {utils.color(combined_allowed)}",
             )
-        elif wired_tg and monitor_only_sw:
+        elif wired_tg and mon_only_switches:
             fail_resp = Response(
                 error="Invalid combination, Monitor Only is not valid for Template Group",
             )
@@ -524,25 +522,6 @@ class ConfigAPI:
         Returns:
             Response: CentralAPI Response object
         """
-        # TODO report flawed API method
-        # This works for renaming 8x groups
-        # if you try to rename a 10x group inappropriate error:
-        # [
-        #     {
-        #         "description": "group already has AOS_10X version set",
-        #         "error_code": "0001",
-        #         "service_name": "Configuration"
-        #     }
-        # ]
-        # I did try w/ full payload similar to get_group props resp
-        # i.e.
-        # {
-        #     "group": "new_name",
-        #     "properties": {
-        #         "AOSVersion": "AOS_10X",  <- tried specifying group is already 10x
-        #         "MonitorOnlySwitch": False
-        #     }
-        # }
         url = f"/configuration/v1/groups/{group}/name"
 
         json_data = {
@@ -644,7 +623,7 @@ class ConfigAPI:
             'group_name': group,
         }
 
-        if tenant_id is not None:
+        if tenant_id is not None:  # pragma: no cover  MSP only
             json_data["tenant_id"] = str(tenant_id)
 
         return await self.session.post(url, json_data=json_data)
@@ -968,8 +947,9 @@ class ConfigAPI:
             template = template if isinstance(template, Path) else Path(str(template))
             if not template.exists():
                 raise FileNotFoundError(f"{str(template)} Not found.")
-            if template.is_file() and template.stat().st_size > 0:
-                template_data: bytes = template.read_bytes()
+            elif not template.stat().st_size > 0:
+                raise ValueError(f"{str(template)} appears to lack any content.")
+            template_data: bytes = template.read_bytes()
         elif payload:
             payload = payload if isinstance(payload, bytes) else payload.encode("utf-8")
             template_data: bytes = payload
