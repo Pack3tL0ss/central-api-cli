@@ -211,11 +211,6 @@ class DevOptions(BaseModel):
     capture_raw: Optional[bool | None] = None
     mock_tests: Optional[bool] = True
 
-    @model_validator(mode="before")
-    def capture_if_not_mocking(data: dict[str, int | bool]) -> dict[str, int | bool]:
-        if not data.get("mock_tests") and data.get("capture_raw") is None:
-            data["capture_raw"] = True
-        return data
 
 class ConfigData(BaseModel):
     workspace: str
