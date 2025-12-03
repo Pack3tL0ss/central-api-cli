@@ -488,12 +488,12 @@ def deploy(
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
 def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[dict], list[dict], list[BatchRequest]]:  # pragma: no cover non GLP API
-    if "'license': " in str(devices):
-        devices = [{**d, "services": d["license"]} for d in devices]
-    elif "'subscription': " in str(devices):
-        devices = [{**d, "services": d["subscription"]} for d in devices]
+    if "'license': " in str(devices):                                       # v1 config import file
+        devices = [{k if k != "license" else "services": v for k, v in d.items()} for d in devices]
+    elif "'subscription': " in str(devices):                                # v2 config import file we moved most to "subscription" for consistency but allo either.
+        devices = devices = [{k if k != "subscription" else "services": v for k, v in d.items()} for d in devices]   # classic API response returns "services": list[str] always with 1 service in the list
 
-    subs = set([utils.unlistify(d["services"]) for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    subs = set([d["services"] for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
     ignored = [d for d in devices if not d.get("services")]
     devices = [d for d in devices if d.get("services")]  # filter any devs that currently do not have subscription
 
@@ -507,14 +507,16 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
         common.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
 
     devs_by_sub = {s: [] for s in subs}
-    for d in devices:
-        devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
+    try:
+        for d in devices:
+            devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
+    except KeyError as e:
+        common.exit(f"Malformed import data, or required field is missing. {repr(e)}")
 
-    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses
-    # Both Assign and unassign allow a max of 50 serials per call
+    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses  # TOGLP
     requests = [
         BatchRequest(func, serials=chunk, services=sub) for sub in devs_by_sub for chunk in utils.chunker(devs_by_sub[sub], 50)
-    ]
+    ]  # Both Assign and unassign allow a max of 50 serials per call
 
     return devices, ignored, requests
 
@@ -546,13 +548,12 @@ def subscribe(
     devices = common._get_import_file(import_file, "devices")
     devices, ignored, sub_reqs = _build_sub_requests(devices)
 
-    render.display_results(data=devices, tablefmt="rich", title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
-    # print("[bright_green]All Devices Listed will have subscriptions assigned.[/]")
+    render.display_results(data=devices, title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
     if ignored:
-        render.display_results(data=ignored, tablefmt="rich", title="[bright_red]!![/] The following devices will be IGNORED [bright_red]!![/]", caption=f'{len(ignored)} devices will be ignored due to incomplete data')
-    if render.confirm(yes):
-        resp = api.session.batch_request(sub_reqs)
-        render.display_results(resp, tablefmt="action")
+        render.display_results(data=ignored, title="[bright_red]!![/] The following devices will be IGNORED [bright_red]!![/]", caption=f'{len(ignored)} devices will be ignored due to incomplete data')
+    render.confirm(yes)
+    resp = api.session.batch_request(sub_reqs)
+    render.display_results(resp, tablefmt="action")
 
 @app.command()
 def unsubscribe(
@@ -580,19 +581,19 @@ def unsubscribe(
         resp = common.cache.get_devices_with_inventory()
         if not resp:
             render.display_results(resp, exit_on_fail=True)
-        else:
-            devices = [d for d in resp.output if d.get("status") is None and d["services"]]
-            if dis_cen:
-                resp = common.batch_delete_devices(devices, yes=yes)
-            else:
-                devices, ignored, unsub_reqs = _build_sub_requests(devices, unsub=True)
-                if not devices:
-                    common.exit("No devices with subscriptions found in inventory that have never connected.\nNoting to do.")
 
-                render.display_results(data=devices, tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
-                print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
-                if render.confirm(yes):
-                    resp = api.session.batch_request(unsub_reqs)
+        devices = [d for d in resp.output if d.get("status") is None and d["services"]]
+        if dis_cen:
+            resp = common.batch_delete_devices(devices, yes=yes)
+        else:
+            devices, ignored, unsub_reqs = _build_sub_requests(devices, unsub=True)
+            if not devices:
+                common.exit("No devices with subscriptions found in inventory that have never connected.\nNoting to do.")
+
+            render.display_results(data=utils.strip_no_value(devices), tablefmt="rich", title="Devices to be unsubscribed", caption=f'{len(devices)} devices will be Unsubscribed')
+            render.econsole.print("[bright_green]All Devices Listed will have subscriptions unassigned.[/]")
+            render.confirm(yes)
+            resp = api.session.batch_request(unsub_reqs)
     elif not import_file:
         common.exit(render._batch_invalid_msg("cencli batch unsubscribe [OPTIONS] [IMPORT_FILE]"))
     elif import_file:
@@ -605,8 +606,9 @@ def unsubscribe(
 
         if not unsub_reqs:
             common.exit("Nothing to do")
-        if render.confirm(yes):
-            resp = api.session.batch_request(unsub_reqs)
+
+        render.confirm(yes)
+        resp = api.session.batch_request(unsub_reqs)
 
     render.display_results(resp, tablefmt="action")
     if not dis_cen:
