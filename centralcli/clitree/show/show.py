@@ -244,19 +244,19 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
             count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients, end=",")
     else:
         _tot = len(resp)
-        wlan_raw = list(filter(lambda d: "raw_wireless_response" in d, resp.raw))
-        wired_raw = list(filter(lambda d: "raw_wired_response" in d, resp.raw))
+        wlan_raw = resp.raw.get("raw_wireless_response")
+        wired_raw = resp.raw.get("raw_wired_response")
         caption_data = {}
         if device is None:
             for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
                 caption_data[_type] = {
-                    "count": "" if not data or "total" not in data[0][f"raw_{_type}_response"] else data[0][f"raw_{_type}_response"]["total"],
+                    "count": "" if not data or "total" not in data else data["total"],
                 }
             count_text = f"Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/],"
             count_text = f"{count_text} [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
 
             # Add counts by band
-            wlan_clients = wlan_raw[0]["raw_wireless_response"].get("clients", [])  # TODO use CombinedResponse
+            wlan_clients = wlan_raw.get("clients", [])  # TODO use CombinedResponse
             count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients)
         else:
             count_text = f"[bright_green]Client Count[/]: [cyan]{_tot}[/],"
@@ -963,7 +963,6 @@ def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Resp
             log.warning("Incomplete output, failures occured, see log")
 
 
-    # output = [i for r in _passed for i in utils.listify(r.output)]
     output = [r.output for r in _passed]
     raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
     elapsed = sum(r.elapsed for r in _passed)
@@ -2531,6 +2530,7 @@ def clients(
         verbosity=verbose,
         format=tablefmt
     )
+    common.exit(code=1 if "status_code" in resp.raw.get("raw_wired_response", {}) else 0)  # TODO more elegant way to determine partial failure here
 
 
 @app.command()
