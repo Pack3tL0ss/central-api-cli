@@ -71,6 +71,10 @@ class Inventory(RootModel):
                 return self._inv_type(value, model=device.get("model"))
             if key == "subscription_expires" and value:
                 return value if len(str(value)) == 10 else value / 1000  # convert ts in ms to ts in seconds
+            if key == "services":
+                if not value:
+                    return None
+                return value if not isinstance(value, list) or len(value) > 1 else value[0]
             return value
 
         return [{k: format_value(k, v, device=dev) for k, v in dev.items()} for dev in data]
@@ -114,8 +118,8 @@ class Inventory(RootModel):
         return count_str
 
 
-    def cache_dump(self) -> list[dict[str, str | int | bool]]:
-        return utils.strip_no_value(self.model_dump())
+    def cache_dump(self) -> list[dict[str, str | int | bool]]:  # currently no adjustments from model_dump.  use json.loads(self.model_dump_json()) with customer json serializer if adjustments needed in future.
+        return self.model_dump()
 
 class DeviceStatus(str, Enum):
     Up = "Up"
@@ -392,7 +396,7 @@ class Client(BaseModel):
     @property
     def summary_text(self):
         parts = [self.name, self.mac, self.ip, self.connected_name]
-        parts = utils.unique([p for p in parts if p is not None])
+        parts = utils.unique(parts)
         return "[reset]" + "|".join([f"{'[cyan]' if idx in list(range(0, len(parts), 2)) else '[bright_green]'}{p}[/]" for idx, p in enumerate(parts)])
 
     def __contains__(self, item: str) -> bool:
