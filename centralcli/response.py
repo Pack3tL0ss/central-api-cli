@@ -174,7 +174,7 @@ class Response:
                 else:  # marker is not an int
                     _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
+            _log_msg = f"[{self.status}:{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 if isinstance(self.output, dict) and ("description" in self.output or "detail" in self.output):
@@ -209,7 +209,7 @@ class Response:
 
         try:  # pragma: no cover
             if config.dev.capture_raw and self.url and self.url.path not in self.raw:  # url.path being in raw response indicates this is a CombinedResponse
-                with render.Spinner("Capturing raw response"):
+                with render.Spinner("Capturing raw response"):                         # the responses that make are within the CombinedResponse are captured
                     written = self.dump()
                     if written:
                         log.info(f"raw capture wrote {written} to capture file", caption=True)
@@ -223,7 +223,7 @@ class Response:
                 return self._response._body.decode("utf-8")
             return res.content.decode("utf-8")
 
-        def combine_response(url: str, out: dict) -> dict | None:
+        def combine_response(url: str, out: dict) -> dict | None:  # TODO add handler to create METHOD key in ok_responses/failed_responses if it doesn't exist.  i.e. failed_responses["DELETE"] currently KeyError if DELETE doesn't exist
             now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
             if env.current_test:
                 key = f"{self.method}_{url}"
@@ -339,6 +339,9 @@ class Response:
                 r = "" if stripped_status else f"  {emoji}  Empty Response.  This may be normal."
         else:
             r = f"  {self.output}"
+        # TODO batch_add_groups when gw_group config is included... Need something like:
+        # if self.url.path == "/caasapi/v1/exec/cmd":
+        #    r = cleaner.parse_caas_response(self.output)
 
         if not self.ok:
             if self.error:
@@ -516,6 +519,10 @@ class BatchResponse:
 
     def __bool__(self):  # pragma: no cover
         return self.ok
+
+    @cached_property
+    def elapsed(self) -> float:  # pragma: no cover
+        return sum(r.elapsed for r in self.responses)
 
     @cached_property
     def passed(self):
