@@ -62,9 +62,10 @@ def site(
     del_list = [s.id for s in sites]
     resp: List[Response] = api.session.request(api.central.delete_site, del_list)
     render.display_results(resp, tablefmt="action")
-    if len(sites) == len(resp):  # resp will be a single failed Response if the first one fails, otherwise all should be there.
-        cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
-        api.session.request(common.cache.update_site_db, data=cache_del_list, remove=True)
+
+    # cache update. resp will be a single failed Response if the first one fails.  Will result in exit above
+    cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
+    api.session.request(common.cache.update_site_db, data=cache_del_list, remove=True)
 
 
 @app.command(name="label")
@@ -105,9 +106,10 @@ def portal(
     render.confirm(yes)
     batch_resp = api.session.batch_request(reqs)
     render.display_results(batch_resp, tablefmt="action")
-    if len(batch_resp) == len(cache_portals):
-        doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
-        api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
+
+    # cache update
+    doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
+    api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
 
 
 
@@ -139,9 +141,10 @@ def group(
     render.confirm(yes)
     resp = api.session.batch_request(reqs)
     render.display_results(resp, tablefmt="action")
-    if resp:
-        doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-        api.session.request(common.cache.update_group_db, data=doc_ids, remove=True)
+
+    # cache update
+    doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+    api.session.request(common.cache.update_group_db, data=doc_ids, remove=True)
 
 
 @app.command(short_help="Delete a WLAN (SSID)")
