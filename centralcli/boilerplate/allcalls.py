@@ -1,28 +1,15 @@
 from __future__ import annotations
 
-import sys
 from pathlib import Path
-from typing import List, Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from centralcli import Response, Session
 
 
-# Detect if called from pypi installed package or via cloned github repo (development)
-try:
-    from centralcli import Response
-except (ImportError, ModuleNotFoundError) as e:
-    pkg_dir = Path(__file__).absolute().parent
-    if pkg_dir.name == "centralcli":
-        sys.path.insert(0, str(pkg_dir.parent))
-        from centralcli import Response
-    else:
-        print(pkg_dir.parts)
-        raise e
-
-from centralcli.central import CentralApi
-
-
-class AllCalls(CentralApi):
-    def __init__(self, account_name: str = "central_info"):
-        super().__init__(account_name=account_name)
+class AllCalls:
+    def __init__(self, session: Session):
+        self.session = session
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_get_metadata_v2(
         self,
@@ -38,7 +25,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/aaa_config/v2/authentication/profiles/metadata/{domain}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_get_domain_list_v2(
         self,
@@ -50,7 +37,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/aaa_config/v2/authentication/idp/source"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_add_authentication_source_v2(
         self,
@@ -106,7 +93,7 @@ class AllCalls(CentralApi):
             'recovery_email': recovery_email
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_update_idp_config_v2(
         self,
@@ -162,7 +149,7 @@ class AllCalls(CentralApi):
             'recovery_email': recovery_email
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_delete_domain_v2(
         self,
@@ -178,7 +165,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/aaa_config/v2/authentication/idp/source/{domain}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def aaa_apis_ccs_gw_sso_management_saml_sso_extract_metadata_v2(
         self,
@@ -195,7 +182,7 @@ class AllCalls(CentralApi):
         url = "/platform/aaa_config/v2/authentication/idp/source/extract/metadata"
         saml_meta_data = saml_meta_data if isinstance(saml_meta_data, Path) else Path(str(saml_meta_data))
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def aiops_get_wifi_connectivity_at_global(
         self,
@@ -221,7 +208,7 @@ class AllCalls(CentralApi):
             'to': to
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def aiops_get_wifi_connectivity_at_site(
         self,
@@ -244,7 +231,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v1/connectivity/site/{site_id}/stage/{stage}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_wifi_connectivity_at_group(
         self,
@@ -267,7 +254,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v1/connectivity/group/{group}/stage/{stage}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_list_ai_insights_for_a_network(
         self,
@@ -285,7 +272,7 @@ class AllCalls(CentralApi):
         """
         url = "/aiops/v2/insights/global/list"
 
-        return await self.get(url, params={"from": from_ms, "to": to})
+        return await self.session.get(url, params={"from": from_ms, "to": to})
 
     async def aiops_list_ai_insights_for_a_site(
         self,
@@ -305,7 +292,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/site/{site_id}/list"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_list_ai_insights_for_an_ap(
         self,
@@ -325,7 +312,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/ap/{ap_serial}/list"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_list_ai_insights_for_a_client(
         self,
@@ -345,7 +332,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/client/{sta_mac}/list"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_list_ai_insights_for_a_gateway(
         self,
@@ -365,7 +352,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/gateway/{gw_serial}/list"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_list_ai_insights_for_a_switch(
         self,
@@ -385,7 +372,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/switch/{sw_serial}/list"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_a_network(
         self,
@@ -405,7 +392,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/global/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_a_site(
         self,
@@ -427,7 +414,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/site/{site_id}/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_an_ap(
         self,
@@ -449,7 +436,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/ap/{ap_serial}/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_a_client(
         self,
@@ -471,7 +458,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/client/{sta_mac}/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_a_gateway(
         self,
@@ -493,7 +480,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/gateway/{gw_serial}/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def aiops_get_ai_insight_details_for_a_switch(
         self,
@@ -515,7 +502,7 @@ class AllCalls(CentralApi):
         """
         url = f"/aiops/v2/insights/switch/{sw_serial}/id/{insight_id}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def airmatch_handlers_telemetry_get_rep_radio_by_radio_mac_v1(
         self,
@@ -537,7 +524,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_rep_radio_v1(
         self,
@@ -557,7 +544,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_ap_info_by_eth_mac_v1(
         self,
@@ -579,7 +566,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_ap_info_v1(
         self,
@@ -599,7 +586,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_nbr_pathloss_by_nbr_band_v1(
         self,
@@ -625,7 +612,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_nbr_pathloss_v1(
         self,
@@ -647,7 +634,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_rf_events_by_radio_mac_v1(
         self,
@@ -669,7 +656,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_priority_rf_events_by_radio_mac_v1(
         self,
@@ -691,7 +678,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_history_by_radio_mac_v1(
         self,
@@ -715,7 +702,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_radio_all_nbr_pathloss_v1(
         self,
@@ -739,7 +726,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_static_radios_v1(
         self,
@@ -759,7 +746,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_advanced_stat_ap_v1(
         self,
@@ -779,7 +766,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_advanced_stat_eirp_v1(
         self,
@@ -799,7 +786,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_advanced_stat_eirp_reason_v1(
         self,
@@ -819,7 +806,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_advanced_stat_radio_v1(
         self,
@@ -839,7 +826,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_adv_stat_nbr_v1(
         self,
@@ -859,7 +846,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_rf_events_v1(
         self,
@@ -879,7 +866,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_get_all_priority_rf_events_v1(
         self,
@@ -899,7 +886,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_telemetry_bootstrap_v1(
         self,
@@ -922,7 +909,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_telemetry_purge_v1(
         self,
@@ -945,7 +932,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_solver_process_optimization_get_req_v1(
         self,
@@ -976,7 +963,7 @@ class AllCalls(CentralApi):
             'runmode': runmode
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_solver_process_optimization_post_req_v1(
         self,
@@ -996,7 +983,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_solver_get_radio_plan_by_radio_mac_v1(
         self,
@@ -1022,7 +1009,7 @@ class AllCalls(CentralApi):
             'debug': debug
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_solver_get_all_radio_plan_v1(
         self,
@@ -1048,7 +1035,7 @@ class AllCalls(CentralApi):
             'band': band
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_solver_get_optimization_per_partition_v1(
         self,
@@ -1073,7 +1060,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_solver_get_adv_state_deployment_v1(
         self,
@@ -1093,7 +1080,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_scheduler_process_tenant_svc_config_update_v1(
         self,
@@ -1114,7 +1101,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_scheduler_process_trigger_runnow_v1(
         self,
@@ -1137,7 +1124,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_scheduler_process_get_schedule_v1(
         self,
@@ -1157,7 +1144,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_scheduler_process_get_deploy_jobs_v1(
         self,
@@ -1177,7 +1164,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_scheduler_process_get_job_list_v1(
         self,
@@ -1197,7 +1184,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_scheduler_process_get_tenant_tz_deploy_hr_info_v1(
         self,
@@ -1217,7 +1204,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_scheduler_process_trigger_solver_job_v1(
         self,
@@ -1237,7 +1224,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_reciever_update_feasibility_v1(
         self,
@@ -1259,7 +1246,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def airmatch_handlers_reciever_get_radio_feas_by_radio_mac_v1(
         self,
@@ -1281,7 +1268,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_reciever_get_all_radio_feas_v1(
         self,
@@ -1301,7 +1288,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_reciever_get_all_device_config_v1(
         self,
@@ -1321,7 +1308,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_reciever_get_device_config_v1(
         self,
@@ -1343,7 +1330,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_reciever_set_device_config_v1(
         self,
@@ -1351,10 +1338,10 @@ class AllCalls(CentralApi):
         device_mac: str,
         static_chan: int,
         static_pwr: int,
-        opmodes: List[str],
+        opmodes: list[str],
         tenant_id: str = None,
-        ___cbw20: List[int] = None,
-        ___cbw40: List[int] = None,
+        ___cbw20: list[int] = None,
+        ___cbw40: list[int] = None,
     ) -> Response:
         """Change a device running config.
 
@@ -1363,10 +1350,10 @@ class AllCalls(CentralApi):
             device_mac (str): Device MAC Address
             static_chan (int): Static Channel
             static_pwr (int): Static Power
-            opmodes (List[str]): opmodes
+            opmodes (list[str]): opmodes
             tenant_id (str, optional): Customer/Tenant ID to look up Radio list
-            ___cbw20 (List[int], optional): CBW20
-            ___cbw40 (List[int], optional): CBW40
+            ___cbw20 (list[int], optional): CBW20
+            ___cbw40 (list[int], optional): CBW40
 
         Returns:
             Response: CentralAPI Response object
@@ -1386,7 +1373,7 @@ class AllCalls(CentralApi):
             '___cbw40': ___cbw40
         }
 
-        return await self.put(url, json_data=json_data, params=params)
+        return await self.session.put(url, json_data=json_data, params=params)
 
     async def airmatch_handlers_reciever_get_all_service_config_v1(
         self,
@@ -1398,7 +1385,7 @@ class AllCalls(CentralApi):
         """
         url = "/airmatch/receiver/v1/service_config_all"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def airmatch_handlers_reciever_get_service_config_v1(
         self,
@@ -1418,7 +1405,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_reciever_get_advanced_stat_eirp_feasible_range_v1(
         self,
@@ -1438,7 +1425,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_radio_feas_by_radio_mac_v1(
         self,
@@ -1460,7 +1447,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_all_radio_feas_v1(
         self,
@@ -1480,7 +1467,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_device_config_v1(
         self,
@@ -1502,7 +1489,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_set_device_config_v1(
         self,
@@ -1510,10 +1497,10 @@ class AllCalls(CentralApi):
         device_mac: str,
         static_chan: int,
         static_pwr: int,
-        opmodes: List[str],
+        opmodes: list[str],
         tenant_id: str = None,
-        ___cbw20: List[int] = None,
-        ___cbw40: List[int] = None,
+        ___cbw20: list[int] = None,
+        ___cbw40: list[int] = None,
     ) -> Response:
         """Change a device running config.
 
@@ -1522,10 +1509,10 @@ class AllCalls(CentralApi):
             device_mac (str): Device MAC Address
             static_chan (int): Static Channel
             static_pwr (int): Static Power
-            opmodes (List[str]): opmodes
+            opmodes (list[str]): opmodes
             tenant_id (str, optional): Customer/Tenant ID to look up Radio list
-            ___cbw20 (List[int], optional): CBW20
-            ___cbw40 (List[int], optional): CBW40
+            ___cbw20 (list[int], optional): CBW20
+            ___cbw40 (list[int], optional): CBW40
 
         Returns:
             Response: CentralAPI Response object
@@ -1545,7 +1532,7 @@ class AllCalls(CentralApi):
             '___cbw40': ___cbw40
         }
 
-        return await self.put(url, json_data=json_data, params=params)
+        return await self.session.put(url, json_data=json_data, params=params)
 
     async def airmatch_handlers_feasibility_get_all_device_config_v1(
         self,
@@ -1565,7 +1552,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_ap_info_by_serial_v1(
         self,
@@ -1587,7 +1574,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_feas_radio_info_v1(
         self,
@@ -1609,7 +1596,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_feasibility_get_radio_board_limit_v1(
         self,
@@ -1631,7 +1618,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_deployer_process_get_pending_deployments_v1(
         self,
@@ -1654,7 +1641,7 @@ class AllCalls(CentralApi):
             'deploy_hour': deploy_hour
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_deployer_process_triger_computation_complete_v1(
         self,
@@ -1674,7 +1661,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_deployer_process_test_action_msg_v1(
         self,
@@ -1709,7 +1696,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_deployer_process_test_config_v1(
         self,
@@ -1732,7 +1719,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def airmatch_handlers_ap_nbr_graph_process_ap_neighbors_get_req_v1(
         self,
@@ -1763,7 +1750,7 @@ class AllCalls(CentralApi):
             'ap_mac': ap_mac
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_ap_nbr_graph_process_radio_neighbors_get_req_v1(
         self,
@@ -1785,17 +1772,17 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_ap_nbr_graph_process_ap_upgrade_sampling_get_req_v1(
         self,
-        aplist: List[str],
+        aplist: list[str],
         tenant_id: str = None,
     ) -> Response:
         """Get AP neighbor list.
 
         Args:
-            aplist (List[str]): List of Aps to be partitioned
+            aplist (list[str]): List of Aps to be partitioned
             tenant_id (str, optional): ID to look up AP list
 
         Returns:
@@ -1808,7 +1795,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_ap_nbr_graph_process_partition_get_req_v1(
         self,
@@ -1833,7 +1820,7 @@ class AllCalls(CentralApi):
             'ptype': ptype
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def airmatch_handlers_ap_nbr_graph_process_partition_post_req_v1(
         self,
@@ -1853,7 +1840,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def apprf_views_apprf_view_get_top_n_stats_v2(
         self,
@@ -1913,7 +1900,7 @@ class AllCalls(CentralApi):
             'to_timestamp': to_timestamp
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def apprf_views_view_applications_get_v1(
         self,
@@ -1924,8 +1911,8 @@ class AllCalls(CentralApi):
         macaddr: str = None,
         from_timestamp: int = None,
         to_timestamp: int = None,
-        ssids: List[str] = None,
-        user_role: List[str] = None,
+        ssids: list[str] = None,
+        user_role: list[str] = None,
         details: bool = None,
     ) -> Response:
         """Gets Top N Applications.
@@ -1940,9 +1927,9 @@ class AllCalls(CentralApi):
                 in seconds. Default is current timestamp minus 3 hours
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
-            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+            ssids (list[str], optional): ssids to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
-            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+            user_role (list[str], optional): user to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
             details (bool, optional): Flag deciding if apprf data details shall be shown
 
@@ -1957,7 +1944,7 @@ class AllCalls(CentralApi):
             'details': details
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def apprf_views_view_webcategories_get_v1(
         self,
@@ -1968,8 +1955,8 @@ class AllCalls(CentralApi):
         macaddr: str = None,
         from_timestamp: int = None,
         to_timestamp: int = None,
-        ssids: List[str] = None,
-        user_role: List[str] = None,
+        ssids: list[str] = None,
+        user_role: list[str] = None,
         details: bool = None,
     ) -> Response:
         """Gets Top N Web categories.
@@ -1984,9 +1971,9 @@ class AllCalls(CentralApi):
                 in seconds. Default is current timestamp minus 3 hours
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
-            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+            ssids (list[str], optional): ssids to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
-            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+            user_role (list[str], optional): user to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
             details (bool, optional): Flag deciding if apprf data details shall be shown
 
@@ -1995,7 +1982,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/webcategories"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_appcategories_get_v1(
         self,
@@ -2006,8 +1993,8 @@ class AllCalls(CentralApi):
         macaddr: str = None,
         from_timestamp: int = None,
         to_timestamp: int = None,
-        ssids: List[str] = None,
-        user_role: List[str] = None,
+        ssids: list[str] = None,
+        user_role: list[str] = None,
         details: bool = None,
     ) -> Response:
         """Gets Top N App categories.
@@ -2022,9 +2009,9 @@ class AllCalls(CentralApi):
                 in seconds. Default is current timestamp minus 3 hours
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
-            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+            ssids (list[str], optional): ssids to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
-            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+            user_role (list[str], optional): user to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
             details (bool, optional): Flag deciding if apprf data details shall be shown
 
@@ -2033,7 +2020,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/appcategories"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_webreputations_get_v1(
         self,
@@ -2043,8 +2030,8 @@ class AllCalls(CentralApi):
         macaddr: str = None,
         from_timestamp: int = None,
         to_timestamp: int = None,
-        ssids: List[str] = None,
-        user_role: List[str] = None,
+        ssids: list[str] = None,
+        user_role: list[str] = None,
         details: bool = None,
     ) -> Response:
         """Gets Top Web Reputations.
@@ -2058,9 +2045,9 @@ class AllCalls(CentralApi):
                 in seconds. Default is current timestamp minus 3 hours
             to_timestamp (int, optional): Need information to this timestamp. Timestamp is epoch in
                 seconds. Default is current timestamp
-            ssids (List[str], optional): ssids to be filtered, comma seperated values (can be
+            ssids (list[str], optional): ssids to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
-            user_role (List[str], optional): user to be filtered, comma seperated values (can be
+            user_role (list[str], optional): user to be filtered, comma seperated values (can be
                 applied at customer/group/swarm levels)
             details (bool, optional): Flag deciding if apprf data details shall be shown
 
@@ -2069,7 +2056,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/webreputations"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_webreputation_mapping_get_v1(
         self,
@@ -2081,7 +2068,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/metainfo/iap/webreputation/id_to_name"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_application_mapping_get_v1(
         self,
@@ -2093,7 +2080,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/metainfo/iap/application/id_to_name"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_appcategory_mapping_get_v1(
         self,
@@ -2105,7 +2092,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/metainfo/iap/appcategory/id_to_name"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def apprf_views_view_webcategory_mapping_get_v1(
         self,
@@ -2117,7 +2104,7 @@ class AllCalls(CentralApi):
         """
         url = "/apprf/v1/metainfo/iap/webcategory/id_to_name"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def audit_get_audits_v1(
         self,
@@ -2159,7 +2146,7 @@ class AllCalls(CentralApi):
             'end_time': end_time
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def audit_get_details_v1(
         self,
@@ -2175,7 +2162,7 @@ class AllCalls(CentralApi):
         """
         url = f"/auditlogs/v1/event_details/{id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def audit_platform_get_audit_logs_v1(
         self,
@@ -2228,7 +2215,7 @@ class AllCalls(CentralApi):
             'app_id': app_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def audit_platform_get_audit_log_details_v1(
         self,
@@ -2244,7 +2231,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/auditlogs/v1/logs/{id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def ble_beacon_service_retrieve_desire_beacon_v1(
         self,
@@ -2278,7 +2265,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def ble_beacon_service_retrieve_actual_beacon_v1(
         self,
@@ -2312,7 +2299,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def ble_beacon_service_retrieve_beacon_profile_v1(
         self,
@@ -2341,7 +2328,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def ble_beacon_service_create_beacon_profile_v1(
         self,
@@ -2357,8 +2344,8 @@ class AllCalls(CentralApi):
         minor_end: int = None,
         ____uuid: str = None,
         payload: str = None,
-        openlocate_option: List[str] = None,
-        identity_option: List[str] = None,
+        openlocate_option: list[str] = None,
+        identity_option: list[str] = None,
         url: str = None,
         passphrase: str = None,
     ) -> Response:
@@ -2382,8 +2369,8 @@ class AllCalls(CentralApi):
             ____uuid (str, optional): ibeacon config
             payload (str, optional): custom beacon config, length is 3-31 bytes and each bytes
                 include 2 ASCII characters
-            openlocate_option (List[str], optional): advertisement openlocate beacon value
-            identity_option (List[str], optional): identity included value
+            openlocate_option (list[str], optional): advertisement openlocate beacon value
+            identity_option (list[str], optional): identity included value
             url (str, optional): eddystone url. The max length is 17 bytes.
             passphrase (str, optional): the passphrase for signature. The max length is 256 bytes
 
@@ -2413,7 +2400,7 @@ class AllCalls(CentralApi):
             'passphrase': passphrase
         }
 
-        return await self.post(url, params=params, json_data=json_data)
+        return await self.session.post(url, params=params, json_data=json_data)
 
     async def ble_beacon_service_edit_beacon_profile_v1(
         self,
@@ -2427,8 +2414,8 @@ class AllCalls(CentralApi):
         minor_end: int = None,
         ____uuid: str = None,
         payload: str = None,
-        openlocate_option: List[str] = None,
-        identity_option: List[str] = None,
+        openlocate_option: list[str] = None,
+        identity_option: list[str] = None,
         url: str = None,
         passphrase: str = None,
     ) -> Response:
@@ -2448,8 +2435,8 @@ class AllCalls(CentralApi):
             ____uuid (str, optional): ibeacon config
             payload (str, optional): custom beacon config, length is 3-31 bytes and each bytes
                 include 2 ASCII characters
-            openlocate_option (List[str], optional): advertisement openlocate beacon value
-            identity_option (List[str], optional): identity included value
+            openlocate_option (list[str], optional): advertisement openlocate beacon value
+            identity_option (list[str], optional): identity included value
             url (str, optional): eddystone url. The max length is 17 bytes.
             passphrase (str, optional): the passphrase for signature. The max length is 256 bytes
 
@@ -2476,7 +2463,7 @@ class AllCalls(CentralApi):
             'passphrase': passphrase
         }
 
-        return await self.post(url, params=params, json_data=json_data)
+        return await self.session.post(url, params=params, json_data=json_data)
 
     async def ble_beacon_service_handler_bbs_beacon_profile_process_profile_delete_v1(
         self,
@@ -2494,7 +2481,7 @@ class AllCalls(CentralApi):
         """
         url = f"/bbs/v1/delete_beacon_profiles/{group_name}/{profile_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def ble_beacon_service_update_device_beacon_v1(
         self,
@@ -2537,7 +2524,7 @@ class AllCalls(CentralApi):
             'interval': interval
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def ble_beacon_service_handler_bbs_n_b_a_p_idelete_device_beacon_v1(
         self,
@@ -2555,7 +2542,7 @@ class AllCalls(CentralApi):
         """
         url = f"/bbs/v1/ble_beacon/{iot_radio_mac}/{profile_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def client_match_get_the_status_of_for_a_tenant(
         self,
@@ -2571,7 +2558,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/cm-enabled/v1/{tenant_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def client_match_enable_or_disable_for_a_particular_tenant(
         self,
@@ -2593,7 +2580,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def client_match_get_the_status_of_load_balancer_for_a_tenant(
         self,
@@ -2609,7 +2596,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/loadbal-enable/v1/{tenant_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def client_match_enable_or_disable_load_balancer_for_a_particular_tenant(
         self,
@@ -2631,7 +2618,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def client_match_get_the_status_of_band_steer_to_6ghz_for_a_tenant(
         self,
@@ -2647,7 +2634,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/bandsteer-6ghz-enable/v1/{tenant_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def client_match_enable_or_disable_band_steer_to_6ghz_for_a_particular_tenant(
         self,
@@ -2669,7 +2656,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def client_match_get_all_unsteerable_entries_for_a_tenant(
         self,
@@ -2685,7 +2672,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/unsteerable/v1/{tenant_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def client_match_get_the_unsteerable_state_of_a_client(
         self,
@@ -2703,7 +2690,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def client_match_set_the_unsteerable_state_of_a_client(
         self,
@@ -2730,7 +2717,7 @@ class AllCalls(CentralApi):
             'duration': duration
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def client_match_delete_the_unsteerable_state_of_a_client(
         self,
@@ -2748,7 +2735,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cm-api/unsteerable/v1/{tenant_id}/{client_mac}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloud_connect_post_aruba_cloud_vpn_connect_config_id1_v1(
         self,
@@ -2774,7 +2761,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_put_aruba_cloud_vpn_connect_config_id1_v1(
         self,
@@ -2800,7 +2787,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_aruba_cloud_vpn_connect_config_id1_v1(
         self,
@@ -2826,7 +2813,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def cloud_connect_post_aruba_cloud_vpn_connect_config_id2_v1(
         self,
@@ -2852,7 +2839,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_put_aruba_cloud_vpn_connect_config_id2_v1(
         self,
@@ -2878,7 +2865,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_aruba_cloud_vpn_connect_config_id2_v1(
         self,
@@ -2904,7 +2891,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def cloud_connect_post_aruba_cloud_vpn_connect_config_id3_v1(
         self,
@@ -2930,7 +2917,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_put_aruba_cloud_vpn_connect_config_id3_v1(
         self,
@@ -2956,7 +2943,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_aruba_cloud_vpn_connect_config_id3_v1(
         self,
@@ -2982,7 +2969,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def cloud_connect_post_aruba_cloud_vpn_connect_config_id4_v1(
         self,
@@ -3008,7 +2995,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_put_aruba_cloud_vpn_connect_config_id4_v1(
         self,
@@ -3034,7 +3021,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_aruba_cloud_vpn_connect_config_id4_v1(
         self,
@@ -3060,7 +3047,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def cloud_connect_post_aruba_cloud_vpn_connect_config_id5_v1(
         self,
@@ -3086,7 +3073,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_put_aruba_cloud_vpn_connect_config_id5_v1(
         self,
@@ -3112,7 +3099,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_aruba_cloud_vpn_connect_config_id5_v1(
         self,
@@ -3138,7 +3125,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def cloud_connect_get_aruba_cloud_vpn_connect_topology_scan(
         self,
@@ -3150,7 +3137,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/topology-scan"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_aruba_cloud_vpn_connect_topology_eps(
         self,
@@ -3170,7 +3157,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloud_connect_get_aruba_cloud_vpn_connect_zscaler_node_scan(
         self,
@@ -3182,7 +3169,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/zscaler/node-scan"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_aruba_cloud_vpn_connect_vlan_cfg(
         self,
@@ -3198,7 +3185,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/vlan-cfg"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_aruba_cloud_vpn_connect_config_summary(
         self,
@@ -3214,7 +3201,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/config-summary"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_the_list_of_valid_tunnel_policy_configurations(
         self,
@@ -3226,7 +3213,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/v1/tunnel-policy-config-metadata"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_the_list_of_all_tunnel_policy_configurations(
         self,
@@ -3238,7 +3225,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloud-connect/v1/all-tunnel-policy-configs"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_get_the_tunnel_policy_configuration_for_policy_name(
         self,
@@ -3254,7 +3241,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_creates_a_new_tunnel_policy_with_name_as_policy_name(
         self,
@@ -3301,7 +3288,7 @@ class AllCalls(CentralApi):
             'NOTE': 'auto code failed check schema',
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_updates_an_existing_tunnel_policy_with_name_as_policy_name(
         self,
@@ -3348,7 +3335,7 @@ class AllCalls(CentralApi):
             'NOTE': 'auto code failed check schema',
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_tunnel_policy_with_name_as_policy_name(
         self,
@@ -3364,7 +3351,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/tunnel-policy-config/{policy_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloud_connect_get_the_custom_cloud_account_configuration_for_account_name(
         self,
@@ -3380,7 +3367,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/custom-account/{account_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_creates_a_new_custom_cloud_account_with_name_as_account_name(
         self,
@@ -3421,7 +3408,7 @@ class AllCalls(CentralApi):
             'tunnel_id_suffix': tunnel_id_suffix
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_updates_an_existing_custom_cloud_account_with_name_as_account_name(
         self,
@@ -3462,7 +3449,7 @@ class AllCalls(CentralApi):
             'tunnel_id_suffix': tunnel_id_suffix
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_custom_cloud_account_with_name_as_account_name(
         self,
@@ -3478,7 +3465,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/custom-account/{account_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloud_connect_get_the_prisma_account_configuration_for_account_name(
         self,
@@ -3494,7 +3481,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/prisma-account/{account_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloud_connect_creates_a_new_prisma_cloud_account_with_name_as_account_name(
         self,
@@ -3526,7 +3513,7 @@ class AllCalls(CentralApi):
             'cdl_region': cdl_region
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloud_connect_updates_an_existing_prisma_cloud_account_with_name_as_account_name(
         self,
@@ -3558,7 +3545,7 @@ class AllCalls(CentralApi):
             'cdl_region': cdl_region
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloud_connect_delete_prisma_cloud_account_with_name_as_account_name(
         self,
@@ -3574,7 +3561,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloud-connect/v1/prisma-account/{account_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloudauth_read_auth_air_pass_list_v1(
         self,
@@ -3607,26 +3594,27 @@ class AllCalls(CentralApi):
             'time_window': time_window
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_read_auth_cloud_identity_list_v1(
         self,
-        limit: int,
-        cursor: str = None,
         from_time: str = None,
         time_window: str = None,
+        cursor: str = None,
+        limit: int = 1000
     ) -> Response:
         """Fetch list of authentications using Cloud Identity.
 
         Args:
-            limit (int): Maximum number of authentication records to be returned. Allowed range is 1
-                to 1000.
-            cursor (str, optional): Cursor to iterate over the next set of authentication records.
             from_time (str, optional): Integer value (1-90) followed by unit - one of d , h , m for
                 day , hour , minute respectively; like 3h. This is ignored if Time Window is
                 specified.
             time_window (str, optional): Set Time Window to include requests started in a specific
                 time window.  Valid Values: 3-hour, 1-day, 1-week, 1-month, 3-month
+            cursor (str | None, optional): Pagination cursor.  Should be None for first call.  Use "cursor"
+                in payload of previous call for subsequent calls to get the next page of results.
+            limit (int, optional): Maximum number of authentication records to be returned. Allowed range is 1
+                to 1000.  Defaults to 1000.
 
         Returns:
             Response: CentralAPI Response object
@@ -3640,7 +3628,7 @@ class AllCalls(CentralApi):
             'time_window': time_window
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_read_auth_details_record_v1(
         self,
@@ -3656,7 +3644,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v1/auth/{request_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_client_policy_get_v1(
         self,
@@ -3668,7 +3656,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloudAuth/api/v1/client_policy"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_client_policy_edit_v1(
         self,
@@ -3702,7 +3690,7 @@ class AllCalls(CentralApi):
             'client_role': client_role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloudauth_dpp_registration_get_v1(
         self,
@@ -3730,7 +3718,7 @@ class AllCalls(CentralApi):
             'id': id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_dpp_registration_add_v1(
         self,
@@ -3753,7 +3741,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloudauth_dpp_registration_edit_v1(
         self,
@@ -3778,7 +3766,7 @@ class AllCalls(CentralApi):
             'uri': uri
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloudauth_dpp_registration_delete_v1(
         self,
@@ -3794,7 +3782,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v1/dpp_registration/{id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloudauth_read_session_air_pass_list_v1(
         self,
@@ -3827,7 +3815,7 @@ class AllCalls(CentralApi):
             'time_window': time_window
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_read_cloud_identity_session_list_v1(
         self,
@@ -3860,7 +3848,7 @@ class AllCalls(CentralApi):
             'time_window': time_window
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_user_policy_get_v1(
         self,
@@ -3872,7 +3860,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloudAuth/api/v1/user_policy"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_user_policy_edit_v1(
         self,
@@ -3973,7 +3961,7 @@ class AllCalls(CentralApi):
             'wlan_network': wlan_network
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloudauth_download_mpsk_v2(
         self,
@@ -4011,7 +3999,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_mpsk_get_v2(
         self,
@@ -4023,7 +4011,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloudAuth/api/v2/mpsk"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_mpsk_add_v2(
         self,
@@ -4053,7 +4041,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloudauth_mpsk_getone_v2(
         self,
@@ -4069,7 +4057,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_mpsk_edit_v2(
         self,
@@ -4101,7 +4089,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def cloudauth_mpsk_delete_v2(
         self,
@@ -4117,7 +4105,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloudauth_mpsk_namedmpsk_get_v2(
         self,
@@ -4156,7 +4144,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_mpsk_namedmpsk_add_v2(
         self,
@@ -4192,7 +4180,7 @@ class AllCalls(CentralApi):
             'status': status
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloudauth_mpsk_namedmpsk_getone_v2(
         self,
@@ -4210,7 +4198,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_mpsk_namedmpsk_edit_v2(
         self,
@@ -4255,7 +4243,7 @@ class AllCalls(CentralApi):
             'status': status
         }
 
-        return await self.put(url, json_data=json_data, params=params)
+        return await self.session.put(url, json_data=json_data, params=params)
 
     async def cloudauth_mpsk_namedmpsk_delete_v2(
         self,
@@ -4273,7 +4261,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudAuth/api/v2/mpsk/{mpsk_id}/namedMPSK/{named_mpsk_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloudauth_mpsk_namedmpsk_patch_v2(
         self,
@@ -4318,7 +4306,7 @@ class AllCalls(CentralApi):
             'status': status
         }
 
-        return await self.patch(url, json_data=json_data, params=params)
+        return await self.session.patch(url, json_data=json_data, params=params)
 
     async def cloudauth_usage_mpsk_v2(
         self,
@@ -4330,7 +4318,7 @@ class AllCalls(CentralApi):
         """
         url = "/cloudAuth/api/v2/usage/mpsk"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def cloudauth_bulk_mac_v3(
         self,
@@ -4359,7 +4347,7 @@ class AllCalls(CentralApi):
             'filename': filename
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_upload_v3(
         self,
@@ -4384,7 +4372,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def cloudauth_bulk_error_v3(
         self,
@@ -4406,7 +4394,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_bulk_status_v3(
         self,
@@ -4428,7 +4416,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_bulk_terminate_v3(
         self,
@@ -4450,7 +4438,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def cloudauth_client_mac_registration_get_v3(
         self,
@@ -4493,7 +4481,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_client_mac_registration_add_v3(
         self,
@@ -4519,7 +4507,7 @@ class AllCalls(CentralApi):
             'mac_address': mac_address
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloudauth_client_mac_registration_delete_v3(
         self,
@@ -4535,7 +4523,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cloudauth/api/v3/client/mac/registration/{mac_address}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def cloudauth_client_mac_registration_edit_v3(
         self,
@@ -4557,7 +4545,7 @@ class AllCalls(CentralApi):
             'client_name': client_name
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def cloudauth_reset_client_policy_v3(
         self,
@@ -4577,7 +4565,7 @@ class AllCalls(CentralApi):
             'delete___mac': delete___mac
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def cloudauth_fetch_user_certificates_v3(
         self,
@@ -4603,7 +4591,7 @@ class AllCalls(CentralApi):
             'sub': sub
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def cloudauth_revoke_device_certificate_v3(
         self,
@@ -4629,7 +4617,7 @@ class AllCalls(CentralApi):
             'subject_der': subject_der
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def cloudauth_reset_user_policy_v3(
         self,
@@ -4649,7 +4637,7 @@ class AllCalls(CentralApi):
             'delete____mpsk': delete____mpsk
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def configuration_groups_get_groups_v2(
         self,
@@ -4673,7 +4661,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_groups_create_group_v2(
         self,
@@ -4701,7 +4689,7 @@ class AllCalls(CentralApi):
             '_wireless': _wireless
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_groups_create_group_v3(
         self,
@@ -4729,7 +4717,7 @@ class AllCalls(CentralApi):
             '_wireless': _wireless
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_groups_clone_group_v2(
         self,
@@ -4755,16 +4743,16 @@ class AllCalls(CentralApi):
             'upgrade_architecture': upgrade_architecture
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_groups_get_groups_template_data_v2(
         self,
-        groups: List[str],
+        groups: list[str],
     ) -> Response:
         """Get configuration mode set per device type for groups.
 
         Args:
-            groups (List[str]): Group list to fetch template information.
+            groups (list[str]): Group list to fetch template information.
                 Maximum 20 comma separated group names allowed.
 
         Returns:
@@ -4776,16 +4764,16 @@ class AllCalls(CentralApi):
             'groups': groups
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_groups_get_groups_properties_v1(
         self,
-        groups: List[str],
+        groups: list[str],
     ) -> Response:
         """Get properties set for groups.
 
         Args:
-            groups (List[str]): Group list to fetch properties.
+            groups (list[str]): Group list to fetch properties.
                 Maximum 20 comma separated group names allowed.
 
         Returns:
@@ -4797,17 +4785,17 @@ class AllCalls(CentralApi):
             'groups': groups
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_groups_update_group_properties_v2(
         self,
         group: str,
-        _allowe_dd_evtypes: List[str] = None,
+        _allowe_dd_evtypes: list[str] = None,
         _architecture: str = None,
         _a_pnetwo_rkrole: str = None,
         _g_wnetwo_rkrole: str = None,
-        _allowe_dswit_chtypes: List[str] = None,
-        _monito_ronly: List[str] = None,
+        _allowe_dswit_chtypes: list[str] = None,
+        _monito_ronly: list[str] = None,
         _ne_wcentral: bool = None,
         _wired: bool = True,
         _wireless: bool = None,
@@ -4816,7 +4804,7 @@ class AllCalls(CentralApi):
 
         Args:
             group (str): Group for which properties need to be updated.
-            _allowe_dd_evtypes (List[str], optional): - Devices types which are allowed to be parked
+            _allowe_dd_evtypes (list[str], optional): - Devices types which are allowed to be parked
                 in the group.                                                       - The allowed
                 device types are 'AccessPoints', 'Gateways', 'Switches' and 'SD_WAN_Gateway'
             _architecture (str, optional): - Architecture for access points and gateways in the
@@ -4838,11 +4826,11 @@ class AllCalls(CentralApi):
                 - VPNConcentrator would be the only network role applicable for SD_WAN_Gateway
                 devices.                                                 Valid Values:
                 BranchGateway, VPNConcentrator, WLANGateway
-            _allowe_dswit_chtypes (List[str], optional): - Switch types which are allowed to be
+            _allowe_dswit_chtypes (list[str], optional): - Switch types which are allowed to be
                 parked in the group.                                                          - This
                 is applicable only when switches are allowed to be parked in the group.
                 - The allowed switch types are 'AOS_S' and 'AOS_CX'
-            _monito_ronly (List[str], optional): - Device types for which monitor only mode is to be
+            _monito_ronly (list[str], optional): - Device types for which monitor only mode is to be
                 enabled                                                  - Currently, this is
                 available only for AOS_S and AOS_CX switches in groups where switches are
                 managed using UI mode of configuration.
@@ -4870,7 +4858,7 @@ class AllCalls(CentralApi):
             '_wireless': _wireless
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_groups_update_group_name_v1(
         self,
@@ -4892,7 +4880,7 @@ class AllCalls(CentralApi):
             'group': new_group_name
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_groups_get_cust_default_group_v1(
         self,
@@ -4904,7 +4892,7 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/groups/default_group"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_set_cust_default_group_v1(
         self,
@@ -4924,7 +4912,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_groups_delete_group_v1(
         self,
@@ -4940,18 +4928,18 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_groups_pre_provision_group_v1(
         self,
-        device_id: List[str],
+        device_id: list[str],
         group_name: str,
         tenant_id: str,
     ) -> Response:
         """Pre Provision a group to the device.
 
         Args:
-            device_id (List[str]): device_id
+            device_id (list[str]): device_id
             group_name (str): Group name
             tenant_id (str): Tenant id
 
@@ -4966,7 +4954,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_templates_get_templates_v1(
         self,
@@ -5013,7 +5001,7 @@ class AllCalls(CentralApi):
             'q': q
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_templates_create_template_v1(
         self,
@@ -5056,7 +5044,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def configuration_templates_update_template_v1(
         self,
@@ -5099,7 +5087,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.patch(url, params=params)
+        return await self.session.patch(url, params=params)
 
     async def configuration_templates_get_template_v1(
         self,
@@ -5117,7 +5105,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/templates/{template}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_templates_delete_template_v1(
         self,
@@ -5135,7 +5123,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/templates/{template}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_groups_create_snapshot_for_group_v1(
         self,
@@ -5161,14 +5149,14 @@ class AllCalls(CentralApi):
             'do_not_delete': do_not_delete
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_groups_create_snapshots_for_multiple_groups_v1(
         self,
         backup_name: str,
         do_not_delete: bool,
-        include_groups: List[str],
-        exclude_groups: List[str],
+        include_groups: list[str],
+        exclude_groups: list[str],
     ) -> Response:
         """Create new configuration backup for multiple groups.
 
@@ -5176,11 +5164,11 @@ class AllCalls(CentralApi):
             backup_name (str): backup_name
             do_not_delete (bool): Flag to represent if the snapshot can be deleted automatically by
                 system when creating new snapshot or not.
-            include_groups (List[str]): List of group names to be included,
+            include_groups (list[str]): List of group names to be included,
                 Example: ["Group1", "Group2"].
                 If include_groups list is specified then exclude_groups list must be empty or must
                 not be specified.
-            exclude_groups (List[str]): List of group names to be excluded,
+            exclude_groups (list[str]): List of group names to be excluded,
                 Example: ["Group1", "Group2"].
                 If exclude_groups list is specified then include_groups list must be empty or must
                 not be specified.
@@ -5197,7 +5185,7 @@ class AllCalls(CentralApi):
             'exclude_groups': exclude_groups
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_groups_get_snapshots_for_group_v1(
         self,
@@ -5213,7 +5201,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_update_do_not_delete_v1(
         self,
@@ -5239,7 +5227,7 @@ class AllCalls(CentralApi):
             'do_not_delete': do_not_delete
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_groups_get_last_restore_logs_for_group_v1(
         self,
@@ -5255,7 +5243,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/last_restore_log"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_get_backup_log_for_snapshot_v1(
         self,
@@ -5273,7 +5261,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/backup_log"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_get_backup_status_for_snapshot_v1(
         self,
@@ -5291,7 +5279,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/backup_status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_get_restore_status_for_snapshot_v1(
         self,
@@ -5309,7 +5297,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/groups/{group}/snapshots/{snapshot}/restore_status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_groups_restore_snapshot_for_group_v1(
         self,
@@ -5334,20 +5322,20 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def configuration_groups_move_devices_v1(
         self,
         group: str,
-        serials: List[str],
-        preserve_config_overrides: List[str],
+        serials: list[str],
+        preserve_config_overrides: list[str],
     ) -> Response:
         """Move devices to a group.
 
         Args:
             group (str): group
-            serials (List[str]): serials
-            preserve_config_overrides (List[str]): The configuration of devices of type mentioned in
+            serials (list[str]): serials
+            preserve_config_overrides (list[str]): The configuration of devices of type mentioned in
                 this list will be preserved when the device is moved to a UI group.
                 The device configuration will not be reset completely with the group level
                 configuration.
@@ -5364,7 +5352,7 @@ class AllCalls(CentralApi):
             'preserve_config_overrides': preserve_config_overrides
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_devices_get_device_template_variables_v1(
         self,
@@ -5380,7 +5368,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_devices_create_device_template_variables_v1(
         self,
@@ -5408,7 +5396,7 @@ class AllCalls(CentralApi):
             '_sys_lan_mac': _sys_lan_mac
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_devices_update_device_template_variables_v1(
         self,
@@ -5436,7 +5424,7 @@ class AllCalls(CentralApi):
             '_sys_lan_mac': _sys_lan_mac
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_devices_replace_device_template_variables_v1(
         self,
@@ -5464,7 +5452,7 @@ class AllCalls(CentralApi):
             '_sys_lan_mac': _sys_lan_mac
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_devices_delete_device_template_variables_v1(
         self,
@@ -5480,7 +5468,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/template_variables"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_devices_get_device_group_v1(
         self,
@@ -5496,7 +5484,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/group"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_devices_get_device_v1(
         self,
@@ -5512,7 +5500,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/configuration"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_devices_get_device_details_v1(
         self,
@@ -5538,16 +5526,16 @@ class AllCalls(CentralApi):
             'details': details
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_devices_get_devices_template_details_v1(
         self,
-        device_serials: List[str],
+        device_serials: list[str],
     ) -> Response:
         """Get templates for a list of devices.
 
         Args:
-            device_serials (List[str]): Serial numbers of the devices.
+            device_serials (list[str]): Serial numbers of the devices.
 
         Returns:
             Response: CentralAPI Response object
@@ -5558,15 +5546,15 @@ class AllCalls(CentralApi):
             'device_serials': device_serials
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_devices_get_groups_template_details_v1(
         self,
         limit: int,
         offset: int,
         device_type: str,
-        include_groups: List[str] = None,
-        exclude_groups: List[str] = None,
+        include_groups: list[str] = None,
+        exclude_groups: list[str] = None,
         all_groups: bool = None,
     ) -> Response:
         """Get templates of devices present in the given list of groups.
@@ -5577,8 +5565,8 @@ class AllCalls(CentralApi):
                 pagination.
             device_type (str): Fetch device templates of the given device_type.  Valid Values: IAP,
                 ArubaSwitch, CX, MobilityController
-            include_groups (List[str], optional): Fetch devices templates for list of groups.
-            exclude_groups (List[str], optional): Fetch devices templates not in list of groups
+            include_groups (list[str], optional): Fetch devices templates for list of groups.
+            exclude_groups (list[str], optional): Fetch devices templates not in list of groups
                 (Only allowed for user having all_groups access or admin).
             all_groups (bool, optional): Fetch devices templates details for all the groups (Only
                 allowed for user having all_groups access or admin)
@@ -5597,7 +5585,7 @@ class AllCalls(CentralApi):
             'all_groups': all_groups
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_devices_get_hash_template_details_v1(
         self,
@@ -5632,7 +5620,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_devices_get_all_devices_template_variables_v1(
         self,
@@ -5659,7 +5647,7 @@ class AllCalls(CentralApi):
             'format': format
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_devices_create_all_devices_template_variables_v1(
         self,
@@ -5685,7 +5673,7 @@ class AllCalls(CentralApi):
             'format': format
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def configuration_devices_replace_all_devices_template_variables_v1(
         self,
@@ -5711,7 +5699,7 @@ class AllCalls(CentralApi):
             'format': format
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def configuration_devices_update_all_devices_template_variables_v1(
         self,
@@ -5731,7 +5719,7 @@ class AllCalls(CentralApi):
         url = "/configuration/v1/devices/template_variables"
         variables = variables if isinstance(variables, Path) else Path(str(variables))
 
-        return await self.patch(url)
+        return await self.session.patch(url)
 
     async def configuration_devices_get_device_variabilised_template_v1(
         self,
@@ -5747,7 +5735,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/variablised_template"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_devices_recover_md_device_v1(
         self,
@@ -5763,7 +5751,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/devices/{device_serial}/recover_device"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def configuration_certificates_get_certificates_v1(
         self,
@@ -5791,7 +5779,7 @@ class AllCalls(CentralApi):
             'q': q
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_certificates_upload_certificate_v1(
         self,
@@ -5824,7 +5812,7 @@ class AllCalls(CentralApi):
             'cert_data': cert_data
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_certificates_delete_certificate_v1(
         self,
@@ -5840,7 +5828,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/certificates/{certificate}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_certificates_msp_update_certificate_v1(
         self,
@@ -5873,7 +5861,7 @@ class AllCalls(CentralApi):
             'cert_data': cert_data
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_certificates_update_certificate_for_non_msp_customer_v1(
         self,
@@ -5906,7 +5894,7 @@ class AllCalls(CentralApi):
             'cert_data': cert_data
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_cp_logo_get_cp_logos_v1(
         self,
@@ -5930,7 +5918,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cp_logo_upload_cp_logo_v1(
         self,
@@ -5953,7 +5941,7 @@ class AllCalls(CentralApi):
             'cp_logo_data': cp_logo_data
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_cp_logo_delete_cp_logo_v1(
         self,
@@ -5969,7 +5957,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/cplogo/{checksum}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_templates_get_msp_customer_templates_v1(
         self,
@@ -6007,7 +5995,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_templates_get_msp_customer_template_text_v1(
         self,
@@ -6032,7 +6020,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/{device_type}/{version}/{model}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_templates_delete_msp_customer_template_v1(
         self,
@@ -6057,7 +6045,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/{device_type}/{version}/{model}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_templates_set_msp_customer_template_v2(
         self,
@@ -6094,7 +6082,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def configuration_templates_get_end_customer_templates_v1(
         self,
@@ -6134,7 +6122,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_templates_get_end_customer_template_text_v1(
         self,
@@ -6161,7 +6149,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/customer/{cid}/{device_type}/{version}/{model}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_templates_delete_end_customer_template_v1(
         self,
@@ -6188,7 +6176,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/customer/{cid}/{device_type}/{version}/{model}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_templates_set_end_customer_template_v2(
         self,
@@ -6227,7 +6215,7 @@ class AllCalls(CentralApi):
             'model': model
         }
 
-        return await self.put(url, params=params)
+        return await self.session.put(url, params=params)
 
     async def configuration_templates_get_msp_tmpl_differ_custs_groups_v1(
         self,
@@ -6264,7 +6252,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_templates_get_msp_tmpl_end_cust_differ_groups_v1(
         self,
@@ -6291,12 +6279,12 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/msp/templates/differences/customer/{cid}/{device_type}/{version}/{model}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_templates_apply_msp_customer_template_v2(
         self,
-        include_customers: List[str],
-        exclude_customers: List[str],
+        include_customers: list[str],
+        exclude_customers: list[str],
         device_type: str,
         version: str,
         model: str,
@@ -6305,11 +6293,11 @@ class AllCalls(CentralApi):
         template groups at end customer. .
 
         Args:
-            include_customers (List[str]): List of customers  IDs to be included while applying
+            include_customers (list[str]): List of customers  IDs to be included while applying
                 template,
                 Example: ["111111", "111112"].
                 If include_customers list is specified then exclude_customers must not be specified.
-            exclude_customers (List[str]): List of customers IDs to be excluded while applying
+            exclude_customers (list[str]): List of customers IDs to be excluded while applying
                 template,
                 Example: ["111111", "111112"].
                 If exclude_customers list is specified then include_customers must not be specified.
@@ -6333,13 +6321,13 @@ class AllCalls(CentralApi):
             'exclude_customers': exclude_customers
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_templates_apply_end_customer_template_v2(
         self,
         cid: str,
-        include_groups: List[str],
-        exclude_groups: List[str],
+        include_groups: list[str],
+        exclude_groups: list[str],
         device_type: str,
         version: str,
         model: str,
@@ -6348,12 +6336,12 @@ class AllCalls(CentralApi):
 
         Args:
             cid (str): End customer id.
-            include_groups (List[str]): List of group names to be included while applying template,
+            include_groups (list[str]): List of group names to be included while applying template,
                 Example: ["G1", "G2"].
                 If include_groups list is specified then exclude_groups must not be specified.
                 Special value ["ALL_GROUPS"] can be specified in include_groups list so that given
                 template can be copied to ALL template groups under given tenant.
-            exclude_groups (List[str]): List of group names to be excluded while applying template,
+            exclude_groups (list[str]): List of group names to be excluded while applying template,
                 Example: ["G1", "G2"].
                 If exclude_groups list is specified then include_groups must not be specified.
             device_type (str): Device type of the template.  Valid Values: IAP, ArubaSwitch, CX,
@@ -6375,7 +6363,7 @@ class AllCalls(CentralApi):
             'exclude_groups': exclude_groups
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_config_mode_get_cust_config_mode_v1(
         self,
@@ -6387,7 +6375,7 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/mode"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_config_mode_set_cust_config_mode_v1(
         self,
@@ -6407,7 +6395,7 @@ class AllCalls(CentralApi):
             'config_mode': config_mode
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_config_mode_get_group_config_mode_v1(
         self,
@@ -6434,17 +6422,17 @@ class AllCalls(CentralApi):
             'q': q
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_config_mode_set_group_config_mode_v1(
         self,
-        groups: List[str],
+        groups: list[str],
         config_mode: str,
     ) -> Response:
         """Set configuration mode as either Monitor or Manage at group level.
 
         Args:
-            groups (List[str]): groups
+            groups (list[str]): groups
             config_mode (str): config_mode  Valid Values: Monitor, Manage
 
         Returns:
@@ -6457,7 +6445,7 @@ class AllCalls(CentralApi):
             'config_mode': config_mode
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_config_mode_get_device_config_mode_v1(
         self,
@@ -6484,17 +6472,17 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_config_mode_set_device_config_mode_v1(
         self,
-        serials: List[str],
+        serials: list[str],
         config_mode: str,
     ) -> Response:
         """Set configuration mode as either Monitor or Manage for given devices.
 
         Args:
-            serials (List[str]): serials
+            serials (list[str]): serials
             config_mode (str): config_mode  Valid Values: Monitor, Manage
 
         Returns:
@@ -6507,16 +6495,16 @@ class AllCalls(CentralApi):
             'config_mode': config_mode
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_config_mode_get_device_serials_config_mode_v1(
         self,
-        device_serials: List[str],
+        device_serials: list[str],
     ) -> Response:
         """Get configuration mode as either Monitor or Managed mode for device serials.
 
         Args:
-            device_serials (List[str]): List of device serials to fetch configuration mode:
+            device_serials (list[str]): List of device serials to fetch configuration mode:
                 Maximum 50 comma separated serials allowed.
 
         Returns:
@@ -6528,7 +6516,7 @@ class AllCalls(CentralApi):
             'device_serials': device_serials
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_variables_firewall_get_vfw_groups_v1(
         self,
@@ -6540,16 +6528,16 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/variables_firewall/groups"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_variables_firewall_update_vfw_groups_v1(
         self,
-        groups: List[str],
+        groups: list[str],
     ) -> Response:
         """Add groups to Variables Firewall whitelist.
 
         Args:
-            groups (List[str]): groups
+            groups (list[str]): groups
 
         Returns:
             Response: CentralAPI Response object
@@ -6560,7 +6548,7 @@ class AllCalls(CentralApi):
             'groups': groups
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_variables_firewall_delete_vfw_group_v1(
         self,
@@ -6576,7 +6564,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/variables_firewall/groups/{group}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_variables_firewall_get_vfw_variables_v1(
         self,
@@ -6588,16 +6576,16 @@ class AllCalls(CentralApi):
         """
         url = "/configuration/v1/variables_firewall/variables"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_variables_firewall_update_vfw_variables_v1(
         self,
-        variables: List[str],
+        variables: list[str],
     ) -> Response:
         """Add variables to Variables Firewall whitelist.
 
         Args:
-            variables (List[str]): variables
+            variables (list[str]): variables
 
         Returns:
             Response: CentralAPI Response object
@@ -6608,7 +6596,7 @@ class AllCalls(CentralApi):
             'variables': variables
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_variables_firewall_delete_vfw_variable_v1(
         self,
@@ -6624,18 +6612,18 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/variables_firewall/variables/{variable}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_nb_ui_group_config_set_group_config_country_code_v1(
         self,
-        groups: List[str],
+        groups: list[str],
         country: str,
     ) -> Response:
         """Set country code at group level (For UI groups only, not supported for template groups).
         Note: IAP's need to be rebooted for changes to take effect. .
 
         Args:
-            groups (List[str]): groups
+            groups (list[str]): groups
             country (str): country
 
         Returns:
@@ -6648,7 +6636,7 @@ class AllCalls(CentralApi):
             'country': country
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_nb_ui_group_config_get_group_country_v1(
         self,
@@ -6664,7 +6652,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/{group}/country"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_save_commit_get_groups_auto_commit_state_v1(
         self,
@@ -6691,17 +6679,17 @@ class AllCalls(CentralApi):
             'q': q
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_save_commit_set_groups_auto_commit_state_v1(
         self,
-        groups: List[str],
+        groups: list[str],
         auto_commit_state: str,
     ) -> Response:
         """Set auto commit state as either On or Off at group level.
 
         Args:
-            groups (List[str]): groups
+            groups (list[str]): groups
             auto_commit_state (str): auto_commit_state  Valid Values: On, Off
 
         Returns:
@@ -6714,16 +6702,16 @@ class AllCalls(CentralApi):
             'auto_commit_state': auto_commit_state
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_save_commit_get_device_serials_auto_commit_state_v1(
         self,
-        device_serials: List[str],
+        device_serials: list[str],
     ) -> Response:
         """Get auto commit state as either On or Off for device serials.
 
         Args:
-            device_serials (List[str]): List of device serials to fetch auto commit state:
+            device_serials (list[str]): List of device serials to fetch auto commit state:
                 Maximum 50 comma separated serials allowed.
 
         Returns:
@@ -6735,17 +6723,17 @@ class AllCalls(CentralApi):
             'device_serials': device_serials
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_save_commit_set_device_serials_auto_commit_state_v1(
         self,
-        serials: List[str],
+        serials: list[str],
         auto_commit_state: str,
     ) -> Response:
         """Set auto commit state as either On or Off for given devices.
 
         Args:
-            serials (List[str]): serials
+            serials (list[str]): serials
             auto_commit_state (str): auto_commit_state  Valid Values: On, Off
 
         Returns:
@@ -6758,16 +6746,16 @@ class AllCalls(CentralApi):
             'auto_commit_state': auto_commit_state
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_save_commit_commit_group_config_v1(
         self,
-        groups: List[str],
+        groups: list[str],
     ) -> Response:
         """Commit configurations for given groups.
 
         Args:
-            groups (List[str]): groups
+            groups (list[str]): groups
 
         Returns:
             Response: CentralAPI Response object
@@ -6778,16 +6766,16 @@ class AllCalls(CentralApi):
             'groups': groups
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_save_commit_commit_device_config_v1(
         self,
-        serials: List[str],
+        serials: list[str],
     ) -> Response:
         """Commit configurations for given devices.
 
         Args:
-            serials (List[str]): serials
+            serials (list[str]): serials
 
         Returns:
             Response: CentralAPI Response object
@@ -6798,7 +6786,7 @@ class AllCalls(CentralApi):
             'serials': serials
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_blacklist_client_get_blacklist_clients_v1(
         self,
@@ -6815,19 +6803,19 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/swarm/{device_id}/blacklisting"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_blacklist_client_add_blacklist_clients_v1(
         self,
         device_id: str,
-        blacklist: List[str],
+        blacklist: list[str],
     ) -> Response:
         """Add denylist clients.
 
         Args:
             device_id (str): Device id of virtual controller or C2C ap.
                 Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5.
-            blacklist (List[str]): blacklist
+            blacklist (list[str]): blacklist
 
         Returns:
             Response: CentralAPI Response object
@@ -6838,19 +6826,19 @@ class AllCalls(CentralApi):
             'blacklist': blacklist
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_blacklist_client_delete_blacklist_clients_v1(
         self,
         device_id: str,
-        blacklist: List[str],
+        blacklist: list[str],
     ) -> Response:
         """Delete denylist clients.
 
         Args:
             device_id (str): Device id of virtual controller or C2C ap.
                 Example:14b3743c01f8080bfa07ca053ef1e895df9c0680fe5a17bfd5.
-            blacklist (List[str]): blacklist
+            blacklist (list[str]): blacklist
 
         Returns:
             Response: CentralAPI Response object
@@ -6861,7 +6849,7 @@ class AllCalls(CentralApi):
             'blacklist': blacklist
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def configuration_wlan_get_wlan_list_v1(
         self,
@@ -6879,7 +6867,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_wlan_get_wlan_template_v1(
         self,
@@ -6897,7 +6885,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/template"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_wlan_get_protocol_map_v1(
         self,
@@ -6914,7 +6902,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/wlan/{group_name_or_guid}/protocol_map"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_wlan_get_access_rule_services_v1(
         self,
@@ -6932,7 +6920,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/access_rule_services"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_wlan_delete_wlan_v1(
         self,
@@ -6953,7 +6941,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_wlan_get_wlan_v2(
         self,
@@ -6973,7 +6961,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v2/wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_wlan_create_wlan_v2(
         self,
@@ -7038,7 +7026,7 @@ class AllCalls(CentralApi):
             'access_rules': access_rules
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_wlan_clean_up_and_update_wlan_v2(
         self,
@@ -7103,7 +7091,7 @@ class AllCalls(CentralApi):
             'access_rules': access_rules
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def configuration_wlan_update_wlan_v2(
         self,
@@ -7168,7 +7156,7 @@ class AllCalls(CentralApi):
             'access_rules': access_rules
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_full_wlan_get_wlan_list(
         self,
@@ -7186,7 +7174,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_wlan_get_wlan_template(
         self,
@@ -7204,7 +7192,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/template"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_wlan_get_protocol_map(
         self,
@@ -7221,7 +7209,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid}/protocol_map"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_wlan_get_access_rule_services(
         self,
@@ -7239,7 +7227,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/access_rule_services"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_wlan_get_wlan(
         self,
@@ -7259,7 +7247,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_wlan_create_wlan(
         self,
@@ -7364,7 +7352,7 @@ class AllCalls(CentralApi):
             'value': value
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_full_wlan_update_wlan(
         self,
@@ -7515,7 +7503,7 @@ class AllCalls(CentralApi):
             'value': value
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_full_wlan_delete_wlan(
         self,
@@ -7536,7 +7524,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_wlan/{group_name_or_guid_or_serial_number}/{wlan_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_full_hotspot_get_hotspot_list(
         self,
@@ -7554,7 +7542,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_hotspot_get_hotspot_list_by_mode_name(
         self,
@@ -7574,7 +7562,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{mode_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_hotspot_get_hotspot_templates(
         self,
@@ -7592,7 +7580,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/template"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_hotspot_get_hotspot(
         self,
@@ -7615,7 +7603,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_full_hotspot_create_hotspot(
         self,
@@ -7665,7 +7653,7 @@ class AllCalls(CentralApi):
             'value': value
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_full_hotspot_update_hotspot(
         self,
@@ -7731,7 +7719,7 @@ class AllCalls(CentralApi):
             'value': value
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_full_hotspot_delete_hotspot(
         self,
@@ -7754,7 +7742,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/full_hotspot/{group_name_or_guid_or_serial_number}/{hotspot_name}/{mode_name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_ap_clis_get_clis_v1(
         self,
@@ -7779,12 +7767,12 @@ class AllCalls(CentralApi):
             'version': version
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_ap_clis_update_clis_v1(
         self,
         group_name_or_guid_or_serial_number: str,
-        clis: List[str],
+        clis: list[str],
     ) -> Response:
         """Replace AP configuration.
 
@@ -7792,7 +7780,7 @@ class AllCalls(CentralApi):
             group_name_or_guid_or_serial_number (str): Group name of the group or guid of swarm or
                 serial number of 10x AP.
                 Example:Group_1 or 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
-            clis (List[str]): Whole configuration List in CLI format
+            clis (list[str]): Whole configuration List in CLI format
 
         Returns:
             Response: CentralAPI Response object
@@ -7803,7 +7791,7 @@ class AllCalls(CentralApi):
             'clis': clis
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_ap_clis_get_ap_settings_clis_v1(
         self,
@@ -7819,18 +7807,18 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/ap_settings_cli/{serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_ap_clis_update_ap_settings_clis_v1(
         self,
         serial_number: str,
-        clis: List[str],
+        clis: list[str],
     ) -> Response:
         """Replace per AP setting.
 
         Args:
             serial_number (str): Hotspot mode name.                                  Example:HS2.
-            clis (List[str]): Whole per AP setting List in CLI format
+            clis (list[str]): Whole per AP setting List in CLI format
 
         Returns:
             Response: CentralAPI Response object
@@ -7841,7 +7829,7 @@ class AllCalls(CentralApi):
             'clis': clis
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_ap_clis_get_swarm_variables_v1(
         self,
@@ -7869,7 +7857,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_ap_clis_update_swarm_variables_v1(
         self,
@@ -7899,7 +7887,7 @@ class AllCalls(CentralApi):
             'warn_on_change': warn_on_change
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_ap_clis_get_dirty_diff_v1(
         self,
@@ -7927,7 +7915,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_ap_settings_get_ap_settings_v2(
         self,
@@ -7943,7 +7931,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v2/ap_settings/{serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_ap_settings_update_ap_settings_v2(
         self,
@@ -7992,7 +7980,7 @@ class AllCalls(CentralApi):
             'usb_port_disable': usb_port_disable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_swarm_config_get_swarm_config_v2(
         self,
@@ -8009,7 +7997,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v2/swarm_config/{guid}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_swarm_config_update_swarm_config_v2(
         self,
@@ -8074,7 +8062,7 @@ class AllCalls(CentralApi):
             'timezone_min': timezone_min
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_cx_config_get_interfaces_v1(
         self,
@@ -8099,7 +8087,7 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_update_interfaces_v1(
         self,
@@ -8111,7 +8099,7 @@ class AllCalls(CentralApi):
         vlan_mode: str,
         native_vlan_id: int,
         access_vlan_id: int,
-        allowed_vlan_list: List[str],
+        allowed_vlan_list: list[str],
         device_serial: str = None,
         group_name: str = None,
     ) -> Response:
@@ -8130,7 +8118,7 @@ class AllCalls(CentralApi):
             vlan_mode (str): vlan_mode  Valid Values: access, trunk
             native_vlan_id (int): native_vlan_id
             access_vlan_id (int): access_vlan_id
-            allowed_vlan_list (List[str]): Configure VLAN to trunk-allowed mode in
+            allowed_vlan_list (list[str]): Configure VLAN to trunk-allowed mode in
                 interfaces.<br>Pattern for VLAN: "(^([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-
                 9]|409[0-4])(-([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4]))?$)|(^all$)"
             device_serial (str, optional): Device serial number.
@@ -8160,7 +8148,7 @@ class AllCalls(CentralApi):
             'allowed_vlan_list': allowed_vlan_list
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def configuration_cx_config_get_lag_v1(
         self,
@@ -8185,32 +8173,32 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_crud_lag_v1(
         self,
-        delete: List[str],
+        delete: list[str],
         device_serial: str = None,
         group_name: str = None,
         name: str = None,
         description: str = None,
         admin_status: bool = False,
-        port_members: List[str] = None,
+        port_members: list[str] = None,
         speed_duplex: str = None,
         aggregation_mode: str = 'None',
         routing: bool = False,
-        ip_address: List[str] = None,
+        ip_address: list[str] = None,
         loop_protect_enabled: bool = False,
         vlan_mode: str = 'access',
         native_vlan_id: int = None,
         access_vlan_id: int = None,
-        allowed_vlan_list: List[str] = None,
+        allowed_vlan_list: list[str] = None,
         dhcpv4_snooping: str = None,
     ) -> Response:
         """Create/Update/Delete LAGs.
 
         Args:
-            delete (List[str]): LAG list to be deleted
+            delete (list[str]): LAG list to be deleted
             device_serial (str, optional): Device serial number.
                 Mandatory for device level configuration.
             group_name (str, optional): Group name.
@@ -8219,7 +8207,7 @@ class AllCalls(CentralApi):
                 "^(LAG|Lag|lag)(([1-9]|[1-9][0-9]|[1-4][0-9][0-9]|5[0-1][0-9]|520))$"
             description (str, optional): Pattern: "^([\x20-\x21\x23-\x3E\x40-\x7F])*$"
             admin_status (bool, optional): admin_status
-            port_members (List[str], optional): For group-level configuration, port_members pattern
+            port_members (list[str], optional): For group-level configuration, port_members pattern
                 to refer:<br>"^1\\/1\\/([1-9]|[1-4][0-9]|5[0-6])$"
             speed_duplex (str, optional): Please refer device specific documentation for valid
                 speed_duplex values.<br>  Valid Values: 10-Full, 10-Half, 100-Full, 100-Half,
@@ -8228,7 +8216,7 @@ class AllCalls(CentralApi):
             aggregation_mode (str, optional): aggregation_mode  Valid Values: None, LACP active,
                 LACP passive
             routing (bool, optional): routing
-            ip_address (List[str], optional): Only configurable at device-level.<br>ipv4/ipv6
+            ip_address (list[str], optional): Only configurable at device-level.<br>ipv4/ipv6
                 address with subnet are valid entries.<br>Please refer to device specific
                 documentation for more information.<br>An example for ipv6 allowed pattern is
                 provided.<br>
@@ -8236,7 +8224,7 @@ class AllCalls(CentralApi):
             vlan_mode (str, optional): vlan_mode  Valid Values: access, trunk
             native_vlan_id (int, optional): native_vlan_id
             access_vlan_id (int, optional): access_vlan_id
-            allowed_vlan_list (List[str], optional): Configure VLAN to trunk-allowed mode in
+            allowed_vlan_list (list[str], optional): Configure VLAN to trunk-allowed mode in
                 LAGs.<br>Pattern: "(^([1-9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4])(-([1-
                 9][0-9]{0,2}|[1-3][0-9]{3}|40[0-8][0-9]|409[0-4]))?$)|(^all$)"
             dhcpv4_snooping (str, optional): dhcpv4_snooping
@@ -8269,7 +8257,7 @@ class AllCalls(CentralApi):
             'dhcpv4_snooping': dhcpv4_snooping,
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def configuration_cx_config_get_loop_prevention_v1(
         self,
@@ -8294,14 +8282,14 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_update_loop_prevention_v1(
         self,
         device_serial: str = None,
         group_name: str = None,
         name: str = None,
-        lag_members: List[str] = None,
+        lag_members: list[str] = None,
         port_priority: int = 128,
         admin_edge_enabled: bool = False,
         bpdu_guard_enabled: bool = False,
@@ -8319,7 +8307,7 @@ class AllCalls(CentralApi):
                 Mandatory for group level configuration.
             name (str, optional): Pattern: "(^1/1/([1-9]|[1-4][0-9]|5[0-6])$|^(lag[
                 ]?([1-9]|[1-9][0-9]|[1-4][0-9][0-9]|5[0-1][0-9]|520))*$)"
-            lag_members (List[str], optional): lag_members
+            lag_members (list[str], optional): lag_members
             port_priority (int, optional): Configure spanning-tree port priority in Interface/LAG.
                 Valid Values: 0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240
             admin_edge_enabled (bool, optional): admin_edge_enabled
@@ -8354,7 +8342,7 @@ class AllCalls(CentralApi):
             'description': description
         }
 
-        return await self.post(url, params=params, json_data=json_data)
+        return await self.session.post(url, params=params, json_data=json_data)
 
     async def configuration_cx_config_get_properties_v1(
         self,
@@ -8379,7 +8367,7 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_update_properties_v1(
         self,
@@ -8388,8 +8376,8 @@ class AllCalls(CentralApi):
         location: str,
         timezone: str,
         vrf: str,
-        dns_servers: List[str],
-        ntp_servers: List[str],
+        dns_servers: list[str],
+        ntp_servers: list[str],
         admin_username: str,
         admin_password: str,
         device_serial: str = None,
@@ -8531,11 +8519,11 @@ class AllCalls(CentralApi):
                 US/Indiana-Starke, US/Michigan, US/Mountain, US/Pacific, US/Samoa, UTC, W-SU, WET,
                 Zulu
             vrf (str): vrf  Valid Values: default, mgmt
-            dns_servers (List[str]): vrf is required to configure dns_servers<br>ipv4/ipv6 address
+            dns_servers (list[str]): vrf is required to configure dns_servers<br>ipv4/ipv6 address
                 without subnet are valid dns_server patterns.<br>Please refer to device specific
                 documentation for more information.<br>An example for ipv4 allowed pattern is
                 provided.
-            ntp_servers (List[str]): vrf is required to configure ntp_servers<br>ipv4/ipv6 address
+            ntp_servers (list[str]): vrf is required to configure ntp_servers<br>ipv4/ipv6 address
                 without subnet are valid ntp_servers patterns.<br>Please refer to device specific
                 documentation for more information.<br>An example for ipv6 allowed pattern is
                 provided.
@@ -8569,7 +8557,7 @@ class AllCalls(CentralApi):
             'admin_password': admin_password
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def configuration_cx_config_get_syslog_v1(
         self,
@@ -8594,11 +8582,11 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_crud_syslog_v1(
         self,
-        delete: List[str],
+        delete: list[str],
         global_severity: str,
         device_serial: str = None,
         group_name: str = None,
@@ -8608,7 +8596,7 @@ class AllCalls(CentralApi):
         """Create/Update/Delete Syslog.
 
         Args:
-            delete (List[str]): Logging servers list to be deleted
+            delete (list[str]): Logging servers list to be deleted
             global_severity (str): Configure syslog server severity level.  Valid Values: alert,
                 crit, debug, emer, err, info, notice, warning
             device_serial (str, optional): Device serial number.
@@ -8636,7 +8624,7 @@ class AllCalls(CentralApi):
             'vrf': vrf,
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def configuration_cx_config_get_vlans_v1(
         self,
@@ -8661,11 +8649,11 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_crud_vlans_v1(
         self,
-        delete: List[str],
+        delete: list[str],
         device_serial: str = None,
         group_name: str = None,
         vlan_id: int = None,
@@ -8673,14 +8661,14 @@ class AllCalls(CentralApi):
         admin_status: bool = True,
         description: str = None,
         ip_address_assignment: str = 'DHCP',
-        ip_address: List[str] = None,
-        dhcp_relay: List[str] = None,
+        ip_address: list[str] = None,
+        dhcp_relay: list[str] = None,
         voice: bool = False,
     ) -> Response:
         """Create/Update/Delete VLANs.
 
         Args:
-            delete (List[str]): VLAN list to be deleted
+            delete (list[str]): VLAN list to be deleted
             device_serial (str, optional): Device serial number.
                 Mandatory for device level configuration.
             group_name (str, optional): Group name.
@@ -8693,10 +8681,10 @@ class AllCalls(CentralApi):
                 8320/8325/8360, the default value is "None", and "DHCP" is not valid
                 entry.<br>ip_address_assignment field is associated with ip_address.  Configure
                 interface-VLAN with static or dhcp mode ipv4/v6 address.  Valid Values: DHCP, Static
-            ip_address (List[str], optional): ipv4/ipv6 address with subnet are valid
+            ip_address (list[str], optional): ipv4/ipv6 address with subnet are valid
                 entries.<br>Please refer to device specific documentation for more
                 information.<br>An example for ipv4 allowed pattern is provided.
-            dhcp_relay (List[str], optional): Only configurable at device-level.<br>
+            dhcp_relay (list[str], optional): Only configurable at device-level.<br>
             voice (bool, optional): voice
 
         Returns:
@@ -8721,7 +8709,7 @@ class AllCalls(CentralApi):
             'voice': voice,
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def configuration_cx_config_get_authentication_v1(
         self,
@@ -8746,7 +8734,7 @@ class AllCalls(CentralApi):
             'group_name': group_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def configuration_cx_config_update_authentication_v1(
         self,
@@ -8798,7 +8786,7 @@ class AllCalls(CentralApi):
             'auth_priority': auth_priority
         }
 
-        return await self.post(url, params=params, json_data=json_data)
+        return await self.session.post(url, params=params, json_data=json_data)
 
     async def configuration_system_config_get_system_config_v1(
         self,
@@ -8816,13 +8804,13 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/system_config/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_system_config_update_system_config_v1(
         self,
         group_name_or_guid_or_serial_number: str,
         dns_server: str,
-        ntp_server: List[str],
+        ntp_server: list[str],
         username: str,
         password: str,
     ) -> Response:
@@ -8833,7 +8821,7 @@ class AllCalls(CentralApi):
                 or serial number of 10x AP. Example:Group_1 or
                 6a5d123b01f9441806244ea6e023fab5841b77c828a085f04f or CNF7JSS9L1.
             dns_server (str): DNS server IPs or domain name
-            ntp_server (List[str]): List of ntp server,
+            ntp_server (list[str]): List of ntp server,
                 Example: ["192.168.1.1", "127.0.0.0", "xxx.com"].
                 IPs or domain name.
             username (str): username
@@ -8851,7 +8839,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_rf_config_get_arm_config_v1(
         self,
@@ -8869,7 +8857,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/arm/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_rf_config_update_arm_config_v1(
         self,
@@ -8977,7 +8965,7 @@ class AllCalls(CentralApi):
             'wide_bands': wide_bands
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_rf_config_get_all_dot11g_radio_profile_v1(
         self,
@@ -8995,7 +8983,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11g_radio_profiles/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_rf_config_get_dot11g_radio_config_by_name_v1(
         self,
@@ -9015,7 +9003,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_rf_config_update_dot11g_radio_profile_v1(
         self,
@@ -9023,7 +9011,7 @@ class AllCalls(CentralApi):
         name: str,
         allowed_channels: str,
         beacon_interval: int,
-        ch_bw_range: List[str],
+        ch_bw_range: list[str],
         csa_count: int,
         disable_arm_wids_functions: str,
         dot11h: bool,
@@ -9048,7 +9036,7 @@ class AllCalls(CentralApi):
             name (str): Name of the dot11g radio profile that needs to be deleted.
             allowed_channels (str): allowed_channels
             beacon_interval (int): beacon_interval
-            ch_bw_range (List[str]): ch_bw_range
+            ch_bw_range (list[str]): ch_bw_range
             csa_count (int): csa_count
             disable_arm_wids_functions (str): disable_arm_wids_functions
             dot11h (bool): dot11h
@@ -9090,7 +9078,7 @@ class AllCalls(CentralApi):
             'zone': zone
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_rf_config_delete_dot11g_radio_profile_v1(
         self,
@@ -9110,7 +9098,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11g_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_rf_config_get_all_dot11a_radio_profile_v1(
         self,
@@ -9128,7 +9116,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11a_radio_profiles/{group_name_or_guid_or_serial_number}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_rf_config_get_dot11a_radio_config_by_name_v1(
         self,
@@ -9148,7 +9136,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_rf_config_update_dot11a_radio_profile_v1(
         self,
@@ -9156,7 +9144,7 @@ class AllCalls(CentralApi):
         name: str,
         allowed_channels: str,
         beacon_interval: int,
-        ch_bw_range: List[str],
+        ch_bw_range: list[str],
         csa_count: int,
         disable_arm_wids_functions: str,
         dot11h: bool,
@@ -9181,7 +9169,7 @@ class AllCalls(CentralApi):
             name (str): Dot11a radio profile name.                         Example: default.
             allowed_channels (str): allowed_channels
             beacon_interval (int): beacon_interval
-            ch_bw_range (List[str]): ch_bw_range
+            ch_bw_range (list[str]): ch_bw_range
             csa_count (int): csa_count
             disable_arm_wids_functions (str): disable_arm_wids_functions
             dot11h (bool): dot11h
@@ -9223,7 +9211,7 @@ class AllCalls(CentralApi):
             'zone': zone
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_rf_config_delete_dot11a_radio_profile_v1(
         self,
@@ -9243,7 +9231,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/dot11a_radio_profile/{group_name_or_guid_or_serial_number}/{name}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def configuration_hppc_switch_get_group_ports_v1(
         self,
@@ -9260,7 +9248,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/ports/groups/{group_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_group_ports_v1(
         self,
@@ -9286,7 +9274,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_device_ports_v1(
         self,
@@ -9303,7 +9291,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/ports/devices/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_device_ports_v1(
         self,
@@ -9329,7 +9317,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_group_vlans_v1(
         self,
@@ -9346,15 +9334,15 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/vlans/groups/{group_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_group_vlans_v1(
         self,
         group_name: str,
         vlan_id: int,
-        tagged_ports: List[str],
-        untagged_ports: List[str],
-        isolated_ports: List[str],
+        tagged_ports: list[str],
+        untagged_ports: list[str],
+        isolated_ports: list[str],
     ) -> Response:
         """Update vlans with tagged, untagged and isolated ports for a group.
 
@@ -9362,9 +9350,9 @@ class AllCalls(CentralApi):
             group_name (str): Group name of the group.
                 Example:Group_1.
             vlan_id (int): vlan_id
-            tagged_ports (List[str]): tagged_ports
-            untagged_ports (List[str]): untagged_ports
-            isolated_ports (List[str]): isolated_ports
+            tagged_ports (list[str]): tagged_ports
+            untagged_ports (list[str]): untagged_ports
+            isolated_ports (list[str]): isolated_ports
 
         Returns:
             Response: CentralAPI Response object
@@ -9378,7 +9366,7 @@ class AllCalls(CentralApi):
             'isolated_ports': isolated_ports
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_device_vlans_v1(
         self,
@@ -9395,15 +9383,15 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/vlans/devices/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_device_vlans_v1(
         self,
         device_serial: str,
         vlan_id: int,
-        tagged_ports: List[str],
-        untagged_ports: List[str],
-        isolated_ports: List[str],
+        tagged_ports: list[str],
+        untagged_ports: list[str],
+        isolated_ports: list[str],
     ) -> Response:
         """Update vlans with tagged, untagged and isolated ports for a device.
 
@@ -9411,9 +9399,9 @@ class AllCalls(CentralApi):
             device_serial (str): Device serial of the device.
                 Example:AB0011111.
             vlan_id (int): vlan_id
-            tagged_ports (List[str]): tagged_ports
-            untagged_ports (List[str]): untagged_ports
-            isolated_ports (List[str]): isolated_ports
+            tagged_ports (list[str]): tagged_ports
+            untagged_ports (list[str]): untagged_ports
+            isolated_ports (list[str]): isolated_ports
 
         Returns:
             Response: CentralAPI Response object
@@ -9427,7 +9415,7 @@ class AllCalls(CentralApi):
             'isolated_ports': isolated_ports
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_group_admin_v1(
         self,
@@ -9443,7 +9431,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/system/groups/{group_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_group_admin_v1(
         self,
@@ -9468,7 +9456,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_device_admin_v1(
         self,
@@ -9485,7 +9473,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/system/devices/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_device_admin_v1(
         self,
@@ -9511,7 +9499,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_group_system_time_v1(
         self,
@@ -9527,7 +9515,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/system_time/groups/{group_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_group_system_time_v1(
         self,
@@ -9556,7 +9544,7 @@ class AllCalls(CentralApi):
             'month': month
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_hppc_switch_get_device_system_time_v1(
         self,
@@ -9573,7 +9561,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/aos_switch/system_time/devices/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_hppc_switch_set_device_system_time_v1(
         self,
@@ -9602,7 +9590,7 @@ class AllCalls(CentralApi):
             'month': month
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def configuration_ap_ssh_credential_get_group_ssh_credential_v1(
         self,
@@ -9619,7 +9607,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/group/ssh_credential/{group_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_ap_ssh_credential_update_group_ssh_credential_v1(
         self,
@@ -9645,7 +9633,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def configuration_ap_ssh_credential_get_device_ssh_credential_v1(
         self,
@@ -9662,7 +9650,7 @@ class AllCalls(CentralApi):
         """
         url = f"/configuration/v1/device/ssh_credential/{serial_number_or_guid}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def configuration_ap_ssh_credential_update_device_ssh_credential_v1(
         self,
@@ -9688,7 +9676,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_management_action_command_send_command_to_device_v1(
         self,
@@ -9706,7 +9694,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/device/{serial}/action/{command}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def device_management_action_command_send_multi_line_cmd_v1(
         self,
@@ -9726,7 +9714,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/device/{serial}/action/{command}/port/{port}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def device_management_action_command_send_multi_line_cmd_v2(
         self,
@@ -9751,7 +9739,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_management_action_command_send_command_to_swarm_v1(
         self,
@@ -9769,7 +9757,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/swarm/{swarm_id}/action/{command}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def device_management_action_command_send_disconnect_user_v1(
         self,
@@ -9798,7 +9786,7 @@ class AllCalls(CentralApi):
             'disconnect_user_network': disconnect_user_network
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_management_action_command_send_speed_test_v1(
         self,
@@ -9823,7 +9811,7 @@ class AllCalls(CentralApi):
             'options': options
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_management_action_command_get_command_status_v1(
         self,
@@ -9839,12 +9827,12 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/status/{task_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def device_management_activate_activate_move_devices_v1(
         self,
         operation: str,
-        devices: List[str],
+        devices: list[str],
         sync: bool = None,
     ) -> Response:
         """Move the devices across customers.
@@ -9853,7 +9841,7 @@ class AllCalls(CentralApi):
             operation (str): Use moveFrom to move the devices from child account to parent account.
                 Use moveTo to move the devices from parent account to child account.  Valid Values:
                 moveFrom, moveTo
-            devices (List[str]): Array of devices MAC addresses to be moved
+            devices (list[str]): Array of devices MAC addresses to be moved
             sync (bool, optional): Sync the devices from activate to APC. Default is True
 
         Returns:
@@ -9867,7 +9855,7 @@ class AllCalls(CentralApi):
             'sync': sync
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_management_mm_device_activate_sync_v1(
         self,
@@ -9883,7 +9871,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/mobility_master/{mm_name}/activate_sync"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def device_management_mm_device_static_md_mm_assign_v1(
         self,
@@ -9901,7 +9889,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/mobility_master/{device_serial}/{mm_name}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def device_management_mm_device_get_md_mm_mapping_v1(
         self,
@@ -9917,7 +9905,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/mobility_master/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def device_management_mm_device_del_md_mm_mapping_v1(
         self,
@@ -9933,7 +9921,7 @@ class AllCalls(CentralApi):
         """
         url = f"/device_management/v1/mobility_master/{device_serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def device_replacement_src_gw_external_handle_get_offline_devices_v1(
         self,
@@ -9965,13 +9953,13 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_replace_request_v1(
         self,
         requesting_app: str,
         device_type: str,
-        faulty_devices: List[str],
+        faulty_devices: list[str],
         tenant_id: str,
     ) -> Response:
         """To request device replacement.
@@ -9980,7 +9968,7 @@ class AllCalls(CentralApi):
             requesting_app (str): Type of device replacement
             device_type (str): Used to filter the result based on type of the device[SWITCH, IAP,
                 GATEWAY]
-            faulty_devices (List[str]): Serial numbers of the devices
+            faulty_devices (list[str]): Serial numbers of the devices
             tenant_id (str): Customer ID of the tenant(For MSP admin mode only)
 
         Returns:
@@ -9995,7 +9983,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_replacement_src_gw_external_handle_check_compliance_v1(
         self,
@@ -10022,7 +10010,7 @@ class AllCalls(CentralApi):
             'new_device_serial': new_device_serial
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_replacement_src_gw_external_handle_initiate_replacement_v1(
         self,
@@ -10052,13 +10040,13 @@ class AllCalls(CentralApi):
             'new_device_serial': new_device_serial
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_replacement_src_gw_external_handle_cancel_replacement_v1(
         self,
         requesting_app: str,
         device_type: str,
-        devices: List[str],
+        devices: list[str],
         tenant_id: str,
     ) -> Response:
         """To cancel device replacement.
@@ -10067,7 +10055,7 @@ class AllCalls(CentralApi):
             requesting_app (str): Type of device replacement
             device_type (str): Used to filter the result based on type of the device[SWITCH, IAP,
                 GATEWAY]
-            devices (List[str]): Serial numbers of the faulty devices
+            devices (list[str]): Serial numbers of the faulty devices
             tenant_id (str): Customer ID of the tenant(For MSP admin mode only)
 
         Returns:
@@ -10082,7 +10070,7 @@ class AllCalls(CentralApi):
             'tenant_id': tenant_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def device_replacement_src_gw_external_handle_devices_under_replacement_v1(
         self,
@@ -10124,7 +10112,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_get_device_status_v1(
         self,
@@ -10144,7 +10132,7 @@ class AllCalls(CentralApi):
             'device_serial': device_serial
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_devices_count_v1(
         self,
@@ -10165,7 +10153,7 @@ class AllCalls(CentralApi):
             'replacement_status': replacement_status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_msp_devices_count_v1(
         self,
@@ -10186,7 +10174,7 @@ class AllCalls(CentralApi):
             'replacement_status': replacement_status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_msp_customers_v1(
         self,
@@ -10209,7 +10197,7 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_replacement_src_gw_external_handle_msp_replacement_details_v1(
         self,
@@ -10232,7 +10220,7 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_troubleshooting_apis_operate_a_device_to_start_stop_clear_the_troubleshooting_data(
         self,
@@ -10248,16 +10236,16 @@ class AllCalls(CentralApi):
         """
         url = "/device-troubleshooting/v1/deviceOperation"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def device_troubleshooting_apis_get_single_devices_operation_status_by_serialnumber(
         self,
-        serial_number: List[str] = None,
+        serial_number: list[str] = None,
     ) -> Response:
         """Get single device's operation status by serialNumber.
 
         Args:
-            serial_number (List[str], optional): List of serialNumber for the request.
+            serial_number (list[str], optional): List of serialNumber for the request.
 
         Returns:
             Response: CentralAPI Response object
@@ -10268,7 +10256,7 @@ class AllCalls(CentralApi):
             'serial_number': serial_number
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_troubleshooting_apis_live_subscribe_data_on_device(
         self,
@@ -10284,16 +10272,16 @@ class AllCalls(CentralApi):
         """
         url = "/device-troubleshooting/v1/subscription"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def device_troubleshooting_apis_get_devices_deviceinfo_data(
         self,
-        serial_number: List[str],
+        serial_number: list[str],
     ) -> Response:
         """Get devices' deviceInfo data.
 
         Args:
-            serial_number (List[str]): List of serialNumber for the request.
+            serial_number (list[str]): List of serialNumber for the request.
 
         Returns:
             Response: CentralAPI Response object
@@ -10304,21 +10292,21 @@ class AllCalls(CentralApi):
             'serial_number': serial_number
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_troubleshooting_apis_get_devices_state_data(
         self,
         _dataset: str,
-        serial_number: List[str],
-        telemetry_path: List[str],
+        serial_number: list[str],
+        telemetry_path: list[str],
     ) -> Response:
         """Get device's state data.
 
         Args:
             _dataset (str): select a dataset to query the telemetry data.  Valid Values: state,
                 stats
-            serial_number (List[str]): List of serialNumber for the request.
-            telemetry_path (List[str]): Telemetry path to get the data.
+            serial_number (list[str]): List of serialNumber for the request.
+            telemetry_path (list[str]): Telemetry path to get the data.
 
         Returns:
             Response: CentralAPI Response object
@@ -10330,11 +10318,11 @@ class AllCalls(CentralApi):
             'telemetry_path': telemetry_path
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def device_troubleshooting_apis_get_devices_events_data(
         self,
-        serial_number: List[str],
+        serial_number: list[str],
         event_type: str = None,
         start_time: str = None,
         end_time: str = None,
@@ -10344,7 +10332,7 @@ class AllCalls(CentralApi):
         """Get device's events data.
 
         Args:
-            serial_number (List[str]): List of serialNumber for the request.
+            serial_number (list[str]): List of serialNumber for the request.
             event_type (str, optional): Telemetry event type.
             start_time (str, optional): Query telemetry events start from start_time.
             end_time (str, optional): Query telemetry events end by end_time.
@@ -10365,7 +10353,7 @@ class AllCalls(CentralApi):
             'next_page': next_page
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def dispatcher_external_get_webhooks_v1(
         self,
@@ -10377,18 +10365,18 @@ class AllCalls(CentralApi):
         """
         url = "/central/v1/webhooks"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dispatcher_external_add_webhook_v1(
         self,
         name: str,
-        urls: List[str],
+        urls: list[str],
     ) -> Response:
         """Add Webhook.
 
         Args:
             name (str): name of the webhook
-            urls (List[str]): List of webhook urls
+            urls (list[str]): List of webhook urls
 
         Returns:
             Response: CentralAPI Response object
@@ -10400,7 +10388,7 @@ class AllCalls(CentralApi):
             'urls': urls
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def dispatcher_external_get_webhook_item_v1(
         self,
@@ -10416,7 +10404,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/webhooks/{wid}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dispatcher_external_delete_webhook_v1(
         self,
@@ -10432,20 +10420,20 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/webhooks/{wid}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def dispatcher_external_update_webhook_v1(
         self,
         wid: str,
         name: str,
-        urls: List[str],
+        urls: list[str],
     ) -> Response:
         """Update webhook settings.
 
         Args:
             wid (str): id of the webhook
             name (str): name of the webhook
-            urls (List[str]): List of webhook urls
+            urls (list[str]): List of webhook urls
 
         Returns:
             Response: CentralAPI Response object
@@ -10457,7 +10445,7 @@ class AllCalls(CentralApi):
             'urls': urls
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def dispatcher_external_get_webhook_token_v1(
         self,
@@ -10473,7 +10461,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/webhooks/{wid}/token"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dispatcher_external_refresh_webhook_token_v1(
         self,
@@ -10489,7 +10477,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/webhooks/{wid}/token"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def dispatcher_external_test_webhook_v1(
         self,
@@ -10505,7 +10493,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/webhooks/{wid}/ping"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policy_stats_v1(
         self,
@@ -10523,7 +10511,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policy/policy_stats/{policy_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policy_stats_higher_window_v1(
         self,
@@ -10552,7 +10540,7 @@ class AllCalls(CentralApi):
             'to_timestamp': to_timestamp
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policies_kpi_stats_v1(
         self,
@@ -10568,7 +10556,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policies/kpi"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policies_compliance_percentage_v1(
         self,
@@ -10590,7 +10578,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policies/compliance_percentage"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policies_status_v1(
         self,
@@ -10606,7 +10594,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policies/status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_endpoints_gw_endpoints_get_dps_policies_event_logs_v1(
         self,
@@ -10624,7 +10612,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/cluster/{cluster_id}/sdwan_policy/event_logs/{policy_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def dps_monitoring_dps_site_monitoring_endpoints_dps_site_monitoring_gw_endpoint_get_dps_site_policy_stats_v1(
         self,
@@ -10646,7 +10634,7 @@ class AllCalls(CentralApi):
         """
         url = f"/dps_monitoring_api/datapoints/v1/sdwan_site/site_policy_stats/{site_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def firmware_get_swarms_details_v1(
         self,
@@ -10672,7 +10660,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_get_swarm_details_v1(
         self,
@@ -10688,7 +10676,7 @@ class AllCalls(CentralApi):
         """
         url = f"/firmware/v1/swarms/{swarm_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def firmware_get_devices_details_v1(
         self,
@@ -10714,7 +10702,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_get_device_details_v1(
         self,
@@ -10730,7 +10718,7 @@ class AllCalls(CentralApi):
         """
         url = f"/firmware/v1/devices/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def firmware_get_version_list_v1(
         self,
@@ -10756,7 +10744,7 @@ class AllCalls(CentralApi):
             'serial': serial
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_is_image_available_v1(
         self,
@@ -10778,7 +10766,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_get_status_v1(
         self,
@@ -10796,7 +10784,7 @@ class AllCalls(CentralApi):
         """
         url = "/firmware/v1/status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def firmware_upgrade_v1(
         self,
@@ -10847,7 +10835,7 @@ class AllCalls(CentralApi):
             'forced': forced
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_cancel_upgrade_v1(
         self,
@@ -10876,7 +10864,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_set_compliance_customer_v2(
         self,
@@ -10916,7 +10904,7 @@ class AllCalls(CentralApi):
             'compliance_scheduled_at': compliance_scheduled_at
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_set_compliance_v1(
         self,
@@ -10951,7 +10939,7 @@ class AllCalls(CentralApi):
             'allow_unsupported_version': allow_unsupported_version
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_get_compliance_v1(
         self,
@@ -10973,7 +10961,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_delete_compliance_v1(
         self,
@@ -10995,7 +10983,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def firmware_upgrade_msp_v1(
         self,
@@ -11038,7 +11026,7 @@ class AllCalls(CentralApi):
             'exclude_customers': exclude_customers
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_upgrade_customer_v1(
         self,
@@ -11079,7 +11067,7 @@ class AllCalls(CentralApi):
             'exclude_groups': exclude_groups
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_cancel_upgrade_msp_v2(
         self,
@@ -11103,7 +11091,7 @@ class AllCalls(CentralApi):
             'exclude_customers': exclude_customers
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_cancel_upgrade_customer_v2(
         self,
@@ -11125,7 +11113,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_get_model_families_list_v1(
         self,
@@ -11147,7 +11135,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_set_compliance_msp_v1(
         self,
@@ -11188,7 +11176,7 @@ class AllCalls(CentralApi):
             'tenants': tenants
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_get_compliance_msp_v1(
         self,
@@ -11204,7 +11192,7 @@ class AllCalls(CentralApi):
         """
         url = "/firmware/v1/msp/upgrade/compliance_version"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def firmware_delete_compliance_msp_v1(
         self,
@@ -11228,7 +11216,7 @@ class AllCalls(CentralApi):
             'tenants': tenants
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def firmware_set_compliance_msp_tenant_v1(
         self,
@@ -11270,7 +11258,7 @@ class AllCalls(CentralApi):
             'compliance_scheduled_at': compliance_scheduled_at
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def firmware_get_compliance_msp_tenant_v1(
         self,
@@ -11294,7 +11282,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def firmware_delete_compliance_msp_tenant_v1(
         self,
@@ -11318,7 +11306,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def firmware_get_tenants_details_v1(
         self,
@@ -11340,7 +11328,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def gdpr_gdpr_external_get_gdprs_v1(
         self,
@@ -11352,7 +11340,7 @@ class AllCalls(CentralApi):
         """
         url = "/gdpr/v1/opt_out_clients"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def gdpr_external_add_v1(
         self,
@@ -11372,7 +11360,7 @@ class AllCalls(CentralApi):
             'mac': mac
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def gdpr_get_mac_v1(
         self,
@@ -11388,7 +11376,7 @@ class AllCalls(CentralApi):
         """
         url = f"/gdpr/v1/opt_out_clients/{mac}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def gdpr_external_delete_v1(
         self,
@@ -11404,7 +11392,7 @@ class AllCalls(CentralApi):
         """
         url = f"/gdpr/v1/opt_out_clients/{mac}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def guest_views_external_get_portals_v1(
         self,
@@ -11431,7 +11419,7 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def guest_views_external_create_portal_v1(
         self,
@@ -11450,7 +11438,7 @@ class AllCalls(CentralApi):
         self_reg_account_expire_hours: int,
         self_reg_account_expire_minutes: int,
         login_button_title: str,
-        whitelist_urls: List[str],
+        whitelist_urls: list[str],
         custom_username_label: str,
         custom_password_label: str,
         custom_sender_message: str,
@@ -11523,7 +11511,7 @@ class AllCalls(CentralApi):
                 minutes, min 0 to max 59
             login_button_title (str): Customizable login button label (optional field, max 32
                 characters).
-            whitelist_urls (List[str]): List of urls to  white list or allow  access before portal
+            whitelist_urls (list[str]): List of urls to  white list or allow  access before portal
                 login
             custom_username_label (str): Custom username lable to be used in registration and
                 password reset messages (max 30 characters)
@@ -11663,7 +11651,7 @@ class AllCalls(CentralApi):
             'override_common_name_enabled': override_common_name_enabled
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def guest_views_external_preview_portal_v1(
         self,
@@ -11679,7 +11667,7 @@ class AllCalls(CentralApi):
         """
         url = f"/guest/v1/portals/preview/{portal_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def guest_views_external_get_portal_v1(
         self,
@@ -11695,7 +11683,7 @@ class AllCalls(CentralApi):
         """
         url = f"/guest/v1/portals/{portal_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def guest_views_external_update_portal_v1(
         self,
@@ -11715,7 +11703,7 @@ class AllCalls(CentralApi):
         self_reg_account_expire_hours: int,
         self_reg_account_expire_minutes: int,
         login_button_title: str,
-        whitelist_urls: List[str],
+        whitelist_urls: list[str],
         custom_username_label: str,
         custom_password_label: str,
         custom_sender_message: str,
@@ -11789,7 +11777,7 @@ class AllCalls(CentralApi):
                 minutes, min 0 to max 59
             login_button_title (str): Customizable login button label (optional field, max 32
                 characters).
-            whitelist_urls (List[str]): List of urls to  white list or allow  access before portal
+            whitelist_urls (list[str]): List of urls to  white list or allow  access before portal
                 login
             custom_username_label (str): Custom username lable to be used in registration and
                 password reset messages (max 30 characters)
@@ -11928,7 +11916,7 @@ class AllCalls(CentralApi):
             'override_common_name_enabled': override_common_name_enabled
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def guest_views_external_delete_portal_v1(
         self,
@@ -11944,7 +11932,7 @@ class AllCalls(CentralApi):
         """
         url = f"/guest/v1/portals/{portal_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def guest_views_external_get_visitors_v1(
         self,
@@ -11977,7 +11965,7 @@ class AllCalls(CentralApi):
             'filter_value': filter_value
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def guest_views_external_create_visitor_v1(
         self,
@@ -12049,7 +12037,7 @@ class AllCalls(CentralApi):
             'expire_at': expire_at
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def guest_views_external_get_visitor_v1(
         self,
@@ -12067,7 +12055,7 @@ class AllCalls(CentralApi):
         """
         url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def guest_views_external_update_visitor_v1(
         self,
@@ -12141,7 +12129,7 @@ class AllCalls(CentralApi):
             'expire_at': expire_at
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def guest_views_external_delete_visitor_v1(
         self,
@@ -12159,7 +12147,7 @@ class AllCalls(CentralApi):
         """
         url = f"/guest/v1/portals/{portal_id}/visitors/{visitor_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def guest_views_external_get_sessions_v1(
         self,
@@ -12199,7 +12187,7 @@ class AllCalls(CentralApi):
             'filter_value': filter_value
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def guest_views_external_get_wlans_v1(
         self,
@@ -12211,7 +12199,7 @@ class AllCalls(CentralApi):
         """
         url = "/guest/v1/wlans"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def guest_views_external_get_enabled_v1(
         self,
@@ -12223,7 +12211,7 @@ class AllCalls(CentralApi):
         """
         url = "/guest/v1/enabled"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def guest_views_external_get_re_provision_v1(
         self,
@@ -12235,7 +12223,7 @@ class AllCalls(CentralApi):
         """
         url = "/guest/v1/reprovision"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def guest_views_external_wifi4eu_status_v1(
         self,
@@ -12257,7 +12245,7 @@ class AllCalls(CentralApi):
             'network_id': network_id
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def guest_views_external_get_statistics_v1(
         self,
@@ -12280,7 +12268,7 @@ class AllCalls(CentralApi):
             'ssid': ssid
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def install_manager_external_invite_installer_v1(
         self,
@@ -12319,7 +12307,7 @@ class AllCalls(CentralApi):
             'site_name': site_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def install_manager_external_get_installers_v1(
         self,
@@ -12331,7 +12319,7 @@ class AllCalls(CentralApi):
         """
         url = "/install_manager/external/v1/installer"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def install_manager_external_delete_installer_v1(
         self,
@@ -12351,7 +12339,7 @@ class AllCalls(CentralApi):
             'id': id
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def install_manager_external_update_installer_v1(
         self,
@@ -12362,8 +12350,8 @@ class AllCalls(CentralApi):
         mobile_number: str,
         expire_at: int,
         allow_config: bool,
-        add_sites: List[int],
-        remove_sites: List[int],
+        add_sites: list[int],
+        remove_sites: list[int],
     ) -> Response:
         """Update an installer.
 
@@ -12376,8 +12364,8 @@ class AllCalls(CentralApi):
             expire_at (int): Date up to which the installer should be given access. Value is in
                 epoch seconds
             allow_config (bool): Allow the installer to add a device name during installation
-            add_sites (List[int]): site id that has to be added
-            remove_sites (List[int]): site id that has to be removed
+            add_sites (list[int]): site id that has to be added
+            remove_sites (list[int]): site id that has to be removed
 
         Returns:
             Response: CentralAPI Response object
@@ -12399,7 +12387,7 @@ class AllCalls(CentralApi):
             'remove_sites': remove_sites
         }
 
-        return await self.patch(url, params=params, json_data=json_data)
+        return await self.session.patch(url, params=params, json_data=json_data)
 
     async def install_manager_external_get_all_qr_codes_v1(
         self,
@@ -12419,7 +12407,7 @@ class AllCalls(CentralApi):
             'id': id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def install_manager_external_delete_qr_code_v1(
         self,
@@ -12439,7 +12427,7 @@ class AllCalls(CentralApi):
             'id': id
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def install_manager_external_create_qr_code_v1(
         self,
@@ -12478,7 +12466,7 @@ class AllCalls(CentralApi):
             'NOTE': 'auto code failed check schema'
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def install_manager_external_update_qr_code_v1(
         self,
@@ -12510,7 +12498,7 @@ class AllCalls(CentralApi):
             'id': id
         }
 
-        return await self.patch(url, params=params, json_data=json_data)
+        return await self.session.patch(url, params=params, json_data=json_data)
 
     async def install_manager_external_assign_group_to_device_types_in_sites_v1(
         self,
@@ -12536,7 +12524,7 @@ class AllCalls(CentralApi):
             'site_name': site_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def install_manager_external_assigned_group_to_site_list_v1(
         self,
@@ -12559,7 +12547,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def install_manager_external_update_site_status_v1(
         self,
@@ -12582,7 +12570,7 @@ class AllCalls(CentralApi):
             'mark_as_completed': mark_as_completed
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def iot_operations_adp_list_apps_published_and_suspended_v1(
         self,
@@ -12614,7 +12602,7 @@ class AllCalls(CentralApi):
             'is_owner': is_owner
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_list_apps_draft_v1(
         self,
@@ -12646,12 +12634,12 @@ class AllCalls(CentralApi):
             'is_owner': is_owner
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_create_draft_app_v1(
         self,
-        allowed_external_urls: List[str],
-        app_allowed_device_class_classification: List[str],
+        allowed_external_urls: list[str],
+        app_allowed_device_class_classification: list[str],
         app_ap_permission: str,
         app_beacon_permission: str,
         ble_gatt_operations: str,
@@ -12660,7 +12648,7 @@ class AllCalls(CentralApi):
         device_context_access: str,
         serial_access: str,
         zigbee_access: str,
-        app_features: List[str],
+        app_features: list[str],
         app_radio_permission: str,
         app_support: str,
         author_website: str,
@@ -12681,7 +12669,7 @@ class AllCalls(CentralApi):
         _name: str,
         placeholder: str,
         required: bool,
-        supported_values: List[str],
+        supported_values: list[str],
         validation: str,
         match_type: str,
         match_value: str,
@@ -12705,7 +12693,7 @@ class AllCalls(CentralApi):
         required_user_permission: bool,
         required_user_subscription: bool,
         summary: str,
-        supported_platforms: List[str],
+        supported_platforms: list[str],
         descriptors: list,
         _device_class: str,
         interfaces: list,
@@ -12721,8 +12709,8 @@ class AllCalls(CentralApi):
         """Create App.
 
         Args:
-            allowed_external_urls (List[str]): allowed_external_urls
-            app_allowed_device_class_classification (List[str]):
+            allowed_external_urls (list[str]): allowed_external_urls
+            app_allowed_device_class_classification (list[str]):
                 app_allowed_device_class_classification
             app_ap_permission (str): app_ap_permission  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             app_beacon_permission (str): app_beacon_permission  Valid Values: BLOCK, READ_ONLY,
@@ -12735,7 +12723,7 @@ class AllCalls(CentralApi):
                 READ_WRITE
             serial_access (str): serial_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             zigbee_access (str): zigbee_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
-            app_features (List[str]): app_features
+            app_features (list[str]): app_features
             app_radio_permission (str): app_radio_permission  Valid Values: BLOCK, READ_ONLY,
                 READ_WRITE
             app_support (str): app_support
@@ -12757,7 +12745,7 @@ class AllCalls(CentralApi):
             name (str): name
             placeholder (str): placeholder
             required (bool): required
-            supported_values (List[str]): supported_values
+            supported_values (list[str]): supported_values
             validation (str): validation
             match_type (str): match_type  Valid Values: DEVICE_CLASS, OUI, VENDOR, LOCAL_NAME
             match_value (str): match_value
@@ -12782,7 +12770,7 @@ class AllCalls(CentralApi):
             required_user_permission (bool): required_user_permission
             required_user_subscription (bool): required_user_subscription
             summary (str): summary
-            supported_platforms (List[str]): supported_platforms
+            supported_platforms (list[str]): supported_platforms
             descriptors (list): descriptors
             device_class (str): device_class
             interfaces (list): interfaces
@@ -12860,14 +12848,14 @@ class AllCalls(CentralApi):
             'src_endpoint': src_endpoint
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_adp_update_or_new_draft_app_version_v1(
         self,
         app_id: str,
         version: int,
-        allowed_external_urls: List[str],
-        app_allowed_device_class_classification: List[str],
+        allowed_external_urls: list[str],
+        app_allowed_device_class_classification: list[str],
         app_ap_permission: str,
         app_beacon_permission: str,
         ble_gatt_operations: str,
@@ -12876,7 +12864,7 @@ class AllCalls(CentralApi):
         device_context_access: str,
         serial_access: str,
         zigbee_access: str,
-        app_features: List[str],
+        app_features: list[str],
         app_radio_permission: str,
         app_support: str,
         author_website: str,
@@ -12897,7 +12885,7 @@ class AllCalls(CentralApi):
         _name: str,
         placeholder: str,
         required: bool,
-        supported_values: List[str],
+        supported_values: list[str],
         validation: str,
         match_type: str,
         match_value: str,
@@ -12921,7 +12909,7 @@ class AllCalls(CentralApi):
         required_user_permission: bool,
         required_user_subscription: bool,
         summary: str,
-        supported_platforms: List[str],
+        supported_platforms: list[str],
         descriptors: list,
         _device_class: str,
         interfaces: list,
@@ -12939,8 +12927,8 @@ class AllCalls(CentralApi):
         Args:
             app_id (str): app_id
             version (int): version
-            allowed_external_urls (List[str]): allowed_external_urls
-            app_allowed_device_class_classification (List[str]):
+            allowed_external_urls (list[str]): allowed_external_urls
+            app_allowed_device_class_classification (list[str]):
                 app_allowed_device_class_classification
             app_ap_permission (str): app_ap_permission  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             app_beacon_permission (str): app_beacon_permission  Valid Values: BLOCK, READ_ONLY,
@@ -12953,7 +12941,7 @@ class AllCalls(CentralApi):
                 READ_WRITE
             serial_access (str): serial_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             zigbee_access (str): zigbee_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
-            app_features (List[str]): app_features
+            app_features (list[str]): app_features
             app_radio_permission (str): app_radio_permission  Valid Values: BLOCK, READ_ONLY,
                 READ_WRITE
             app_support (str): app_support
@@ -12975,7 +12963,7 @@ class AllCalls(CentralApi):
             name (str): name
             placeholder (str): placeholder
             required (bool): required
-            supported_values (List[str]): supported_values
+            supported_values (list[str]): supported_values
             validation (str): validation
             match_type (str): match_type  Valid Values: DEVICE_CLASS, OUI, VENDOR, LOCAL_NAME
             match_value (str): match_value
@@ -13000,7 +12988,7 @@ class AllCalls(CentralApi):
             required_user_permission (bool): required_user_permission
             required_user_subscription (bool): required_user_subscription
             summary (str): summary
-            supported_platforms (List[str]): supported_platforms
+            supported_platforms (list[str]): supported_platforms
             descriptors (list): descriptors
             device_class (str): device_class
             interfaces (list): interfaces
@@ -13078,7 +13066,7 @@ class AllCalls(CentralApi):
             'src_endpoint': src_endpoint
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_adp_validate_app_name_v1(
         self,
@@ -13101,7 +13089,7 @@ class AllCalls(CentralApi):
             'app_id': app_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_delete_app_version_v1(
         self,
@@ -13124,7 +13112,7 @@ class AllCalls(CentralApi):
             'version': version
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def iot_operations_adp_reject_pending_app_version_v1(
         self,
@@ -13147,7 +13135,7 @@ class AllCalls(CentralApi):
             'version': version
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_adp_get_apps_version_details_v1(
         self,
@@ -13169,14 +13157,14 @@ class AllCalls(CentralApi):
             'version': version
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_new_pending_app_version_v1(
         self,
         app_id: str,
         version: int,
-        allowed_external_urls: List[str],
-        app_allowed_device_class_classification: List[str],
+        allowed_external_urls: list[str],
+        app_allowed_device_class_classification: list[str],
         app_ap_permission: str,
         app_beacon_permission: str,
         ble_gatt_operations: str,
@@ -13185,7 +13173,7 @@ class AllCalls(CentralApi):
         device_context_access: str,
         serial_access: str,
         zigbee_access: str,
-        app_features: List[str],
+        app_features: list[str],
         app_radio_permission: str,
         app_support: str,
         author_website: str,
@@ -13206,7 +13194,7 @@ class AllCalls(CentralApi):
         _name: str,
         placeholder: str,
         required: bool,
-        supported_values: List[str],
+        supported_values: list[str],
         validation: str,
         match_type: str,
         match_value: str,
@@ -13230,7 +13218,7 @@ class AllCalls(CentralApi):
         required_user_permission: bool,
         required_user_subscription: bool,
         summary: str,
-        supported_platforms: List[str],
+        supported_platforms: list[str],
         descriptors: list,
         _device_class: str,
         interfaces: list,
@@ -13248,8 +13236,8 @@ class AllCalls(CentralApi):
         Args:
             app_id (str): app_id
             version (int): version
-            allowed_external_urls (List[str]): allowed_external_urls
-            app_allowed_device_class_classification (List[str]):
+            allowed_external_urls (list[str]): allowed_external_urls
+            app_allowed_device_class_classification (list[str]):
                 app_allowed_device_class_classification
             app_ap_permission (str): app_ap_permission  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             app_beacon_permission (str): app_beacon_permission  Valid Values: BLOCK, READ_ONLY,
@@ -13262,7 +13250,7 @@ class AllCalls(CentralApi):
                 READ_WRITE
             serial_access (str): serial_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
             zigbee_access (str): zigbee_access  Valid Values: BLOCK, READ_ONLY, READ_WRITE
-            app_features (List[str]): app_features
+            app_features (list[str]): app_features
             app_radio_permission (str): app_radio_permission  Valid Values: BLOCK, READ_ONLY,
                 READ_WRITE
             app_support (str): app_support
@@ -13284,7 +13272,7 @@ class AllCalls(CentralApi):
             name (str): name
             placeholder (str): placeholder
             required (bool): required
-            supported_values (List[str]): supported_values
+            supported_values (list[str]): supported_values
             validation (str): validation
             match_type (str): match_type  Valid Values: DEVICE_CLASS, OUI, VENDOR, LOCAL_NAME
             match_value (str): match_value
@@ -13309,7 +13297,7 @@ class AllCalls(CentralApi):
             required_user_permission (bool): required_user_permission
             required_user_subscription (bool): required_user_subscription
             summary (str): summary
-            supported_platforms (List[str]): supported_platforms
+            supported_platforms (list[str]): supported_platforms
             descriptors (list): descriptors
             device_class (str): device_class
             interfaces (list): interfaces
@@ -13387,7 +13375,7 @@ class AllCalls(CentralApi):
             'src_endpoint': src_endpoint
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_adp_list_app_versions_v1(
         self,
@@ -13415,7 +13403,7 @@ class AllCalls(CentralApi):
             'page_size': page_size
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_list_images_v1(
         self,
@@ -13450,7 +13438,7 @@ class AllCalls(CentralApi):
             'search_term': search_term
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_create_upload_request_v1(
         self,
@@ -13479,7 +13467,7 @@ class AllCalls(CentralApi):
             'version': version
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_adp_list_images_for_max_version_v1(
         self,
@@ -13505,7 +13493,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_adp_validate_image_name_v1(
         self,
@@ -13525,7 +13513,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_search_apps_v1(
         self,
@@ -13559,7 +13547,7 @@ class AllCalls(CentralApi):
             'size': size
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_find_all_installed_apps_v1(
         self,
@@ -13567,7 +13555,7 @@ class AllCalls(CentralApi):
         group_id: str = None,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Find all installed apps.
 
@@ -13577,7 +13565,7 @@ class AllCalls(CentralApi):
             group_id (str, optional): The unique Id of the group to check whether App is installed
             page (int, optional): Results page you want to retrieve (0…N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -13593,7 +13581,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_count_all_installed_apps_v1(
         self,
@@ -13613,7 +13601,7 @@ class AllCalls(CentralApi):
             'collector_id': collector_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_get_app_v1(
         self,
@@ -13642,7 +13630,7 @@ class AllCalls(CentralApi):
             'latest_version': latest_version
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_get_app_icon_v1(
         self,
@@ -13658,7 +13646,7 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/appstore/apps/{app_id}/icon"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_appstore_install_app_v1(
         self,
@@ -13683,7 +13671,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_edit_installed_app_v1(
         self,
@@ -13708,7 +13696,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_uninstall_app_v1(
         self,
@@ -13730,7 +13718,7 @@ class AllCalls(CentralApi):
             'collector_id': collector_id
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def iot_operations_appstore_upgrade_app_v1(
         self,
@@ -13755,7 +13743,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_developers_search_apps_v1(
         self,
@@ -13785,7 +13773,7 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_edit_developer_installed_app_v1(
         self,
@@ -13810,7 +13798,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_get_developer_app_v1(
         self,
@@ -13838,7 +13826,7 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_get_developer_app_icon_v1(
         self,
@@ -13856,7 +13844,7 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/appstore/developers/apps/{app_id}/versions/{version}/icon"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_appstore_install_developer_app_v1(
         self,
@@ -13883,7 +13871,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_uninstall_developer_app_v1(
         self,
@@ -13907,7 +13895,7 @@ class AllCalls(CentralApi):
             'collector_id': collector_id
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def iot_operations_appstore_get_app_version_history_v1(
         self,
@@ -13927,7 +13915,7 @@ class AllCalls(CentralApi):
             'app_id': app_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_appstore_upgrade_developer_app_v1(
         self,
@@ -13954,7 +13942,7 @@ class AllCalls(CentralApi):
             'certificates': certificates
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_appstore_developer_info_v1(
         self,
@@ -13966,14 +13954,14 @@ class AllCalls(CentralApi):
         """
         url = "/iot_operations/api/v1/appstore/developers/info"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_appstore_find_all_recommended_apps_v1(
         self,
         collector_id: str = None,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
         type: str = None,
     ) -> Response:
         """Find Recommended Apps.
@@ -13983,7 +13971,7 @@ class AllCalls(CentralApi):
                 installed
             page (int, optional): Results page you want to retrieve (0…N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
             type (str, optional): Open channel App type
 
@@ -14000,33 +13988,33 @@ class AllCalls(CentralApi):
             'type': type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_all_devices_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         device_address: str = None,
-        device_classes: List[str] = None,
+        device_classes: list[str] = None,
         device_type: str = None,
         page: int = 0,
         group_id: str = None,
         since: str = None,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of all devices.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             device_address (str, optional): Device Address
-            device_classes (List[str], optional): Device Classes
+            device_classes (list[str], optional): Device Classes
             device_type (str, optional): Device Type  Valid Values: UNSPECIFIED, BLE, ZIGBEE, USB,
                 AP, DEPENDENT, RADIO, UNRECOGNIZED
             page (int, optional): Results page you want to retrieve (0…N)
             group_id (str, optional): groupId
             since (str, optional): Start time - End time range in ISO timestamp
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14046,28 +14034,28 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_all_devices_by_attribute_v1(
         self,
         att_name: str = None,
         att_value: str = '*',
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         page: int = 0,
         since: str = None,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of all devices.
 
         Args:
             att_name (str, optional): Device attribute name
             att_value (str, optional): Device attribute value
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             page (int, optional): Results page you want to retrieve (0…N)
             since (str, optional): Start time - End time range in ISO timestamp
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14085,18 +14073,18 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_classified_count_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         device_type: str = None,
         since: str = None,
     ) -> Response:
         """Return the count of devices with one or more device classes.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             device_type (str, optional): Device Type  Valid Values: UNSPECIFIED, BLE, ZIGBEE, USB,
                 AP, DEPENDENT, RADIO, UNRECOGNIZED
             since (str, optional): Start time - End time range in ISO timestamp
@@ -14112,18 +14100,18 @@ class AllCalls(CentralApi):
             'since': since
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_count_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         since: str = None,
         group_id: str = None,
     ) -> Response:
         """Return the count of devices.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             since (str, optional): Start time - End time range in ISO timestamp
             group_id (str, optional): groupId
 
@@ -14138,11 +14126,11 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_classified_statistics_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         device_type: str = None,
         since: str = None,
         group_id: str = None,
@@ -14150,7 +14138,7 @@ class AllCalls(CentralApi):
         """Return the count of devices by Device Class.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             device_type (str, optional): Device Type  Valid Values: UNSPECIFIED, BLE, ZIGBEE, USB,
                 AP, DEPENDENT, RADIO, UNRECOGNIZED
             since (str, optional): Start time - End time range in ISO timestamp
@@ -14168,17 +14156,17 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_reporters_count_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         since: str = None,
     ) -> Response:
         """Return the count of devices reporters by Collector.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             since (str, optional): Start time - End time range in ISO timestamp
 
         Returns:
@@ -14191,18 +14179,18 @@ class AllCalls(CentralApi):
             'since': since
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_count_by_type_v1(
         self,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         since: str = None,
         group_id: str = None,
     ) -> Response:
         """Return the count of devices by type.
 
         Args:
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             since (str, optional): Start time - End time range in ISO timestamp
             group_id (str, optional): groupId
 
@@ -14217,14 +14205,14 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_count_by_collector_id_v1(
         self,
         end_time: str,
         start_time: str,
         aggregation: int = None,
-        collector_id: List[str] = None,
+        collector_id: list[str] = None,
         type: str = None,
     ) -> Response:
         """Return a time-series device count by collectorId.
@@ -14233,7 +14221,7 @@ class AllCalls(CentralApi):
             end_time (str): End time
             start_time (str): Start time
             aggregation (int, optional): Aggregation time
-            collector_id (List[str], optional): The unique Id of the collector
+            collector_id (list[str], optional): The unique Id of the collector
             type (str, optional): Device Type  Valid Values: UNSPECIFIED, BLE, ZIGBEE, USB, AP,
                 DEPENDENT, RADIO, UNRECOGNIZED
 
@@ -14250,7 +14238,7 @@ class AllCalls(CentralApi):
             'type': type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_v1(
         self,
@@ -14266,14 +14254,14 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/devices/{device_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_devices_get_device_attributes_v1(
         self,
         device_id: str,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of Attributes.
 
@@ -14281,7 +14269,7 @@ class AllCalls(CentralApi):
             device_id (str): The unique Device Id
             page (int, optional): Results page you want to retrieve (0…N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14295,7 +14283,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_devices_get_device_timeseries_metrics_v1(
         self,
@@ -14304,7 +14292,7 @@ class AllCalls(CentralApi):
         start_time: str,
         aggregation: int = None,
         collector_id: str = None,
-        metrics: List[str] = None,
+        metrics: list[str] = None,
         reporter: str = None,
     ) -> Response:
         """Return the time-series from device.
@@ -14315,7 +14303,7 @@ class AllCalls(CentralApi):
             start_time (str): Start time
             aggregation (int, optional): Aggregation time
             collector_id (str, optional): The unique Id of the collector
-            metrics (List[str], optional): Metrics  Valid Values: RSSI, BATTERY, ADVERTISING,
+            metrics (list[str], optional): Metrics  Valid Values: RSSI, BATTERY, ADVERTISING,
                 COLLECTOR, LQI, RXPACKETS, RXBYTES, TXPACKETS, TXBYTES
             reporter (str, optional): Reporter MacAddress
 
@@ -14333,7 +14321,7 @@ class AllCalls(CentralApi):
             'reporter': reporter
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_iotgateway_get_all_gateways_v1(
         self,
@@ -14341,7 +14329,7 @@ class AllCalls(CentralApi):
         page: int = 0,
         group_id: str = None,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of Gateways.
 
@@ -14350,7 +14338,7 @@ class AllCalls(CentralApi):
             page (int, optional): Results page you want to retrieve (0..N)
             group_id (str, optional): filter by group
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14366,20 +14354,20 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_iotgateway_get_all_association_v1(
         self,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of Gateways.
 
         Args:
             page (int, optional): Results page you want to retrieve (0..N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14393,20 +14381,20 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_iotgateway_add_association_v1(
         self,
         collector_id: str = None,
         collector_ip: str = None,
-        reporter_list: List[str] = None,
+        reporter_list: list[str] = None,
     ) -> Response:
         """Add Association.
 
         Args:
             collector_id (str, optional): collectorId
             collector_ip (str, optional): collectorIp
-            reporter_list (List[str], optional): reporterList
+            reporter_list (list[str], optional): reporterList
 
         Returns:
             Response: CentralAPI Response object
@@ -14419,18 +14407,18 @@ class AllCalls(CentralApi):
             'reporter_list': reporter_list
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_iotgateway_delete_association_v1(
         self,
         collector_id: str = None,
-        reporter_list: List[str] = None,
+        reporter_list: list[str] = None,
     ) -> Response:
         """Delete Association.
 
         Args:
             collector_id (str, optional): collectorId
-            reporter_list (List[str], optional): reporterList
+            reporter_list (list[str], optional): reporterList
 
         Returns:
             Response: CentralAPI Response object
@@ -14442,7 +14430,7 @@ class AllCalls(CentralApi):
             'reporter_list': reporter_list
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def iot_operations_iotgateway_get_association_for_collector_v1(
         self,
@@ -14458,7 +14446,7 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/iot_gateways/association/collector/{collector_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_iotgateway_get_association_token_for_collector_v1(
         self,
@@ -14474,7 +14462,7 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/iot_gateways/association/token/{collector_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_iotgateway_get_group_for_connector_v1(
         self,
@@ -14490,17 +14478,17 @@ class AllCalls(CentralApi):
         """
         url = f"/iot_operations/api/v1/iot_gateways/groups/connector/{connector_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_iotgateway_move_v1(
         self,
-        connector_list: List[str] = None,
+        connector_list: list[str] = None,
         group_id: str = None,
     ) -> Response:
         """Group move.
 
         Args:
-            connector_list (List[str], optional): connectorList
+            connector_list (list[str], optional): connectorList
             group_id (str, optional): groupId
 
         Returns:
@@ -14513,16 +14501,16 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_iotgateway_delete_v1(
         self,
-        connector_list: List[str] = None,
+        connector_list: list[str] = None,
     ) -> Response:
         """Group move.
 
         Args:
-            connector_list (List[str], optional): connectorList
+            connector_list (list[str], optional): connectorList
 
         Returns:
             Response: CentralAPI Response object
@@ -14533,14 +14521,14 @@ class AllCalls(CentralApi):
             'connector_list': connector_list
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def iot_operations_iotgateway_get_all_online_gateways_v1(
         self,
         check_status: bool = True,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Return Pageable List of Gateways.
 
@@ -14548,7 +14536,7 @@ class AllCalls(CentralApi):
             check_status (bool, optional): Check collector status
             page (int, optional): Results page you want to retrieve (0..N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14563,7 +14551,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_iotgateway_get_gateway_v1(
         self,
@@ -14585,7 +14573,7 @@ class AllCalls(CentralApi):
             'check_status': check_status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_transport_profile_find_transport_profiles_v1(
         self,
@@ -14593,7 +14581,7 @@ class AllCalls(CentralApi):
         group_id: str = None,
         page: int = 0,
         size: int = 20,
-        sort: List[str] = None,
+        sort: list[str] = None,
     ) -> Response:
         """Find transport profiles.
 
@@ -14602,7 +14590,7 @@ class AllCalls(CentralApi):
             group_id (str, optional): The unique Id of the group
             page (int, optional): Results page you want to retrieve (0…N)
             size (int, optional): Number of records per page.
-            sort (List[str], optional): Sorting criteria in the format: property(,asc|desc). Default
+            sort (list[str], optional): Sorting criteria in the format: property(,asc|desc). Default
                 sort order is ascending. Multiple sort criteria are supported.
 
         Returns:
@@ -14618,7 +14606,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_transport_profile_add_v1(
         self,
@@ -14673,17 +14661,17 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def iot_operations_transport_profile_count_transport_profiles_v1(
         self,
-        collector_ids: List[str] = [],
+        collector_ids: list[str] = [],
         group_id: str = None,
     ) -> Response:
         """Count transport profiles.
 
         Args:
-            collector_ids (List[str], optional): List of collector Ids
+            collector_ids (list[str], optional): List of collector Ids
             group_id (str, optional): Group Id
 
         Returns:
@@ -14696,7 +14684,7 @@ class AllCalls(CentralApi):
             'group_id': group_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_transport_profile_find_device_classes_v1(
         self,
@@ -14708,7 +14696,7 @@ class AllCalls(CentralApi):
         """
         url = "/iot_operations/api/v1/transport_profiles/device_classes"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def iot_operations_transport_profile_get_v1(
         self,
@@ -14730,7 +14718,7 @@ class AllCalls(CentralApi):
             'collector_id': collector_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def iot_operations_transport_profile_save_v1(
         self,
@@ -14787,7 +14775,7 @@ class AllCalls(CentralApi):
             'protocol': protocol
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def iot_operations_transport_profile_delete_v1(
         self,
@@ -14809,7 +14797,7 @@ class AllCalls(CentralApi):
             'collector_id': collector_id
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def monitoring_external_controller_get_networks_v2(
         self,
@@ -14844,7 +14832,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_network_v2(
         self,
@@ -14868,7 +14856,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v2/networks/{network_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_networks_bandwidth_usage_v2(
         self,
@@ -14904,7 +14892,7 @@ class AllCalls(CentralApi):
             'to_timestamp': to_timestamp
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_aps_v2(
         self,
@@ -14973,7 +14961,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_bssids_v2(
         self,
@@ -14985,9 +14973,9 @@ class AllCalls(CentralApi):
         macaddr: str = None,
         cluster_id: str = None,
         calculate_total: bool = None,
+        sort: str = None,
         offset: int = None,
         limit: int = None,
-        sort: str = None,
     ) -> Response:
         """List BSSIDs.
 
@@ -15000,10 +14988,10 @@ class AllCalls(CentralApi):
             macaddr (str, optional): Filter by AP MAC address
             cluster_id (str, optional): Filter by Mobility Controller serial number
             calculate_total (bool, optional): Whether to calculate total APs
-            offset (int, optional): Pagination offset
-            limit (int, optional): Pagination limit. Default is 100 and max is 1000
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
                 +swarm_id, -swarm_id.Default is '+serial'
+            offset (int, optional): Pagination offset
+            limit (int, optional): Pagination limit. Default is 100 and max is 1000
 
         Returns:
             Response: CentralAPI Response object
@@ -15011,14 +14999,20 @@ class AllCalls(CentralApi):
         url = "/monitoring/v2/bssids"
 
         params = {
+            'group': group,
+            'swarm_id': swarm_id,
+            'label': label,
+            'site': site,
             'serial': serial,
             'macaddr': macaddr,
             'cluster_id': cluster_id,
             'calculate_total': calculate_total,
-            'sort': sort
+            'sort': sort,
+            'offset': offset,
+            'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_ap_v1(
         self,
@@ -15034,7 +15028,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/aps/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_delete_ap_v1(
         self,
@@ -15050,7 +15044,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/aps/{serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_external_controller_get_ap_rf_summary_v3(
         self,
@@ -15083,7 +15077,7 @@ class AllCalls(CentralApi):
             'radio_number': radio_number
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_aps_bandwidth_usage_v3(
         self,
@@ -15139,7 +15133,7 @@ class AllCalls(CentralApi):
             'network': network
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_aps_bandwidth_usage_topn_v2(
         self,
@@ -15176,7 +15170,7 @@ class AllCalls(CentralApi):
             'count': count
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_swarms_bandwidth_usage_topn_v1(
         self,
@@ -15204,7 +15198,7 @@ class AllCalls(CentralApi):
             'count': count
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_swarms_clients_count_topn_v1(
         self,
@@ -15235,7 +15229,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_wireless_clients_v1(
         self,
@@ -15299,7 +15293,7 @@ class AllCalls(CentralApi):
             'last_client_mac': last_client_mac
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_wired_clients_v1(
         self,
@@ -15353,7 +15347,7 @@ class AllCalls(CentralApi):
             'last_client_mac': last_client_mac
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_unified_clients_v2(
         self,
@@ -15446,7 +15440,7 @@ class AllCalls(CentralApi):
             'show_signal_db': show_signal_db
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_unified_client_detail_v2(
         self,
@@ -15462,7 +15456,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v2/clients/{macaddr}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_wireless_client_v1(
         self,
@@ -15478,7 +15472,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/clients/wireless/{macaddr}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_wireless_client_mobility_v1(
         self,
@@ -15510,7 +15504,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_wired_client_v1(
         self,
@@ -15526,7 +15520,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/clients/wired/{macaddr}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_clients_bandwidth_usage_v1(
         self,
@@ -15567,7 +15561,7 @@ class AllCalls(CentralApi):
             'macaddr': macaddr
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_clients_bandwidth_usage_topn_v1(
         self,
@@ -15608,7 +15602,7 @@ class AllCalls(CentralApi):
             'count': count
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_clients_count_v1(
         self,
@@ -15661,7 +15655,7 @@ class AllCalls(CentralApi):
             'radio_number': radio_number
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_swarms_v1(
         self,
@@ -15703,7 +15697,7 @@ class AllCalls(CentralApi):
             'swarm_name': swarm_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_swarm_v1(
         self,
@@ -15719,7 +15713,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/swarms/{swarm_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_vpn_info_v1(
         self,
@@ -15739,7 +15733,7 @@ class AllCalls(CentralApi):
             'swarm_id': swarm_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_vpn_usage_v3(
         self,
@@ -15773,7 +15767,7 @@ class AllCalls(CentralApi):
             'to_timestamp': to_timestamp
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_external_controller_get_mc_ports_bandwidth_usage_v1(
         self,
@@ -15801,7 +15795,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_mc_ports_v1(
         self,
@@ -15817,7 +15811,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/mobility_controllers/{serial}/ports"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_vlan_info_v1(
         self,
@@ -15833,7 +15827,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/mobility_controllers/{serial}/vlan"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_mcs_v2(
         self,
@@ -15880,7 +15874,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_mc_v2(
         self,
@@ -15902,7 +15896,7 @@ class AllCalls(CentralApi):
             'stats_metric': stats_metric
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_delete_mc_v2(
         self,
@@ -15918,7 +15912,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v2/mobility_controllers/{serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_external_controller_get_gateways_v1(
         self,
@@ -15968,7 +15962,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_v1(
         self,
@@ -15990,7 +15984,7 @@ class AllCalls(CentralApi):
             'stats_metric': stats_metric
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_delete_gateway_v1(
         self,
@@ -16006,7 +16000,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/gateways/{serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_external_controller_get_gateway_uplinks_detail_v1(
         self,
@@ -16030,7 +16024,7 @@ class AllCalls(CentralApi):
             'timerange': timerange
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_uplinks_bandwidth_usage_v1(
         self,
@@ -16061,7 +16055,7 @@ class AllCalls(CentralApi):
             'interval': interval
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_uplinks_tunnel_stats_v1(
         self,
@@ -16095,7 +16089,7 @@ class AllCalls(CentralApi):
             'interval': interval
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_uplinks_wan_compression_usage_v1(
         self,
@@ -16126,7 +16120,7 @@ class AllCalls(CentralApi):
             'interval': interval
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_uplinks_distribution_v1(
         self,
@@ -16142,7 +16136,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/gateways/{serial}/uplinks/distribution"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_gateway_ports_bandwidth_usage_v1(
         self,
@@ -16170,7 +16164,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_ports_v1(
         self,
@@ -16186,7 +16180,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/gateways/{serial}/ports"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_gateway_port_errors_v1(
         self,
@@ -16218,7 +16212,7 @@ class AllCalls(CentralApi):
             'interval': interval
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_tunnels_v1(
         self,
@@ -16246,7 +16240,7 @@ class AllCalls(CentralApi):
             'timerange': timerange
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_dhcp_clients_v1(
         self,
@@ -16272,7 +16266,7 @@ class AllCalls(CentralApi):
             'reservation': reservation
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_gateway_dhcp_pools_v1(
         self,
@@ -16288,7 +16282,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/gateways/{serial}/dhcp_pools"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_gateway_vlan_info_v1(
         self,
@@ -16304,7 +16298,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/gateways/{serial}/vlan"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_labels_external_controller_get_labels_v1(
         self,
@@ -16335,7 +16329,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_labels_external_controller_create_label_v1(
         self,
@@ -16358,7 +16352,7 @@ class AllCalls(CentralApi):
             'label_name': label_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_get_default_labels_v2(
         self,
@@ -16386,7 +16380,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_labels_external_controller_get_label_v1(
         self,
@@ -16402,7 +16396,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/labels/{label_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_labels_external_controller_update_label_v1(
         self,
@@ -16424,7 +16418,7 @@ class AllCalls(CentralApi):
             'label_name': label_name
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_delete_label_v1(
         self,
@@ -16440,7 +16434,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/labels/{label_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_labels_external_controller_assign_label_v1(
         self,
@@ -16467,7 +16461,7 @@ class AllCalls(CentralApi):
             'label_id': label_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_unassign_label_v1(
         self,
@@ -16493,13 +16487,13 @@ class AllCalls(CentralApi):
             'label_id': label_id
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_assign_label_to_devices_v2(
         self,
         label_id: int,
         device_type: str,
-        device_ids: List[str],
+        device_ids: list[str],
     ) -> Response:
         """Associate Label to a list of devices.
 
@@ -16507,7 +16501,7 @@ class AllCalls(CentralApi):
             label_id (int): Label ID
             device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
                 IAP, SWITCH, CONTROLLER
-            device_ids (List[str]): List of device serial numbers of the devices to which the label
+            device_ids (list[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
@@ -16521,13 +16515,13 @@ class AllCalls(CentralApi):
             'device_ids': device_ids
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_unassign_label_from_devices_v2(
         self,
         label_id: int,
         device_type: str,
-        device_ids: List[str],
+        device_ids: list[str],
     ) -> Response:
         """Unassociate a label from a list of devices.
 
@@ -16535,7 +16529,7 @@ class AllCalls(CentralApi):
             label_id (int): Label ID
             device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
                 IAP, SWITCH, CONTROLLER
-            device_ids (List[str]): List of device serial numbers of the devices to which the label
+            device_ids (list[str]): List of device serial numbers of the devices to which the label
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
@@ -16549,7 +16543,7 @@ class AllCalls(CentralApi):
             'device_ids': device_ids
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def monitoring_labels_external_controller_get_label_categories_v1(
         self,
@@ -16573,7 +16567,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_sites_external_controller_get_sites_v2(
         self,
@@ -16601,7 +16595,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_sites_external_controller_create_site_v2(
         self,
@@ -16642,7 +16636,7 @@ class AllCalls(CentralApi):
             'longitude': longitude
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_sites_external_controller_get_site_v2(
         self,
@@ -16658,7 +16652,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v2/sites/{site_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_sites_external_controller_update_site_v2(
         self,
@@ -16701,7 +16695,7 @@ class AllCalls(CentralApi):
             'longitude': longitude
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def monitoring_sites_external_controller_delete_site_v2(
         self,
@@ -16717,7 +16711,7 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v2/sites/{site_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_sites_external_controller_assign_site_v2(
         self,
@@ -16744,7 +16738,7 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_sites_external_controller_unassign_site_v2(
         self,
@@ -16771,13 +16765,13 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def monitoring_sites_external_controller_assign_site_to_devices_v2(
         self,
         site_id: int,
         device_type: str,
-        device_ids: List[str],
+        device_ids: list[str],
     ) -> Response:
         """Associate Site to a list of devices.
 
@@ -16785,7 +16779,7 @@ class AllCalls(CentralApi):
             site_id (int): Site ID
             device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
                 IAP, SWITCH, CONTROLLER
-            device_ids (List[str]): List of device serial numbers of the devices to which the site
+            device_ids (list[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
@@ -16799,13 +16793,13 @@ class AllCalls(CentralApi):
             'device_ids': device_ids
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def monitoring_sites_external_controller_unassign_site_from_devices_v2(
         self,
         site_id: int,
         device_type: str,
-        device_ids: List[str],
+        device_ids: list[str],
     ) -> Response:
         """Unassociate a site from a list of devices.
 
@@ -16813,7 +16807,7 @@ class AllCalls(CentralApi):
             site_id (int): Site ID
             device_type (str): Device type. It is either IAP, SWITCH or CONTROLLER  Valid Values:
                 IAP, SWITCH, CONTROLLER
-            device_ids (List[str]): List of device serial numbers of the devices to which the site
+            device_ids (list[str]): List of device serial numbers of the devices to which the site
                 has to be un/associated with. A maximum of 5000 device serials are allowed at once.
 
         Returns:
@@ -16827,7 +16821,7 @@ class AllCalls(CentralApi):
             'device_ids': device_ids
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def monitoring_external_controller_get_switches_v1(
         self,
@@ -16884,7 +16878,7 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_vlan_v1(
         self,
@@ -16943,7 +16937,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_vlan_v1(
         self,
@@ -17002,7 +16996,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_stack_vlan_v1(
         self,
@@ -17061,7 +17055,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_stack_vlan_v1(
         self,
@@ -17120,7 +17114,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_poe_detail_v1(
         self,
@@ -17142,7 +17136,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_poe_detail_v1(
         self,
@@ -17164,7 +17158,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_poe_details_for_all_ports_v1(
         self,
@@ -17186,7 +17180,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_poe_details_for_all_ports_v1(
         self,
@@ -17208,7 +17202,7 @@ class AllCalls(CentralApi):
             'port': port
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_vsx_detail_v1(
         self,
@@ -17224,7 +17218,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/cx_switches/{serial}/vsx"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_cx_switch_neighbors_v1(
         self,
@@ -17240,7 +17234,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/cx_switches/{serial}/neighbors"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_cx_switch_stack_neighbors_v1(
         self,
@@ -17256,7 +17250,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/cx_switch_stacks/{stack_id}/neighbors"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_bandwidth_usage_v1(
         self,
@@ -17289,7 +17283,7 @@ class AllCalls(CentralApi):
             'stack_id': stack_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_bandwidth_usage_topn_v1(
         self,
@@ -17322,7 +17316,7 @@ class AllCalls(CentralApi):
             'count': count
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_v1(
         self,
@@ -17338,7 +17332,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switches/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_delete_switch_v1(
         self,
@@ -17354,7 +17348,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switches/{serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_external_controller_get_switch_ports_v1(
         self,
@@ -17377,7 +17371,7 @@ class AllCalls(CentralApi):
             'slot': slot
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_ports_v1(
         self,
@@ -17400,7 +17394,7 @@ class AllCalls(CentralApi):
             'slot': slot
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_chassis_info_v1(
         self,
@@ -17416,7 +17410,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switches/{serial}/chassis_info"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_switch_ports_bandwidth_usage_v1(
         self,
@@ -17447,7 +17441,7 @@ class AllCalls(CentralApi):
             'show_uplink': show_uplink
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_switch_ports_bandwidth_usage_v1(
         self,
@@ -17478,7 +17472,7 @@ class AllCalls(CentralApi):
             'show_uplink': show_uplink
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_ports_errors_v1(
         self,
@@ -17509,7 +17503,7 @@ class AllCalls(CentralApi):
             'error': error
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_cx_ports_errors_v1(
         self,
@@ -17540,7 +17534,7 @@ class AllCalls(CentralApi):
             'error': error
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_stack_ports_v1(
         self,
@@ -17556,7 +17550,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switch_stacks/{stack_id}/ports"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_cx_stack_ports_v1(
         self,
@@ -17572,7 +17566,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/cx_switch_stacks/{stack_id}/ports"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_get_switch_stacks_v1(
         self,
@@ -17598,7 +17592,7 @@ class AllCalls(CentralApi):
             'hostname': hostname
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def monitoring_external_controller_get_switch_stack_v1(
         self,
@@ -17614,7 +17608,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switch_stacks/{stack_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def monitoring_external_controller_delete_switch_stack_v1(
         self,
@@ -17630,7 +17624,7 @@ class AllCalls(CentralApi):
         """
         url = f"/monitoring/v1/switch_stacks/{stack_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def monitoring_external_controller_get_events_v2(
         self,
@@ -17705,7 +17699,7 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def msp_views_get_customers_v1(
         self,
@@ -17731,7 +17725,7 @@ class AllCalls(CentralApi):
             'customer_name': customer_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def msp_views_create_customer_v2(
         self,
@@ -17775,7 +17769,7 @@ class AllCalls(CentralApi):
             'lock_msp_ssids': lock_msp_ssids
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def msp_views_edit_customer_v2(
         self,
@@ -17821,7 +17815,7 @@ class AllCalls(CentralApi):
             'lock_msp_ssids': lock_msp_ssids
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def msp_views_get_country_code_v2(
         self,
@@ -17833,7 +17827,7 @@ class AllCalls(CentralApi):
         """
         url = "/msp_api/v2/get_country_code"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def msp_views_get_customer_v1(
         self,
@@ -17849,7 +17843,7 @@ class AllCalls(CentralApi):
         """
         url = f"/msp_api/v1/customers/{customer_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def msp_views_delete_customer_v1(
         self,
@@ -17865,7 +17859,7 @@ class AllCalls(CentralApi):
         """
         url = f"/msp_api/v1/customers/{customer_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def msp_views_get_users_v1(
         self,
@@ -17883,7 +17877,7 @@ class AllCalls(CentralApi):
         """
         url = "/msp_api/v1/customers/users"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def msp_views_get_customer_users_v1(
         self,
@@ -17903,7 +17897,7 @@ class AllCalls(CentralApi):
         """
         url = f"/msp_api/v1/customers/{customer_id}/users"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def msp_views_get_resource_v1(
         self,
@@ -17915,7 +17909,7 @@ class AllCalls(CentralApi):
         """
         url = "/msp_api/v1/resource"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def msp_views_edit_resource_v1(
         self,
@@ -17965,7 +17959,7 @@ class AllCalls(CentralApi):
             'skin_info': skin_info
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def msp_views_get_customer_devices_v1(
         self,
@@ -17994,7 +17988,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def msp_views_move_devices_to_customer_v1(
         self,
@@ -18022,7 +18016,7 @@ class AllCalls(CentralApi):
             'group': group
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def msp_views_unassign_tenant_devices_v2(
         self,
@@ -18038,7 +18032,7 @@ class AllCalls(CentralApi):
         """
         url = f"/msp_api/v2/{customer_id}/devices"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def msp_views_get_devices_v1(
         self,
@@ -18073,7 +18067,7 @@ class AllCalls(CentralApi):
             'device_allocation_status': device_allocation_status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def msp_views_get_mapped_tenants_v1(
         self,
@@ -18098,7 +18092,7 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def noc_views_external_get_labels_v1(
         self,
@@ -18145,7 +18139,7 @@ class AllCalls(CentralApi):
             '_site_properties_used_with_thresholds': _site_properties_used_with_thresholds
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def noc_views_external_get_sites_v1(
         self,
@@ -18184,7 +18178,7 @@ class AllCalls(CentralApi):
         """
         url = "/branchhealth/v1/site"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def notification_notifications_external_get_types_v1(
         self,
@@ -18210,7 +18204,7 @@ class AllCalls(CentralApi):
             'limit': limit
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def notification_notifications_external_get_settings_v1(
         self,
@@ -18238,19 +18232,19 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def notification_notifications_external_add_setting_v1(
         self,
         type: str,
         severity: str,
-        delivery_options: List[str],
-        emails: List[str],
-        webhooks: List[str],
-        group: List[str],
-        label: List[str],
-        site: List[str],
-        device_id: List[str],
+        delivery_options: list[str],
+        emails: list[str],
+        webhooks: list[str],
+        group: list[str],
+        label: list[str],
+        site: list[str],
+        device_id: list[str],
         transform_func: str,
         conditions: list,
         filters: list,
@@ -18265,13 +18259,13 @@ class AllCalls(CentralApi):
             type (str): Notification Type name
             severity (str): Severity:Deprecated consider using severity field inside conditions
                 array  Valid Values: Critical, Major, Minor, Warning
-            delivery_options (List[str]): delivery_options
-            emails (List[str]): email ids to send the alert mails to
-            webhooks (List[str]): webhook id
-            group (List[str]): group
-            label (List[str]): label
-            site (List[str]): site
-            device_id (List[str]): device_id
+            delivery_options (list[str]): delivery_options
+            emails (list[str]): email ids to send the alert mails to
+            webhooks (list[str]): webhook id
+            group (list[str]): group
+            label (list[str]): label
+            site (list[str]): site
+            device_id (list[str]): device_id
             transform_func (str): Transform Function that spciefies whether this is a percentage
                 based or absolute  Valid Values: percentage, absolute
             conditions (list): conditions
@@ -18306,7 +18300,7 @@ class AllCalls(CentralApi):
             'active': active
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def notification_notifications_external_delete_setting_v1(
         self,
@@ -18322,20 +18316,20 @@ class AllCalls(CentralApi):
         """
         url = f"/central/v1/notifications/settings/{settings_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def notification_notifications_external_update_setting_v1(
         self,
         settings_id: str,
         type: str,
         severity: str,
-        delivery_options: List[str],
-        emails: List[str],
-        webhooks: List[str],
-        group: List[str],
-        label: List[str],
-        site: List[str],
-        device_id: List[str],
+        delivery_options: list[str],
+        emails: list[str],
+        webhooks: list[str],
+        group: list[str],
+        label: list[str],
+        site: list[str],
+        device_id: list[str],
         transform_func: str,
         conditions: list,
         filters: list,
@@ -18351,13 +18345,13 @@ class AllCalls(CentralApi):
             type (str): Notification Type name
             severity (str): Severity:Deprecated consider using severity field inside conditions
                 array  Valid Values: Critical, Major, Minor, Warning
-            delivery_options (List[str]): delivery_options
-            emails (List[str]): email ids to send the alert mails to
-            webhooks (List[str]): webhook id
-            group (List[str]): group
-            label (List[str]): label
-            site (List[str]): site
-            device_id (List[str]): device_id
+            delivery_options (list[str]): delivery_options
+            emails (list[str]): email ids to send the alert mails to
+            webhooks (list[str]): webhook id
+            group (list[str]): group
+            label (list[str]): label
+            site (list[str]): site
+            device_id (list[str]): device_id
             transform_func (str): Transform Function that spciefies whether this is a percentage
                 based or absolute  Valid Values: percentage, absolute
             conditions (list): conditions
@@ -18392,7 +18386,7 @@ class AllCalls(CentralApi):
             'active': active
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def notification_notifications_external_get_customer_settings_v1(
         self,
@@ -18404,13 +18398,13 @@ class AllCalls(CentralApi):
         """
         url = "/central/v1/notifications/customer_settings"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def notification_notifications_external_update_customer_settings_v1(
         self,
-        add_sites_to_mute: List[str],
-        remove_sites_from_mute: List[str],
-        default_recipients_email_list: List[str],
+        add_sites_to_mute: list[str],
+        remove_sites_from_mute: list[str],
+        default_recipients_email_list: list[str],
         email_subject_line_template: str,
         start_time: int = None,
         end_time: int = None,
@@ -18419,9 +18413,9 @@ class AllCalls(CentralApi):
         """Update customer settings.
 
         Args:
-            add_sites_to_mute (List[str]): Sites to be muted for alert
-            remove_sites_from_mute (List[str]): Sites to be unmuted for alert
-            default_recipients_email_list (List[str]): Emails to be saved as deafult recipient list
+            add_sites_to_mute (list[str]): Sites to be muted for alert
+            remove_sites_from_mute (list[str]): Sites to be unmuted for alert
+            default_recipients_email_list (list[str]): Emails to be saved as deafult recipient list
             email_subject_line_template (str): Subject line to use for email notifications
             start_time (int, optional): Start time for mute
             end_time (int, optional): end time for mute
@@ -18442,7 +18436,7 @@ class AllCalls(CentralApi):
             'time_zone': time_zone
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def notification_notifications_external_get_count_by_severity_v1(
         self,
@@ -18487,7 +18481,7 @@ class AllCalls(CentralApi):
             'ack': ack
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def notification_notifications_external_get_notifications_v1(
         self,
@@ -18543,23 +18537,23 @@ class AllCalls(CentralApi):
             'fields': fields
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def notification_notifications_external_acknowledge_notifications_v1(
         self,
-        body: List[str] = None,
+        body: list[str] = None,
     ) -> Response:
         """Acknowledge Notifications by ID List / All.
 
         Args:
-            body (List[str], optional): Acknowledge notifications
+            body (list[str], optional): Acknowledge notifications
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/central/v1/notifications"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def notification_notifications_external_acknowledge_notification_v1(
         self,
@@ -18582,7 +18576,7 @@ class AllCalls(CentralApi):
             'acknowledged': acknowledged
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def ofc_apihandler_enable_wildcard_flow_v1(
         self,
@@ -18605,7 +18599,7 @@ class AllCalls(CentralApi):
             'serial_id': serial_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def ofc_apihandler_enable_wildcard_flow_list_v1(
         self,
@@ -18624,7 +18618,7 @@ class AllCalls(CentralApi):
         url = f"/ofcapi/v1/syslog/flows/{enable}"
         serial_id_metadata = serial_id_metadata if isinstance(serial_id_metadata, Path) else Path(str(serial_id_metadata))
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def ofc_apihandler_check_status_list_v1(
         self,
@@ -18641,7 +18635,7 @@ class AllCalls(CentralApi):
         url = "/ofcapi/v1/syslog/flows/status/device_list"
         serial_ids = serial_ids if isinstance(serial_ids, Path) else Path(str(serial_ids))
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def ofc_apihandler_check_status_v1(
         self,
@@ -18657,7 +18651,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ofcapi/v1/syslog/flow/status/{serial_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_devices_v1(
         self,
@@ -18683,7 +18677,7 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_add_device_v1(
         self,
@@ -18699,7 +18693,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/device_inventory/v1/devices"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_delete_device_v1(
         self,
@@ -18715,7 +18709,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/device_inventory/v1/devices"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_devices_stats_v1(
         self,
@@ -18739,7 +18733,7 @@ class AllCalls(CentralApi):
             'service_type': service_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_verify_device_addition_v1(
         self,
@@ -18755,7 +18749,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/device_inventory/v1/devices/verify"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_device_v1(
         self,
@@ -18772,7 +18766,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/device_inventory/v1/device/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_archive_devices_v1(
         self,
@@ -18795,16 +18789,16 @@ class AllCalls(CentralApi):
             'offset': offset
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_archive_devices_v1(
         self,
-        serials: List[str],
+        serials: list[str],
     ) -> Response:
         """Archive devices using Serial list.
 
         Args:
-            serials (List[str]): serials
+            serials (list[str]): serials
 
         Returns:
             Response: CentralAPI Response object
@@ -18815,16 +18809,16 @@ class AllCalls(CentralApi):
             'serials': serials
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_unarchive_devices_v1(
         self,
-        serials: List[str],
+        serials: list[str],
     ) -> Response:
         """Unarchive devices using Serial list.
 
         Args:
-            serials (List[str]): serials
+            serials (list[str]): serials
 
         Returns:
             Response: CentralAPI Response object
@@ -18835,7 +18829,7 @@ class AllCalls(CentralApi):
             'serials': serials
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_msp_customer_devices_v1(
         self,
@@ -18867,7 +18861,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_assign_device_to_customer_v1(
         self,
@@ -18892,7 +18886,7 @@ class AllCalls(CentralApi):
             'mac': mac
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def platform_device_inventory_acp_service_nb_device_inventory_get_msp_devices_v1(
         self,
@@ -18931,7 +18925,7 @@ class AllCalls(CentralApi):
             'device_allocation_status': device_allocation_status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_get_user_subscriptions_v1(
         self,
@@ -18965,7 +18959,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_get_subscription_stats_v1(
         self,
@@ -18999,7 +18993,7 @@ class AllCalls(CentralApi):
             'app_only_stats': app_only_stats
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_license_available_v1(
         self,
@@ -19018,7 +19012,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/licensing/v1/autolicensing/services/{service}/status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_get_autolicense_settings_v1(
         self,
@@ -19030,17 +19024,17 @@ class AllCalls(CentralApi):
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_enable_auto_licensing_settings_v1(
         self,
-        services: List[str],
+        services: list[str],
     ) -> Response:
         """Standalone Customer API:- Assign licenses to all devices and enable auto licensing for
         given services.
 
         Args:
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19054,16 +19048,16 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_disable_auto_licensing_settings_v1(
         self,
-        services: List[str],
+        services: list[str],
     ) -> Response:
         """Standalone Customer API:- Disable auto licensing for given services.
 
         Args:
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19077,7 +19071,7 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_msp_get_autolicense_settings_v1(
         self,
@@ -19097,21 +19091,21 @@ class AllCalls(CentralApi):
             'customer_id': customer_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_msp_enable_auto_licensing_settings_v1(
         self,
-        include_customers: List[str],
-        exclude_customers: List[str],
-        services: List[str],
+        include_customers: list[str],
+        exclude_customers: list[str],
+        services: list[str],
     ) -> Response:
         """MSP API:- Enable auto license settings and assign services to all devices owned by tenant
         customers.
 
         Args:
-            include_customers (List[str]): Customer ids to be included for licensing/un-licensing.
-            exclude_customers (List[str]): Customer ids to be excluded for licensing/un-licensing.
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            include_customers (list[str]): Customer ids to be included for licensing/un-licensing.
+            exclude_customers (list[str]): Customer ids to be excluded for licensing/un-licensing.
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19127,20 +19121,20 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_msp_disable_auto_licensing_settings_v1(
         self,
-        include_customers: List[str],
-        exclude_customers: List[str],
-        services: List[str],
+        include_customers: list[str],
+        exclude_customers: list[str],
+        services: list[str],
     ) -> Response:
         """MSP API:- Disable auto license settings at msp and its tenant level for given services.
 
         Args:
-            include_customers (List[str]): Customer ids to be included for licensing/un-licensing.
-            exclude_customers (List[str]): Customer ids to be excluded for licensing/un-licensing.
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            include_customers (list[str]): Customer ids to be included for licensing/un-licensing.
+            exclude_customers (list[str]): Customer ids to be excluded for licensing/un-licensing.
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19156,18 +19150,18 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_assign_licenses_v1(
         self,
-        serials: List[str],
-        services: List[str],
+        serials: list[str],
+        services: list[str],
     ) -> Response:
         """Assign subscription to a device.
 
         Args:
-            serials (List[str]): List of serial number of device.
-            services (List[str]): List of service names. Call services/config API to get the list of
+            serials (list[str]): List of serial number of device.
+            services (list[str]): List of service names. Call services/config API to get the list of
                 valid service names.
 
         Returns:
@@ -19180,18 +19174,18 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_unassign_licenses_v1(
         self,
-        serials: List[str],
-        services: List[str],
+        serials: list[str],
+        services: list[str],
     ) -> Response:
         """Unassign subscription to a device.
 
         Args:
-            serials (List[str]): List of serial number of device.
-            services (List[str]): List of service names. Call services/config API to get the list of
+            serials (list[str]): List of serial number of device.
+            services (list[str]): List of service names. Call services/config API to get the list of
                 valid service names.
 
         Returns:
@@ -19204,7 +19198,7 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_gw_get_customer_enabled_services_v1(
         self,
@@ -19216,7 +19210,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/licensing/v1/services/enabled"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_get_services_config_v1(
         self,
@@ -19239,16 +19233,16 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_assign_subscription_all_devices_v1(
         self,
-        services: List[str],
+        services: list[str],
     ) -> Response:
         """Standalone customer API:- Assign licenses to all devices.
 
         Args:
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19262,16 +19256,16 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_unassign_subscription_all_devices_v1(
         self,
-        services: List[str],
+        services: list[str],
     ) -> Response:
         """Standalone customer API:- Un-assign licenses to all devices for given services.
 
         Args:
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19285,20 +19279,20 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_msp_assign_subscription_all_devices_v1(
         self,
-        include_customers: List[str],
-        exclude_customers: List[str],
-        services: List[str],
+        include_customers: list[str],
+        exclude_customers: list[str],
+        services: list[str],
     ) -> Response:
         """MSP API:- Assign licenses to all the devices owned by tenant customers.
 
         Args:
-            include_customers (List[str]): Customer ids to be included for licensing/un-licensing.
-            exclude_customers (List[str]): Customer ids to be excluded for licensing/un-licensing.
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            include_customers (list[str]): Customer ids to be included for licensing/un-licensing.
+            exclude_customers (list[str]): Customer ids to be excluded for licensing/un-licensing.
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19314,20 +19308,20 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def platform_licensing_acp_service_license_web_views_admin_license_msp_unassign_subscription_all_devices_v1(
         self,
-        include_customers: List[str],
-        exclude_customers: List[str],
-        services: List[str],
+        include_customers: list[str],
+        exclude_customers: list[str],
+        services: list[str],
     ) -> Response:
         """MSP API:- Remove service licenses to all the devices owned by tenants and MSP.
 
         Args:
-            include_customers (List[str]): Customer ids to be included for licensing/un-licensing.
-            exclude_customers (List[str]): Customer ids to be excluded for licensing/un-licensing.
-            services (List[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
+            include_customers (list[str]): Customer ids to be included for licensing/un-licensing.
+            exclude_customers (list[str]): Customer ids to be excluded for licensing/un-licensing.
+            services (list[str]): list of services e.g. ['pa', 'ucc', foundation_ap,
                 advanced_switch_6200, foundation_70XX etc ...]. Check
                 /platform/licensing/v1/services/config API response to know the list of supported
                 services.
@@ -19343,7 +19337,7 @@ class AllCalls(CentralApi):
             'services': services
         }
 
-        return await self.delete(url, json_data=json_data)
+        return await self.session.delete(url, json_data=json_data)
 
     async def presence_analytics_views_presence_set_presence_thresholds_v3(
         self,
@@ -19380,7 +19374,7 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def presence_analytics_views_presence_get_presence_thresholds_v3(
         self,
@@ -19401,7 +19395,7 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_pa_config_data_v3(
         self,
@@ -19436,7 +19430,7 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_visitors_status_info_v3(
         self,
@@ -19462,7 +19456,7 @@ class AllCalls(CentralApi):
             'tag_id': tag_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_loyalty_visit_frequency_v3(
         self,
@@ -19488,7 +19482,7 @@ class AllCalls(CentralApi):
             'tag_id': tag_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_dashboard_percentile_datapoints_v3(
         self,
@@ -19521,7 +19515,7 @@ class AllCalls(CentralApi):
             'sample_frequency': sample_frequency
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_loyalty_trends_v3(
         self,
@@ -19551,21 +19545,21 @@ class AllCalls(CentralApi):
             'sample_frequency': sample_frequency
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_enable_or_disable_pa_license_v3(
         self,
         customer_level: bool,
-        enable_device_list: List[str],
-        disable_device_list: List[str],
+        enable_device_list: list[str],
+        disable_device_list: list[str],
     ) -> Response:
         """Enable or disable PA license.
 
         Args:
             customer_level (bool): one of the values true or false (when customer level key is
                 passed, other keys should not be passed)
-            enable_device_list (List[str]): enable_device_list
-            disable_device_list (List[str]): disable_device_list
+            enable_device_list (list[str]): enable_device_list
+            disable_device_list (list[str]): disable_device_list
 
         Returns:
             Response: CentralAPI Response object
@@ -19578,7 +19572,7 @@ class AllCalls(CentralApi):
             'disable_device_list': disable_device_list
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def presence_analytics_views_presence_get_pa_license_status_v3(
         self,
@@ -19590,7 +19584,7 @@ class AllCalls(CentralApi):
         """
         url = "/presence/v3/license"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def presence_analytics_views_presence_get_device_license_status_per_site_v3(
         self,
@@ -19610,7 +19604,7 @@ class AllCalls(CentralApi):
             'tag_id': tag_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def presence_analytics_views_presence_get_presence_site_wise_data_v3(
         self,
@@ -19650,13 +19644,13 @@ class AllCalls(CentralApi):
             'site_id': site_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def rapids_list_rogue_aps(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19668,9 +19662,9 @@ class AllCalls(CentralApi):
         """List Rogue APs.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19702,13 +19696,13 @@ class AllCalls(CentralApi):
             'to_timestamp': to_timestamp
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def rapids_list_interfering_aps(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19720,9 +19714,9 @@ class AllCalls(CentralApi):
         """List Interfering APs.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19741,13 +19735,13 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/interfering_aps"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def rapids_list_suspect_aps(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19759,9 +19753,9 @@ class AllCalls(CentralApi):
         """List suspect APs.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19780,13 +19774,13 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/suspect_aps"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def rapids_list_neighbor_aps(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19798,9 +19792,9 @@ class AllCalls(CentralApi):
         """List neighbor APs.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19819,13 +19813,13 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/neighbor_aps"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def rapids_list_manually_contained_aps(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19837,9 +19831,9 @@ class AllCalls(CentralApi):
         """List manually contained APs.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19858,13 +19852,13 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/manually_contained_aps"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def rapids_external_controller_get_infrastructure_attacks_v1(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         calculate_total: bool = None,
@@ -19878,9 +19872,9 @@ class AllCalls(CentralApi):
         """List Infrastructure Attacks.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19909,13 +19903,13 @@ class AllCalls(CentralApi):
             'sort': sort
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def rapids_external_controller_get_client_attacks_v1(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         calculate_total: bool = None,
@@ -19929,9 +19923,9 @@ class AllCalls(CentralApi):
         """List Client Attacks.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -19959,13 +19953,13 @@ class AllCalls(CentralApi):
             'calculate_total': calculate_total
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def rapids_external_controller_get_wids_events_v1(
         self,
-        group: List[str] = None,
-        label: List[str] = None,
-        site: List[str] = None,
+        group: list[str] = None,
+        label: list[str] = None,
+        site: list[str] = None,
         start: int = None,
         end: int = None,
         offset: int = 0,
@@ -19978,9 +19972,9 @@ class AllCalls(CentralApi):
         """WIDS Events.
 
         Args:
-            group (List[str], optional): List of group names
-            label (List[str], optional): List of label names
-            site (List[str], optional): List of site names
+            group (list[str], optional): List of group names
+            label (list[str], optional): List of label names
+            site (list[str], optional): List of site names
             start (int, optional): Need information from this timestamp. Timestamp is epoch in
                 milliseconds. Default is current timestamp minus 3 hours
             end (int, optional): Need information to this timestamp. Timestamp is epoch in
@@ -20003,7 +19997,7 @@ class AllCalls(CentralApi):
         """
         url = "/rapids/v1/wids/events"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def refresh_api_token_x_x_x_x_x_x(
         self,
@@ -20032,7 +20026,7 @@ class AllCalls(CentralApi):
             'refresh_token': refresh_token
         }
 
-        return await self.post(url, params=params)
+        return await self.session.post(url, params=params)
 
     async def reporting_external_scheduled_reports_v1(
         self,
@@ -20059,7 +20053,7 @@ class AllCalls(CentralApi):
             'end_time': end_time
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def reporting_external_generated_reports_v1(
         self,
@@ -20086,7 +20080,7 @@ class AllCalls(CentralApi):
             'end_time': end_time
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def reporting_views_sdwan_noc_view_get_sdwan_wan_policy_compliance(
         self,
@@ -20115,7 +20109,7 @@ class AllCalls(CentralApi):
             'count': count
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_bgp_list_bgp_neighbor_information(
         self,
@@ -20141,7 +20135,7 @@ class AllCalls(CentralApi):
             'marker': marker
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_bgp_get_bgp_neighbor_detailed_information(
         self,
@@ -20163,7 +20157,7 @@ class AllCalls(CentralApi):
             'address': address
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_bgp_reset_clear_bgp_neighbor_session(
         self,
@@ -20181,7 +20175,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/reset"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def routing_bgp_list_of_routes_learned_form_a_bgp_neighbor(
         self,
@@ -20203,7 +20197,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/route/learned"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_bgp_list_of_routes_advertised_to_a_bgp_neighbor(
         self,
@@ -20225,7 +20219,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/neighbor/route/advertised"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_bgp_list_bgp_routes(
         self,
@@ -20245,7 +20239,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/bgp/route"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_oap_get_information_about_overlay_control_connection(
         self,
@@ -20271,7 +20265,7 @@ class AllCalls(CentralApi):
             'marker': marker
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_oap_reset_overlay_control_connection(
         self,
@@ -20287,7 +20281,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/connection/reset"
 
-        return await self.put(url)
+        return await self.session.put(url)
 
     async def routing_oap_list_of_overlay_interfaces(
         self,
@@ -20307,7 +20301,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/interface"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_oap_list_of_learned_routes_from_overlay(
         self,
@@ -20327,7 +20321,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/learned"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_oap_list_of_best_learned_routes_from_overlay(
         self,
@@ -20347,7 +20341,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/learned/best"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_oap_list_of_advertised_routes_to_overlay(
         self,
@@ -20367,7 +20361,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/overlay/route/advertised"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_ospf_list_ospf_area_information(
         self,
@@ -20393,7 +20387,7 @@ class AllCalls(CentralApi):
             'marker': marker
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_ospf_list_ospf_interface_information(
         self,
@@ -20413,7 +20407,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/interface"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_ospf_list_ospf_neighbor_information(
         self,
@@ -20433,7 +20427,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/neighbor"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_ospf_list_ospf_link_state_database_information(
         self,
@@ -20453,7 +20447,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/ospf/database"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_rip_list_rip_interfaces(
         self,
@@ -20479,7 +20473,7 @@ class AllCalls(CentralApi):
             'marker': marker
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_rip_list_rip_neighbors(
         self,
@@ -20499,7 +20493,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/rip/neighbor"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_rip_list_of_routes_learned_from_a_rip_neighbor(
         self,
@@ -20525,7 +20519,7 @@ class AllCalls(CentralApi):
             'address': address
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_rip_list_rip_routes(
         self,
@@ -20545,7 +20539,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v1/rip/route"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def routing_rtm_get_routes(
         self,
@@ -20574,7 +20568,7 @@ class AllCalls(CentralApi):
             'marker': marker
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def routing_rtm_get_legacy_routes(
         self,
@@ -20590,7 +20584,7 @@ class AllCalls(CentralApi):
         """
         url = "/api/routing/v0/route"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_service_ids_id1_v2(
         self,
@@ -20614,7 +20608,7 @@ class AllCalls(CentralApi):
             'service_id': service_id
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_service_ids_id1_v2(
         self,
@@ -20638,7 +20632,7 @@ class AllCalls(CentralApi):
             'service_id': service_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_service_ids_id1_v2(
         self,
@@ -20656,7 +20650,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_service_ids_id1_v2(
         self,
@@ -20674,7 +20668,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/custom_services/{name}/service_ids/{service_id}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_service_ids_id2_v2(
         self,
@@ -20690,7 +20684,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/custom_services/{name}/service_ids/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_custom_services_id2_v2(
         self,
@@ -20718,7 +20712,7 @@ class AllCalls(CentralApi):
             'service_id': service_id
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_custom_services_id2_v2(
         self,
@@ -20746,7 +20740,7 @@ class AllCalls(CentralApi):
             'service_id': service_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_custom_services_id3_v2(
         self,
@@ -20762,7 +20756,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/custom_services/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_custom_services_id2_v2(
         self,
@@ -20778,7 +20772,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/custom_services/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_custom_services_id4_v2(
         self,
@@ -20810,7 +20804,7 @@ class AllCalls(CentralApi):
             'search_name': search_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def services_config_airgroup_put_aruba_airgroup_admin_user_ids_id3_v2(
         self,
@@ -20830,7 +20824,7 @@ class AllCalls(CentralApi):
             'user_id': user_id
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_admin_user_ids_id3_v2(
         self,
@@ -20850,7 +20844,7 @@ class AllCalls(CentralApi):
             'user_id': user_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_admin_user_ids_id5_v2(
         self,
@@ -20866,7 +20860,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_admin_user_ids_id3_v2(
         self,
@@ -20882,7 +20876,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/{user_id}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_admin_user_ids_id6_v2(
         self,
@@ -20894,7 +20888,7 @@ class AllCalls(CentralApi):
         """
         url = "/airgroup-config/v2/common_config/personal_device_visibility/admin_user_ids/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_personal_device_visibility_id4_v2(
         self,
@@ -20918,7 +20912,7 @@ class AllCalls(CentralApi):
             'user_id': user_id
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_personal_device_visibility_id4_v2(
         self,
@@ -20942,7 +20936,7 @@ class AllCalls(CentralApi):
             'user_id': user_id
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_personal_device_visibility_id7_v2(
         self,
@@ -20954,7 +20948,7 @@ class AllCalls(CentralApi):
         """
         url = "/airgroup-config/v2/common_config/personal_device_visibility/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_personal_device_visibility_id4_v2(
         self,
@@ -20966,7 +20960,7 @@ class AllCalls(CentralApi):
         """
         url = "/airgroup-config/v2/common_config/personal_device_visibility/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_service_ids_id5_v2(
         self,
@@ -20993,7 +20987,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_service_ids_id5_v2(
         self,
@@ -21020,7 +21014,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_service_ids_id8_v2(
         self,
@@ -21038,7 +21032,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/{service_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_get_aruba_airgroup_service_ids_id9_v2(
         self,
@@ -21054,7 +21048,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/common_config/standard_services/{name}/service_ids/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_standard_services_id6_v2(
         self,
@@ -21087,7 +21081,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_standard_services_id6_v2(
         self,
@@ -21120,7 +21114,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_standard_services_id10_v2(
         self,
@@ -21136,7 +21130,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/common_config/standard_services/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_get_aruba_airgroup_standard_services_id11_v2(
         self,
@@ -21148,7 +21142,7 @@ class AllCalls(CentralApi):
         """
         url = "/airgroup-config/v2/common_config/standard_services/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_get_aruba_airgroup_common_config_id12_v2(
         self,
@@ -21160,7 +21154,7 @@ class AllCalls(CentralApi):
         """
         url = "/airgroup-config/v2/common_config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_disallowed_roles_id7_v2(
         self,
@@ -21182,7 +21176,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_disallowed_roles_id7_v2(
         self,
@@ -21204,7 +21198,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_roles_id13_v2(
         self,
@@ -21222,7 +21216,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_disallowed_roles_id5_v2(
         self,
@@ -21240,7 +21234,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/{role}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_roles_id14_v2(
         self,
@@ -21256,7 +21250,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/disallowed_roles/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_allowed_roles_id8_v2(
         self,
@@ -21278,7 +21272,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_allowed_roles_id8_v2(
         self,
@@ -21300,7 +21294,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_roles_id15_v2(
         self,
@@ -21318,7 +21312,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_allowed_roles_id6_v2(
         self,
@@ -21336,7 +21330,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/{role}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_roles_id16_v2(
         self,
@@ -21352,7 +21346,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/allowed_roles/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_role_restrictions_id9_v2(
         self,
@@ -21374,7 +21368,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_role_restrictions_id9_v2(
         self,
@@ -21396,7 +21390,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_role_restrictions_id17_v2(
         self,
@@ -21412,7 +21406,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_role_restrictions_id7_v2(
         self,
@@ -21428,7 +21422,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/role_restrictions/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_ap_list_id10_v2(
         self,
@@ -21454,7 +21448,7 @@ class AllCalls(CentralApi):
             'device_name': device_name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_ap_list_id10_v2(
         self,
@@ -21480,7 +21474,7 @@ class AllCalls(CentralApi):
             'device_name': device_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_ap_list_id18_v2(
         self,
@@ -21498,7 +21492,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_ap_list_id8_v2(
         self,
@@ -21516,7 +21510,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/{serial_number}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_ap_list_id19_v2(
         self,
@@ -21532,7 +21526,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/ap_list/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_network_visibility_id11_v2(
         self,
@@ -21558,7 +21552,7 @@ class AllCalls(CentralApi):
             'device_name': device_name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_network_visibility_id11_v2(
         self,
@@ -21584,7 +21578,7 @@ class AllCalls(CentralApi):
             'device_name': device_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_network_visibility_id20_v2(
         self,
@@ -21600,7 +21594,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_network_visibility_id9_v2(
         self,
@@ -21616,7 +21610,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/network_visibility/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_servers_list_id12_v2(
         self,
@@ -21651,7 +21645,7 @@ class AllCalls(CentralApi):
             'ap_list': ap_list
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_servers_list_id12_v2(
         self,
@@ -21686,7 +21680,7 @@ class AllCalls(CentralApi):
             'ap_list': ap_list
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_servers_list_id21_v2(
         self,
@@ -21702,7 +21696,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_servers_list_id10_v2(
         self,
@@ -21718,7 +21712,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/servers/servers_list/{mac_address}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_servers_list_id22_v2(
         self,
@@ -21753,7 +21747,7 @@ class AllCalls(CentralApi):
             'mac_address': mac_address
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def services_config_airgroup_put_aruba_airgroup_airgroup_status_id13_v2(
         self,
@@ -21781,7 +21775,7 @@ class AllCalls(CentralApi):
             'airgroup_status': airgroup_status
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_airgroup_status_id13_v2(
         self,
@@ -21809,7 +21803,7 @@ class AllCalls(CentralApi):
             'airgroup_status': airgroup_status
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_airgroup_status_id23_v2(
         self,
@@ -21830,7 +21824,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_airgroup_status_id11_v2(
         self,
@@ -21851,7 +21845,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/airgroup_status/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_general_settings_id14_v2(
         self,
@@ -21883,7 +21877,7 @@ class AllCalls(CentralApi):
             'inherited_from': inherited_from
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_general_settings_id14_v2(
         self,
@@ -21915,7 +21909,7 @@ class AllCalls(CentralApi):
             'inherited_from': inherited_from
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_general_settings_id24_v2(
         self,
@@ -21936,7 +21930,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_general_settings_id12_v2(
         self,
@@ -21957,7 +21951,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/general_settings/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_disallowed_vlans_id15_v2(
         self,
@@ -21988,7 +21982,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_disallowed_vlans_id15_v2(
         self,
@@ -22020,7 +22014,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_vlans_id25_v2(
         self,
@@ -22047,7 +22041,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_disallowed_vlans_id13_v2(
         self,
@@ -22074,7 +22068,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/{vlan_or_range}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_vlans_id26_v2(
         self,
@@ -22098,7 +22092,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/disallowed_vlans/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_allowed_vlans_id16_v2(
         self,
@@ -22130,7 +22124,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_allowed_vlans_id16_v2(
         self,
@@ -22162,7 +22156,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_vlans_id27_v2(
         self,
@@ -22189,7 +22183,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_allowed_vlans_id14_v2(
         self,
@@ -22216,7 +22210,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/{vlan_or_range}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_vlans_id28_v2(
         self,
@@ -22240,7 +22234,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/allowed_vlans/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_vlan_restrictions_id17_v2(
         self,
@@ -22272,7 +22266,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_vlan_restrictions_id17_v2(
         self,
@@ -22304,7 +22298,7 @@ class AllCalls(CentralApi):
             'vlan_or_range': vlan_or_range
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_vlan_restrictions_id29_v2(
         self,
@@ -22328,7 +22322,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_vlan_restrictions_id15_v2(
         self,
@@ -22352,7 +22346,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/vlan_restrictions/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_disallowed_roles_id18_v2(
         self,
@@ -22382,7 +22376,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_disallowed_roles_id18_v2(
         self,
@@ -22412,7 +22406,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_roles_id30_v2(
         self,
@@ -22438,7 +22432,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_disallowed_roles_id16_v2(
         self,
@@ -22464,7 +22458,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/{role}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_disallowed_roles_id31_v2(
         self,
@@ -22488,7 +22482,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/disallowed_roles/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_allowed_roles_id19_v2(
         self,
@@ -22518,7 +22512,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_allowed_roles_id19_v2(
         self,
@@ -22548,7 +22542,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_roles_id32_v2(
         self,
@@ -22574,7 +22568,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_allowed_roles_id17_v2(
         self,
@@ -22600,7 +22594,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/{role}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_allowed_roles_id33_v2(
         self,
@@ -22624,7 +22618,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/allowed_roles/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_put_aruba_airgroup_role_restrictions_id20_v2(
         self,
@@ -22654,7 +22648,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_role_restrictions_id20_v2(
         self,
@@ -22684,7 +22678,7 @@ class AllCalls(CentralApi):
             'role': role
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_role_restrictions_id34_v2(
         self,
@@ -22708,7 +22702,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_role_restrictions_id18_v2(
         self,
@@ -22732,7 +22726,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/role_restrictions/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_put_aruba_airgroup_services_id21_v2(
         self,
@@ -22799,7 +22793,7 @@ class AllCalls(CentralApi):
             'allowed_roles': allowed_roles
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airgroup_post_aruba_airgroup_services_id21_v2(
         self,
@@ -22866,7 +22860,7 @@ class AllCalls(CentralApi):
             'allowed_roles': allowed_roles
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airgroup_get_aruba_airgroup_services_id35_v2(
         self,
@@ -22890,7 +22884,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_services_id19_v2(
         self,
@@ -22914,7 +22908,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_services_id36_v2(
         self,
@@ -22935,7 +22929,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/services/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_get_aruba_airgroup_config_id37_v2(
         self,
@@ -22956,7 +22950,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airgroup_delete_aruba_airgroup_config_id20_v2(
         self,
@@ -22977,7 +22971,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airgroup_get_aruba_airgroup_node_list_id38_v2(
         self,
@@ -22998,7 +22992,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airgroup-config/v2/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airmatch_put_aruba_airmatch_system_id1_v1(
         self,
@@ -23048,7 +23042,7 @@ class AllCalls(CentralApi):
             'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airmatch_post_aruba_airmatch_system_id1_v1(
         self,
@@ -23098,7 +23092,7 @@ class AllCalls(CentralApi):
             'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airmatch_get_aruba_airmatch_system_id1_v1(
         self,
@@ -23119,7 +23113,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airmatch_delete_aruba_airmatch_system_id1_v1(
         self,
@@ -23140,7 +23134,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/system/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airmatch_put_aruba_airmatch_config_id2_v1(
         self,
@@ -23190,7 +23184,7 @@ class AllCalls(CentralApi):
             'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_airmatch_post_aruba_airmatch_config_id2_v1(
         self,
@@ -23240,7 +23234,7 @@ class AllCalls(CentralApi):
             'quality_threshold_6ghz': quality_threshold_6ghz
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_airmatch_get_aruba_airmatch_config_id2_v1(
         self,
@@ -23261,7 +23255,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_airmatch_delete_aruba_airmatch_config_id2_v1(
         self,
@@ -23282,7 +23276,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_airmatch_get_aruba_airmatch_node_list_id3_v1(
         self,
@@ -23303,7 +23297,7 @@ class AllCalls(CentralApi):
         """
         url = f"/airmatch-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ids_ips_put_aruba_ids_ips_siem_notification_id1_v1(
         self,
@@ -23330,7 +23324,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ids_ips_post_aruba_ids_ips_siem_notification_id1_v1(
         self,
@@ -23357,7 +23351,7 @@ class AllCalls(CentralApi):
             'enable': enable
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ids_ips_get_aruba_ids_ips_siem_notification_id1_v1(
         self,
@@ -23378,7 +23372,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ids_ips_delete_aruba_ids_ips_siem_notification_id1_v1(
         self,
@@ -23399,7 +23393,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_notification/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ids_ips_put_aruba_ids_ips_siem_servers_list_id2_v1(
         self,
@@ -23435,7 +23429,7 @@ class AllCalls(CentralApi):
             'siem_token': siem_token
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ids_ips_post_aruba_ids_ips_siem_servers_list_id2_v1(
         self,
@@ -23471,7 +23465,7 @@ class AllCalls(CentralApi):
             'siem_token': siem_token
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ids_ips_get_aruba_ids_ips_siem_servers_list_id2_v1(
         self,
@@ -23494,7 +23488,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ids_ips_delete_aruba_ids_ips_siem_servers_list_id2_v1(
         self,
@@ -23517,7 +23511,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/{siem_server_name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ids_ips_get_aruba_ids_ips_siem_servers_list_id3_v1(
         self,
@@ -23538,7 +23532,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/siem_servers_list/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ids_ips_put_aruba_ids_ips_config_id3_v1(
         self,
@@ -23577,7 +23571,7 @@ class AllCalls(CentralApi):
             'siem_token': siem_token
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ids_ips_post_aruba_ids_ips_config_id3_v1(
         self,
@@ -23616,7 +23610,7 @@ class AllCalls(CentralApi):
             'siem_token': siem_token
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ids_ips_get_aruba_ids_ips_config_id4_v1(
         self,
@@ -23637,7 +23631,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ids_ips_delete_aruba_ids_ips_config_id3_v1(
         self,
@@ -23658,7 +23652,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ids_ips_get_aruba_ids_ips_node_list_id5_v1(
         self,
@@ -23679,7 +23673,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ids-ips-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_put_aruba_ipms_ip_range_id1_v1(
         self,
@@ -23720,7 +23714,7 @@ class AllCalls(CentralApi):
             'is_conflicting': is_conflicting
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ipms_post_aruba_ipms_ip_range_id1_v1(
         self,
@@ -23761,7 +23755,7 @@ class AllCalls(CentralApi):
             'is_conflicting': is_conflicting
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ipms_get_aruba_ipms_ip_range_id1_v1(
         self,
@@ -23787,7 +23781,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/{range_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_get_aruba_ipms_ip_range_id2_v1(
         self,
@@ -23810,7 +23804,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/ip_range/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_put_aruba_ipms_address_pool_id2_v1(
         self,
@@ -23867,7 +23861,7 @@ class AllCalls(CentralApi):
             'max_clients': max_clients
         }
 
-        return await self.put(url, json_data=json_data, params=params)
+        return await self.session.put(url, json_data=json_data, params=params)
 
     async def services_config_ipms_post_aruba_ipms_address_pool_id2_v1(
         self,
@@ -23924,7 +23918,7 @@ class AllCalls(CentralApi):
             'max_clients': max_clients
         }
 
-        return await self.post(url, json_data=json_data, params=params)
+        return await self.session.post(url, json_data=json_data, params=params)
 
     async def services_config_ipms_get_aruba_ipms_address_pool_id3_v1(
         self,
@@ -23947,7 +23941,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_delete_aruba_ipms_address_pool_id1_v1(
         self,
@@ -23970,7 +23964,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/{pool_name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ipms_get_aruba_ipms_address_pool_id4_v1(
         self,
@@ -23991,7 +23985,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/address_pool/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_get_aruba_ipms_config_id5_v1(
         self,
@@ -24012,7 +24006,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ipms_get_aruba_ipms_node_list_id6_v1(
         self,
@@ -24033,7 +24027,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ipms-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_put_aruba_overlay_wlan_gw_cluster_list_id1_v2(
         self,
@@ -24080,7 +24074,7 @@ class AllCalls(CentralApi):
             'tunnel_type': tunnel_type
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_overlay_wlan_post_aruba_overlay_wlan_gw_cluster_list_id1_v2(
         self,
@@ -24126,7 +24120,7 @@ class AllCalls(CentralApi):
             'tunnel_type': tunnel_type
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_gw_cluster_list_id1_v2(
         self,
@@ -24157,7 +24151,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_delete_aruba_overlay_wlan_gw_cluster_list_id1_v2(
         self,
@@ -24188,7 +24182,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/{cluster_redundancy_type}/{cluster_group_name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_gw_cluster_list_id2_v2(
         self,
@@ -24215,7 +24209,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/gw_cluster_list/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_put_aruba_overlay_wlan_ssid_cluster_id2_v2(
         self,
@@ -24263,7 +24257,7 @@ class AllCalls(CentralApi):
             'tunnel_type': tunnel_type
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_overlay_wlan_post_aruba_overlay_wlan_ssid_cluster_id2_v2(
         self,
@@ -24311,7 +24305,7 @@ class AllCalls(CentralApi):
             'tunnel_type': tunnel_type
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_ssid_cluster_id3_v2(
         self,
@@ -24338,7 +24332,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_delete_aruba_overlay_wlan_ssid_cluster_id2_v2(
         self,
@@ -24365,7 +24359,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/{profile}/{profile_type}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_ssid_cluster_id4_v2(
         self,
@@ -24386,7 +24380,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/ssid_cluster/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_put_aruba_overlay_wlan_config_id3_v2(
         self,
@@ -24395,7 +24389,7 @@ class AllCalls(CentralApi):
         profile: str,
         profile_type: str,
         gw_cluster_list: list,
-        address_family: List[str],
+        address_family: list[str],
     ) -> Response:
         """Create/Update Complete Overlay-wlan config for given group.
 
@@ -24410,7 +24404,7 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             gw_cluster_list (list): Gateway Clusters mapped to this profile
-            address_family (List[str]): Address family configuration <AFI,SAFI>.
+            address_family (list[str]): Address family configuration <AFI,SAFI>.
 
         Returns:
             Response: CentralAPI Response object
@@ -24424,7 +24418,7 @@ class AllCalls(CentralApi):
             'address_family': address_family
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_overlay_wlan_post_aruba_overlay_wlan_config_id3_v2(
         self,
@@ -24433,7 +24427,7 @@ class AllCalls(CentralApi):
         profile: str,
         profile_type: str,
         gw_cluster_list: list,
-        address_family: List[str],
+        address_family: list[str],
     ) -> Response:
         """Create Complete Overlay-wlan config for given group.
 
@@ -24448,7 +24442,7 @@ class AllCalls(CentralApi):
                 'WIRED_PORT_PROFILE' if profile is wired-port profile  Valid Values:
                 WIRELESS_PROFILE, WIRED_PORT_PROFILE
             gw_cluster_list (list): Gateway Clusters mapped to this profile
-            address_family (List[str]): Address family configuration <AFI,SAFI>.
+            address_family (list[str]): Address family configuration <AFI,SAFI>.
 
         Returns:
             Response: CentralAPI Response object
@@ -24462,7 +24456,7 @@ class AllCalls(CentralApi):
             'address_family': address_family
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_config_id5_v2(
         self,
@@ -24483,7 +24477,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_overlay_wlan_delete_aruba_overlay_wlan_config_id3_v2(
         self,
@@ -24504,7 +24498,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_overlay_wlan_get_aruba_overlay_wlan_node_list_id6_v2(
         self,
@@ -24525,7 +24519,7 @@ class AllCalls(CentralApi):
         """
         url = f"/overlay-wlan-config/v2/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_ssid_includes_id1_v1(
         self,
@@ -24554,7 +24548,7 @@ class AllCalls(CentralApi):
             'essid': essid
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_ssid_includes_id1_v1(
         self,
@@ -24583,7 +24577,7 @@ class AllCalls(CentralApi):
             'essid': essid
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_ssid_includes_id1_v1(
         self,
@@ -24608,7 +24602,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_ssid_includes_id1_v1(
         self,
@@ -24633,7 +24627,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/{essid}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_ssid_includes_id2_v1(
         self,
@@ -24656,7 +24650,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_includes/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_ssid_excludes_id2_v1(
         self,
@@ -24685,7 +24679,7 @@ class AllCalls(CentralApi):
             'essid': essid
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_ssid_excludes_id2_v1(
         self,
@@ -24714,7 +24708,7 @@ class AllCalls(CentralApi):
             'essid': essid
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_ssid_excludes_id3_v1(
         self,
@@ -24739,7 +24733,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_ssid_excludes_id2_v1(
         self,
@@ -24764,7 +24758,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/{essid}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_ssid_excludes_id4_v1(
         self,
@@ -24787,7 +24781,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/ssid_excludes/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_site_includes_id3_v1(
         self,
@@ -24818,7 +24812,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_site_includes_id3_v1(
         self,
@@ -24849,7 +24843,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_site_includes_id5_v1(
         self,
@@ -24874,7 +24868,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_site_includes_id3_v1(
         self,
@@ -24899,7 +24893,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_site_includes_id6_v1(
         self,
@@ -24922,7 +24916,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_includes/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_site_excludes_id4_v1(
         self,
@@ -24953,7 +24947,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_site_excludes_id4_v1(
         self,
@@ -24984,7 +24978,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_site_excludes_id7_v1(
         self,
@@ -25009,7 +25003,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_site_excludes_id4_v1(
         self,
@@ -25034,7 +25028,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_site_excludes_id8_v1(
         self,
@@ -25057,7 +25051,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/site_excludes/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_match_criteria_id5_v1(
         self,
@@ -25124,7 +25118,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_match_criteria_id5_v1(
         self,
@@ -25191,7 +25185,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_match_criteria_id9_v1(
         self,
@@ -25214,7 +25208,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_match_criteria_id5_v1(
         self,
@@ -25237,7 +25231,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/match_criteria/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_put_aruba_rds_classification_rules_id6_v1(
         self,
@@ -25328,7 +25322,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_classification_rules_id6_v1(
         self,
@@ -25419,7 +25413,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_classification_rules_id10_v1(
         self,
@@ -25442,7 +25436,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_classification_rules_id6_v1(
         self,
@@ -25465,7 +25459,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/{rule_name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_classification_rules_id11_v1(
         self,
@@ -25486,7 +25480,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/classification_rules/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_put_aruba_rds_config_id7_v1(
         self,
@@ -25565,7 +25559,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_rapids_post_aruba_rds_config_id7_v1(
         self,
@@ -25644,7 +25638,7 @@ class AllCalls(CentralApi):
             'valid_client_match': valid_client_match
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_rapids_get_aruba_rds_config_id12_v1(
         self,
@@ -25665,7 +25659,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_rapids_delete_aruba_rds_config_id7_v1(
         self,
@@ -25686,7 +25680,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_rapids_get_aruba_rds_node_list_id13_v1(
         self,
@@ -25707,7 +25701,7 @@ class AllCalls(CentralApi):
         """
         url = f"/rapids-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_branch_devices_id1_v1(
         self,
@@ -25729,7 +25723,7 @@ class AllCalls(CentralApi):
             'identifier': identifier
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_branch_devices_id1_v1(
         self,
@@ -25753,7 +25747,7 @@ class AllCalls(CentralApi):
             'identifier': identifier
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_devices_id1_v1(
         self,
@@ -25771,7 +25765,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/{identifier}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_branch_devices_id1_v1(
         self,
@@ -25789,7 +25783,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/{identifier}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_devices_id2_v1(
         self,
@@ -25805,7 +25799,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/config/branch-devices/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_config_id2_v1(
         self,
@@ -25827,7 +25821,7 @@ class AllCalls(CentralApi):
             'identifier': identifier
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_config_id2_v1(
         self,
@@ -25849,7 +25843,7 @@ class AllCalls(CentralApi):
             'identifier': identifier
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_config_id3_v1(
         self,
@@ -25865,7 +25859,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_config_id2_v1(
         self,
@@ -25881,7 +25875,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_mesh_id4_v1(
         self,
@@ -25897,7 +25891,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/branch-mesh/{label}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_mesh_id5_v1(
         self,
@@ -25929,7 +25923,7 @@ class AllCalls(CentralApi):
             'search_name': search_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def services_config_sdwan_put_aruba_sdwan_transit_id3_v1(
         self,
@@ -25956,7 +25950,7 @@ class AllCalls(CentralApi):
             'transit': transit
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_transit_id3_v1(
         self,
@@ -25983,7 +25977,7 @@ class AllCalls(CentralApi):
             'transit': transit
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_transit_id7_v1(
         self,
@@ -26004,7 +25998,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_transit_id3_v1(
         self,
@@ -26025,7 +26019,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/transit/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_aggregates_id4_v1(
         self,
@@ -26056,7 +26050,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_aggregates_id4_v1(
         self,
@@ -26087,7 +26081,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_aggregates_id8_v1(
         self,
@@ -26112,7 +26106,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/{prefix}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_aggregates_id4_v1(
         self,
@@ -26137,7 +26131,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/{prefix}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_aggregates_id9_v1(
         self,
@@ -26160,7 +26154,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/aggregates/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_aggregates_id5_v1(
         self,
@@ -26192,7 +26186,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_aggregates_id5_v1(
         self,
@@ -26224,7 +26218,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_aggregates_id10_v1(
         self,
@@ -26247,7 +26241,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_aggregates_id5_v1(
         self,
@@ -26270,7 +26264,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/{segment}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_aggregates_id11_v1(
         self,
@@ -26291,7 +26285,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/hub-aggregates/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_config_id12_v1(
         self,
@@ -26312,7 +26306,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_config_id6_v1(
         self,
@@ -26333,7 +26327,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/hub-config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hubs_id13_v1(
         self,
@@ -26356,7 +26350,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hubs_id7_v1(
         self,
@@ -26379,7 +26373,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/{identifier}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hubs_id14_v1(
         self,
@@ -26400,7 +26394,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hubs/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_clusters_id6_v1(
         self,
@@ -26430,7 +26424,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_clusters_id6_v1(
         self,
@@ -26460,7 +26454,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_clusters_id15_v1(
         self,
@@ -26485,7 +26479,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_clusters_id8_v1(
         self,
@@ -26510,7 +26504,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/{cluster_name}/{cluster_group}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_clusters_id16_v1(
         self,
@@ -26531,7 +26525,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/hub-clusters/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_branch_config_id7_v1(
         self,
@@ -26577,7 +26571,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_branch_config_id7_v1(
         self,
@@ -26623,7 +26617,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_config_id17_v1(
         self,
@@ -26644,7 +26638,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_branch_config_id9_v1(
         self,
@@ -26665,7 +26659,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/branch-config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_clusters_id8_v1(
         self,
@@ -26695,7 +26689,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_clusters_id8_v1(
         self,
@@ -26725,7 +26719,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_clusters_id18_v1(
         self,
@@ -26750,7 +26744,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_clusters_id10_v1(
         self,
@@ -26775,7 +26769,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/{cluster_name}/{cluster_group}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_clusters_id19_v1(
         self,
@@ -26796,7 +26790,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/hub-clusters/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_microbranch_dc_cluster_id9_v1(
         self,
@@ -26831,7 +26825,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_microbranch_dc_cluster_id9_v1(
         self,
@@ -26866,7 +26860,7 @@ class AllCalls(CentralApi):
             'cluster_group': cluster_group
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_microbranch_dc_cluster_id20_v1(
         self,
@@ -26887,7 +26881,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_microbranch_dc_cluster_id11_v1(
         self,
@@ -26908,7 +26902,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/microbranch-dc-cluster/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_admin_status_id10_v1(
         self,
@@ -26935,7 +26929,7 @@ class AllCalls(CentralApi):
             'admin_status': admin_status
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_admin_status_id10_v1(
         self,
@@ -26962,7 +26956,7 @@ class AllCalls(CentralApi):
             'admin_status': admin_status
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_admin_status_id21_v1(
         self,
@@ -26983,7 +26977,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_admin_status_id12_v1(
         self,
@@ -27004,7 +26998,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/admin-status/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_topology_id11_v1(
         self,
@@ -27031,7 +27025,7 @@ class AllCalls(CentralApi):
             'topology': topology
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_topology_id11_v1(
         self,
@@ -27058,7 +27052,7 @@ class AllCalls(CentralApi):
             'topology': topology
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_topology_id22_v1(
         self,
@@ -27079,7 +27073,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_topology_id13_v1(
         self,
@@ -27100,7 +27094,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/topology/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_network_segment_policy_id12_v1(
         self,
@@ -27132,7 +27126,7 @@ class AllCalls(CentralApi):
             'load_balance': load_balance
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_network_segment_policy_id12_v1(
         self,
@@ -27164,7 +27158,7 @@ class AllCalls(CentralApi):
             'load_balance': load_balance
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_network_segment_policy_id23_v1(
         self,
@@ -27187,7 +27181,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_network_segment_policy_id14_v1(
         self,
@@ -27210,7 +27204,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_network_segment_policy_id24_v1(
         self,
@@ -27231,7 +27225,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/network-segment-policy/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_get_aruba_sdwan_sdwan_global_id25_v1(
         self,
@@ -27252,7 +27246,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_sdwan_global_id15_v1(
         self,
@@ -27273,7 +27267,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/sdwan-global/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_as_number_id13_v1(
         self,
@@ -27300,7 +27294,7 @@ class AllCalls(CentralApi):
             'as_number': as_number
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_as_number_id13_v1(
         self,
@@ -27327,7 +27321,7 @@ class AllCalls(CentralApi):
             'as_number': as_number
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_as_number_id26_v1(
         self,
@@ -27348,7 +27342,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_as_number_id16_v1(
         self,
@@ -27369,7 +27363,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/as-number/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_timer_id14_v1(
         self,
@@ -27401,7 +27395,7 @@ class AllCalls(CentralApi):
             'timer': timer
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_timer_id14_v1(
         self,
@@ -27433,7 +27427,7 @@ class AllCalls(CentralApi):
             'timer': timer
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_timer_id27_v1(
         self,
@@ -27454,7 +27448,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_timer_id17_v1(
         self,
@@ -27475,7 +27469,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/timer/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_graceful_restart_id15_v1(
         self,
@@ -27510,7 +27504,7 @@ class AllCalls(CentralApi):
             'timer': timer
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_graceful_restart_id15_v1(
         self,
@@ -27545,7 +27539,7 @@ class AllCalls(CentralApi):
             'timer': timer
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_graceful_restart_id28_v1(
         self,
@@ -27566,7 +27560,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_graceful_restart_id18_v1(
         self,
@@ -27587,7 +27581,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/graceful-restart/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_best_path_computation_id16_v1(
         self,
@@ -27616,7 +27610,7 @@ class AllCalls(CentralApi):
             'best_path_computation': best_path_computation
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_best_path_computation_id16_v1(
         self,
@@ -27645,7 +27639,7 @@ class AllCalls(CentralApi):
             'best_path_computation': best_path_computation
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_best_path_computation_id29_v1(
         self,
@@ -27666,7 +27660,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_best_path_computation_id19_v1(
         self,
@@ -27687,7 +27681,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/best-path-computation/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_id17_v1(
         self,
@@ -27725,7 +27719,7 @@ class AllCalls(CentralApi):
             'prefer_overlay_path': prefer_overlay_path
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_id17_v1(
         self,
@@ -27763,7 +27757,7 @@ class AllCalls(CentralApi):
             'prefer_overlay_path': prefer_overlay_path
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_id30_v1(
         self,
@@ -27784,7 +27778,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_id20_v1(
         self,
@@ -27805,7 +27799,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/hub/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_load_balance_orchestration_id18_v1(
         self,
@@ -27841,7 +27835,7 @@ class AllCalls(CentralApi):
             'randomize_time': randomize_time
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_load_balance_orchestration_id18_v1(
         self,
@@ -27877,7 +27871,7 @@ class AllCalls(CentralApi):
             'randomize_time': randomize_time
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_load_balance_orchestration_id31_v1(
         self,
@@ -27898,7 +27892,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_load_balance_orchestration_id21_v1(
         self,
@@ -27919,7 +27913,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/load-balance-orchestration/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_aggregates_id19_v1(
         self,
@@ -27950,7 +27944,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_aggregates_id19_v1(
         self,
@@ -27981,7 +27975,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_aggregates_id32_v1(
         self,
@@ -28006,7 +28000,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_aggregates_id22_v1(
         self,
@@ -28031,7 +28025,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/{prefix}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_aggregates_id33_v1(
         self,
@@ -28054,7 +28048,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/aggregates/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_branch_aggregates_id20_v1(
         self,
@@ -28084,7 +28078,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_branch_aggregates_id20_v1(
         self,
@@ -28114,7 +28108,7 @@ class AllCalls(CentralApi):
             'prefix': prefix
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_aggregates_id34_v1(
         self,
@@ -28137,7 +28131,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_branch_aggregates_id23_v1(
         self,
@@ -28160,7 +28154,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/{segment}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_branch_aggregates_id35_v1(
         self,
@@ -28181,7 +28175,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/branch-aggregates/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_get_aruba_sdwan_route_policy_id36_v1(
         self,
@@ -28202,7 +28196,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_route_policy_id24_v1(
         self,
@@ -28223,7 +28217,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/route-policy/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_rekey_interval_id21_v1(
         self,
@@ -28252,7 +28246,7 @@ class AllCalls(CentralApi):
             'rekey_interval': rekey_interval
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_rekey_interval_id21_v1(
         self,
@@ -28281,7 +28275,7 @@ class AllCalls(CentralApi):
             'rekey_interval': rekey_interval
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_rekey_interval_id37_v1(
         self,
@@ -28302,7 +28296,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_rekey_interval_id25_v1(
         self,
@@ -28323,7 +28317,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/rekey-interval/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_tunnel_policy_id22_v1(
         self,
@@ -28355,7 +28349,7 @@ class AllCalls(CentralApi):
             'rekey_interval': rekey_interval
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_tunnel_policy_id22_v1(
         self,
@@ -28387,7 +28381,7 @@ class AllCalls(CentralApi):
             'rekey_interval': rekey_interval
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_tunnel_policy_id38_v1(
         self,
@@ -28408,7 +28402,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_tunnel_policy_id26_v1(
         self,
@@ -28429,7 +28423,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/tunnel-policy/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_groups_id23_v1(
         self,
@@ -28462,7 +28456,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_groups_id23_v1(
         self,
@@ -28495,7 +28489,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_groups_id39_v1(
         self,
@@ -28521,7 +28515,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/{name}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_groups_id27_v1(
         self,
@@ -28547,7 +28541,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/{name}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_groups_id40_v1(
         self,
@@ -28570,7 +28564,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/hub-groups/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_put_aruba_sdwan_hub_mesh_id24_v1(
         self,
@@ -28601,7 +28595,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_sdwan_post_aruba_sdwan_hub_mesh_id24_v1(
         self,
@@ -28632,7 +28626,7 @@ class AllCalls(CentralApi):
             'name': name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_mesh_id41_v1(
         self,
@@ -28655,7 +28649,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_hub_mesh_id28_v1(
         self,
@@ -28678,7 +28672,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/{label}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_hub_mesh_id42_v1(
         self,
@@ -28699,7 +28693,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/hub-mesh/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_get_aruba_sdwan_mesh_policy_id43_v1(
         self,
@@ -28720,7 +28714,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_mesh_policy_id29_v1(
         self,
@@ -28741,7 +28735,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/mesh-policy/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_config_id44_v1(
         self,
@@ -28762,7 +28756,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_sdwan_delete_aruba_sdwan_config_id30_v1(
         self,
@@ -28783,7 +28777,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_sdwan_get_aruba_sdwan_node_list_id45_v1(
         self,
@@ -28804,7 +28798,7 @@ class AllCalls(CentralApi):
         """
         url = f"/sdwan-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_put_aruba_ucc_skype4b_id1_v1(
         self,
@@ -28836,7 +28830,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_skype4b_id1_v1(
         self,
@@ -28868,7 +28862,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_skype4b_id1_v1(
         self,
@@ -28889,7 +28883,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_skype4b_id1_v1(
         self,
@@ -28910,7 +28904,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/skype4b/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_dns_patterns_id2_v1(
         self,
@@ -28942,7 +28936,7 @@ class AllCalls(CentralApi):
             'carrier_service_provider': carrier_service_provider
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_dns_patterns_id2_v1(
         self,
@@ -28974,7 +28968,7 @@ class AllCalls(CentralApi):
             'carrier_service_provider': carrier_service_provider
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_dns_patterns_id2_v1(
         self,
@@ -28998,7 +28992,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_dns_patterns_id2_v1(
         self,
@@ -29022,7 +29016,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/{dns_pattern}/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_get_aruba_ucc_dns_patterns_id3_v1(
         self,
@@ -29043,7 +29037,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/dns_patterns/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_put_aruba_ucc_wifi_calling_id3_v1(
         self,
@@ -29079,7 +29073,7 @@ class AllCalls(CentralApi):
             'carrier_service_provider': carrier_service_provider
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_wifi_calling_id3_v1(
         self,
@@ -29115,7 +29109,7 @@ class AllCalls(CentralApi):
             'carrier_service_provider': carrier_service_provider
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_wifi_calling_id4_v1(
         self,
@@ -29136,7 +29130,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_wifi_calling_id3_v1(
         self,
@@ -29157,7 +29151,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/wifi_calling/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_sip_id4_v1(
         self,
@@ -29187,7 +29181,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_sip_id4_v1(
         self,
@@ -29217,7 +29211,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_sip_id5_v1(
         self,
@@ -29238,7 +29232,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_sip_id4_v1(
         self,
@@ -29259,7 +29253,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/sip/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_teams_id5_v1(
         self,
@@ -29289,7 +29283,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_teams_id5_v1(
         self,
@@ -29319,7 +29313,7 @@ class AllCalls(CentralApi):
             'video_priority': video_priority
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_teams_id6_v1(
         self,
@@ -29340,7 +29334,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_teams_id5_v1(
         self,
@@ -29361,7 +29355,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/teams/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_zoom_id6_v1(
         self,
@@ -29388,7 +29382,7 @@ class AllCalls(CentralApi):
             'voice_priority': voice_priority
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_zoom_id6_v1(
         self,
@@ -29415,7 +29409,7 @@ class AllCalls(CentralApi):
             'voice_priority': voice_priority
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_zoom_id7_v1(
         self,
@@ -29436,7 +29430,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/zoom/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_zoom_id6_v1(
         self,
@@ -29457,7 +29451,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/zoom/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_ucc_alg_id7_v1(
         self,
@@ -29503,7 +29497,7 @@ class AllCalls(CentralApi):
             'voice_priority': "auto-code failed here look at schema"
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_ucc_alg_id7_v1(
         self,
@@ -29549,7 +29543,7 @@ class AllCalls(CentralApi):
             'voice_priority': 'auto code failed refer to schema'
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_ucc_alg_id8_v1(
         self,
@@ -29570,7 +29564,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_ucc_alg_id7_v1(
         self,
@@ -29591,7 +29585,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_alg/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_activate_id8_v1(
         self,
@@ -29618,7 +29612,7 @@ class AllCalls(CentralApi):
             'activate': activate
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_activate_id8_v1(
         self,
@@ -29645,7 +29639,7 @@ class AllCalls(CentralApi):
             'activate': activate
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_activate_id9_v1(
         self,
@@ -29666,7 +29660,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_activate_id8_v1(
         self,
@@ -29687,7 +29681,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/activate/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_ucc_settings_id9_v1(
         self,
@@ -29718,7 +29712,7 @@ class AllCalls(CentralApi):
             'enable_call_prioritization': enable_call_prioritization
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_ucc_settings_id9_v1(
         self,
@@ -29749,7 +29743,7 @@ class AllCalls(CentralApi):
             'enable_call_prioritization': enable_call_prioritization
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_ucc_settings_id10_v1(
         self,
@@ -29770,7 +29764,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_ucc_settings_id9_v1(
         self,
@@ -29791,7 +29785,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/ucc_settings/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_put_aruba_ucc_config_id10_v1(
         self,
@@ -29830,7 +29824,7 @@ class AllCalls(CentralApi):
             'enable_call_prioritization': enable_call_prioritization
         }
 
-        return await self.put(url, json_data=json_data)
+        return await self.session.put(url, json_data=json_data)
 
     async def services_config_ucc_post_aruba_ucc_config_id10_v1(
         self,
@@ -29869,7 +29863,7 @@ class AllCalls(CentralApi):
             'enable_call_prioritization': enable_call_prioritization
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def services_config_ucc_get_aruba_ucc_config_id11_v1(
         self,
@@ -29890,7 +29884,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def services_config_ucc_delete_aruba_ucc_config_id10_v1(
         self,
@@ -29911,7 +29905,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/config/"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def services_config_ucc_get_aruba_ucc_node_list_id12_v1(
         self,
@@ -29932,7 +29926,7 @@ class AllCalls(CentralApi):
         """
         url = f"/ucc-config/v1/node_list/{node_type}/{node_id}/"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology(
         self,
@@ -29948,7 +29942,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/{site_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology_devices(
         self,
@@ -29964,7 +29958,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/devices/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology_edges(
         self,
@@ -29982,7 +29976,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/edges/{source_serial}/{dest_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology_edges_v2(
         self,
@@ -30000,7 +29994,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/v2/edges/{source_serial}/{dest_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology_uplinks(
         self,
@@ -30018,18 +30012,18 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/uplinks/{source_serial}/{uplink_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_get_tunnel(
         self,
         site_id: int,
-        tunnel_map_names: List[str],
+        tunnel_map_names: list[str],
     ) -> Response:
         """Get tunnel details.
 
         Args:
             site_id (int): Site ID.
-            tunnel_map_names (List[str]): Comma separated list of tunnel map names.
+            tunnel_map_names (list[str]): Comma separated list of tunnel map names.
 
         Returns:
             Response: CentralAPI Response object
@@ -30040,7 +30034,7 @@ class AllCalls(CentralApi):
             'tunnel_map_names': tunnel_map_names
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def topology_apis_views_topology_external_views_display_topology_ap_neighbors(
         self,
@@ -30056,7 +30050,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/apNeighbors/{device_serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def topology_apis_views_topology_external_views_display_topology_vlans(
         self,
@@ -30084,7 +30078,7 @@ class AllCalls(CentralApi):
             'search': search
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def topology_apis_views_topology_external_views_display_topology_expiring_devices(
         self,
@@ -30100,7 +30094,7 @@ class AllCalls(CentralApi):
         """
         url = f"/topology_external_api/unreachableDevices/{site_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def troubleshooting_get_commands_list_v1(
         self,
@@ -30121,7 +30115,7 @@ class AllCalls(CentralApi):
             'device_type': device_type
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def troubleshooting_get_cxcommands_list_v1(
         self,
@@ -30141,7 +30135,7 @@ class AllCalls(CentralApi):
             '_serial': _serial
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def troubleshooting_start_troubleshoot_v1(
         self,
@@ -30170,7 +30164,7 @@ class AllCalls(CentralApi):
             'arguments': arguments
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def troubleshooting_get_troubleshoot_output_v1(
         self,
@@ -30192,7 +30186,7 @@ class AllCalls(CentralApi):
             'session_id': session_id
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def troubleshooting_clear_session_v1(
         self,
@@ -30210,18 +30204,18 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def troubleshooting_start_cx_troubleshoot_v1(
         self,
         serial: str,
-        commands: List[str],
+        commands: list[str],
     ) -> Response:
         """Start Troubleshooting Session For CX Device.
 
         Args:
             serial (str): Serial of device
-            commands (List[str]): List of commands
+            commands (list[str]): List of commands
 
         Returns:
             Response: CentralAPI Response object
@@ -30232,7 +30226,7 @@ class AllCalls(CentralApi):
             'commands': commands
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def troubleshooting_get_session_id_v1(
         self,
@@ -30248,7 +30242,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}/session"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def troubleshooting_export_output_v1(
         self,
@@ -30266,7 +30260,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/devices/{serial}/export"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def troubleshooting_action_command_send_enroll_pki_certificate_switch(
         self,
@@ -30291,7 +30285,7 @@ class AllCalls(CentralApi):
             'cert_name': cert_name
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def troubleshooting_post_running_config_backup_serial_v1(
         self,
@@ -30312,7 +30306,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/running-config-backup/serial/{serial}/prefix/{prefix}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def troubleshooting_get_named_backups_for_serial_prefix_v1(
         self,
@@ -30333,7 +30327,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/running-config-backup/serial/{serial}/prefix/{prefix}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def troubleshooting_post_running_config_backup_group_name_v1(
         self,
@@ -30354,7 +30348,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/running-config-backup/group_name/{group_name}/prefix/{prefix}"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def troubleshooting_get_named_backups_for_serial_v1(
         self,
@@ -30370,7 +30364,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/running-config-backup/serial/{serial}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def troubleshooting_get_running_config_backup_with_name_v1(
         self,
@@ -30386,7 +30380,7 @@ class AllCalls(CentralApi):
         """
         url = f"/troubleshooting/v1/running-config-backup/name/{name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def usermgmt_user_get_user_accounts_v1(
         self,
@@ -30426,7 +30420,7 @@ class AllCalls(CentralApi):
             'status': status
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def usermgmt_user_create_user_account_v1(
         self,
@@ -30485,7 +30479,7 @@ class AllCalls(CentralApi):
             'info': info
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def usermgmt_user_update_user_account_v1(
         self,
@@ -30543,7 +30537,7 @@ class AllCalls(CentralApi):
             'info': info
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def usermgmt_user_get_user_account_details_v1(
         self,
@@ -30565,7 +30559,7 @@ class AllCalls(CentralApi):
             'system_user': system_user
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def usermgmt_user_delete_user_account_v1(
         self,
@@ -30587,7 +30581,7 @@ class AllCalls(CentralApi):
             'system_user': system_user
         }
 
-        return await self.delete(url, params=params)
+        return await self.session.delete(url, params=params)
 
     async def usermgmt_user_change_user_password_v1(
         self,
@@ -30615,7 +30609,7 @@ class AllCalls(CentralApi):
             'new_password': new_password
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def usermgmt_user_reset_user_password_v1(
         self,
@@ -30640,7 +30634,7 @@ class AllCalls(CentralApi):
             'password': password
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def usermgmt_user_create_bulk_users_account_v1(
         self,
@@ -30656,7 +30650,7 @@ class AllCalls(CentralApi):
         """
         url = "/platform/rbac/v1/bulk_users"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def usermgmt_user_update_bulk_users_account_v1(
         self,
@@ -30675,23 +30669,23 @@ class AllCalls(CentralApi):
         """
         url = "/platform/rbac/v1/bulk_users"
 
-        return await self.patch(url)
+        return await self.session.patch(url)
 
     async def usermgmt_user_delete_bulk_users_account_v1(
         self,
-        params: List[str] = None,
+        params: list[str] = None,
     ) -> Response:
         """Delete multiple users account. The max no of accounts that can be deleted at once is 10.
 
         Args:
-            params (List[str], optional): List of user id's to be deleted.
+            params (list[str], optional): List of user id's to be deleted.
 
         Returns:
             Response: CentralAPI Response object
         """
         url = "/platform/rbac/v1/bulk_users"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def usermgmt_user_bulk_users_get_cookie_status_v1(
         self,
@@ -30708,7 +30702,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/rbac/v1/status/{cookie_name}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def usermgmt_role_get_roles_v1(
         self,
@@ -30740,7 +30734,7 @@ class AllCalls(CentralApi):
             'app_name': app_name
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def usermgmt_role_get_role_v1(
         self,
@@ -30760,7 +30754,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/rbac/v1/apps/{app_name}/roles/{rolename}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def usermgmt_role_delete_role_v1(
         self,
@@ -30780,7 +30774,7 @@ class AllCalls(CentralApi):
         """
         url = f"/platform/rbac/v1/apps/{app_name}/roles/{rolename}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def usermgmt_role_update_role_v1(
         self,
@@ -30813,7 +30807,7 @@ class AllCalls(CentralApi):
             'permission': permission
         }
 
-        return await self.patch(url, json_data=json_data)
+        return await self.session.patch(url, json_data=json_data)
 
     async def usermgmt_role_create_role_v1(
         self,
@@ -30846,7 +30840,7 @@ class AllCalls(CentralApi):
             'permission': permission
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def vgw_get_cloud_accounts_for_aws(
         self,
@@ -30858,7 +30852,7 @@ class AllCalls(CentralApi):
         """
         url = "/cgw/cloud_accounts/provider/AWS"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def vgw_get_cloud_accounts_for_azure(
         self,
@@ -30870,7 +30864,7 @@ class AllCalls(CentralApi):
         """
         url = "/cgw/cloud_accounts/provider/Azure"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def vgw_get_cloud_accounts_for_zscaler(
         self,
@@ -30882,7 +30876,7 @@ class AllCalls(CentralApi):
         """
         url = "/cgw/cloud_accounts/provider/Zscaler"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def vgw_create_cloud_account(
         self,
@@ -30941,7 +30935,7 @@ class AllCalls(CentralApi):
             'zscaler_username': zscaler_username
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def vgw_edit_cloud_account(
         self,
@@ -31002,7 +30996,7 @@ class AllCalls(CentralApi):
             'zscaler_username': zscaler_username
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def vgw_delete_cloud_account(
         self,
@@ -31018,7 +31012,7 @@ class AllCalls(CentralApi):
         """
         url = f"/cgw/cloud_accounts/{account_id}"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def visualrf_get_status_of_geofence(
         self,
@@ -31030,7 +31024,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/geofence"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_enable_geofence(
         self,
@@ -31042,7 +31036,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/geofence"
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def visualrf_disable_geofence(
         self,
@@ -31054,7 +31048,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/geofence"
 
-        return await self.delete(url)
+        return await self.session.delete(url)
 
     async def visualrf_get_location_of_a_specific_client(
         self,
@@ -31100,7 +31094,7 @@ class AllCalls(CentralApi):
             'units': units
         }
 
-        return await self.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def visualrf_get_a_specific_floor_and_location_of_all_its_clients(
         self,
@@ -31139,7 +31133,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/client_location"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_location_of_a_specific_rogue_access_point(
         self,
@@ -31179,7 +31173,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/rogue_location/{macaddr}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_a_specific_floor_and_location_of_all_its_rogue_access_points(
         self,
@@ -31218,7 +31212,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/rogue_location"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_list_of_all_campuses(
         self,
@@ -31252,7 +31246,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/campus"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_a_specific_campus_and_its_buildings(
         self,
@@ -31289,7 +31283,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/campus/{campus_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_a_specific_building_and_its_floors(
         self,
@@ -31329,7 +31323,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/building/{building_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_details_of_a_specific_floor(
         self,
@@ -31368,7 +31362,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_background_image_of_a_specific_floor(
         self,
@@ -31405,7 +31399,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/image"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_a_specific_floor_and_location_of_all_its_access_points(
         self,
@@ -31444,7 +31438,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/floor/{floor_id}/access_point_location"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_location_of_a_specific_access_point(
         self,
@@ -31484,7 +31478,7 @@ class AllCalls(CentralApi):
         """
         url = f"/visualrf_api/v1/access_point_location/{ap_id}"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_create_floorplans_using_zip_file(
         self,
@@ -31501,7 +31495,7 @@ class AllCalls(CentralApi):
         url = "/visualrf_api/v1/restore_sites"
         file = file if isinstance(file, Path) else Path(str(file))
 
-        return await self.post(url)
+        return await self.session.post(url)
 
     async def visualrf_get_last_import_operation_information(
         self,
@@ -31513,7 +31507,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/restore_sites/status"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_get_status_of_anonymization(
         self,
@@ -31525,7 +31519,7 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/anonymization"
 
-        return await self.get(url)
+        return await self.session.get(url)
 
     async def visualrf_enable_anonymization(
         self,
@@ -31546,7 +31540,7 @@ class AllCalls(CentralApi):
             'schedule': schedule
         }
 
-        return await self.post(url, json_data=json_data)
+        return await self.session.post(url, json_data=json_data)
 
     async def visualrf_disable_anonymization(
         self,
@@ -31558,4 +31552,4 @@ class AllCalls(CentralApi):
         """
         url = "/visualrf_api/v1/anonymization"
 
-        return await self.delete(url)
+        return await self.session.delete(url)

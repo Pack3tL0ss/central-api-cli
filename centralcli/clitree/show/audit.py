@@ -1,0 +1,262 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+import pendulum
+import typer
+
+from centralcli import cleaner, common, log, render, utils
+from centralcli.cache import api
+from centralcli.constants import LogAppArgs, LogSortBy
+
+if TYPE_CHECKING:
+    from centralcli.cache import CacheDevice, CacheGroup
+
+app = typer.Typer()
+
+
+@app.command(hidden=True, deprecated=True)
+def acp_logs(
+    log_id: str = typer.Argument(
+        None,
+        metavar='[LOG_ID]',
+        help="Show details for a specific log_id",
+        autocompletion=common.cache.audit_log_completion,
+        show_default=False,
+    ),
+    user: str = typer.Option(None, help="Filter logs by user", show_default=False,),
+    _all: bool = typer.Option(False, "-a", "--all", help="Display all available audit logs.  Overrides default of 5 days", show_default=False,),
+    device: str = common.options.device,
+    app: LogAppArgs = typer.Option(None, help="Filter logs by app_id", hidden=True),
+    ip: str = typer.Option(None, help="Filter logs by device IP address", show_default=False,),
+    description: str = typer.Option(None, help="Filter logs by description (fuzzy match)", show_default=False,),
+    _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    start: datetime = common.options(timerange="5d").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    verbose: int = typer.Option(
+            0,
+            "-v",
+            count=True,
+            metavar="",
+            help="Verbosity: -v Show periodic system default app tasks, which are filtered by default, -vv Show logs with original field names and minimal formatting (vertically)",
+            rich_help_panel="Formatting",
+            show_default=False,
+    ),
+    sort_by: LogSortBy = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:  # pragma: no cover
+    """Show ACP audit logs
+
+    Use [cyan]cencli show audit logs[/]  The payload on this one seems far less useful
+
+    This command shows logs associated with Aruba Cloud Platform (ACP).
+    i.e. [cyan]Device Onboarded[/]
+         [cyan]Device checked in[/]
+         [cyan]New API Gateway app added (token creation)[/]
+
+    Use [cyan]show audit logs[/] to show audit event logs.
+    or [cyan]show logs[/] to show device event logs.
+
+    :clock5:  Displays prior 5 days if no time options are provided.
+    """
+    title = "ACP Audit Logs"
+    caption = None
+    if (_all or count) and [start, end, past].count(None) != 3:
+        common.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+    start, end = common.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=5))
+
+    dev_id = None
+    if device:
+        if utils.is_serial(device):
+            dev_id = device
+            title = f"{title} related to device with serial [cyan]{device}[/]"
+        else:
+            dev = common.cache.get_dev_identifier(device)
+            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial
+            title = f"{title} related to {dev.summary_text}"
+
+    if _all:
+        title = f"All available {title}"
+    elif count:
+        title = f"Last {count} {title}"
+    elif [start, end].count(None) == 2:
+        start = pendulum.now(tz="UTC").subtract(days=5)
+        title = f"{title} for last 5 days"
+
+    kwargs = {
+        "log_id": log_id if log_id is None else common.cache.get_audit_log_identifier(log_id),
+        "username": user,
+        "from_time": start,
+        "to_time": end,
+        "description": description,
+        "target": dev_id,
+        "classification": _class,
+        "ip_address": ip,
+        "app_id": app,
+        "count": count
+    }
+
+    resp = api.session.request(api.platform.get_audit_logs, **kwargs)
+
+    if kwargs.get("log_id"):
+        render.display_results(resp, tablefmt="action")
+    else:
+        _time_words = common.get_time_range_caption(start, end, default="for last 5 days." if not _all else "")
+        caption = [
+            f"[cyan]{len(resp)}[/] Alert{'s' if len(resp) != 1 else ''} {_time_words}",
+            "Use [cyan]show audit acp-logs <id>[/] to see details for a log.  Logs lacking an id don't have details.",
+            "[reset][italic][red]DeprecationWarning[/red][dim]: This command is deprecated, use [cyan]cencli show audit logs[/cyan].[/dim][/italic]"
+        ]
+        tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if verbose <= 1 else "yaml")
+
+        render.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=title,
+            caption=caption,
+            pager=pager,
+            outfile=outfile,
+            sort_by=sort_by,
+            reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
+            cleaner=cleaner.get_audit_logs,  # if not verbose else None,
+            cache_update_func=common.cache.update_log_db,  # cache is not updated if -vv if not verbose else None,
+            verbosity = verbose
+        )
+
+
+@app.command()
+def logs(
+    log_id: str = typer.Argument(
+        None,
+        metavar='[LOG_ID]',
+        help="Show details for a specific log (log_id from previous run of the command)",
+        autocompletion=common.cache.audit_log_completion,
+        show_default=False,
+    ),
+    group: str = common.options(timerange="48h", include_mins=True).group,
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    _all: bool = typer.Option(False, "-a", "--all", help="Display all available audit logs.  Overrides default of 48h", show_default=False,),
+    device: str = common.options.device,
+    _class: str = typer.Option(None, "--class", help="Filter logs by classification (fuzzy match)", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show logs cencli)", is_eager=True, hidden=True),
+    sort_by: LogSortBy = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    verbose: int = common.options.get("verbose", help="Show logs with original field names and minimal formatting (vertically)"),
+) -> None:
+    """Show HPE Aruba Central audit logs.
+
+    Other available log commands:
+        - [cyan]show logs[/] to show device event logs.
+
+    :clock2:  Displays prior 2 days if no time options are provided.
+    """
+    title = "audit event logs"
+    if tail:
+        common.ws_follow_tail(title=title, log_type="audit")  # pragma: no cover requires tty ... program will exit here
+
+    start, end = common.verify_time_range(start, end=end, past=past, end_offset=pendulum.duration(days=2))
+    caption = None
+
+    if _all:
+        title = f"All available {title}"
+    elif all(x is None for x in [start, end]):
+        start = pendulum.now(tz="UTC").subtract(days=2)
+        title = f"{title} for last 2 days"
+
+    dev_id = None
+    if device:
+        if utils.is_serial(device):
+            dev_id = device  # if the input looks like a serial... it could be an incomplete serial, but rare someone would do such a thing.
+            title = f"{title} related to device with serial [cyan]{device}[/]"
+        else:
+            dev: CacheDevice = common.cache.get_dev_identifier(device)
+            dev_id = dev.serial if not dev.type == "ap" else dev.swack_id  # AOS10 AP swack_id is serial / AOS8 swack_id is swarm
+            title = f"{title} related to {dev.summary_text}"
+
+        if group:
+            log.warning(f"[cyan]--group[/] [bright_green]{group}[/] ignored as it doesn't make sense with [cyan]--device[/] [bright_green]{device}[/]", caption=True)
+            group = None
+    elif group:
+        group: CacheGroup = common.cache.get_group_identifier(group)
+        title = f"{title} associated with group {group.name}"
+
+    kwargs = {
+        'log_id': None if not log_id else common.cache.get_audit_log_identifier(log_id),
+        'group_name': None if not group else group.name,
+        'device_id': dev_id,
+        'classification': _class,
+        'from_time': start,
+        'to_time': end,
+        'count': count,
+    }
+
+    resp = api.session.request(api.other.get_audit_event_logs, **kwargs)
+
+    if log_id is not None:
+        if resp and "body" in resp.output:
+            body = utils.unlistify(resp.output["body"], replace_underscores=False)
+            if body:
+                body = body.replace("\t", "  ")
+                body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'
+                other = "\n".join([f"{k}: {str(v)}" for k, v in resp.output.items() if k != "body"])
+                resp.output = f"{other}\n{body}"
+        render.display_results(resp, tablefmt="action")
+    else:
+        tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+        _time_words = "" if _all else common.get_time_range_caption(start, end, default="for last 2 days.")
+        caption = [
+            f"[cyan]{len(resp)}[/] audit log{'s' if len(resp) != 1 else ''} {_time_words}".rstrip(),
+            "Use [cyan]show audit logs <id>[/] to see details for a log.  Logs lacking an id don't have details."
+        ]
+
+        render.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=title,
+            pager=pager,
+            outfile=outfile,
+            sort_by=sort_by,
+            reverse=not reverse,  # API returns newest on top this makes newest on bottom unless they use -r
+            cleaner=cleaner.get_audit_logs if not verbose else None,
+            cache_update_func=common.cache.update_log_db if not verbose else None,
+            caption=caption,
+        )
+
+@app.callback()
+def callback():
+    """Show Aruba Central audit logs"""
+    ...
+
+
+if __name__ == "__main__":
+    app()

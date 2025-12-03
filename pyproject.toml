@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "8.5.1"
+version = "9.0.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -30,7 +30,10 @@ dependencies = [
     "uniplot>=0.13.0",
     "protobuf",
     "eval_type_backport;python_version<'3.10'",
-    "colorama;platform_system == 'Windows'"
+    "colorama;platform_system == 'Windows'",
+    "oauthlib>=3.2.2",
+    "requests_oauthlib>=2.0.0",
+    "stringenum;python_version<'3.11'",
 ]
 
 keywords = [
@@ -39,6 +42,7 @@ keywords = [
     "Aruba Networks",
     "Aruba Central",
     "HPE",
+    "HPE Networking",
     "API",
     "RESTFUL",
     "REST"
@@ -69,6 +73,10 @@ cencli = "centralcli.cli:app"
 [tool.poetry.group.dev.dependencies]
 ruff = ">=0.8.0"
 pytest = ">=6"
+pytest-cov = ">=6.2.1"
+nox = ">=2025.5.1"
+pytest-asyncio = ">=1.2.0"
+
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
@@ -78,6 +86,63 @@ build-backend = "poetry.core.masonry.api"
 testpaths = ["tests"]
 filterwarnings = [
     "ignore::DeprecationWarning"
+]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.coverage.run]
+omit = [
+    "centralcli/noxfile.py",
+    "centralcli/wh_proxy.py",
+    "centralcli/wh_proxy_service.py",
+    "centralcli/ws_client.py",
+    "centralcli/setup.py",
+    "centralcli/webhook.py",
+    "centralcli/snow.py",
+    "centralcli/boilerplate/*",
+    "protobuf/*"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == \"__main__\":",
+    "if __name__ == '__main__':",
+    "if TYPE_CHECKING:",
+    "# pragma: no cover",
+    "if show_example:",
+    "if not import_file:",
+    "if result.exit_code != 0",
+    "if result.exception:",
+    "if missing:",
+    "if ctx.resilient_parsing:",
+    "if ctx is not None and ctx.resilient_parsing:",
+    "if not config.valid:",
+    "if config.is_old_cfg:",
+    "if match and not completion:",  # cache get_..._identifier methods multi-match requires tty
+    "if len(match) > 1:",
+    "if config.is_old_cfg:",
+    "if config.dev.mock_tests:",
+    "def __repr__(self):",
+]
+exclude_also = [
+    # 1. Exclude an except clause of a specific form:
+    # 'except ValueError:\n\s*assume\(False\)',
+    # 2. Comments to turn coverage on and off:
+    'no cover: start(?s:.)*?no cover: stop',
+    # 3. A pragma comment that excludes an entire file:
+    '\A(?s:.*# pragma: exclude file.*)\Z',
+]
+omit = [
+    "tests/test_rate_limit.py",
+    "tests/cache_test.py",
+    "*/snow.py",
+    "*/webhook.py",
+    "centralcli/__init__.py",
+    "centralcli/wh2snow.py",
+    "centralcli/dashboard/*",
+    "centralcli/vscodeargs.py",
+    "centralcli/clitree/dev.py",
+    "centralcli/protobuf/*",
+    "noxfile.py"
 ]
 
 [tool.ruff]

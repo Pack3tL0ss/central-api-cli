@@ -1,64 +1,302 @@
+from typing import Callable
+
+import pytest
 from typer.testing import CliRunner
 
-from centralcli.cli import app  # type: ignore # NoQA
-from . import test_site_file, test_group_file, test_data, test_batch_device_file
-import traceback
-from rich.traceback import Traceback
-from rich import print
+from centralcli.cli import app
+from centralcli.environment import env
+from centralcli.exceptions import InvalidConfigException
 
+from . import capture_logs, config, log
+from ._test_data import (
+    test_data,
+    test_outfile,
+    test_invalid_empty_file,
+    test_deploy_file,
+    test_device_file,
+    test_device_file_txt,
+    test_invalid_device_file_csv,
+    test_group_file,
+    test_label_file,
+    test_mpsk_file,
+    test_rename_aps_file,
+    test_site_file,
+    test_sub_file_csv,
+    test_sub_file_test_ap,
+    test_sub_file_yaml,
+    test_update_aps_file,
+    test_verify_file,
+    test_switch_var_file_flat,
+    test_device_file_w_dup,
+    test_device_file_none_exist,
+    test_device_file_one_not_exist,
+    test_cloud_auth_mac_file,
+    test_cloud_auth_mac_file_invalid,
+)
 
 runner = CliRunner()
 
-def test_batch_add_groups():
+
+def test_batch_add_groups(ensure_cache_group4):  # TODO may need to adjust fixture to remove group4 from cache if it already being there interferes with subsequent tests
     result = runner.invoke(app, ["batch", "add",  "groups", str(test_group_file), "-Y"])
+    capture_logs(result, "test_batch_add_groups")
     assert result.exit_code == 0
-    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"]) + 1  # Plus 1 as confirmation prompt includes "created"
+    assert "⚠" in result.stdout  # group4 already exists, so skipped
+    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"])  # confirmation prompt includes "created" but group4 is skipped
 
 
-def test_batch_del_groups():
-    result = runner.invoke(app, ["batch", "delete",  "groups", str(test_group_file), "-Y"])
-    if test_group_file.is_file():
-        test_group_file.unlink()
+@pytest.mark.parametrize(
+    "idx,file,debug,exit_code,pass_condition",
+    [
+        [1, str(test_cloud_auth_mac_file), True, 0, lambda r: "202" in r],
+        [2, str(test_cloud_auth_mac_file_invalid), False, 1, lambda r: "validation error" in r],
+    ]
+)
+def test_batch_add_macs(idx: int, file: str, debug: bool, exit_code: int, pass_condition: Callable):
+    log.DEBUG = debug
+    result = runner.invoke(app, ["batch", "add",  "macs", file, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "_,fixture,test_name_append",
+    [
+        [1, None, None],
+        [2, "ensure_cache_label5", None],
+    ]
+)
+def test_batch_add_labels(_:int, fixture: str | None, test_name_append: str | None, request: pytest.FixtureRequest):
+    if fixture:
+        request.getfixturevalue(fixture)
+    # no cover: start
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    # no cover: stop
+    result = runner.invoke(app, ["batch", "add",  "labels", str(test_label_file), "-Y"])
+    capture_logs(result, env.current_test)
     assert result.exit_code == 0
-    assert "success" in result.stdout.lower()
-    assert result.stdout.lower().count("success") == len(test_data["batch"]["groups_by_name"])
+    assert "200" in result.stdout
+
+
+def test_batch_delete_labels(ensure_cache_batch_labels):
+    result = runner.invoke(app, ["batch", "delete",  "labels", str(test_label_file), "-Y"])
+    capture_logs(result, "test_batch_delete_labels")
+    assert result.exit_code == 0
+    assert "200" in result.stdout
+
+
+@pytest.mark.parametrize("args", [(str(test_label_file), "--no-devs"), ()])
+def test_batch_delete_labels_invalid(args: tuple[str]):
+    result = runner.invoke(app, ["batch", "delete",  "labels", *args])
+    capture_logs(result, "test_batch_delete_labels_invalid", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
+
+
+def test_batch_add_mpsk():
+    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
+    capture_logs(result, "test_batch_add_mpsk")
+    assert result.exit_code == 0
+    assert "202" in result.stdout
+
+
+def test_batch_add_mpsk_invalid_options():
+    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "-Y"])
+    capture_logs(result, "test_batch_add_mpsk_invalid_options", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
 
 
 def test_batch_add_sites():
     result = runner.invoke(app, ["batch", "add",  "sites", str(test_site_file), "-Y"])
+    capture_logs(result, "test_batch_add_sites")
     assert result.exit_code == 0
     assert "city" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
     assert "state" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
 
 
-def test_batch_del_sites():
-    result = runner.invoke(app, ["batch", "delete",  "sites", str(test_site_file), "-Y"])
-    if test_site_file.is_file():
-        test_site_file.unlink()
-    assert result.exit_code == 0
-    assert "success" in result.stdout
-    assert result.stdout.count("success") == len(test_data["batch"]["sites"])
-
 def test_batch_unarchive_devices():
-    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_batch_device_file)}'])
+    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
+    capture_logs(result, "test_batch_unarchive_device")
     assert result.exit_code == 0
     assert "uccess" in result.stdout
-    if result.exception:
-        print(Traceback())
-        traceback.print_exception(result.exception)
+
+
+def test_batch_unarchive_devices_fail():
+    result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
+    capture_logs(result, "test_batch_unarchive_device_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
+
 
 def test_batch_add_devices():
-    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_device_file)}', "-Y"])
+    capture_logs(result, "test_batch_add_device")
     assert result.exit_code == 0
     assert "uccess" in result.stdout
     assert "200" in result.stdout  # /platform/device_inventory/v1/devices
     assert "201" in result.stdout  # /configuration/v1/preassign
-    if result.exception:
-        print(Traceback())
-        traceback.print_exception(result.exception)
 
-def test_batch_del_devices():
-    result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_batch_device_file)}', "-Y"])
+
+@pytest.mark.parametrize(
+    "_,args",
+    [
+        [1, ("devices", f'{str(test_invalid_device_file_csv)}')],
+        [2, ("devices", f'{str(test_invalid_empty_file)}')],
+    ]
+)
+def test_batch_add_fail(_: int, args: tuple[str]):
+    result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
+    capture_logs(result, "test_batch_add_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout
+
+
+if config.dev.mock_tests:
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [982], indirect=True
+    )
+    def test_batch_assign_subscriptions_with_tags_yaml(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_with_tags_yaml")
+            assert result.exit_code == 0
+            assert result.stdout.count("code: 202") == 2
+
+
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [981], indirect=True
+    )
+    def test_batch_assign_subscriptions_csv(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_csv")
+            assert result.exit_code == 0
+            assert result.stdout.count("code: 202") >= 2
+
+    @pytest.mark.parametrize(
+        "ensure_cache_subscription", [980], indirect=True
+    )
+    def test_batch_assign_subscriptions_w_sub(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_test_ap)}', "--sub", "advanced-ap", "-Y"])
+        if config.is_old_cfg:
+            assert isinstance(result.exception, InvalidConfigException)
+        else:
+            capture_logs(result, "test_batch_assign_subscriptions_w_sub")
+            assert result.exit_code == 0
+            assert "code: 202" in result.stdout
+
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, (str(test_device_file), "--cx-retain"), lambda r: "API" in r],
+            [2, (str(test_device_file_one_not_exist),), lambda r: "skipped" in r],
+        ]
+    )
+    def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1, ensure_cache_site1, idx: int, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(app, ["batch", "move",  "devices", *args, "-y"])
+        capture_logs(result, f"{env.current_test}{idx}")
+        assert result.exit_code == 0
+        assert "200" in result.stdout
+        assert pass_condition(result.stdout)
+else:  # pragma: no cover
+    ...
+
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("devices",), lambda r: "Invalid" in r],
+        [2, ("devices", "nonexistfile.fake.json"), lambda r: "Invalid" in r],
+        [3, ("devices", f'{str(test_device_file)}', f'{str(test_rename_aps_file)}', "--label"), lambda r: "oo many" in r],
+        [4, ("devices", f'{str(test_site_file)}'), lambda r: "missing required field" in r],
+        [5, ("devices", f'{str(test_switch_var_file_flat)}'), lambda r: "AttributeError" in r],
+        [6, ("devices", f'{str(test_device_file_none_exist)}'), lambda r: "No devices found" in r],
+        [7, ("devices", f'{str(test_device_file_w_dup)}'), lambda r: "Duplicates exist" in r],
+    ]
+)
+def test_batch_move_fail(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", "move",  *args])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert pass_condition(result.stdout)
+
+
+def test_batch_rename_aps(ensure_dev_cache_no_last_rename_ap):
+    result = runner.invoke(app, ["batch", "rename",  "aps", f'{str(test_rename_aps_file)}', "-Y"])
+    capture_logs(result, "test_batch_rename_aps")
     assert result.exit_code == 0
-    assert "subscriptions successfully removed" in result.stdout.lower()
+    assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
+
+
+@pytest.mark.parametrize("what", ["aps", "devices"])
+def test_batch_update_aps(what: str):
+    result = runner.invoke(app, ["batch", "update",  what, f'{str(test_update_aps_file)}', "-Y"])
+    capture_logs(result, "test_batch_update_aps")
+    assert result.exit_code == 0
+    assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
+
+
+def test_batch_rename_aps_no_args():
+    result = runner.invoke(app, ["batch", "rename",  "aps",])
+    capture_logs(result, "test_batch_rename_aps_no_args", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Invalid" in result.stdout
+
+
+def test_batch_verify():
+    result = runner.invoke(app, ["batch", "verify", f'{str(test_verify_file)}', "--out", test_outfile])
+    capture_logs(result, "test_batch_verify")
+    assert result.exit_code == 0
+    assert "validation" in result.stdout
+
+
+def test_batch_delete_devices_no_sub_gws():
+    result = runner.invoke(app, ["batch", "delete", "devices", "--no-sub", "--dev-type", "gw", "-Y"])
+    capture_logs(result, "test_batch_delete_devices_no_sub_gws")
+    assert result.exit_code == 0
+    assert "Devices updated" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [(), lambda r: "⚠" in r],
+        [(f'{str(test_verify_file)}', "--dev-type", "cx"), lambda r: "⚠" in r],
+        [(f'{str(test_verify_file)}', "--no-sub"), lambda r: "Invalid" in r],
+    ]
+)
+def test_batch_delete_devices_fail(args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", "delete", "devices", *args])
+    capture_logs(result, "test_batch_delete_devices_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize("file", [test_device_file, test_device_file_txt])
+def test_batch_archive(file: str):
+    result = runner.invoke(app, ["batch", "archive", str(file), "-y"])
+    capture_logs(result, "test_batch_archive")
+    assert result.exit_code == 0
+    assert "True" in result.stdout
+
+
+def test_batch_archive_fail():
+    result = runner.invoke(app, ["batch", "archive", str(test_device_file), "-y"])
+    capture_logs(result, "test_batch_archive_fail", expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
+
+
+def test_batch_deploy():
+    result = runner.invoke(app, ["batch", "deploy", str(test_deploy_file), "-yyyyy"])
+    capture_logs(result, "test_batch_deploy")
+    assert result.exit_code == 0
+    assert "201" in result.stdout
     assert "200" in result.stdout

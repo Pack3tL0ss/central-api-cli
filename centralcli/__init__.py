@@ -8,7 +8,7 @@ Features of Central CLI:
   - Specify device, site, etc. by fuzzy match of multiple fields (i.e. name, mac, serial#, ip address)
   - Multiple output formats + Output to file
   - Numerous import formats (csv, yaml, json, etc.)
-  - Multiple account support (easily switch between different central accounts --account myotheraccount)
+  - Multiple workspace support (easily switch between different central workspaces --ws myotherworkspace)
   - Batch Operation based on data from input file. i.e. Add sites in batch based on data from a csv.
   - Automatically rename APs in mass using portions or all of:
     - The switch hostname the AP is connected to, switch port, AP MAC, AP model, AP serial, and the Site it's assigned to in Aruba Central
@@ -20,24 +20,73 @@ Documentation: https://central-api-cli.readthedocs.io/en/latest/readme.html
 HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
-
 import os
-import typer
-
-from pathlib import Path
-from typing import Iterable, List
 import sys
+from pathlib import Path
+from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
 
 import click
-
+import typer
 from rich.traceback import install
+
+from .environment import env
+from .utils import Utils
+
 install(show_locals=True, suppress=[click])
 
-# TODO after install if you --install-completion prior to configuration completion will freeze the terminal (first_run is running with no interactive prompt)
-# TODO first command after config is provided updates the cache but returns no output.  Bug.  Works fine from then on.
+
+utils = Utils()  # TODO make utils.py a module, strip the class
+
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[True]) -> bool: ...
+
+@overload
+def get_option_from_args(option: str) -> bool: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False]) -> str: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Optional[Literal[False]], pop: Optional[bool]) -> str: ...
+
+@overload
+def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Literal[True],  pop: Optional[bool]) -> int: ...
+
+def get_option_from_args(option: str, is_flag: bool = True, pop: bool = True, convert_int: bool = False) -> str | int | bool:
+    """Get CLI Options from sys.argv
+
+    Args:
+        option (str): The option to look for.  i.e. '--debug'
+        is_flag (bool, optional): If the option is a flag, meaning there is no value expected to follow and the return of this function will be a bool. Defaults to True.
+        pop (bool, optional): If the option should be removed from sys.argv after the value is determined. Defaults to True.
+        convert_int (bool, optional): If the value retuned should be coverted to an int. Defaults to False.
+
+    Returns:
+        str | int | bool | None: Returns a bool if is_flag=True.
+            Otherwise returns the value following the option (str unless convert_int otherwise int) or None if the option is not found.
+    """
+    assert not all([is_flag, convert_int])
+
+    if option not in sys.argv:
+        return False if is_flag else None
+
+    idx = sys.argv.index(option)
+    if pop:
+        _ = sys.argv.pop(sys.argv.index(option))
+
+    value_idx = idx if pop else idx + 1
+
+    if is_flag:
+        return True
+
+    value = sys.argv[value_idx] if not pop else sys.argv.pop(value_idx)
+
+    return value if not convert_int else int(value)
+
 
 _calling_script = Path(sys.argv[0])
-if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM") == "vscode":
+if str(_calling_script) == "." and os.environ.get("TERM_PROGRAM", "") == "vscode":
     _calling_script = Path.cwd() / "cli.py"   # vscode run in python shell
 
 if _calling_script.name == "cencli":
@@ -57,20 +106,31 @@ else:
         print("Warning Logic Error in git/pypi detection")
         print(f"base_dir Parts: {base_dir.parts}")
 
-from .logger import MyLogger
 from . import constants
 from .config import Config
+from .logger import MyLogger
+
+if os.environ.get("TERM_PROGRAM") == "vscode":  # pragma: no cover
+    from .vscodeargs import vscode_arg_handler
+    vscode_arg_handler()
+
+# hidden dev option stripped from args before instantiating CLI app
+# Must be b4 config is instantiated.
+# Results in use of mock cache.  API request/responses are still real
+if get_option_from_args("--mock"):
+    env.is_pytest = True
+
 config = Config(base_dir=base_dir)
 
 log_file = config.log_dir / f"{__name__}.log"
 
-if '--debug' in str(sys.argv) or os.environ.get("ARUBACLI_DEBUG", "").lower() in ["1", "true"]:
+if '--debug' in sys.argv or env.debug:
     config.debug = True  # for the benefit of the 2 log messages below
-if '--debugv' in str(sys.argv):
+if '--debugv' in sys.argv:
     config.debug = config.debugv = True
     # debugv is stripped from args below
 
-log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv)
+log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.debugv, deprecation_warnings=config.deprecation_warnings)
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
 
@@ -100,8 +160,8 @@ if os.name == "nt":  # pragma: no cover
 
         :meta private:
         """
-        from glob import glob
         import re
+        from glob import glob
 
         out = []
 
@@ -128,16 +188,6 @@ if os.name == "nt":  # pragma: no cover
     if not hasattr(click.utils, "_expand_args"):
         click.utils._expand_args = _expand_args
 
-
-from pycentral.base import ArubaCentralBase
-from .utils import Utils
-utils = Utils()
-from .response import Response, BatchRequest
-from .central import CentralApi
-from .cache import Cache, CentralObject, CacheGroup, CacheLabel, CacheSite, CacheTemplate, CacheDevice, CacheInvDevice, CachePortal, CacheGuest, CacheClient, CacheMpskNetwork, CacheMpsk
-from .clicommon import CLICommon
-from . import cleaner, render
-
 # if no environ vars set for LESS command line options
 # set -X to retain scroll-back after quitting less
 #     -R for color output (default for the pager but defaults are not used if LESS is set)
@@ -145,31 +195,59 @@ from . import cleaner, render
 # if not os.environ.get("LESS"):
 os.environ["LESS"] = "-RX +G"
 
-if os.environ.get("TERM_PROGRAM") == "vscode":
-    from .vscodeargs import vscode_arg_handler
-    vscode_arg_handler()
+def _get_value_from_argv(flag: str, *, is_flag: bool = False, transformer: Callable = None, strip_from_argv: bool = True) -> tuple[Sequence, str | int | bool]:
+    if flag not in sys.argv:
+        return sys.argv, None if not is_flag else False
 
-# These are global hidden flags/args that are stripped before sending to cli
-raw_out = False
-if "--raw" in sys.argv:
-    raw_out = True
-    _ = sys.argv.pop(sys.argv.index("--raw"))
+    idx = sys.argv.index(flag)
+    if is_flag:
+        value = True
+    else:
+        value = sys.argv[idx + 1]  # want to fail fast here so not checking len of sys.argv
+
+    value = value if not transformer else transformer(value)
+    if strip_from_argv:
+        _ = [sys.argv.pop(idx) for _ in range(idx, idx + (1 if is_flag else 2))]
+
+    return sys.argv, value
+
+
+
+
+# Most of these are global hidden flags/args that are stripped before sending to cli
+# We do it this way, as we then don't need to include them in each CLI command
+# Most would be hidden flags anyway.
+sys.argv, raw_out = _get_value_from_argv("--raw", is_flag=True)
+if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
+    config.dev.capture_raw = True
+    _ = sys.argv.pop(sys.argv.index("--capture-raw"))
+if "--test" in sys.argv:
+    config.dev.capture_raw = True
+    sys.argv, env.current_test = _get_value_from_argv("--test")
 if "--debug-limit" in sys.argv:
     _idx = sys.argv.index("--debug-limit")
     _ = sys.argv.pop(sys.argv.index("--debug-limit"))
     if len(sys.argv) - 1 >= _idx and sys.argv[_idx].isdigit():
-        config.limit = int(sys.argv[_idx])
+        config.dev.limit = int(sys.argv[_idx])
         _ = sys.argv.pop(_idx)
 if "--sanitize" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--sanitize"))
-    config.sanitize = True
+    config.dev.sanitize = True
 if "--debugv" in sys.argv:
     _ = sys.argv.pop(sys.argv.index("--debugv"))
     # config var updated above, just stripping flag here.
 if "?" in sys.argv:
     sys.argv[sys.argv.index("?")] = "--help"  # Replace '?' with '--help' as '?' causes issues in cli in some scenarios
+if "--account" in sys.argv:  # bachward compat TODO remove anytime after 12.2025
+    sys.argv = [item if item != "--account" else "--ws" for item in sys.argv]
+    print("--account flag is deprecated.  Use --ws or --workspace.", file=sys.stderr)
 if "--again" in sys.argv:
-    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug", "--account"]
+    valid_options = ["--json", "--yaml", "--csv", "--table", "--sort", "-r", "--pager", "-d", "--debug"]
+    ws_flag = "--workspace" if "--workspace" in sys.argv else "--ws"
+    if ws_flag in sys.argv:
+        ws_idx = sys.argv.index(ws_flag) + 1
+        if len(sys.argv) - 1 >= ws_idx:
+            valid_options += ["--ws", sys.argv[ws_idx]]
     out_args = []
     if "--out" in sys.argv:
         outfile = sys.argv[sys.argv.index("--out") + 1]
@@ -177,26 +255,32 @@ if "--again" in sys.argv:
 
     args = [*[arg for arg in sys.argv if arg in valid_options], *out_args]
     sys.argv = [sys.argv[0], "show", "last", *args]
-if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
-    config.capture_raw = True
-    _ = sys.argv.pop(sys.argv.index("--capture-raw"))
 
-central = CentralApi(config.account)
-Cache.set_config(config)
-cache = Cache(central)
+
+from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding
+
+cache = Cache(config=config)
 if config.valid:
     CacheDevice.set_db(cache.DevDB)
     CacheInvDevice.set_db(cache.InvDB)
+    CacheCert.set_db(cache.CertDB)
     CacheGroup.set_db(cache.GroupDB)
     CacheSite.set_db(cache.SiteDB)
     CacheClient.set_db(cache.ClientDB, cache=cache)
     CacheLabel.set_db(cache.LabelDB)
     CachePortal.set_db(cache.PortalDB)
-    CacheGuest.set_db(cache.GuestDB)
+    CacheGuest.set_db(cache.GuestDB, cache=cache)
     CacheTemplate.set_db(cache.TemplateDB)
     CacheMpskNetwork.set_db(cache.MpskNetDB)
     CacheMpsk.set_db(cache.MpskDB)
-cli = CLICommon(config.account, cache, central, raw_out=raw_out)
+    CacheBuilding.set_db(cache.BuildingDB)
+    CacheFloorPlanAP.set_db(cache.FloorPlanAPDB, building_db=cache.BuildingDB)
+
+from .clicommon import CLICommon
+
+common = CLICommon(config.workspace, cache, raw_out=raw_out)
+
+from . import cleaner, render
 
 # allow singular form and common synonyms for the defined show commands
 # show switches / show switch, delete label / labels ...

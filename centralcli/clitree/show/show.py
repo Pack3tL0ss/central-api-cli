@@ -1,0 +1,3580 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+from __future__ import annotations
+
+import getpass
+import ipaddress
+import json
+import os
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Tuple
+
+import pendulum
+import typer
+from jinja2 import Template
+from rich import print
+from rich.markup import escape
+
+try:
+    import psutil
+    hook_enabled = True
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    hook_enabled = False
+
+from centralcli import caas, cache, cleaner, common, config, log, render, utils
+from centralcli.caas import CaasAPI
+from centralcli.cache import CacheDevice, CentralObject
+from centralcli.clicommon import APIClients
+from centralcli.client import BatchRequest
+from centralcli.clitree import ts as clitshoot
+from centralcli.constants import (
+    LIB_DEV_TYPE,
+    AlertSeverity,
+    AlertTypes,
+    CacheArgs,
+    DeviceStatus,
+    DeviceTypes,
+    DevTypes,
+    DhcpArgs,
+    EventDevTypeArgs,
+    GenericDeviceTypes,
+    GenericDevTypes,
+    InsightSeverity,
+    LicenseTypes,
+    LogLevel,
+    RadioBandOptions,
+    ShowHookProxyArgs,
+    ShowInventoryArgs,
+    SortAlertOptions,
+    SortArchivedOptions,
+    SortBSSIDOptions,
+    SortCertOptions,
+    SortClientOptions,
+    SortDevOptions,
+    SortDhcpOptions,
+    SortGroupOptions,
+    SortInsightOptions,  # noqa
+    SortInventoryOptions,
+    SortLabelOptions,
+    SortPortalOptions,
+    SortRouteOptions,
+    SortSiteOptions,
+    SortStackOptions,
+    SortSubscriptionOptions,
+    SortSwarmOptions,
+    SortTemplateOptions,
+    SortVlanOptions,
+    SortWebHookOptions,
+    SortWlanOptions,
+    SortGuestOptions,
+    StatusOptions,
+    SubscriptionArgs,
+    TimeRange,
+    iden_meta,
+    lib_to_api,
+    lib_to_gen_plural,
+    what_to_pretty,
+)
+from centralcli.models.cache import Device
+from centralcli.objects import DateTime, ShowInterfaceFilters
+from centralcli.response import CombinedResponse, Response
+from centralcli.strings import cron_weekly
+
+from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
+
+if TYPE_CHECKING:
+    from tinydb.table import Document
+
+    from ...cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite, CacheSub
+
+
+app = typer.Typer()
+app.add_typer(firmware.app, name="firmware")
+app.add_typer(wids.app, name="wids")
+app.add_typer(branch.app, name="branch")
+app.add_typer(ospf.app, name="ospf")
+app.add_typer(ts.app, name="ts")
+app.add_typer(overlay.app, name="overlay")
+app.add_typer(audit.app, name="audit")
+app.add_typer(cloudauth.app, name="cloud-auth")
+app.add_typer(mpsk.app, name="mpsk")
+app.add_typer(bandwidth.app, name="bandwidth")
+
+api_clients = APIClients()
+api = api_clients.classic
+glp_api = api_clients.glp
+
+class Counts:
+    def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
+        self.total = total
+        self.up = up
+        self.inventory = not_checked_in
+        self.down = down or total - not_checked_in - up
+
+def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[Dict[str: Dict[str: int]]] | None:
+    """parse response data to determine switch counts by switch type
+
+    Args:
+        data (List[Dict[str, Any]]): Combined resp.output data from API, with data for any or all device types.
+
+    Returns:
+        List[Dict[str: Dict[str: int]]] | None: Returns a dict with total and up keys available for each switch type.
+            i.e. {"cx": {"total": 10, "up": 9}, "sw": {"total": 3, "up": 3}}
+            Returns None, if data was None
+    """
+    if data is None:
+        return {}
+    dev_types = set([t.get("switch_type", "ERR") for t in data])
+
+    return {
+        LIB_DEV_TYPE.get(_type, _type): {
+            "total": len(list(filter(lambda x: x["switch_type"] == _type, data))),
+            "up": len(list(filter(lambda x: x["switch_type"] == _type and x["status"] == "Up", data)))
+        }
+        for _type in dev_types
+    }
+
+def _get_counts(data: List[dict], dev_type: DeviceTypes) -> Counts:
+    _match_type = [d for d in data if d["type"] == dev_type]
+    _tot = len(_match_type)
+    _up = len([d for d in _match_type if d.get("status") == "Up"])
+    _inv = len([d for d in _match_type if not d.get("status")])
+    return Counts(_tot, _up, _inv)
+
+def _get_counts_with_inv(data: List[dict]) -> dict:
+    """parse combined output attr of inventory and monitoring responses to determine counts by device type.
+
+    Args:
+        data (List[dict]): Combined resp.output for monitoring and inventory response.
+
+    Returns:
+        dict: dictionary with counts keyed by type.  i.e.: {"cx": {"total": 12, "up": 10, "down": 1, "inventory_only": 1}}
+    """
+    status_by_type = {}
+    _types = set(d["type"] for d in data)
+    for t in _types:
+        counts = _get_counts(data, t)
+        status_by_type[t] = {"total": counts.total, "up": counts.up, "down": counts.down, "inventory_only": counts.inventory}
+
+    return status_by_type
+
+def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
+    inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
+    up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
+    return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
+
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, verbosity: int = 0) -> str:
+    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
+    if not dev_type:
+        if inventory:  # cencli show inventory -v or cencli show all --inv
+            status_by_type = _get_counts_with_inv(resp.output)
+        else:
+            def url_to_key(url) -> str:
+                path_end = url.split("/")[-1]
+                return path_end if path_end != "mobility_controllers" else "mcs"
+
+            counts_by_type = {
+                **{
+                    url_to_key(path): {
+                        "total": resp.raw[path].get("total", 0),
+                        "up": len(list(filter(lambda x: x["status"] == "Up", resp.raw[path].get(url_to_key(path), []))))
+                    } for path in resp.raw.keys() if not path.endswith("switches")
+                },
+                **_get_switch_counts(resp.raw.get("/monitoring/v1/switches", {}).get("switches"))
+            }
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    elif dev_type == "switch":
+        if inventory:
+            status_by_type = _get_counts_with_inv(resp.output)
+        else:
+            counts_by_type = _get_switch_counts(resp.raw["/monitoring/v1/switches"]["switches"])
+            status_by_type = {LIB_DEV_TYPE.get(_type, _type): {"total": counts_by_type[_type]["total"], "up": counts_by_type[_type]["up"], "down": counts_by_type[_type]["total"] - counts_by_type[_type]["up"]} for _type in counts_by_type}
+    else:
+        counts = _get_counts(resp.output, dev_type=dev_type)
+        status_by_type = {dev_type: {"total": counts.total, "up": counts.up, "down": counts.down}}
+        if inventory:
+            status_by_type[dev_type]["inventory_only"] = counts.inventory
+
+    # Put together counts caption string
+    if status:
+        _cnt_str = ", ".join([f'[{"bright_green" if status.lower() == "up" else "red"}]{t if t != "ap" else "APs"}[/]: [cyan]{status_by_type[t]["total"]}[/]' for t in status_by_type])
+    elif inventory:
+        _cnt_str = f"Total in inventory: [cyan]{len(resp.output)}[/], "
+        _cnt_str = _cnt_str + ", ".join(
+            [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
+        )
+        if "(" not in _cnt_str:
+            inventory_only = True
+    else:
+        _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
+
+    if status is None or status.lower() != "down":
+        try:
+            clients = sum([t.get("client_count", 0) for t in resp.output if t.get("client_count") != "-"])
+            if clients:
+                _cnt_str = f"{_cnt_str}, [bright_green]clients[/]: [cyan]{clients}[/]"
+        except AttributeError as e:  # pragma: no cover
+            log.exception(f"AttribueError occured in _build_caption\n{resp.output = }\n{e}", exc_info=True)
+        except Exception as e:  # pragma: no cover
+            log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
+
+    caption = f"[reset]{'Counts' if not status else f'{status.capitalize()} Devices'}: {_cnt_str}"
+    if inventory and not inventory_only:
+        caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
+    return caption
+
+
+def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = None, band: RadioBandOptions | None = None, device: CacheDevice = None, verbose: bool = False,):
+    def _update_counts_by_band(caption: str, wlan_clients: List[Dict[str, Any]], end: str = "\n") -> str:
+        two_four_clients = len([c for c in wlan_clients if c.get("band", 0) == 2.4])
+        five_clients = len([c for c in wlan_clients if c.get("band", 0) == 5])
+        six_clients = len([c for c in wlan_clients if c.get("band", 0) == 6])
+
+        return f"{caption} ([bright_green]2.4Ghz[/]: [bright_red]{two_four_clients}[/], [bright_green]5Ghz[/]: [cyan]{five_clients}[/], [bright_green]6Ghz[/]: [cyan]{six_clients}[/]){end}"
+
+    if wired:
+        count_text = f"[cyan]{len(resp)}[/] Wired Clients."
+    elif wireless or band:
+        count_text = f"[cyan]{len(resp)}[/] {'' if not band else f'[magenta]{band.value}Ghz[/] '}Wireless Clients."
+        wlan_clients = resp.raw.get("clients", [])
+        if not band:
+            count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients, end=",")
+    else:
+        _tot = len(resp)
+        wlan_raw = resp.raw.get("raw_wireless_response")
+        wired_raw = resp.raw.get("raw_wired_response")
+        caption_data = {}
+        if device is None:
+            for _type, data in zip(["wireless", "wired"], [wlan_raw, wired_raw]):
+                caption_data[_type] = {
+                    "count": "" if not data or "total" not in data else data["total"],
+                }
+            count_text = f"Counts: [bright_green]Total[/]: [cyan]{_tot}[/], [bright_green]Wired[/]: [cyan]{caption_data['wired']['count']}[/],"
+            count_text = f"{count_text} [bright_green]Wireless[/]: [cyan]{caption_data['wireless']['count']}[/]"
+
+            # Add counts by band
+            wlan_clients = wlan_raw.get("clients", [])  # TODO use CombinedResponse
+            count_text = _update_counts_by_band(count_text, wlan_clients=wlan_clients)
+        else:
+            count_text = f"[bright_green]Client Count[/]: [cyan]{_tot}[/],"
+            if device.type == "ap":
+                wlan_clients = resp.raw.get("clients", [])
+                count_text = _update_counts_by_band(count_text.rstrip(","), wlan_clients=wlan_clients, end=",")
+
+    return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
+
+# TODO expand params into available kwargs
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
+    if include_inventory:
+        resp = common.cache.get_devices_with_inventory(status=status)
+        caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
+    else:
+        if common.cache.responses.dev:  # pragma: no cover
+            log.error("DEV NOTE: _get_details_for_all_devices.  common.cache.responses.dev already has value.", show=True, caption=True, log=True)
+        resp = api.session.request(common.cache.refresh_dev_db, **params)
+        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
+
+    return resp, caption
+
+def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[CacheDevice]):
+    try:
+        data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
+        model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
+        api.session.request(common.cache.update_dev_db, model_data)
+    except Exception as e:  # pragma: no cover
+        log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
+        log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
+
+
+def _get_details_for_specific_devices(
+        devices: List[CentralObject],
+        dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
+        include_inventory: bool = False,
+        do_table: bool = False
+    ) -> Tuple[Response | List[Response], str]:
+        caption = None
+
+        # Build requests
+        br = BatchRequest
+        devs = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        dev_types = [dev.type for dev in devs]
+        reqs = [br(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+
+        # Fetch results from API
+        batch_res = api.session.batch_request(reqs)
+        if include_inventory:  # Combine results with inventory results
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+            for r, dev in zip(batch_res, devs):
+                r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
+
+        _update_cache_for_specific_devices(batch_res, devs)
+
+        if do_table and len(dev_types) > 1:
+            _output = [r.output for r in batch_res]
+            resp = batch_res[-1]
+            resp.output = _output
+            resp.output = resp.table
+            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
+        else:
+            resp = batch_res
+
+        if "cx" in dev_types:
+            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
+
+        return resp, caption
+
+# TODO break this into multiple functions
+def show_devices(
+    devices: str | Iterable[str] = None,
+    dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+    include_inventory: bool = False,
+    verbosity: int = 0,
+    outfile: Path = None,
+    group: str = None,
+    site: str = None,
+    label: str = None,
+    status: DeviceStatus = None,
+    state: str = None,
+    version: str = None,
+    pub_ip: str = None,
+    do_clients: bool = True,
+    do_stats: bool = False,
+    do_ssids: bool = False,
+    sort_by: str = None,
+    reverse: bool = False,
+    pager: bool = False,
+    do_json: bool = False,
+    do_csv: bool = False,
+    do_yaml: bool = False,
+    do_table: bool = False
+) -> None:
+    # include subscription implies include_inventory
+    if group:
+        group: CacheGroup = common.cache.get_group_identifier(group)
+    if site:
+        site: CacheSite = common.cache.get_site_identifier(site)
+    if label:
+        label: CacheLabel = common.cache.get_label_identifier(label)
+
+    resp = None
+    status = status or state
+    params = {
+        "group": None if not group else group.name,
+        "site": None if not site else site.name,
+        "status": None if not status else status.title(),
+        "label": None if not label else label.name,
+        "public_ip_address": pub_ip,
+        "calculate_client_count": do_clients,
+        "show_resource_details": do_stats,
+        "calculate_ssid_count": do_ssids,
+    }
+
+    params = {k: v for k, v in params.items() if v is not None}
+    if dev_type is None:
+        dev_type = None if devices else "all"
+    elif dev_type != "all":
+        dev_type = lib_to_api(dev_type)
+
+    default_tablefmt = "rich" if not verbosity else "yaml"
+
+    if devices:  # cencli show devices <device iden>
+        verbosity = verbosity or 99  # specific device implies verbose output vertically
+        default_tablefmt = "yaml"
+        resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
+    elif dev_type == "all":  # cencli show all | cencli show devices
+        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
+    else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
+        resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
+        if include_inventory:
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+            resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
+
+        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
+    title_sfx = [
+        f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
+    ] if not include_inventory else ["including Devices from Inventory"]
+    title = "Device Details" if not dev_type else f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}".rstrip()
+
+    # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
+    if include_inventory:
+        output_key = "serial"
+    elif dev_type and dev_type == "switch":
+        output_key = "name+serial"
+    else:
+        output_key = "name"
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        exit_on_fail=True,
+        output_by_key=output_key,
+        cleaner=cleaner.get_devices,
+        verbosity=verbosity,
+        output_format=tablefmt,
+        version=version
+    )
+
+def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
+    if not resp.output.get("logo"):
+        common.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
+    if not path.is_dir() and not path.parent.is_dir():
+        common.exit(f"[cyan]{path.parent}[/] directory not found, provide full path with filename, or an existing directory to use original filename")
+
+    import base64
+    file = path / resp.output["logo_name"] if path.is_dir() else path
+    if not os.access(file.parent, os.W_OK):
+        common.exit(f"{file.parent} is not writable")
+
+    img_data = base64.b64decode(resp.output["logo"].split(",")[1])
+    if file.write_bytes(img_data):
+        common.exit(f"Logo saved to {file}", code=0)
+    else:  # pragma: no cover
+        common.exit(
+            f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
+        )
+
+@app.command("all")
+def all_(
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show details for All devices [dim italic](that have checked in with Central)[/]."""
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
+
+    show_devices(
+        dev_type="all", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, status=status, state=state,
+        version=version, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by, reverse=reverse, pager=pager,
+        do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+    )
+
+
+@app.command()
+def devices(
+    devices: list[str] = typer.Argument(
+        None,
+        metavar=iden_meta.dev_many.replace("]", "|'all']"),
+        hidden=False,
+        autocompletion=lambda incomplete: [
+            m for m in [("all", "Show all devices"), *[m for m in common.cache.dev_completion(incomplete=incomplete)]]
+            if m[0].lower().startswith(incomplete.lower())
+        ],
+        help=f"Show details for a specific device {common.help_block('show details for all devices')}",
+        show_default=False,
+    ),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    pub_ip: str = typer.Option(None, help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show details for devices
+    """
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
+
+    devices = devices if devices is not None else ["all"]
+
+    if "all" in devices:
+        dev_type = "all"
+        devices = None
+    else:
+        dev_type = None
+
+    show_devices(
+        devices, dev_type=dev_type, include_inventory=with_inv, verbosity=verbose if not with_inv else verbose + 1, outfile=outfile, group=group,
+        site=site, status=status, state=state, version=version, label=label, pub_ip=pub_ip, do_stats=True, do_clients=True, sort_by=sort_by,
+        reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+    )
+
+
+@app.command()
+def aps(
+    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {common.help_block('--group', help_type='requires')}[/]"),
+    neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {common.help_block('--site', help_type='requires')}", show_default=False,),
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show details for APs
+
+    Use [cyan]cencli show aps -n --site <SITE>[/] to see lldp neighbors for all APs in a site.
+    """
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
+
+    if dirty:
+        if not group:
+            common.exit("[cyan]--group[/] must be provided with [cyan]--dirty[/] option.")
+
+        group: CacheGroup = common.cache.get_group_identifier(group)
+        resp = api.session.request(api.configuration.get_dirty_diff, group.name)
+        tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        render.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
+    elif neighbors:
+        if site is None:
+            common.exit("[cyan]--site <site name>[/] is required for neighbors output.")
+
+        site: CacheSite = common.cache.get_site_identifier(site)
+        resp: Response = api.session.request(api.topo.get_topo_for_site, site.id, )
+        tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+        cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
+        render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site, **cleaner_kwargs)
+    else:
+        show_devices(
+            aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label, status=status,
+            state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True, do_ssids=True,
+            sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+            do_table=do_table)
+
+@app.command("switches")
+def switches_(
+    switches: List[str] = common.arguments.get(
+        "devices",
+        default=None,
+        help=f"Show [dim italic]verbose[/] details for specific switch(es) {render.help_block('All switches (summary table)')}",
+        autocompletion=common.cache.dev_switch_completion,
+    ),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include switches in Inventory that have yet to connect", show_default=False,),
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show details for switches
+    """
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+
+    show_devices(
+        switches, dev_type='switch', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
+        status=status, state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True,
+        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        do_table=do_table)
+
+
+@app.command(name="gateways")
+def gateways_(
+    gateways: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
+    version: str = common.options.version,
+    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
+    verbose: int = common.options.verbose,
+    sort_by: SortDevOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show details for gateways
+    """
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+
+    show_devices(
+        gateways, dev_type='gw', include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label,
+        status=status, state=state, version=version, pub_ip=pub_ip, do_clients=True, do_stats=True,
+        sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
+        do_table=do_table)
+
+
+@app.command()
+def stacks(
+    switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    group: str = common.options.group,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    version: str = common.options.version,
+    verbose: int = common.options.verbose,
+    sort_by: SortStackOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show details for switch stacks."""
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+
+    if group:
+        group: CacheGroup = common.cache.get_group_identifier(group)
+
+    cleaner_kwargs = {"status": status, "version": version}
+    args = ()
+    kwargs = {}
+    func = api.monitoring.get_switch_stacks
+    if switches:
+        devs: list[CacheDevice] = [common.cache.get_dev_identifier(d, dev_type="switch", swack_only=True,) for d in switches]
+        if len(devs) == 1:  # if they specify a single switch we use the details call
+            func = api.monitoring.get_switch_stack_details
+            args = (devs[0].swack_id,)
+        else: # if they specify multiple switches we grab info for all stacks and filter in the cleaner
+            cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
+            if group:
+                kwargs = {"group": group.name}
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = api.session.request(func, *args, **kwargs)
+
+    title = "Switch stack details"
+    caption = None
+    if resp and "count" in resp.raw:
+        caption = f"Total # of Stacks Returned: [cyan]{resp.raw['count']}[/]"
+
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_switch_stacks, **cleaner_kwargs)
+
+
+@app.command()
+def inventory(
+    dev_type: ShowInventoryArgs = typer.Argument(ShowInventoryArgs.all,),
+    sub: bool = typer.Option(
+        None,
+        help=f"Show devices with applied subscription/license, or devices with no subscription/license applied. {common.help_block('show all')}",
+        show_default=False,
+    ),
+    key: str = typer.Option(None, help="Show all devices assigned to a specific subscription [dim](key)[/]", autocompletion=cache.sub_completion),
+    verbose: int = common.options.verbose,
+    sort_by: SortInventoryOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show [green]GreenLake[/] device inventory."""
+    dev_type = dev_type.value
+    title = f"{what_to_pretty(dev_type)} in Inventory"
+
+    if verbose:  # `show inventory -v` is the same as `show all --inv``
+        verbose -= 1
+
+        show_devices(
+            dev_type=dev_type, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
+        )
+        common.exit(code=0 if all([r.ok for r in api.session.requests if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    _api = glp_api or api
+    if key and dev_type == "all":
+        sub: CacheSub = cache.get_sub_identifier(key)
+        key = sub.key
+        dev_type = ShowInventoryArgs(sub.type)
+
+    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        # caption=caption,  # captions are added to Resonse Object in refresh_inv_db
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        set_width_cols={"services": {"min": 31}},
+        cleaner=cleaner.get_device_inventory,
+        sub=sub,
+        key=key
+    )
+
+
+# TODO break into seperate command group if we can still all show subscription without an arg to default to details
+@app.command()
+def subscriptions(
+    what: SubscriptionArgs = typer.Argument(SubscriptionArgs.details),
+    dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
+    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", autocompletion=cache.sub_completion, show_default=False),
+    sort_by: SortSubscriptionOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show subscription/license details or stats
+    """
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if what != "stats" else "yaml")
+
+    _cleaner = None
+    set_width_cols = None
+    _cleaner_kwargs = {}
+    caption = None
+    _api = glp_api or api
+    if what == "details":
+        resp = _api.session.request(cache.refresh_sub_db, sub_type=service, dev_type=dev_type)
+        title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
+        if resp.ok:
+            _cleaner = cleaner.get_subscriptions
+            set_width_cols = {"name": {"min": 39}}
+            if sort_by:
+                _cleaner_kwargs["default_sort"] = False
+            if not glp_api:  # pragma: no cover
+                try:
+                    _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
+                    _ok_cnt = len(resp.output) - _expired_cnt
+                    caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
+                except Exception as e:
+                    log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
+                    caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
+
+    elif what == "auto":
+        resp = api.session.request(api.platform.get_auto_subscribe)
+        if resp and "services" in resp.output:
+            _auto_subs = [s for s in resp.output["services"] if s != "dm"]
+            resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
+        title = "Services with auto-subscribe enabled"
+    elif what == "stats":
+        resp = api.session.request(api.platform.get_subscription_stats)
+        title = "Subscription Stats"
+    elif what == "names":
+        resp = api.session.request(common.cache.refresh_license_db)
+        title = "Valid Subscription/License Names"
+        set_width_cols = {"name": {"min": 39}}
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        set_width_cols=set_width_cols,
+        cleaner=_cleaner,
+        **_cleaner_kwargs
+    )
+
+
+@app.command()
+def swarms(
+    ap: str = typer.Argument(None, metavar=iden_meta.dev, help=f"Show settings for the Virtual Controller/Swarm associated with this AP.  {common.help_block('Show All Swarms')}", show_default=False, autocompletion=common.cache.dev_ap_completion),
+    config: bool = typer.Option(False, "-c", "--config", help="Get Swarm/Virtual Controller configuration for a specific swarm.  [dim italic]Valid/Applies if AP is provided[/]", show_default=False),
+    group: str = common.options.group,
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", help="Filter by swarm status", show_default=False, hidden=True,),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status
+    up: bool = typer.Option(False, "--up", help="Filter by swarms that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by swarms that are Down", show_default=False),
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by swarm Public IP", show_default=False,),
+    name: str = typer.Option(None, "--name", help="Filter by swarm/cluster name", show_default=False,),
+    sort_by: SortSwarmOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Swarms (AOS8 IAP Clusters) or settings for a specific swarm."""
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+    status = status or state
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    if ap:
+        device = common.cache.get_dev_identifier(ap, dev_type="ap", swack_only=True)
+        if device.is_aos10:
+            common.exit("This command is only valid for AOS8 APs")
+        if status is not None:
+            log.warning("--[bright_green]up[/]|--[red]down[/] option ignored.  Only applies when showing all swarms (no AP is provided)", caption=True)
+        if sort_by:
+            log.warning(f"[cyan]--sort[/] {sort_by.value} ignored as AP: [cyan]{device.name}[/] was specified.", caption=True)
+
+        if config:
+            title = f"Swarm config details for swarm associated with: {device.summary_text}"
+            resp = api.session.request(api.configuration.get_swarm_config, device.swack_id)
+        else:
+            title = f"Swarm details for swarm associated with: {device.summary_text}"
+            resp = api.session.request(api.monitoring.get_swarm_details, device.swack_id)
+    else:
+        title = "All Swarms"
+        resp = api.session.request(api.monitoring.get_swarms, group=group, status=None if not status else status.value, public_ip_address=pub_ip, swarm_name=name)
+
+    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
+
+class ParsedCombinedResp:
+    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
+        self.dev_type = dev_type
+        self.passed = passed
+        self.failed = failed
+        self.output = output
+        self.raw = raw
+        self.elapsed = elapsed
+        self.verbosity = verbosity
+
+    @property
+    def to_dict(self) -> dict:
+        return {"response": self.response._response, "output": self.clean, "raw": self.raw, "elapsed": self.elapsed}
+
+    @property
+    def clean(self):
+        _clean = sorted(
+            [inner for r in self.output for inner in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)],
+            key=lambda d: d["device"]
+        )
+        return cleaner.ensure_common_keys(_clean)
+
+    @property
+    def response(self):
+        return sorted(self.passed or self.failed, key=lambda r: r.rl)[0]
+
+def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response], verbosity: int = 0) -> ParsedCombinedResp:
+    _failed = [r for r in responses if not r.ok]
+    _passed = responses if not _failed else [r for r in responses if r.ok]
+
+    if _failed:
+        try:
+            log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
+        except Exception:  # pragma: no cover
+            log.warning("Incomplete output, failures occured, see log")
+
+
+    output = [r.output for r in _passed]
+    raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
+    elapsed = sum(r.elapsed for r in _passed)
+
+    parsed = ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed, verbosity=verbosity)
+    return {**parsed.to_dict}
+
+def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str]]:
+    if isinstance(data, dict) and "ethernets" in data:  # single AP output
+        data = data["ethernets"]
+
+    try:
+        filtered = data
+        filter_caption = None
+        if filters.slow:
+            filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) < 1000]
+            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [bright_magenta]{len(filtered)}[/]"
+        elif filters.fast:
+            filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) >= 2500]
+            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [bright_magenta]{len(filtered)}[/]"
+        elif filters.up:
+            filtered = [d for d in data if d.get("status", "") == "Up"]
+        elif filters.down:
+            filtered = [d for d in data if d.get("status", "") == "Down"]
+
+        if not filtered:
+            log.warning("Filters resulted in no results. Showing unfiltered output", caption=True)
+        else:
+            data = filtered
+        if filter_caption:
+            caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
+
+    except Exception as e:  # pragma: no cover
+        log.exception(f"{e.__class__.__name__} in do_interface_filters\n{e}")
+        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub", caption=True)
+
+    return data, caption
+
+
+# TODO define sort_by fields
+@app.command()
+def interfaces(
+    device: str = typer.Argument(
+        "all",
+        metavar=f"{iden_meta.dev.replace(']', '|all]')}",
+        autocompletion=lambda incomplete: [item for item in [*common.cache.dev_completion(incomplete), ("all", "Return interface details for all devices of a given type, requires --ap, --gw, or --switch",)] if item[0].startswith(incomplete)],
+        help=f"Device to fetch interfaces from {common.help_block('ALL (must provide one of --ap, --gw, or --switch)')}",
+        show_default=False,
+    ),
+    slot: str = typer.Argument(None, help="Slot name of the ports to query [italic dim](chassis only)[/]", show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    do_gw: bool = typer.Option(False, "--gw", help="Show interfaces for all gateways, [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
+    do_ap: bool = typer.Option(False, "--ap", help="Show interfaces for all APs [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
+    do_switch: bool = typer.Option(False, "--switch", help="Show interfaces for all switches [italic dim](Only applies with device 'all' or when no device is provided)[/]"),
+    _do_switch: bool = typer.Option(False, "--cx", "--sw", hidden=True,),  # hidden support common alternative switch flags
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get intrfaces for entire stack [grey42]\[default: Show interfaces for specified stack member only][/]",),
+    # port: List[int] = typer.Argument(None, help="Optional list of interfaces to filter on"),
+    up: bool = typer.Option(False, "--up", help="Filter by interfaces that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by interfaces that are Down", show_default=False),
+    slow: bool = typer.Option(False, "-s", "--slow", help="Filter by Up interfaces that have negotiated a speed below 1Gbps", show_default=False),
+    fast: bool = typer.Option(False, "-f", "--fast", help="Filter by Up interfaces that have negotiated a speed at or above 2.5Gbps (Smart Rate)", show_default=False),
+    verbose: int = common.options.verbose,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    yes: bool = common.options.get("yes", help="Bypass confirmation prompts - Assume Yes [dim italic](Prompt occurs if # of API calls required > 15)[/]"),
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show interfaces/details
+
+    Show interfaces for a device, or show interfaces for all devices (default if no device is specified) of a provided device type.
+    --site & --group filters only apply when listing all interfaces of a given device type.
+    """
+    do_switch = do_switch or _do_switch
+    title_sfx = ""
+    context_filters = {
+        "group": group,
+        "site": site
+    }
+
+    filters = ShowInterfaceFilters(up=up, down=down, slow=slow, fast=fast)
+    if not filters.ok:
+        log.warning(f"Contradictory flags! {filters.error} together don't make sense.  Ignoring.", caption=True)
+
+    if device != "all":
+        if any([site, group]):
+            warn_msg = ",".join([f'[cyan]--{k} {v}[/]' for k, v in context_filters.items() if v])
+            log.warning(f"{warn_msg} ignored as the option does not apply when a specific device is provided.", caption=True)
+        dev: CacheDevice = common.cache.get_dev_identifier(device, swack=True,)
+        dev_type = dev.generic_type
+        devs = [dev]
+    else:
+        _dev_type = [_dev_type for _dev_type, var in {"ap": do_ap, "gw": do_gw, "switch": do_switch}.items() if var]
+        if not _dev_type:
+            common.exit("One of [cyan]--ap[/], [cyan]--gw[/], [cyan]--switch[/] :triangular_flag: is required when no device is specified")
+        dev_type = _dev_type.pop(0)
+
+        if _dev_type:
+            common.exit("Only one of [cyan]--ap[/], [cyan]--gw[/], [cyan]--switch[/] :triangular_flag: can be provided.")
+
+        site: CacheSite = site if not site else common.cache.get_site_identifier(site)
+        group: CacheGroup = group if not group else common.cache.get_group_identifier(group)
+
+        # Update cache basesd on provided filters
+        kwargs = {"site": site if not site else site.name} if site else {"group": group if not group else group.name}  # monitoring API only allows 1 filter
+        dev_resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **kwargs)
+        if not dev_resp:
+            render.display_results(dev_resp, tablefmt="action", exit_on_fail=True)
+
+        devs: List[CacheDevice] = [cd for cd in [CacheDevice(d) for d in common.cache.devices] if cd.generic_type == dev_type]
+        if site:
+            devs = [d for d in devs if d.site == site.name]
+            title_sfx = f" in site {site.name}"
+        if group:
+            devs = [d for d in devs if d.group == group.name]
+            title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
+
+        if not devs:
+            common.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
+
+    if dev_type == "gw":
+        batch_reqs = [BatchRequest(api.monitoring.get_gateway_ports, d.serial) for d in devs]
+    elif dev_type == "ap":
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, "ap", d.serial) for d in devs]
+    else:
+        batch_reqs = [
+                BatchRequest(
+                    api.monitoring.get_switch_ports,
+                    d.swack_id or d.serial,
+                    slot=slot,
+                    stack=d.swack_id is not None,
+                    aos_sw=d.type == "sw"
+                ) for d in devs
+            ]
+
+    if len(batch_reqs) > 15:  # pragma: no cover
+        render.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
+        render.confirm(yes)
+
+    batch_resp = api.session.batch_request(batch_reqs)
+
+    # We need to include name and dev_type from cache for multi-device listings (not included in payload of all the interface endpoints)
+    if len(batch_resp) > 1:
+            for d, r in zip(devs, batch_resp):
+                if r.ok:
+                    r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in utils.listify(r.output)]
+
+    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose,))
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
+    title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
+
+    caption = []
+    min_width = None
+    if dev_type == "switch":
+        if "sw" in [d.type for d in devs] and resp.ok:
+            dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
+            caption = ["[deep_sky_blue1]\u2139[/]  Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]  # \u2139 = :information:
+        if "cx" in [d.type for d in devs] and resp.ok:
+            caption = ["[deep_sky_blue1]\u2139[/]  [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
+            min_width = 106
+
+    if resp:
+        try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
+            ifaces = resp.output if "ethernets" not in resp.output else resp.output["ethernets"]
+            ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
+            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i["status"] is None]))
+            if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
+                word = "devices" if len(_invalid_payload) > 1 else "device"
+                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
+                ifaces = [i for i in ifaces if i["status"] is not None]
+
+            up_ifaces = [i["status"].lower() for i in ifaces].count("up")
+            down_ifaces = len(ifaces) - up_ifaces
+
+            caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
+        except Exception as e:  # pragma: no cover
+            log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
+
+        if filters:
+            resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
+
+    # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        output_by_key=None,
+        group_by=None if len(batch_resp) <= 1 else "device",
+        min_width=min_width,
+        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
+        verbosity=verbose,
+        dev_type=dev_type,
+    )
+
+
+@app.command()
+def poe(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, hidden=False, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    port: str = typer.Argument(None, show_default=False, help="Show PoE details for a specific interface",),
+    _port: str = typer.Option(None, "--port", show_default=False, hidden=True,),
+    powered: bool = typer.Option(False, "-p", "--powered", help="Show only interfaces currently delivering power", show_default=False,),
+    verbose: int = common.options.verbose,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show (switch) interface poe details
+
+    [italic][deep_sky_blue1]:information:[/]  Only supported on switches[/italic]
+    """
+    port = _port if _port else port
+    dev = common.cache.get_dev_identifier(device, dev_type="switch")
+    resp = api.session.request(api.monitoring.get_switch_poe_details, dev.serial, port=port, aos_sw=dev.type == "sw")
+    resp.output = utils.unlistify(resp.output)
+    caption = "  Power values are in watts."
+    if resp:
+        resp.output = utils.listify(resp.output)  # if they specify an interface output will be a single dict.
+        if not port:
+            _delivering_count = len(list(filter(lambda i: i.get("poe_detection_status", 99) == 3, resp.output)))
+            caption = f"{caption}  Interfaces delivering power: [bright_green]{_delivering_count}[/]"
+            try:
+                total_draw = round(sum(p.get('power_drawn_in_watts', 0) for p in resp.output), 1)
+                # aos_sw is always 0 for power_drawn_in_watts (if it has the field).  cx has amperage_drawn_in_milliamps field but it's always 0 so shouldn't hurt on non poe switch were power_drawn_in_watts still sums to 0
+                total_draw = total_draw or round(sum([round(p.get("amperage_drawn_in_milliamps", 0) / 1000 * p.get("port_voltage_in_volts", 0), 2) for p in resp.output]), 2)
+                reserved = round(sum(p.get('reserved_power_in_watts', 0) for p in resp.output), 1)
+                allocated = round(sum(p.get('pse_allocated_power', 0) for p in resp.output), 1)
+                denied = len([p for p in resp.output if p.get("power_denied_count")])
+                counts_caption = [f"Total PoE [dark_olive_green2]Draw[/]: [cyan]{total_draw}[/], [dark_olive_green2]Reserved[/]: [cyan]{reserved}[/], [dark_olive_green2]Allocated[/]: [cyan]{allocated}[/]"]
+
+                if denied:
+                    counts_caption += [f"[dark_orange3]\u26a0[/]  {denied} interfaces have a power denied count > 0"]
+                counts_caption = '\n'.join(counts_caption)
+                caption = f"{caption}\n {counts_caption}"
+            except Exception as e:  # pragma: no cover
+                log.exception(f"{repr(e)} in show poe while gathering poe counts")
+        if "poe_slots" in resp.output[0] and resp.output[0]["poe_slots"]:  # CX has the key but it appears to always be an empty dict
+            caption = f"{caption}\n Switch Poe Capabilities (watts): Max: [cyan]{resp.output[0]['poe_slots'].get('maximum_power_in_watts', '?')}[/]"
+            caption = f"{caption}, Draw: [cyan]{resp.output[0]['poe_slots'].get('power_drawn_in_watts', '?')}[/]"
+            caption = f"{caption}, In use: [cyan]{resp.output[0]['poe_slots'].get('power_in_use_in_watts', '?')}[/]"
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"Poe details for {dev.name}",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        pager=pager,
+        outfile=outfile,
+        output_by_key="port",
+        cleaner=cleaner.get_switch_poe_details,
+        verbosity=verbose,
+        powered=powered,
+        aos_sw=dev.type == "sw"
+    )
+    # TODO output cleaner / sort & reverse options
+
+
+@app.command()
+def vlans(
+    dev_site: str = typer.Argument(
+        ...,
+        metavar=f"{iden_meta.dev} (vlans for a device) OR {iden_meta.site} (vlans for a site)",
+        autocompletion=common.cache.dev_gw_switch_site_completion,
+        show_default=False,
+    ),
+    # stack: bool = typer.Option(False, "-s", "--stack", help="Get VLANs for entire stack [grey42]\[default: Get VLANs for the individual member switch specified][/]"),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by VLAN status"),
+    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
+    up: bool = typer.Option(False, "--up", help="Filter by VLANs that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by VLANs that are Down", show_default=False),
+    sort_by: SortVlanOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show VLANs for device or site
+
+    Command applies to sites, gateways, or switches
+    """
+    # TODO cli command lacks the filtering options available from method currently.
+    # TODO verify stack_ports are part of output
+    if (up or down) and not (up and down):
+        status = StatusOptions.down if down else StatusOptions.up
+    status = status or state
+
+    obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), swack=True)
+    if obj.is_site:
+        resp = api.session.request(api.topo.get_site_vlans, obj.id)
+    elif obj.is_dev:
+        if obj.generic_type == "switch":
+            if obj.swack_id:
+                iden = obj.swack_id
+                stack = True
+            else:
+                iden = obj.serial
+                stack = False
+
+            resp = api.session.request(api.monitoring.get_switch_vlans, iden, stack=stack, aos_sw=obj.type == "sw", status=None if not status else status.name)
+        elif obj.type.lower() == 'gw':
+            resp = api.session.request(api.monitoring.get_gateway_vlans, obj.serial)
+        else:
+            common.exit("Command is only valid on gateways and switches")
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{obj.name} Vlans",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.get_vlans
+    )
+
+def _get_reservation_pool_from_config(cfg_resp: Response, res_by_mac: Dict[str, dict]) -> Dict[str, dict]:
+    dhcp_pools = {}
+    pvids = {}
+    for idx, line in enumerate(cfg_resp.output):
+        if line.lstrip().startswith("ip dhcp pool"):
+            pool = line.removeprefix("ip dhcp pool").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("network")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("network ")
+                network = ipaddress.ip_network("/".join(network_line.split()))
+                dhcp_pools[network] = pool
+        elif line.startswith("interface vlan"):
+            pvid = line.removeprefix("interface vlan").strip()
+            _slice = slice(idx, idx + cfg_resp.output[idx:].index("!"))
+            network_line = [line for line in cfg_resp.output[_slice] if line.lstrip().startswith("ip address")]
+            if network_line:
+                network_line = network_line[0].lstrip().removeprefix("ip address ")
+                network = ipaddress.ip_network("/".join(network_line.split()), strict=False)
+                pvids[network] = pvid
+
+    for mac, data in res_by_mac.items():
+        if data.get("ip"):
+            ip = ipaddress.ip_address(data["ip"])
+            matched = [net for net in dhcp_pools if ip in net]
+            if matched:
+                res_by_mac[mac]["pool_name"] = dhcp_pools[matched[0]]
+                res_by_mac[mac]["subnet"] = str(matched[0])
+            pvid_match = [net for net in pvids if ip in net]
+            if pvid_match:
+                res_by_mac[mac]["vlan_id"] = pvids[pvid_match[0]]
+    return res_by_mac
+
+
+def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Response:
+    reservations = [gw for gw in resp.output if gw.get("reserved", False) is True]
+    if not reservations:
+        return resp
+
+    caas = CaasAPI()
+    cfg_resp = api.session.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
+    if not cfg_resp.ok:
+        log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
+        return resp
+
+    cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
+    dhcp_res_lines = [line for line in cfg_resp.output if line.lstrip().startswith("ip dhcp reserved hardware-address")]
+    if not dhcp_res_lines:
+        return resp
+
+    res_by_mac = {r["mac"]: r for r in reservations}
+    for line in dhcp_res_lines:
+        match = re.match("ip dhcp reserved hardware-address (.*) ip-address (.*) hostname (.*)", line)
+        if match:
+            mac, ip, hostname = map(str.strip, match.groups())
+            if mac in res_by_mac and res_by_mac[mac].get("ip", "err") == ip:
+                res_by_mac[mac]["client_name"] = hostname
+
+    try:
+        res_by_mac = _get_reservation_pool_from_config(cfg_resp=cfg_resp, res_by_mac=res_by_mac)
+    except Exception as e: # pragma: no cover
+        msg = f"{e.__class__.__name__} while trying to extract reservation info from config in _get_reservation_pool_from_config."
+        log.exception(f"{msg}\n{e}")
+        log.error(f"{msg}", caption=True)
+
+
+    output_by_mac = {r["mac"]: r for r in resp.output}
+    combined = {**output_by_mac, **res_by_mac}
+    resp.output = list(combined.values())
+    return resp
+
+
+@app.command()
+def dhcp(
+    what: DhcpArgs = typer.Argument(..., show_default=False,),
+    dev: str = typer.Argument(
+        ...,
+        metavar=f"{iden_meta.dev} (Valid for Gateways Only) ",
+        autocompletion=common.cache.dev_completion,
+        show_default=False,
+    ),
+    no_res: bool = typer.Option(False, "--no-res", is_flag=True, help="Filter out reservations"),
+    sort_by: SortDhcpOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    verbosity: int = common.options.verbose,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show DHCP pool or lease details (gateways only)
+
+    -v (verbose) will extract hostnames for defined reservations from GW config
+    """
+    dev: CentralObject = common.cache.get_dev_identifier(dev, dev_type="gw")
+
+    if what == "pools":
+        resp = api.session.request(api.monitoring.get_dhcp_pools, dev.serial)
+    else:  # clients
+        resp = api.session.request(api.monitoring.get_dhcp_clients, dev.serial, reservation=not no_res)
+        if resp.ok and not no_res and verbosity:
+            resp = _get_reservation_info_from_config(resp, dev=dev)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{dev.name} DHCP {what.rstrip('s')} details",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.get_dhcp,
+    )
+
+
+@app.command()
+def upgrade(
+    devices: List[str] = typer.Argument(
+        ...,
+        metavar=iden_meta.dev_many,
+        hidden=False,
+        autocompletion=common.cache.dev_completion,
+        show_default=False,
+    ),
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show firmware upgrade status (by device)
+    """
+    # Allow unnecessary keyword status `cencli show upgrade status <dev>` or `cencli show upgrade device <dev>`
+    ignored_subcommands = ["status", "device"]
+    devices = [d for d in devices if d not in ignored_subcommands]
+
+    if not devices:
+        common.exit("Missing required parameter [cyan]<device>[/]")
+
+    devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, swack=True,) for dev in devices]
+    kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
+    batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
+    failed = [r for r in batch_resp if not r.ok]
+    passed = [r for r in batch_resp if r.ok]
+
+    if passed:
+        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, passed)]
+        rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
+        resp = passed[-1]
+        resp.rl = rl[0]
+        resp.output = combined_out
+        if failed:
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
+    else:
+        resp = batch_resp
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Upgrade Status",
+        pager=pager,
+        outfile=outfile,
+        cleaner=cleaner.simple_kv_formatter,
+    )
+
+
+@app.command("cache", hidden=True)
+def cache_(
+    args: List[CacheArgs] = typer.Argument(None, help="[cyan]all[/] Shows data in [italic bright_green]the most pertinent[/] tables", show_default=False),
+    all: bool = typer.Option(False, "--all", help="This is the Super [cyan]all[/] option, shows data in [bright_green italic]every[/] table.", show_choices=False),
+    no_page: bool = typer.Option(False, "--no-page", help="For [cyan]all[/] | [cyan]--all[/] options, you hit Enter to see the next table.  This option disables that behavior.", show_default=False,),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+):
+    """Show contents/size/record-count in Local Cache.
+
+    By default (or with [cyan]all[/] as argument) the command shows the data in the most frequently used tables:
+        devices, inventory, sites, groups, templates, labels, licenses, clients
+        Use [cyan]--all[/] flag to see data for all tables.
+
+    Use [cyan]tables[/] as argument to see summary and headers for all tables.
+    """
+    def get_fields(data: List[Dict[str, Any]], name: str = None) -> List[str]:
+        data = [] if not data else data[0].keys()
+        pfx = ">>" if not name else f">> {name}"
+        return f"[bright_green]{pfx} fields[/]:\n{utils.color(list(data), 'cyan')}".splitlines()
+
+    def sort_devices(data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        # make device order from cache match device order from other show device commands
+        return sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
+
+    args = ('all',) if not args else args
+    tablefmt = common.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table, default="rich")
+
+    if all or "all" in args:
+        tables = common.cache.all_tables if all else common.cache.key_tables
+        length = len(common.cache) if all else len(common.cache._tables)
+        for idx, t in enumerate(tables, start=1):
+            data = t.all()
+            if t.name == "devices":
+                data = sort_devices(data)
+
+            render.display_results(data=data, tablefmt=tablefmt, title=t.name, caption=f'[turquoise2]{len(data)}[/] items in [medium_spring_green]{t.name}[/] cache.', pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+            if not no_page and render.econsole.is_terminal and not idx == length:
+                render.pause()  # pragma: no cover
+
+    elif "tables" in args:
+        tables = common.cache.all_tables
+        data = [f"[dark_olive_green2]{t.name}[/]: records: [cyan]{len(t)}[/]\n    {' '.join(get_fields(t.all()))}" for t in tables]
+        render.display_results(data=data, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, output_by_key=None)
+
+    else:
+        for idx, arg in enumerate(args, start=1):
+            cache_out: List[Document] = getattr(common.cache, arg)
+            cache_out = [dict(d) for d in cache_out]
+            arg = arg if not hasattr(arg, "value") else arg.value
+            if arg == "devices":
+                cache_out = sort_devices(cache_out)
+
+            caption = f"{arg.title()} in cache: [cyan]{len(cache_out)}[/]"
+            render.display_results(
+                data=cache_out,
+                tablefmt=tablefmt,
+                title=f'Cache {arg.title().replace("_", " ")}',
+                pager=pager,
+                outfile=outfile,
+                sort_by=sort_by,
+                reverse=reverse,
+                output_by_key=None,
+                stash=False,
+                caption=caption,
+                full_cols=[] if "subscriptions" not in args else "tier",
+            )
+            if not no_page and render.econsole.is_terminal and not idx == len(args):
+                render.pause()  # pragma: no cover
+
+    account_msg = "" if config.workspace in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.workspace}[/] "
+    render.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(common.cache)}[/], Cache File Size: [cyan]{common.cache.size}[reset]')
+
+def _build_groups_caption(data: List[dict]) -> List[str]:
+    if not data:
+        return
+
+    total = ("Total", len(data),)
+    template = ("Template", len(list(filter(lambda g: any([g.get("wired_tg"), g.get("wlan_tg")]), data))),)
+    mon_only = ("Monitor Only (cx or sw)", len(list(filter(lambda g: any([g.get("monitor_only_cx"), g.get("monitor_only_sw")]), data))),)
+    aos10 = ("AOS10", len(list(filter(lambda g: g.get("aos10") is True, data))),)
+    mb = ("MicroBranch", len(list(filter(lambda g: g.get("microbranch") is True, data))),)
+    sdwan = ("EdgeConnect SD-WAN", len(list(filter(lambda g: "sdwan" in g.get("allowed_types", {}), data))),)
+    counts = [total, template, mon_only, aos10, mb, sdwan]
+
+    caption, _caption = [], []
+    for text, count in counts:
+        if count:
+            _caption += [f'[bright_green]{text}[/] Groups: [cyan]{count}[/]']
+    if len(_caption) > 3:
+        for chunk in utils.chunker(_caption, 3):
+            caption += [", ".join(chunk)]
+
+    return caption or _caption
+
+@app.command(help="Show groups/details")
+def groups(
+    sort_by: SortGroupOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    resp = api.session.request(common.cache.refresh_group_db)
+    caption = None if not resp.ok else _build_groups_caption(resp.output)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="Groups", caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, exit_on_fail=True, outfile=outfile, cleaner=cleaner.show_groups, cleaner_format=tablefmt)
+
+
+@app.command()
+def labels(
+    sort_by: SortLabelOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show labels/details"""
+    resp = api.session.request(common.cache.refresh_label_db)
+    tablefmt = common.get_format(do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_labels)
+
+
+def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
+    if not resp.ok:
+        return
+
+    caption = f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    counts, count_caption = {}, None
+    for do, field in zip([count_state, count_country], ["state", "country"]):
+        if do:
+            _cnt_list = [site[field] for site in resp.output if site[field]]
+            _cnt_dict = {
+                item: _cnt_list.count(item) for item in set(_cnt_list)
+            }
+            counts = {**counts, **_cnt_dict}
+
+        if counts:
+            count_caption = ", ".join([f'{k}: [cyan]{v}[/]' for k, v in counts.items()])
+    if count_caption:
+        caption = f'[reset]{caption}, {count_caption}[reset][/]'
+
+    return caption
+
+
+@app.command(short_help="Show sites/details")
+def sites(
+    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=common.cache.site_completion, show_default=False),
+    count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
+    count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
+    sort_by: SortSiteOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
+
+    site = None if site and site.lower() == "all" else site
+    if not site:
+        resp = api.session.request(common.cache.refresh_site_db)
+        cleaner_func = None  # No need to clean cache sends through model/cleans
+    else:
+        site: CacheSite = common.cache.get_site_identifier(site)
+        resp = api.session.request(api.central.get_site_details, site.id)
+        cleaner_func = cleaner.sites
+
+    # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
+    # Country is blank when added via API and not provided.  Find public API to lookup country during add
+    caption = _build_site_caption(resp, count_state=count_state, count_country=count_country)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Sites" if not site else f"{site.name} site details",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        caption=caption,
+        cleaner=cleaner_func,
+    )
+
+
+@app.command()
+def templates(
+    name: str = typer.Argument(
+        None,
+        help=f"Template: {escape('[name]')} or Device: {escape(iden_meta.dev)}",
+        autocompletion=common.cache.dev_template_completion,
+        show_default=False,
+    ),
+    group: str = typer.Argument(None, help=f"Get Templates for a specific Group {common.help_block('All Groups/Templates')}", autocompletion=common.cache.group_completion, show_default=False),
+    _group: str = typer.Option(
+        None, "--group",
+        help=f"Get Templates for a specific Group {common.help_block('All Groups/Templates')}",
+        hidden=False,
+        autocompletion=common.cache.template_group_completion,
+        show_default=False,
+    ),
+    device_type: DevTypes = common.options.device_type,
+    version: str = common.options.get("version", help="[Templates] Filter by software version Template applies to."),
+    model: str = typer.Option(None, metavar="<model>", help="[Templates] Filter by model Template applies to.", show_default=False,),
+    #  variablised: str = typer.Option(False, "--with-vars",
+    #                                  help="[Templates] Show Template with variable place-holders and vars."),
+    sort_by: SortTemplateOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show templates/details"""
+    # Allows unnecessary keyword group "cencli show templates group WadeLab"
+    if name and name.lower() == "group":
+        name = None
+
+    group = group or _group
+    if group:
+        group: CentralObject = common.cache.get_group_identifier(group)
+
+    obj = None if not name else common.cache.get_identifier(name, ("dev", "template"), device_type=device_type, group=None if not group else group.name)
+
+    params = {
+        # "name": name,
+        "device_type": device_type,  # valid to API = IAP, ArubaSwitch, MobilityController, CX converted in api module
+        "version": version,
+        "model": model
+    }
+    params = {k: v for k, v in params.items() if v is not None}
+
+    if obj:
+        title = f"{obj.name.title()} Template"
+        if obj.is_dev:  # They provided a dev identifier
+            resp = api.session.request(api.configuration.get_variablised_template, obj.serial)
+        else:  #  obj.is_template
+            resp = api.session.request(api.configuration.get_template, group=obj.group, template=obj.name)
+    elif group:
+        title = "Templates in Group {} {}".format(group.name, ', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = api.session.request(api.configuration.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
+    elif params:  # show templates - Full update and show data from cache
+        title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
+        resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
+    else:
+        title = "All Templates"  # TODO get_all_templates return last failure if any occur, can return resp with passed responses and Partial failure noted in caption
+        resp = api.session.request(common.cache.refresh_template_db)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, exit_on_fail=True)
+
+
+@app.command()
+def variables(
+    device: str = typer.Argument(
+        None,
+        metavar=f"{iden_meta.dev.rstrip(']')}|all]",
+        help=common.help_block('all'),
+        autocompletion=lambda incomplete: [
+            m for m in [d for d in [("all", "Show Variables for all templates"), *common.cache.dev_completion(incomplete=incomplete)]]
+            if m[0].lower().startswith(incomplete.lower())
+        ] or [],
+        show_default=False,
+    ),
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+):
+    """Show Variables for all or a specific device"""
+    dev = None
+    if device and device != "all":
+        dev = common.cache.get_dev_identifier(device, include_inventory=True, swack=True)
+
+    resp = api.session.request(api.configuration.get_variables, serial=None if not dev else dev.serial,)
+    if resp.ok and dev:
+        resp.output = resp.output.get("variables", resp.output)
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="json")
+    if not dev and tablefmt in ["csv", "rich", "tabulate"] and len(resp.output) > 1:
+        all_keys = [sorted(resp.output[dev].keys()) for dev in resp.output]
+        if not all([all_keys[0] == key_list for key_list in all_keys[1:]]):
+            tablefmt = "json"
+            log.warning("Format changed to [cyan]JSON[/].  All variable names need to be identical for all devices for csv and table output.", caption=True)
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="Variables" if not dev else f"{dev.summary_text} Variables",
+        pager=pager,
+        outfile=outfile,
+    )
+
+
+@app.command()
+def lldp(
+    device: List[str] = typer.Argument(
+        ...,
+        metavar=iden_meta.dev_many,
+        autocompletion=common.cache.dev_switch_ap_completion,
+        show_default=False,
+    ),
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+
+) -> None:
+    """Show lldp neighbor information
+
+    Valid on APs and switches
+
+    NOTE: AOS-SW will return LLDP neighbors, but only reports neighbors for connected Aruba devices managed in Central
+    """
+    _devs: list[CacheDevice] = [common.cache.get_dev_identifier(_dev, dev_type=("ap", "switch"), swack=True,) for _dev in device if not _dev.lower().startswith("neighbor")]
+
+    # in case they included 2 members of same stack on command line (by serial or mac).  swack only helps if called by name
+    stack_ids = []
+    devs: list[CacheDevice] = []
+    for dev in _devs:
+        if dev.swack_id:
+            if dev.swack_id not in stack_ids:
+                stack_ids.append(dev.swack_id)
+                devs.append(dev)
+        else:
+            devs.append(dev)
+
+
+    reqs = {dev: BatchRequest(api.topo.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
+    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
+    reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_stack_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
+
+
+    batch_resp = api.session.batch_request(list(reqs.values()))
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+
+    last_resp = sorted(batch_resp, key=lambda r: r.rl)
+    rl = last_resp[0].rl
+    for idx, (dev, r) in enumerate(zip(list(reqs.keys()), batch_resp), start=1):
+        title = f"{dev.summary_text} [cyan bold]LLDP Neighbor information[/]"
+        if tablefmt not in ["table", "rich"]:
+            render.console.print(f'[green]{"-" * 5}[/] {title} [green]{"-" * 5}[/]')
+
+        if idx == len(reqs):  # ensure rate limit caption reflects last call made.
+            r.rl = rl
+
+        render.display_results(
+            r,
+            tablefmt=tablefmt,
+            title=title,
+            caption = None if dev.type != "sw" else "  [dark_orange3]\u26a0[/]  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]",
+            pager=pager,
+            outfile=outfile,
+            suppress_rl=idx != len(reqs),
+            output_by_key=["port", "localPort"],
+            cleaner=cleaner.get_lldp_neighbor,
+        )
+
+@app.command()
+def certs(
+    query: str = typer.Argument(None, metavar='[name|hash]', autocompletion=common.cache.cert_completion, help="Show details for certificates matching query [dim italic]name or hash[/]", show_default=False,),
+    valid: bool = typer.Option(None, help="Filter by certificate validity [dim italic]expiration status[/]", show_default=False,),
+    server_cert: bool = typer.Option(None, "--svr", help="Filter by certificate type: Server Certificate", show_default=False,),
+    ca_cert: bool = typer.Option(None, "--ca", help="Filter by certificate type: CA", show_default=False,),
+    crl: bool = typer.Option(None, "--crl", help="Filter by certificate type: CRL", show_default=False,),
+    int_ca_cert: bool = typer.Option(None, "--int-ca", help="Filter by certificate type: Intermediate CA", show_default=False,),
+    ocsp_resp_cert: bool = typer.Option(None, "--ocsp-resp", help="Filter by certificate type: OCSP responder", show_default=False,),
+    ocsp_signer_cert: bool = typer.Option(None, "--ocsp-signer", help="Filter by certificate type: OCSP signer", show_default=False,),
+    ssh_pub_key: bool = typer.Option(None, "--public", help="Filter by certificate type: SSH Public cert", show_default=False, hidden=True,),
+    sort_by: SortCertOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """"Show certificates/details"
+    """
+    resp = api.session.request(common.cache.refresh_cert_db, query=query)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    type_filter = {
+        "SERVER_CERT": server_cert,
+        "CA_CERT": ca_cert,
+        "CRL": crl,
+        "INTERMEDIATE_CA": int_ca_cert,
+        "OCSP_RESPONDER_CERT": ocsp_resp_cert,
+        "OCSP_SIGNER_CERT": ocsp_signer_cert,
+        "PUBLIC_CERT": ssh_pub_key
+    }
+    cert_types = [k for k, v in type_filter.items() if v is True]
+
+    render.display_results(
+        resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_certificates, valid=valid, cert_types=cert_types
+    )
+
+# TODO show task --device  look up task by device if possible
+@app.command()
+def task(
+    task_id: str = typer.Argument(..., show_default=False),
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show status of previously issued task/command
+
+    Requires task_id which is provided in the response of the previously issued command.
+        Example: [cyan]cencli bounce interface idf1-6300-sw 1/1/11[/] will queue the command
+                and provide the task_id.
+    """
+    resp = api.session.request(api.device_management.get_task_status, task_id)
+    if "reason" in resp.output and "expired" in resp.output["reason"]:
+        resp.output["reason"] = resp.output["reason"].replace("expired", "invalid/expired")
+
+    render.display_results(resp, tablefmt="action", title=f"Task {task_id} status", outfile=outfile)
+
+
+@app.command()
+def run(
+    device: str = common.arguments.device,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show running config for a device
+
+    APs get the last known running config from Central
+    Switches and GWs request the running config from the device
+    """
+    dev = common.cache.get_dev_identifier(device)
+
+    if dev.type != "ap":
+        type_to_command = {"cx": 6002, "sw": 1022, "gw": 2385}
+        clitshoot.send_cmds_by_id(dev, commands=[type_to_command[dev.type]], pager=pager, outfile=outfile, exit_on_fail=True)
+        # exits
+
+    resp = api.session.request(api.configuration.get_device_configuration, dev.serial)
+    if isinstance(resp.output, str) and resp.output.startswith("{"):  # pragma: no cover
+        try:
+            cli_config: dict[str, Any] = json.loads(resp.output)
+            cli_config = cli_config.get("_data", cli_config)
+            resp.output = cli_config
+        except Exception as e:
+            log.exception(e)
+
+    render.display_results(resp, pager=pager, outfile=outfile)
+
+
+# TODO --status does not work
+# https://web.yammer.com/main/org/hpe.com/threads/eyJfdHlwZSI6IlRocmVhZCIsImlkIjoiMTQyNzU1MDg5MTQ0MjE3NiJ9
+@app.command("config")
+def config_(
+    group_dev: str = common.arguments.get(
+        "group_dev",
+        metavar=iden_meta.group_dev_cencli,
+        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
+        show_default=False,
+    ),
+    device: str = typer.Argument(
+        None,
+        autocompletion=common.cache.dev_ap_gw_completion,
+        hidden=True,
+        show_default=False,
+    ),
+    do_gw: bool = typer.Option(None, "--gw", help="Show group level config for gateways."),
+    do_ap: bool = typer.Option(None, "--ap", help="Show group level config for APs."),
+    ap_env: bool = typer.Option(False, "-e", "--env", help="Show AP environment settings.  [italic dim]Valid for APs only[/]", show_default=False,),
+    file: bool = typer.Option(False, "-f", "--file", help="Applies to [cyan]cencli show config self[/].  Display raw file contents (i.e. cat the file)"),
+    verbose: int = common.options.get("verbose", help=f"Show details for all configured workspaces. [dim italic]Valid/Applies when showing [cyan]cencli[/] config.[/] {common.help_block('Show Config for current WorkSpace')}"),
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Effective Group/Device Config (UI Group), ap speciffic settings (env) or cencli config.
+
+    Group level configs are available for APs or GWs.
+    Device level configs are available for all device types, however
+    AP and GW, show what Aruba Central has configured at the device level.
+    Switches fetch the running config from the device ([italic]Same as [cyan]cencli show run[/cyan][/italic]).
+    \tor the config that results from the template/variables ([italic]Use [cyan]cencli show template <SWITCH>[/cyan] to see the template with variables.[/italic])).
+
+    Examples:
+    \t[cyan]cencli show config GROUPNAME --gw[/]\tCentral's Group level config for gateways.
+    \t[cyan]cencli show config DEVICENAME[/]\t\tCentral's device level config if GW, per AP settings if AP, template or
+    \t\trunning config if switch.
+    \t[cyan]cencli show config self[/]\t\tcencli configuration information (from config.yaml)
+    """
+    if group_dev.lower() in ["cencli", "self"]:
+        if file:
+            render.display_results(data=config.file.read_text())
+            common.exit(code=0)
+        return _get_cencli_config(all_workspaces=bool(verbose))
+
+    group_dev: CacheGroup | CacheDevice = common.cache.get_identifier(group_dev, ["group", "dev"],)
+    if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
+        _group: CacheGroup = common.cache.get_group_identifier(group_dev.group)
+        if device:
+            log.warning(f"ignoring extra argument [red]{device}[/].  As [cyan]{group_dev.name}[/] is a device.", caption=True)
+        if _group.wired_tg:
+            resp = api.session.request(api.configuration.get_template_details_for_device, group_dev.serial, details=True)
+            render.display_results(resp, tablefmt="simple", pager=pager, outfile=outfile, exit_on_fail=True, cleaner=cleaner.get_template_details_for_device, device=group_dev)
+            common.exit(code=0)
+        else:
+            return run(group_dev.serial, outfile=outfile, pager=pager)
+
+    elif group_dev.is_group:  # TODO group level AP config is not supported for Template Group,  Need logic to show template
+        group = group_dev
+        if device:
+            device: CacheDevice = common.cache.get_dev_identifier(device)
+        elif not do_ap and not do_gw:
+            if "ap" in group_dev.allowed_types and "gw" in group_dev.allowed_types:
+                common.exit("Invalid Input, --gw or --ap option must be supplied for group level config.")
+            elif "ap" in group_dev.allowed_types:
+                render.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--ap[/] as [magenta]dev type[/]: [cyan]gw[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_ap = True
+            elif "gw" in group_dev.allowed_types:
+                render.econsole.print(f"[yellow]:information:[/]  Assuming [cyan]--gw[/] as [magenta]dev type[/]: [cyan]ap[/] is not configured for group [cyan]{group_dev.name}[/].\n")
+                do_gw = True
+    else:  # group_dev is a device iden
+        group = common.cache.get_group_identifier(group_dev.group)
+        if device is not None:
+            lbrkt, rbrkt = escape("["), escape("]")
+            common.exit(f"Invalid input provide {lbrkt}[cyan]GROUP NAME[/]{rbrkt} {lbrkt}[cyan]device iden[/]{rbrkt} or {lbrkt}[cyan]device iden[/]{rbrkt} [red]NOT[/] 2 devices.")
+        else:
+            device = group_dev
+
+    _data_key, title, cleaner_func = None, None, None
+    if do_gw or (device and device.generic_type == "gw"):
+        if device:
+            if device.generic_type != "gw":
+                common.exit(f"Invalid input: [cyan]--gw[/] option conflicts with [cyan]{device.name}[/] which is an [bright_green]{device.generic_type}[/]")
+
+        caasapi = caas.CaasAPI()
+        func = caasapi.show_config
+        args = [group.name,]
+        if device:
+            args += [device.mac]
+        _data_key = "config"
+
+    elif do_ap or (device and device.generic_type == "ap"):
+        func = api.configuration.get_ap_config
+        if device:
+            if device.generic_type == "ap":
+                args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
+                if ap_env:
+                    func = api.configuration.get_per_ap_config
+                    args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
+                elif not device.is_aos10:
+                    render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
+            else:
+                common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+    else:
+        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")
+
+    if not device:
+        args = [group.name]
+
+    resp = api.session.request(func, *args)
+
+    if resp and _data_key:
+        resp.output = resp.output[_data_key]
+
+    render.display_results(resp, title=title, pager=pager, outfile=outfile, cleaner=cleaner_func)
+
+
+@app.command()
+def token(
+    no_refresh: bool = typer.Option(False, "--no-refresh", help="Do not refresh tokens first"),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show current access token from cache"""
+    if not no_refresh:
+        api.session.refresh_token()
+
+    tokens: dict[str, str] = api.session.auth.getToken()
+    if tokens:
+        if common.workspace != "default":
+            print(f"Account: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
+        print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
+
+
+# TODO clean up output ... single line output
+@app.command()
+def routes(
+    device: List[str] = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, show_default=False,),
+    sort_by: SortRouteOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show gateway routing table
+
+    :information:  This command is only valid on Gateways
+    """
+    device = device[-1]  # allow unnecessary keyword "device"
+    device: CacheDevice = common.cache.get_dev_identifier(device, dev_type="gw")
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    resp = api.session.request(api.routing.get_device_ip_routes, device.serial)
+    caption = ""
+    if "summary" in resp.raw:
+        s = resp.raw["summary"]
+        caption = (
+            f'max: {s.get("maximum")}, total: {s.get("total")}, default: {s.get("default")}, connected: {s.get("connected")}, '
+            f'static: {s.get("static")}, dynamic: {s.get("dynamic")}, overlay: {s.get("overlay")} '
+        )
+
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"{device.name} IP Routes",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        pager=pager,
+        outfile=outfile,
+        cleaner=cleaner.get_overlay_routes,
+    )
+
+
+def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]):
+    out, failed, passed = [], [], []
+    for group, res in zip(groups, responses):
+        if res.ok:
+            passed += [res]
+            for wlan in res.output:
+                out += [{'group': group, **wlan}]
+        else:
+            failed += [res]
+    if passed:
+        resp: Response = sorted(passed, key=lambda r: r.rl)[0]
+        resp.output = out
+    else:
+        resp: List[Response] = failed
+
+    if failed and passed:
+        _ = [log.warning(f'Partial Failure [cyan]{f.url.name}[/] [red]{f.error}[/]: {f.output.get("description", f.output)}', caption=True) for f in failed]
+
+    return resp
+
+
+@app.command()
+def wlans(
+    name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    swarm: str = common.options.swarm_device,
+    verbose: int = common.options.get("verbose", help="get more details for SSIDs across all AP groups"),
+    sort_by: SortWlanOptions = common.options.get("sort_by", help=f"Field to sort by {common.help_block('SSID')}",),
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show WLAN(SSID)/details
+
+    Shows summary of all WLANs in Central by default.  Each SSID is only listed once.
+    Use -v (fetch details for wlans in each group) or specify [cyan]--group[/] for more details.
+
+    [deep_sky_blue1]:information:[/]  [cyan]--site[/] & [cyan]--label[/] options can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/] options.
+    """
+    title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
+    if (site or label) and any([group, swarm, verbose]):
+        common.exit("Invalid combination of options.  [cyan]--site[/] & [cyan]--label[/] can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/]")
+    if len([p for p in {site, label, group, swarm} if p]) > 1:
+        common.exit("Invalid combination of options.  You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] options.")
+
+    if group:
+        _group: CacheGroup = common.cache.get_group_identifier(group, dev_type="ap")
+        if _group.wlan_tg:
+            common.exit(f"Group [cyan]{_group.name}[/] is a Template Group for WLAN.  Operation is not supported by API for template groups.")
+        title = f"{title} in group {_group.name}"
+        group = _group.name
+    if label:
+        _label: CentralObject = common.cache.get_label_identifier(label)
+        title = f"{title} with label {_label.name}"
+        label = _label.name
+    if site:
+        _site: CentralObject = common.cache.get_site_identifier(site)
+        title = f"{title} in site {_site.name}"
+        site = _site.name
+    if swarm:
+        _dev: CentralObject = common.cache.get_dev_identifier(swarm, dev_type="ap")
+        title = f"{title} in swarm associated with {_dev.name}"
+        swarm = _dev.swack_id
+
+
+    params = {
+        "name": name,
+        "group": group,
+        "swarm_id": swarm,
+        "label": label,
+        "site": site,
+        "calculate_client_count": True,
+    }
+
+    # TODO # FIXME specifying WLAN name ... is ignored if verbose
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    if group:  # Specifying the group implies verbose (same # of API calls either way.)
+        resp = api.session.request(api.configuration.get_full_wlan_list, group)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+    elif swarm:
+        resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
+        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+    elif verbose:
+        _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
+        ap_groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
+        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
+        batch_resp = api.session.batch_request(batch_req)
+        resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
+
+        group_by = "group" if not sort_by else None
+        render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+    else:
+        resp = api.session.request(api.monitoring.get_wlans, **params)
+        caption = None
+        if resp and not name:
+            caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
+            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
+        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
+
+
+@app.command()
+def cluster(
+    group: str = common.arguments.group,
+    ssid: str = common.arguments.ssid,
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+) -> None:
+    """Show Cluster mapped to a given group/SSID."""
+    caption = None
+    group: CacheGroup = common.cache.get_group_identifier(group)
+    resp = api.session.request(api.other.get_wlan_cluster_by_group, group.name, ssid)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    if resp and not resp.output:
+        caption = [
+            ":information:  This API will return 200 if the SSID does not exist in the group / or the SSID is bridge mode.",
+            f"Ensure {ssid} is accurate, as WLANs/SSIDs are not cached.",
+            f"Use 'show wlans -v' to see details for all SSIDs or 'show wlans --group {group.name}' to see details for SSIDs in group {group.name}",
+        ]
+    elif tablefmt == "rich":
+        resp.output = [{"SSID": resp.output.get("profile", ""), **d} for d in resp.output.get("gw_cluster_list", resp.output)]
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"Cluster details for [green]{ssid}[/] in group [green]{group.name}[/]",
+        pager=pager,
+        caption=caption,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.simple_kv_formatter
+    )
+
+
+@app.command()
+def vsx(
+    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_switch_completion, show_default=False,),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+) -> None:
+    """Show VSX details for a CX switch
+    """
+    device: CentralObject = common.cache.get_dev_identifier(device, dev_type="switch")  # update to cx once get_dev_iden... refactored to support type vs generic_type
+    if device.type == "sw":
+        common.exit("This command is only valid for [cyan]CX[/] switches, not [cyan]AOS-SW[/]")
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
+    resp = api.session.request(api.monitoring.get_switch_vsx_detail, device.serial)
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"VSX details for {device.name}",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse
+    )
+
+
+@app.command()
+def clients(
+    client: str = typer.Argument(
+        None,
+        metavar=iden_meta.client,
+        help="Show details for a specific client. [dim italic]verbose assumed.[/]",
+        autocompletion=common.cache.client_completion,
+        show_default=False,
+    ),
+    location: bool = typer.Option(False, help=f"Show Location for client [dim](AP must be on a floor plan)[/] {render.help_block('client argument', help_type='requires')}"),
+    past: TimeRange = common.options("3h", include_mins=False).past,
+    group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, metavar="<Label>", help="Filter by Label", show_default=False,),
+    wireless: bool = typer.Option(False, "-w", "--wireless", help="Show only wireless clients", show_default=False,),
+    wired: bool = typer.Option(False, "-W", "--wired", help="Show only wired clients", show_default=False,),
+    ssid: str = typer.Option(None, help="Filter by SSID [dim italic](Applies only to wireless clients)[/]", show_default=False,),
+    band: RadioBandOptions = typer.Option(None, help="Filter by Band [dim italic](Applies only to wireless clients)[/]", show_default=False,),
+    failed: bool = typer.Option(False, "-F", "--failed", help="Show clients that have failed to connect", show_choices=False,),
+    device: str = common.options.device,
+    verbose: int = common.options.verbose,
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show clients/details
+
+    Shows clients that have connected within the last 3 hours by default.
+    """
+    if [site, group, label].count(None) < 2:
+        common.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
+    if location:
+        if not client:
+            common.exit("Client argument is required with [cyan]--location[/] :triangular_flag:")
+        _client = common.cache.get_client_identifier(client, exit_on_fail=True)
+        title = f"Client Location ([cyan]{_client.name}[/]|[cyan]{_client.mac}[/])"
+        resp = api.session.request(api.visualrf.get_client_location, _client.mac)
+        if resp.ok:
+            resp.output = resp.raw.get("location", resp.output)
+        tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table)
+        render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
+        common.exit(code=0 if resp.ok else 1)
+
+
+    kwargs = {}
+    dev = None
+    title = "All Clients"
+    if band:
+        kwargs["band"] = band.value
+    if client:
+        _client = common.cache.get_client_identifier(client, exit_on_fail=True)
+        kwargs["mac"] = _client.mac
+        title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
+        verbose = verbose or 1
+    elif device:
+        dev: CacheDevice = common.cache.get_dev_identifier(device)
+        kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
+        if dev.generic_type == "switch" and dev.swack_id:
+            kwargs["stack_id"] = dev.swack_id
+        else:
+            kwargs["serial"] = dev.serial
+        title = f'{dev.name} Clients'
+        ignored = {
+            "group": group,
+            "site": site,
+            "label": label
+        }
+        if any([ignored.values()]):
+            for k, v in ignored.items():
+                if v:
+                    log.warning(f"[cyan]--{k}[/] [green]{v}[/] ignored.  Doesn't make sense with [cyan]--dev[/] [green]{dev.name}[/] specified.", log=False, caption=True)
+            group = site = label = None
+
+    if not client:
+        if wired:
+            title = "All Wired Clients" if not dev else f"{dev.name} Wired Clients"
+            kwargs["client_type"] = "wired"
+        elif wireless:
+            title = f"{'All' if not dev else dev.name} Wireless Clients"
+            kwargs["client_type"] = "wireless"
+            if band:
+                title = f"{title} associated with {band.value}Ghz radios"
+        elif band:
+            title = f"{'All' if not dev else dev.name} Wireless Clients associated with {band.value}Ghz radios"
+            kwargs["client_type"] = "wireless"
+
+    if group:
+        _group = common.cache.get_group_identifier(group)
+        kwargs["group"] = _group.name
+        title = f"{title} in group {_group.name}"
+
+    if site:
+        _site = common.cache.get_site_identifier(site)
+        kwargs["site"] = _site.name
+        title = f"{title} in site {_site.name}"
+
+    if label:
+        _label = common.cache.get_label_identifier(label)
+        kwargs["label"] = _label.name
+        title = f"{title} on devices with label {_label.name}"
+
+    if ssid:
+        kwargs["network"] = ssid
+        if "Wired Clients" in title:
+            log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
+        else:
+            title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
+
+    if failed:
+        kwargs["client_status"] = "FAILED_TO_CONNECT"
+        title = title.replace("Clients", "Failed Clients")
+
+    if past:
+        kwargs["past"] = past.upper()
+        title = f'{title} (past {past.replace("h", " hours").replace("d", " day").replace("w", " week").replace("1M", "1 month").replace("3M", "3 months")})'
+
+    resp = api.session.request(common.cache.refresh_client_db, **kwargs)
+    if not resp:
+        render.display_results(resp, exit_on_fail=True)
+
+    caption = None if any([client, failed]) else _build_client_caption(resp, wired=wired, wireless=wireless, band=band, device=dev, verbose=verbose)
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
+    if sort_by:
+        sort_by = sort_by if sort_by != "dot11" else "802.11"
+        if sort_by.value == "last-connected":  # We invert so the most recent client is on top
+            reverse = not reverse
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        cleaner=cleaner.get_clients,
+        cache=common.cache,
+        verbosity=verbose,
+        format=tablefmt
+    )
+    common.exit(code=1 if "status_code" in resp.raw.get("raw_wired_response", {}) else 0)  # TODO more elegant way to determine partial failure here
+
+
+@app.command()
+def denylisted(
+    device: list[str] = common.arguments.device,
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show denylisted clients."""
+    devs = [cache.get_dev_identifier(d, dev_type="ap") for d in device if d not in ["client", "clients"]]  # allow unnecessary keyword client(s)
+    dev = None if not devs else devs[0]
+
+    if not dev:
+        common.exit("Missing required argument [cyan]device [dim italic](AP)[/][/].")
+
+    title = f"{dev.name} Denylisted Clients"
+    resp = api.session.request(api.configuration.get_denylist_clients, serial=dev.serial)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=f'[cyan]{len(resp.output.get("blacklist", "?"))}[/] denylisted client{utils.singular_plural_sfx(resp.output.get("blacklist", []))}',
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        group_by="ap" if not sort_by else None,
+        reverse=reverse,
+        exit_on_fail=True,
+        min_width=55,
+        cleaner=cleaner.get_denylist_clients if tablefmt in ["rich", "tabulate"] else None
+    )
+
+@app.command()
+def tunnels(
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+) -> None:
+    """Show Branch Gateway/VPNC Tunnel details"""
+    dev = common.cache.get_dev_identifier(gateway, dev_type="gw")
+    resp = api.session.request(api.monitoring.get_gw_tunnels, dev.serial, timerange=time_range.value)
+    caption = None
+    if resp:
+        if resp.output.get("total"):
+            caption = f'Tunnel Count: {resp.output["total"]}'
+        if resp.output.get("tunnels"):
+            resp.output = resp.output["tunnels"]
+
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+
+    render.display_results(resp, title=f'{dev.rich_help_text} Tunnels', caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+
+
+@app.command(hidden=config.is_cop)
+def uplinks(
+    gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
+    time_range: TimeRange = typer.Option(TimeRange._1d, "--past", case_sensitive=False, help="Time Range for usage/trhoughput details where 3h = 3 Hours, 1d = 1 Day, 1w = 1 Week, 1m = 1Month, 3m = 3Months."),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Branch Gateway/VPNC Uplink details"""
+    dev = common.cache.get_dev_identifier(gateway, dev_type="gw")
+    resp = api.session.request(api.monitoring.get_gw_uplinks_details, dev.serial, timerange=time_range.value)
+
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+
+    render.display_results(resp, title=f'{dev.rich_help_text} Tunnels', tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_gw_tunnels)
+
+
+@app.command()
+def roaming(
+    client: str = typer.Argument(..., metavar=iden_meta.client, autocompletion=common.cache.client_completion, case_sensitive=False, help="Client username, ip, or mac", show_default=False,),
+    start: datetime = common.options(timerange="3h").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    refresh: bool = typer.Option(False, "--refresh", "-R", help="Cache is used to determine mac if username or ip are provided. This forces a cache update prior to lookup."),
+    sort_by: SortClientOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+) -> None:
+    """Show wireless client roaming history.
+
+    If ip or username are provided the client cache is used to lookup the clients mac address.
+    The cache is updated anytime a show clients ... is ran, or automatically if the client
+    is not found in the cache.
+
+    The -R flag can be used to force a cache refresh prior to looking up roaming history.
+    """
+    start, end = common.verify_time_range(start, end=end, past=past)
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table)
+    title = "Roaming history"
+
+    if refresh:
+        resp = api.session.request(common.cache.refresh_client_db, "wireless")
+        if not resp:
+            render.display_results(resp, exit_on_fail=True)
+
+    mac = utils.Mac(client)
+    if not mac.ok:
+        client: CacheClient = common.cache.get_client_identifier(client)
+        mac = utils.Mac(client.mac)
+        title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
+    else:
+        title = f'{title} for {mac.cols}'
+
+
+    resp = api.session.request(api.monitoring.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
+    caption = None if not resp else f"{len(resp)} roaming events"
+    caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
+    render.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
+
+
+@app.command()
+def logs(
+    event_id: str = typer.Argument(
+        None,
+        metavar='[LOG_ID|cencli]',
+        help="Show details for a specific log_id or [cyan]cencli[/] to show cencli logs",
+        autocompletion=common.cache.event_log_completion,
+        show_default=False,
+    ),
+    cencli: bool = typer.Option(False, "--cencli", help="Show cencli logs",),
+    pytest: bool = typer.Option(False, "--pytest", hidden=True),
+    unused_mocks: bool = typer.Option(False, "-u", "--unused-mocks", hidden=True),
+    tail: bool = typer.Option(False, "-f", help="follow tail on log file [dim italic](wss_key must be configured unless used to show cencli logs locally)[/]", is_eager=True),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    _all: bool = typer.Option(False, "-a", "--all", help="Display all available event logs.  Overrides default of 30m", show_default=False,),
+    count: int = typer.Option(None, "-n", max=10_000, help="Collect Last n logs [grey42 italic]max: 10,000[/]", show_default=False,),
+    start: datetime = common.options(timerange="30m").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    device: str = common.options.device,
+    swarm: bool = common.options.get("swarm", help=f"Filter logs for IAP cluster associated with provided device.  {common.help_block('--dev', 'requires')}",),
+    level: LogLevel = typer.Option(None, "--level", help="Filter events by log level", show_default=False,),
+    client: str = common.options.client,
+    bssid: str = typer.Option(None, help="Filter events by bssid", show_default=False,),
+    hostname: str = typer.Option(None, "-H", "--hostname", help="Filter events by hostname (fuzzy match)", show_default=False,),
+    dev_type: EventDevTypeArgs = typer.Option(
+        None,
+        "--dev-type",
+        metavar="[ap|switch|gw|client]",
+        help="Filter events by device type",
+        show_default=False,
+    ),
+    description: str = typer.Option(None, help="Filter events by description (fuzzy match)", show_default=False,),
+    event_type: str = typer.Option(None, "--event-type", help="Filter events by type (fuzzy match)", show_default=False,),  # TODO completion enum
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+    verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
+) -> None:
+    """Show device event logs (last 30m by default) or show cencli logs."""
+    title="Device event Logs"
+    pytest = pytest or (event_id and event_id == "pytest")
+    if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):  # pragma: no cover
+        log.print_file(pytest, show_all=_all, unused_mocks=unused_mocks) if not tail else log.follow(pytest)
+        common.exit(code=0)
+
+    if tail:  # pragma: no cover
+        if not config.wss:
+            common.exit(
+                "Missing all or part of required configuration for this command.\n"
+                "[cyan]-f[/] option for logs streams events from the streaming API.\n"
+                f"[cyan]wss[/]: [dim italic](websocket)[/] [cyan]base_url[/] and [cyan]key[/] are [dim red]required[/] in {config.file}\n"
+                f"See example @ {config.example_link}\n"
+            )
+        common.ws_follow_tail(title=title, log_type="event")  # program will exit here
+
+    # TODO move to common func for use by show logs and show audit logs
+    if event_id:
+        event_details = common.cache.get_event_log_identifier(event_id)
+        render.display_results(
+            Response(output=event_details),
+            tablefmt="action",
+        )
+        common.exit(code=0)
+
+    if (_all or count) and [start, end, past].count(None) != 3:
+        common.exit("Invalid combination of arguments. [cyan]--start[/], [cyan]--end[/], and [cyan]--past[/] are invalid when [cyan]-a[/]|[cyan]--all[/] or [cyan]-n[/] flags are used.")
+
+    start, end = common.verify_time_range(start, end=end, past=past)
+    level = level if level is None else level.name
+    dev_id = None
+    swarm_id = None
+    if device:
+        device: CacheDevice = common.cache.get_dev_identifier(device)
+        if swarm:
+            if device.type != "ap":
+                log.warning(f"[cyan]--s[/]|[cyan]--swarm[/] option ignored, only valid on APs not {device.type}", caption=True)
+                dev_id = device.serial
+            else:
+                swarm_id = device.swack_id
+        else:
+            dev_id = device.serial
+
+    client_mac = None
+    if client:
+        _mac = utils.Mac(client)
+        if _mac.ok:
+            client_mac = _mac.cols
+        else:
+            _client = common.cache.get_client_identifier(client)
+            client_mac = _client.mac
+
+    if _all:
+        start = pendulum.now(tz="UTC").subtract(days=89)  # max 90 but will fail pagination calls as now still moves making this value > 90 so we use 89.  get_events defaults to now - 3 hours if not specified.
+        title = f"All available {title}"
+        count = 10_000
+    elif count:
+        title = f"Last {count} {title}"
+    elif [start, end].count(None) == 2:
+        start = pendulum.now(tz="UTC").subtract(minutes=30)
+        title = f"{title} for last 30 minutes"
+
+    kwargs = {
+        "group": group,
+        "swarm_id": swarm_id,
+        "label": None if not label else common.cache.get_label_identifier(label).name,
+        "from_time": start,
+        "to_time": end,
+        "client_mac": client_mac,
+        "bssid": bssid,
+        # "device_mac": None if not device else device.mac,  # no point we use serial
+        "hostname": hostname,
+        "device_type": dev_type,
+        "site": None if not site else common.cache.get_site_identifier(site).name,
+        "serial": dev_id,
+        "level": level,
+        "event_description": description,
+        "event_type": event_type,
+        # "fields": fields,
+        # "calculate_total": True,  # Total defaults to True in get_events for benefit of async multi-call
+        "count": count,
+    }
+
+    resp = api.session.request(api.monitoring.get_events, **kwargs)
+
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+
+    _cmd_txt = "[bright_green] show logs <id>[reset]"
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        caption=f"[reset]Use {_cmd_txt} to see details for an event.  Events lacking an id don\'t have details.",
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=not reverse,
+        set_width_cols={"event type": {"min": 5, "max": 12}},
+        cleaner=cleaner.get_event_logs if not verbose else None,
+        cache_update_func=common.cache.update_event_db if not verbose else None,
+    )
+
+
+@app.command()
+def alerts(
+    group: str = common.options(timerange="24h").group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    device: str = common.options.device,
+    severity: AlertSeverity = typer.Option(None, help="Filter by alerts by severity.", show_default=False,),
+    search: str = typer.Option(None, help="Filter by alerts with supplied text in name/description/category.", show_default=False,),
+    ack: bool = typer.Option(None, help="Show only acknowledged (--ack) or unacknowledged (--no-ack) alerts", show_default=False,),
+    alert_type: AlertTypes = typer.Option(None, "--type", help="Filter by alert type", show_default=False,),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    sort_by: SortAlertOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    verbose: bool = typer.Option(False, "-v", help="Show alerts with original field names and minimal formatting (vertically)"),
+) -> None:
+    """Show Alerts/Notifications (for past 24 hours by default).
+
+    :information:  Notification must be Configured.
+    """
+    dev = None if not device else common.cache.get_dev_identifier(device)
+    _group = None if not group else common.cache.get_group_identifier(group)
+    _site = None if not site else common.cache.get_site_identifier(site)
+    _label = None if not label or _group is not None else common.cache.get_label_identifier(label)
+    if label and _group:
+        log.warning(f"Provided label {label}, was ignored.  You can only specify one of [cyan]group[/], [cyan]label[/]", caption=True)
+
+    if alert_type:
+        alert_type = "user_management" if alert_type == "user" else alert_type
+        alert_type = "ids_events" if alert_type == "ids" else alert_type
+
+    if severity:
+        severity = severity.title() if severity != "info" else severity.upper()
+
+    start, end = common.verify_time_range(start=start, end=end, past=past, end_offset=pendulum.duration(hours=24))
+
+    kwargs = {
+        "group": None if not _group else _group.name,
+        "label": None if not _label else _label.name,
+        "from_time": start,
+        "to_time": end,
+        "serial": None if not dev else dev.serial,
+        "site": None if not _site else _site.name,
+        'severity': severity,
+        "search": search,
+        "type": alert_type,
+        'ack': ack,
+    }
+
+    resp = api.session.request(api.central.get_alerts, **kwargs)
+
+    caption = common.get_time_range_caption(start, end, default="in past 24 hours.")
+    caption = f"[cyan]{len(resp)}{' active' if not ack else ' '} Alerts {caption}[/]"
+    cleaner_func = cleaner.get_alerts if not verbose else None
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")
+    title = "Alerts/Notifications (Configured Notification Rules)"
+    if dev:
+        title = f"{title} [reset]for[cyan] {dev.generic_type.upper()} {dev.name}|{dev.serial}[reset]"
+    if _group or _site or label:
+        title = f"{title} [bright_green]filtered by[/]"
+        if _group:
+            title = f"{title} group: [cyan]{_group.name}[/]"
+        if _site:
+            title = f"{title} site: [cyan]{_site.name}[/]"
+        if _label:
+            title = f"{title} label: [cyan]{_label.name}[/]"
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=not reverse,
+        cleaner=cleaner_func,
+        caption=caption,
+    )
+
+
+@app.command()
+def notifications(
+    search: str = typer.Option(None, help="Filter by alerts with search term in name/description/category."),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+    update_cache = common.options.update_cache,
+) -> None:
+    """Show alert/notification configuration.
+
+    Display alerty types, notification targets, and rules.
+    """
+    resp = api.session.request(api.central.get_notification_config, search=search)
+
+    tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
+    title = "Alerts/Notifications Configuration (Configured Notification Targets/Rules)"
+
+    # TODO cleaner, currently raw response in yaml
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=title,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+    )
+
+
+@app.command()
+def last(
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Re-display output from Last command.  (No API Calls)"""
+    if not config.last_command_file.exists():  # pragma: no cover
+        common.exit("Unable to find cache for last command.")
+
+    kwargs = config.last_command_file.read_text()
+    import json
+    kwargs: dict[str, Any] = json.loads(kwargs)
+
+    last_format = kwargs.get("tablefmt", "rich")
+    kwargs["tablefmt"] = common.get_format(do_json, do_yaml, do_csv, do_table, default=last_format)
+    if not kwargs.get("title") or "Previous Output" not in kwargs["title"]:
+        kwargs["title"] = f"{kwargs.get('title') or ''} Previous Output " \
+                        f"{DateTime(int(config.last_command_file.stat().st_mtime))}"
+    data = kwargs.pop("outdata")
+
+    render.display_results(
+        data=data, outfile=outfile, sort_by=sort_by, reverse=reverse, pager=pager, stash=False, **kwargs
+    )
+
+
+@app.command()
+def webhooks(
+    sort_by: SortWebHookOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show configured webhooks."""
+    if sort_by is not None:
+        sort_by = sort_by.name
+
+    resp = api.session.request(api.central.get_all_webhooks)
+
+    caption = None
+    if resp.ok and resp.output:
+        caption = f"Counts: Webhooks: [cyan]{len(resp.output)}[/] | Destination URLs: [cyan]{sum([len(wh['urls']) for wh in resp.output])}[/]"
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title="WebHooks",
+        caption=caption,
+        pager=pager,
+        outfile=outfile,
+        sort_by=sort_by,
+        reverse=reverse,
+        fold_cols=["urls", "wid"],
+        cleaner=cleaner.get_all_webhooks
+    )
+
+
+# TODO callbacks.py send all validation to callbacks
+def hook_proxy_what_callback(ctx: typer.Context, what: ShowHookProxyArgs):  # pragma: no cover
+    if ctx.resilient_parsing:  # tab completion, return without validating
+        return what
+
+    if ctx.params.get("tail", False):
+        if what is None:
+            what = ShowHookProxyArgs("logs")
+        elif what != "logs":
+            raise typer.BadParameter(f"-f (follow tail) is only valid with 'logs' command not '{what}'")
+
+    return "pid" if what is None else what.value
+
+
+@app.command(help="Show WebHook Proxy details/logs", hidden=not hook_enabled)
+def hook_proxy(
+    what: ShowHookProxyArgs = typer.Argument(ShowHookProxyArgs.pid, callback=hook_proxy_what_callback),
+    tail: bool = typer.Option(False, "-f", help="follow tail on log file (implies show hook-proxy logs)", is_eager=True),
+    brief: bool = typer.Option(False, "-b", help="Brief output for 'pid' and 'port'"),
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    def _get_process_details() -> tuple:
+        for p in psutil.process_iter(attrs=["name", "cmdline"]):
+            if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
+                for flag in p.cmdline()[::-1]:
+                    if flag.startswith("-"):
+                        continue
+                    elif flag.isdigit():
+                        port = flag
+                        break
+                return p.pid, port
+
+    if what == "logs":
+        from centralcli import log
+        log.print_file() if not tail else log.follow()
+    else:
+        proc = _get_process_details()
+        if not proc:
+            common.exit("WebHook Proxy is not running.")
+
+        br = proc[1] if what == "port" else proc[0]
+        _out = f"[{proc[0]}] WebHook Proxy is listening on port: {proc[1]}" if not brief else br
+        common.exit(_out, code=0)
+
+
+@app.command()
+def archived(
+    sort_by: SortArchivedOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show archived devices"""
+    # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
+    resp = api.session.request(api.platform.get_archived_devices)
+    if resp.raw and "devices" in resp.raw:
+        plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
+        caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
+
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
+
+
+# TODO verbosity 1 to cleaner
+@app.command()
+def portals(
+    portal: List[str] = typer.Argument(
+        None,
+        metavar="[name|id]",
+        help=f"show details for a specific portal profile {common.help_block('show summary for all portals')}",
+        autocompletion=common.cache.portal_completion,
+        show_default=False,
+    ),
+    logo: bool = typer.Option(
+        False,
+        "-L", "--logo",
+        metavar="PATH",
+        help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {common.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
+        show_default = False,
+        writable=True,
+    ),
+    sort_by: SortPortalOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Configured Guest Portals, details for a specific portal, or download logo for a specified portal"""
+    path = Path.cwd()
+    if portal:
+        if len(portal) > 1:
+            if not logo or len(portal) > 2:
+                common.exit("Too many Arguments")
+            path = Path(portal[-1])
+        portal = portal[0]
+
+    if portal is None:
+        _cleaner = cleaner.get_portals
+        resp: Response = api.session.request(common.cache.refresh_portal_db)
+    else:
+        _cleaner = cleaner.get_portal_profile
+        p: CachePortal = common.cache.get_name_id_identifier("portal", portal)
+        resp: Response = api.session.request(api.guest.get_portal_profile, p.id)
+        if logo and resp.ok:
+            download_logo(resp, path, p)  # this will exit CLI after writing to file
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if portal else "rich")
+    render.display_results(resp, tablefmt=tablefmt, title="Portals", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner, fold_cols=["url"],)
+
+
+@app.command()
+def guests(
+    portal: str = typer.Argument(None, help=f"portal name {common.help_block('Guests for all defined User/Pass portals')}", autocompletion=common.cache.portal_completion, show_default=False,),
+    refresh: bool = typer.Option(False, "-R", "--refresh", help="Applies only if portal is not provided.  Refresh the portal cache prior to fetching guests for all User/Pass portals"),
+    sort_by: SortGuestOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Guests configured for a Portal"""
+    caption = None
+    title="Guest Users"
+    failed = None
+    if portal:
+        portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
+        resp = api.session.request(common.cache.refresh_guest_db, portal.id, )
+        title = f"{title} for {portal.name} portal"
+
+    else:
+        if refresh:
+            _ = api.session.request(common.cache.refresh_portal_db)
+        for idx in range(0, 2):
+            portals = [portal for portal in common.cache.portals if "Username/Password" in portal["auth_type"]]
+            if not portals:
+                if idx == 0 and not refresh:
+                    _ = api.session.request(common.cache.refresh_portal_db)
+                else:
+                    common.exit(":information:  No portals configured with Username/Password auth type", code=0)
+
+        batch_resp = api.session.batch_request([BatchRequest(common.cache.refresh_guest_db, portal["id"]) for portal in portals])
+        resp_by_name = {resp: portal for portal, resp in zip(portals, batch_resp)}
+        passed = [r for r in batch_resp if r.ok]
+        failed = [] if len(passed) == len(batch_resp) else [r for r in batch_resp if not r.ok]
+        if passed:
+            passed = sorted(passed, key=lambda r: r.rl)
+            resp = passed[-1]
+            resp.output = [{"portal": resp_by_name[r]["name"], **item} for r in passed for item in r.output]
+            resp.raw = {r.url.path: r.raw for r in batch_resp}
+            portal_ids = [f"[cyan]{p['name']}[/]: {p['id']}" for p in portals]
+            caption = f"[italic cornflower_blue]Portal IDs[/]: {', '.join(portal_ids)}"
+            if failed:
+                log.error(f"Partial call failure.  {len(failed)} API requests failed.  Refer to logs [cyan]cencli show logs cencli[/].", caption=True)
+        else:
+            resp = failed
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_guests, output_format=tablefmt)
+    if failed:
+        common.exit()
+
+def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
+    try:
+        two_four_cnt, five_cnt, six_cnt, ap_names = 0, 0, 0, []
+        two_four_up_cnt, five_up_cnt, six_up_cnt = 0, 0, 0
+        for ap in data:
+            ap_names += [ap["name"]]
+            if "2.4" in ap["radio_name"]:
+                two_four_cnt += 1
+                if ap["status"] == "Up":
+                    two_four_up_cnt += 1
+            elif "5 GHz" in ap["radio_name"]:
+                five_cnt += 1
+                if ap["status"] == "Up":
+                    five_up_cnt += 1
+            elif "6 GHz" in ap["radio_name"]:
+                six_cnt += 1
+                if ap["status"] == "Up":
+                    six_up_cnt += 1
+        radio_cnt = len(ap_names)
+        ap_cnt = len(list(set(ap_names)))
+        caption = ''.join(
+            [
+                f"Counts [grey42 italic](in this output)[/]: Total APs [cyan]{ap_cnt}[/], Total Radios: [cyan]{radio_cnt}[/], ",
+                f"2.4Ghz: [cyan]{two_four_cnt}[/] ([bright_green]{two_four_up_cnt}[/], [red]{two_four_cnt - two_four_up_cnt}[/]) ",
+                f"5Ghz: [cyan]{five_cnt}[/] ([bright_green]{five_up_cnt}[/], [red]{five_cnt - five_up_cnt}[/]) ",
+                f"6Ghz: [cyan]{six_cnt}[/] ([bright_green]{six_cnt}[/], [red]{six_cnt - six_up_cnt}[/])",
+            ]
+        )
+    except Exception as e:  # pragma: no cover
+        log.error(f"Unable to build caption for show radios due to {e.__class__.__name__}")
+        return
+
+    return caption
+
+
+@app.command()
+def radios(
+    aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    group: str = typer.Option(None, help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
+    site: str = typer.Option(None, help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=common.cache.label_completion,show_default=False,),
+    status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
+    pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
+    up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
+    down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    sort_by: str = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show details for Radios."""
+    if not status:
+        if (up or down) and not (up and down):
+            status = StatusOptions.down if down else StatusOptions.up
+            status = status.title()
+
+    group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
+    site: CacheSite = None if not site else common.cache.get_site_identifier(site)
+    label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
+    title="Radio Details"
+    for filter_, filter_name in zip((group, site, label), ("group", "site", "label")):
+        title = f"{title}{'' if not filter_ else f' for APs in {filter_name} [cyan]{filter_.name}[/]'}"
+
+    params = {
+        "group": None if not group else group.name,
+        "site": None if not site else site.name,
+        "status": status,
+        "label": None if not label else label.name,
+        "public_ip_address": pub_ip
+    }
+    default_params = {
+        "calculate_client_count": True,
+        "show_resource_details": True,
+        "calculate_ssid_count": True,
+    }
+
+    params = {k: v for k, v in params.items() if v is not None}
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    failed = None
+
+    if aps:
+        aps: List[CacheDevice] = [common.cache.get_dev_identifier(ap, dev_type="ap") for ap in aps]
+        resp = api.session.batch_request([BatchRequest(api.monitoring.get_devices, "ap", serial=ap.serial, **default_params) for ap in aps])
+        passed = [r for r in resp if r.ok]
+        failed = [r for r in resp if not r.ok]
+        if failed and not passed:
+            render.display_results(failed, tablefmt="action")  # will exit
+        elif failed:
+            [log.error(f"Partial Failure.  Call to fetch radio details for {ap.summary_text} failed ({r.error})", caption=True) for r, ap in zip(resp, aps) if not r.ok]
+
+        combined = [ap for r in passed for ap in r.output]
+        resp = sorted(passed, key=lambda ap: ap.rl)[0]
+        resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
+    else:
+        resp = api.session.request(common.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
+        if resp.ok:
+            resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
+
+    if resp.ok:
+        # We sort before sending data to renderer to keep groupings by AP name
+        if sort_by and resp.output and sort_by in resp.output[0].keys():
+            resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap[sort_by])))
+        else:
+            resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap["radio_name"])))
+
+        caption = _build_radio_caption(resp.output)
+        if status:
+            resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
+
+    render.display_results(resp, tablefmt=tablefmt, title=title, reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+    if failed:
+        common.exit()
+
+
+@app.command()
+def bssids(
+    device: str = common.arguments.get("device", default=None, help=f"Show BSSIDs for a speciffic AP {render.help_block('All APs')}", autocompletion=common.cache.dev_ap_completion,),
+    swarm: bool = common.options.swarm,
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    band: RadioBandOptions = common.options.get("band", help="Filter by radio band/frequency"),
+    sort_by: SortBSSIDOptions = common.options.get("sort_by", default=SortBSSIDOptions.ap, show_default=True,),
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show BSSIDs."""
+    caption = []
+    sort_by = sort_by if sort_by is None or sort_by != "ap" else None  # AP is default sort, reset to None to retain group_by functionality
+    group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
+    site: CacheSite = None if not site else common.cache.get_site_identifier(site)
+    label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
+    dev = None if not device else cache.get_dev_identifier(device)
+
+    kwargs = {
+        "group": None if not group else group.name,
+        "site": None if not site else site.name,
+        "label": None if not label else label.name,
+    }
+    title_sfx = [f"{k} {v}" for k, v in kwargs.items() if v]
+
+    if dev:
+        key = "serial" if not swarm else "swarm_id"
+        title_sfx += [f"{'' if not swarm else 'Swarm associated with '}AP {dev.summary_text}"]
+        kwargs[key] = dev.serial if not swarm else dev.swack_id
+    elif swarm:
+        caption += ["[dark_orange3]\u26a0[/] Ignoring [cyan]-s[/]|[cyan]--swarm[/] as no device was provided as argument."]
+
+    kwargs = {k: v for k, v in kwargs.items() if v is not None}
+    if len(kwargs) > 1:
+        common.exit(f"You can only specify one of [cyan]device [dim italic]Argument[/][/], or :triangular_flag: {utils.color(['--group', '--site', '--label'], color_str='cyan')} :triangular_flag:")
+
+    resp = api.session.request(api.monitoring.get_bssids, **kwargs)
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+    title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
+
+    render.display_results(
+        resp,
+        tablefmt=tablefmt,
+        title=f"BSSIDs{title_sfx}",
+        caption=caption,
+        sort_by=sort_by,
+        reverse=reverse,
+        output_by_key=None,
+        group_by="ap" if not sort_by else None,
+        outfile=outfile,
+        pager=pager,
+        min_width=85,
+        cleaner=cleaner.get_bssids,
+        output_format=tablefmt,
+        band=band
+    )
+
+
+
+# TODO # FIXME --past 6h returns empty payload despite default of 3h returning insights  --past 1d seems to work fine.
+@app.command()
+def insights(
+    insight_id: int = typer.Argument(
+        None,
+        help="Show details for a specific insight id.",
+        show_default=False,
+    ),
+    start: datetime = common.options(timerange="3h").start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    site: str = common.options.site,
+    device: str = common.options.get("device", help="Show insights related to a specific device"),
+    client: str = common.options.get("client", help="Show insights related to a specific client"),
+    severity: InsightSeverity = typer.Option(None, "-s", "--severity", help="Filter insights by severity", show_default=False,),
+    sort_by: SortInsightOptions = common.options.sort_by,
+    reverse: bool = common.options.reverse,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show AI Insights or details for a specific insight
+
+    Shows Global Insights by default, or insights related to a site, device, or client based on provided options.
+    Result of above will include insight id, which can be provided to show details for the insight.
+    """
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not insight_id else "yaml")
+    if not any([past, start]):
+        start = pendulum.now(tz="UTC").subtract(hours=3)
+    start, end = common.verify_time_range(start, end=end, past=past, max_days=None)  # this endpoint doesn't complain for longer ranges, but appears to only stores insights for a month
+    duration: pendulum.Interval = end - start
+    if duration.in_days() > 31:
+        log.info(f":information:  Specified time range ({duration.in_words()}), exceeds the retention period for AI Insights (1 month).  Showing all available insights.", caption=True)
+
+    if insight_id:
+        resp = api.session.request(api.aiops.get_aiops_insight_details, insight_id, from_time=start, to_time=end)
+        title = f"Insight details for insight id: {insight_id} for past {duration.in_words()}"
+        render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights)
+        common.exit(code=0 if resp.ok else 1)
+
+    site_id, serial, dev_type, client_mac = None, None, None, None
+    if device:
+        device: CacheDevice = common.cache.get_dev_identifier(device)
+        serial = device.serial
+        dev_type = device.generic_type
+        title = f"AI Insights related to device {device.summary_text}"
+    elif client:
+        client: CacheClient = common.cache.get_client_identifier(client)
+        client_mac = client.mac
+        title = f"AI Insights related to Client {client.summary_text}"
+    elif site:
+        site: CacheSite = common.cache.get_site_identifier(site)
+        site_id = site.id
+        title = f"AI Insights related to site {site.name}"
+    else:
+        title = "Global AI Insights"
+    title = f"{title} for past {duration.in_words()}"
+    caption="Use [cyan]show insight <id>[/] to see details for an insight."
+
+    resp = api.session.request(api.aiops.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
+
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, sort_by=sort_by, reverse=reverse, outfile=outfile, cleaner=cleaner.show_ai_insights, severity=severity)
+
+
+@app.command()
+def version(
+    debug: bool = common.options.debug,
+) -> None:
+    """Show current cencli version, and latest available version.
+    """
+    common.version_callback()
+
+@app.command(hidden=os.name != "posix")
+def cron(
+    accounts: List[str] = typer.Argument(None,),
+) -> None:
+    """Show contents of cron file that can be used to automate token refresh weekly.
+
+    This will keep the tokens valid, even if cencli is not used.
+    """
+    if os.name != "posix":  # pragma: no cover
+        render.econsole.print("This command is currently only supported on Linux using cron.  It is possible to do the same via Windows Task Scheduler.  Showing Linux cron.weekly output for reference.")
+
+    user = getpass.getuser()
+    exec_path = sys.argv[0]
+    py_path = sys.executable
+
+    config_data = {
+        "user": user,
+        "py_path": py_path,
+        "exec_path": exec_path,
+        "accounts": "" if not accounts else " ".join(accounts)
+    }
+
+    template = Template(cron_weekly)
+    config_out = template.render(config_data)
+
+    render.econsole.rule("/etc/cron.weekly/cencli file contents")
+    render.console.print(config_out)
+    render.econsole.rule()
+
+    render.econsole.print(
+        "Place the above contents into a file: /etc/cron.weekly/cencli [grey42 italic](requires sudo)[/]\n"
+        f"Alternatively you can pipe the output directly [cyan]cencli show cron {'' if not accounts else ' '.join(accounts)} | sudo tee /etc/cron.weekly/cencli[/]"
+        "\nThen make it executable: [cyan]sudo chmod +x /etc/cron.weekly/cencli[/]"
+        "\n\n[cyan]cencli refresh token[/] [dark_olive_green2 italic]command will always update the tokens for the default workspace (that's the -d flag)[/]"
+    )
+
+
+def _get_cencli_config(all_workspaces: bool = False) -> None:
+    omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
+    if not config.is_old_cfg:
+        omit += ["is_old_cfg"]
+    if not config.dev.capture_raw:
+        omit += ["capture_file"]
+    if not config.dev.sanitize:
+        omit += ["sanitize_file"]
+    out = {k: str(v) if isinstance(v, Path) else v for k, v in config.__dict__.items() if k not in omit}
+    defined_workspaces = out.pop("defined_workspaces", [])
+    current_workspace = out.pop("_workspace", "[red]ERROR[/]")
+    out = {**out, "defined_workspaces": ", ".join(defined_workspaces), "current_workspace": f"[bright_green]{current_workspace}[/]"}
+    workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
+
+    dev_options = config.dev.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
+    if dev_options:  # pragma: no cover
+        out = {**out, "dev_options": dev_options}
+
+    if all_workspaces:
+        out = {"workspaces": workspaces,  **out}
+    else:
+        out = {**out, config.workspace: workspaces.get(config.workspace, {})}
+
+    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
+
+    render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
+
+
+@app.callback()
+def callback():
+    """
+    Show Details about Aruba Central Objects
+    """
+    pass
+
+
+if __name__ == "__main__":
+    app()

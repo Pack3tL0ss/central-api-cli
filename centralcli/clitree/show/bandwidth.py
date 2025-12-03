@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+from __future__ import annotations
+
+from datetime import datetime
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal
+
+import typer
+from rich.markup import escape
+
+from centralcli import cleaner, common, log, render
+from centralcli.cache import api
+from centralcli.constants import BandwidthInterval, RadioBandOptions, UplinkNames, iden_meta  # noqa
+from centralcli.response import Response
+
+if TYPE_CHECKING:
+    from centralcli.cache import CacheClient, CacheDevice, CacheGroup, CacheLabel
+
+app = typer.Typer()
+
+
+def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", "graph"], title: str, pager: bool = False, outfile: Path = None, cleaner: callable = cleaner.get_gw_uplinks_bandwidth,) -> None:
+    if resp:
+        resp.output = sorted(resp.output, key=lambda x: x["timestamp"])
+
+    # We don't graph if there is only a single sample
+    if not tablefmt == "graph" or not resp or not resp.output or common.raw_out or len(resp.output) < 2:
+        render.display_results(
+            resp,
+            tablefmt=tablefmt,
+            title=title,
+            caption=None if not resp.ok else f'[cyan]Samples[/]: [bright_green]{resp.raw.get("count", "err")}[/] [cyan]Interval[/]: [bright_green]{resp.raw.get("interval", "err")}[/]',
+            exit_on_fail=True,
+            pager=pager,
+            outfile=outfile,
+            cleaner=cleaner
+        )
+    else:
+        render.bandwidth_graph(resp, title=title)
+
+
+@app.command()
+def ap(
+    ap: str = common.arguments.get("device", default=None, help=f"Show Bandwidth details for a specific AP {render.help_block('All APs')}", autocompletion=common.cache.dev_ap_completion,),
+    group: str = common.options.group,
+    site: str = common.options.site,
+    label: str = common.options.label,
+    swarm: bool = common.options.get("swarm", help=f"Show Bandwidth for the swarm/cluster the provided AP belongs to [dim]{escape('[AP argument must be provided. Valid for AOS8 IAP]')}[/]"),
+    band: RadioBandOptions = common.options.band,
+    ssid: str = common.options.get("ssid", help=f"Show Bandwidth for a specifc ssid [dim]{escape('[ap must be provided]')}[/]",),
+    interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show AP(s) bandwidth usage graph.
+
+    Default output is line graph showing bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    """
+    # start and end datetime opjects are in UTC
+    dev = None if not ap else common.cache.get_dev_identifier(ap, dev_type="ap")
+    group = None if not group else common.cache.get_group_identifier(group)
+    site = None if not site else common.cache.get_site_identifier(site)
+    label = None if not label else common.cache.get_label_identifier(label)
+    start, end = common.verify_time_range(start, end=end, past=past)  # TODO handle end without start... see show audit logs
+
+    interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
+
+    if band and not dev:
+        log.warning(f"[cyan]--band[/] is only valid when gathering bandwidth for a specific AP.  [cyan]--band[/] {band} ignored.", caption=True,)
+        band = None
+    if ssid and not dev:
+        log.warning(f"[cyan]--ssid[/] is only valid when gathering bandwidth for a specific AP.  [cyan]--ssid[/] {ssid} ignored.", caption=True,)
+        ssid = None
+    if any([group, site, label]) and dev:
+        log.warning(f"[cyan]--group[/] [cyan]--site[/] [cyan]--label[/] flags don't apply when gathering usage for a specific AP ({dev.summary_text})", caption=True,)
+        group = site = label = None
+        ssid = None
+    if swarm and dev and dev.is_aos10:
+        common.exit(f"[cyan]--swarm[/] is only valid for [bright_green]AOS8[/] IAP clusters [cyan]{dev.name}[/] is an [bright_red]AOS10[/] AP.")
+
+
+    params = ["serial", "group", "site", "label", "swarm_id", "band", "network"]
+    args = [
+        dev if dev is None else dev.serial,
+        group if group is None else group.name,
+        site if site is None else site.name,
+        label if label is None else label.name,
+        None if not swarm or not dev else dev.swack_id,
+        band if band is None else band.value,
+        ssid
+    ]
+    title_sfx = [
+        f"for AP [cyan]{'' if not dev else dev.name}[/]",
+        f"for APs in group [cyan]{'' if not group else group.name}[/]",
+        f"for APs in site [cyan]{'' if not site else site.name}[/]",
+        f"for APs with label [cyan]{'' if not label else label.name}[/]",
+        f"for APs in same cluster as {'' if not swarm or not dev else dev.summary_text}",
+        f"{band}Ghz radio",
+        f"[bright_green]SSID[/]: [cyan]{ssid}[/]",
+    ]
+
+    kwargs = {k: v for k, v in zip(params, args) if v is not None}
+    if dev and swarm:
+        del kwargs["serial"]  # They provided the --swarm flag so we keep the swarm_id kwargs but strip the serial.  --swarm means to return bandwidth for the swarm the AP belongs to (swarm_ids are not human friendly)
+
+    title_parts = ["Bandwidth Usage", *[title_part for k, title_part in zip(params, title_sfx) if k in kwargs]]
+    title = " ".join(title_parts)
+    title = title if title != "Bandwidth Usage" else "Bandwidth Usage All APs"
+
+    resp = api.session.request(api.monitoring.get_aps_bandwidth_usage, **kwargs, interval=interval, from_time=start, to_time=end)
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
+@app.command()
+def switch(
+    switch: str = common.arguments.get("device", help="Switch to show Bandwidth details for", autocompletion=common.cache.dev_switch_completion,),
+    port: str = typer.Argument("All Ports", help="Show bandwidth for a specific port",),
+    uplink: bool = typer.Option(False, "--uplink", help="Show Bandwidth usage for the uplink", show_default=False,),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show Bandwidth usage for a switch or a specific port on a switch.
+
+    Default output is line graph showing bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    """
+    # start and end datetime opjects are in UTC
+    dev = common.cache.get_dev_identifier(switch, dev_type="switch")
+    port = None if port == "All Ports" else port
+    start, end = common.verify_time_range(start, end=end, past=past)
+
+
+    title = f"Bandwidth Usage [cyan]{dev.name}[/]"
+    if uplink:
+        title = f"{title} [bright_green]Uplink[/]"
+    elif port:
+        title = f"{title} port [bright_green]{port}[/]"
+
+    resp = api.session.request(api.monitoring.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, port=port, show_uplink=uplink)
+
+    _interval = resp.raw.get("interval")
+    if _interval and not any([do_json, do_yaml, do_csv, do_table]):
+        title = f"{title}, Sample Frequency: {_interval}"
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
+@app.command()
+def client(
+    client: str = typer.Argument(None, help=f"Show Bandwidth details for a specific client [grey42]{escape('[default: All clients]')}[/]", metavar=iden_meta.client, autocompletion=common.cache.client_completion, show_default=False,),
+    device: str = typer.Option(None, "--dev", help="Show Bandwidth details for clients connected to a specific device", metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, case_sensitive=False, show_default=False,),
+    group: str = typer.Option(None, help="Show Bandwidth for clients connected to devices in a specific group", metavar=iden_meta.group, autocompletion=common.cache.group_completion, show_default=False),
+    label: str = typer.Option(None, help="Show Bandwidth for clients connected to devices with a specific label", metavar=iden_meta.label, autocompletion=common.cache.label_completion, show_default=False),
+    swarm_or_stack: bool = typer.Option(False, "-S", "--swarm", "--stack", help="Show Bandwidth for the swarm or stack the provided device belongs to [cyan]--dev[/] argument must be provided.", show_default=False),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show client bandwidth usage graph.
+
+    Default output is line graph showing bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    """
+    # start and end datetime opjects are in UTC
+    dev: CacheDevice | None = None if not device else common.cache.get_dev_identifier(device, swack=True)
+    group: CacheGroup | None = None if not group else common.cache.get_group_identifier(group)
+    label: CacheLabel | None = None if not label else common.cache.get_label_identifier(label)
+    client: CacheClient | None = None if not client else common.cache.get_client_identifier(client, exit_on_fail=True)
+    start, end = common.verify_time_range(start, end=end, past=past)
+
+    kwargs = {}
+    title = "Bandwidth Usage"
+
+    if client:
+        kwargs["mac"] = client.mac
+        title = f'{title} for Client: {client.name}|{client.ip}|{client.mac}|{client.connected_name}'
+        if client.site:
+            title = f'{title}|s:{client.site}'
+        if swarm_or_stack:
+            log.warning(f"[cyan]-S[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
+        if dev:
+            log.warning(f"[cyan]--dev[/] {device} was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
+        if any([group, label]):
+            _err = f"[cyan]--group[/] {group.name}" if group and not label else f"[cyan]--label[/] {label.name}"
+            _err = _err if not label else f"[cyan]--group[/] {group.name} & [cyan]--label[/] {label.name}"
+            log.warning(f"{_err} was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
+    elif swarm_or_stack:
+        if not dev:
+            common.exit("[cyan]--dev[/] DEVICE must be provided with [cyan]-s[/]|[cyan]--swarm[/]|[cyan]--stack[/] option.")
+        else:
+            if dev.type == "ap" and dev.is_aos10:
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/] is only valid for AOS8 APs {dev.name} is AOS10.", caption=True)
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
+                kwargs["serial"] = dev.serial
+            elif dev.generic_type not in ["switch", "ap"]:
+                log.warning(f"[cyan]swarm[/]/[cyan]stack[/] flag only applies to switches or APs not {dev.type}.", caption=True)
+                log.warning(f"[cyan]-S[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored.  Output is for clients connected to {dev.name}", caption=True)
+            else:
+                kwargs[f'{"swarm_id" if dev.type == "ap" else "stack_id"}'] = dev.swack_id
+    elif dev:
+        if any([group, label]):
+            log.warning("[cyan]--group[/] & [cyan]--label[/] flags are mutually exclusive with [cyan]--dev[/] <DEVICE>.", caption=True,)
+            log.info(f"Ignoring {'[cyan]--group[/]' if group else '[cyan]--label[/]'}.  Output is for clients connected to {dev.summary_text}", caption=True,)
+            title = f"{title} for clients connected to {dev.name}"
+            kwargs["serial"] = dev.serial
+    elif any([group, label]):
+        if group:
+            kwargs["group"] = group.name
+            title = f"{title} for clients connected to devices in [cyan]{group.name}[/] group"
+
+        if label:
+            kwargs["label"] = label.name
+            title = f"{title} for clients connected to devices with label {label.name}" if not group else f"{title} with label {label.name}"
+    else:
+        title = f"{title} [bright_green]All[/] Clients"
+
+    if dev and title == "Bandwidth Usage":
+        title = f"{title} for Clients connected to {dev.summary_text}"
+
+
+    resp = api.session.request(api.monitoring.get_clients_bandwidth_usage, **kwargs, from_time=start, to_time=end)
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
+@app.command()
+def uplink(
+    device: str = common.arguments.get("device", autocompletion=common.cache.dev_switch_gw_completion,),
+    uplink_name: UplinkNames = typer.Argument("uplink101", help="[Applies to Gateway] Name of the uplink.  Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names.", show_default=True,),
+    interval: BandwidthInterval = typer.Option(BandwidthInterval._5m, "-i", "--interval", case_sensitive=False, help="[Applies to Gateway] One of 5m, 1h, 1d, 1w, where m=minutes, h=hours, d=days, w=weeks M=Months"),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show bandwidth usage graph for a switch or gateway uplink
+
+    Default output is line graph showing uplink bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    Use [cyan]cencli show uplinks <GATEWAY>[/] to get uplink names
+    """
+    # start and end datetime opjects are in UTC
+    dev = common.cache.get_dev_identifier(device, dev_type=["gw", "switch"])
+    start, end = common.verify_time_range(start, end=end, past=past)
+
+    interval = interval.replace("m", "minutes").replace("h", "hours").replace("d", "days").replace("w", "weeks")
+
+    if dev.type == "gw":
+        resp = api.session.request(api.monitoring.get_gw_uplinks_bandwidth_usage, dev.serial, uplink_name, interval=interval, from_time=start, to_time=end)
+    else:
+        resp = api.session.request(api.monitoring.get_switch_ports_bandwidth_usage, dev.serial, switch_type=dev.type, from_time=start, to_time=end, show_uplink=True)
+
+    title = f'Bandwidth Usage for [cyan]{dev.name}[/] uplink [cyan]{uplink_name}[/]'
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
+@app.command()
+def wlan(
+    network: str = typer.Argument(..., metavar="[WLAN SSID]", help="Use [cyan]cencli show wlans[/] for a list of networks", show_default=False,),  # COMPLETION
+    group: str = typer.Option(None, help="Show Bandwidth for APs in a specific group", metavar=iden_meta.group, autocompletion=common.cache.group_completion, show_default=False),
+    site: str = typer.Option(None, help="Show Bandwidth for APs in a specific site", metavar=iden_meta.site, autocompletion=common.cache.site_completion, show_default=False),
+    label: str = typer.Option(None, help="Show Bandwidth for APs with a specific label", metavar=iden_meta.label, autocompletion=common.cache.label_completion, show_default=False),
+    device: str = typer.Option(
+        None,
+        "-S", "--swarm",
+        metavar=iden_meta.dev,
+        autocompletion=common.cache.dev_switch_ap_completion,
+        help=f"Show bandwidth for the swarm associated with provided AP [grey42]{escape('[Valid for AOS8 IAP]')}[/]",
+        show_default=False,
+    ),
+    start: datetime = common.options.start,
+    end: datetime = common.options.end,
+    past: str = common.options.past,
+    do_json: bool = common.options.do_json,
+    do_yaml: bool = common.options.do_yaml,
+    do_csv: bool = common.options.do_csv,
+    do_table: bool = common.options.do_table,
+    raw: bool = common.options.raw,
+    outfile: Path = common.options.outfile,
+    pager: bool = common.options.pager,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Show bandwidth usage graph for a network/SSID
+
+    Default output is line graph showing network bandwidth usage over the last 3 hours.
+    Use formatting flags for alternative output.  [cyan]--start[/], [cyan]--end[/], [cyan]--past[/] to adjust time-frame.
+
+    The larger the time-frame the more unreadable the graph will be.
+    Use [cyan]cencli show wlans <GATEWAY>[/] to get list of available networks.
+    """
+    # start and end datetime opjects are in UTC
+    title = f'Bandwidth Usage for [cyan]{network}[/]'
+    if device:
+        dev = common.cache.get_dev_identifier(device, dev_type="ap", swack_only=True)
+        title = f"{title} on swarm containing {dev.name}"
+
+    kwargs = {
+        "group": None if not group else common.cache.get_group_identifier(group).name,
+        "site": None if not site else common.cache.get_group_identifier(site).name,
+        "label": None if not label else common.cache.get_group_identifier(label).name,
+        "swarm_id": None if not device else dev.swack_id
+    }
+    if len([v for v in kwargs.values() if v is not None]) > 1:
+        common.exit("You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] parameters")
+
+    start, end = common.verify_time_range(start, end=end, past=past)
+
+    resp = api.session.request(api.monitoring.get_networks_bandwidth_usage, network, **kwargs)
+
+    tablefmt = "graph" if not any([do_csv, do_json, do_yaml, do_table]) else common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not do_table else "yaml")
+    _render(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile,)
+
+
+@app.callback()
+def callback():
+    """
+    Show bandwidth usage
+    """
+    pass
+
+
+if __name__ == "__main__":
+    app()

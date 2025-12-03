@@ -2,6 +2,7 @@
 
 [![Latest Version](https://img.shields.io/pypi/v/centralcli.svg)](https://pypi.org/project/centralcli)
 [![Documentation Status](https://readthedocs.org/projects/central-api-cli/badge/?version=latest)](https://central-api-cli.readthedocs.io/en/latest/?badge=latest)
+[![Coverage](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/coverage.svg)](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/coverage.svg)
 [![Downloads](https://static.pepy.tech/badge/centralcli)](https://pepy.tech/project/centralcli)
 [![PyPI - Installs](https://img.shields.io/pypi/dm/centralcli.svg?color=blue&label=Installs&logo=pypi&logoColor=gold)](https://pypi.org/project/centralcli/)
 [![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](https://lbesson.mit-license.org/)
@@ -55,9 +56,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 #### Install `centralcli` via `uv`
 ```bash
-# install centralcli (will also quickly install Python 3.11 if needed)
-uv tool install --python 3.11 centralcli
+# install centralcli (showing command with optional `--python 3.13` flag see note below)
+uv tool install --python 3.13 centralcli
 ```
+
+> Including `--python 3.13` above is optional provided you have python installed on the system.  However uv facilitates deploying a stand-alone version of python with the package.  There are likely speed advantages to doing this if your current version is dated (check with `python -V`)
+
 
 Then to Upgrade `centralcli`
 ```bash

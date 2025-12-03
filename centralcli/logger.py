@@ -1,39 +1,25 @@
 from __future__ import annotations
 
-from os import environ
-from pathlib import Path
-from typing import Union, List, Any
-from logging.handlers import RotatingFileHandler
-from time import sleep
-from rich.console import Console
-# from rich.logging import RichHandler
-
 import logging
-import typer
+from functools import partial
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from time import sleep
+from typing import Any
 
+from rich.console import Console
 
-log_colors = {
-    "error": typer.colors.RED,
-    "exception": typer.colors.RED,
-    "critical": typer.colors.RED,
-    "fatal": typer.colors.RED,
-    "warning": typer.colors.YELLOW,
-}
-# log_colors = {
-#     "error": "[bright_red]",
-#     "exception": "[bright_red]",
-#     "critical": "[bright_red]",
-#     "fatal": "[bright_red]",
-#     "warning": "[dark_orange4]",
-# }
+from . import env, utils
+
 console = Console(emoji=False, markup=False)
-emoji_console = Console(markup=False)
-emoji_econsole = Console(markup=False, stderr=True)
 econsole = Console(stderr=True)
-default_console = Console()
+
+
+# These are pycentral logs that we ignore unless DEBUG is enabled
 DEBUG_ONLY_MSGS = [
     "Loaded token from storage from file"
 ]
+
 
 # pycentral has a number of sys.exit that are logged, but not displayed.  So it's a silent exit for cencli.  log_print will change the log to show=True so they display
 PYCENTRAL_SILENT_EXIT = [
@@ -47,20 +33,28 @@ PYCENTRAL_SILENT_EXIT = [
 
 
 class MyLogger:
-    def __init__(self, log_file: Union[str, Path], debug: bool = False, show: bool = False, verbose: bool = False):
+    def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None):
         self._DEBUG: bool = debug
-        self.log_msgs: List[str] = []
+        self.log_msgs: list[str] = []
         self.verbose: bool = verbose
-        if isinstance(log_file, Path):
-            self.log_file: Path = log_file
-        else:
-            self.log_file: Path = Path(log_file)
+        self.log_file: Path = log_file if isinstance(log_file, Path) else Path(log_file)
+        if env.is_pytest:
+            self.log_file = self.log_file.parent / "pytest.log"
         self._log: logging.Logger = self.get_logger()
         self.name: str = self._log.name
         self.show: bool = show  # Sets default log behavior (other than debug)
-        self._caption: List[str] = []  # Log messages will be logged and displayed in caption output
+        self._caption: list[str] = utils.listify(deprecation_warnings) or []  # Log messages will be logged and displayed in caption output
 
-    def __getattr__(self, name: str) -> Any:
+        # base logger methods
+        self.debug = partial(self.log_print, level="debug")
+        self.info = partial(self.log_print, level="info")
+        self.warning = partial(self.log_print, level="warning")
+        self.error = partial(self.log_print, level="error")
+        self.exception = partial(self.log_print, level="exception", exc_info=True)
+        self.critical  = partial(self.log_print, level="critical")
+        self.fatal  = partial(self.log_print, level="fatal")
+
+    def __getattr__(self, name: str) -> Any:  # pragma: no cover Exists only as a convenience when debugging
         if hasattr(self, "_log") and hasattr(self._log, name):
             return getattr(self._log, name)
         else:
@@ -69,29 +63,43 @@ class MyLogger:
     def get_logger(self) -> logging.Logger:
         '''Return custom log object.'''
         fmtStr = "%(asctime)s [%(process)d][%(levelname)s]: %(message)s"
-        # fmtStr = "%(asctime)s [%(process)d][%(levelname)s]{%(pathname)s:%(lineno)d}: %(message)s"
         dateStr = "%m/%d/%Y %I:%M:%S %p"
-        # fmtStr = "%(message)s"
-        # dateStr = "[%X]"
         logging.basicConfig(
-            # filename=self.log_file.absolute(),
             level=logging.DEBUG if self.DEBUG else logging.INFO,
             format=fmtStr,
             datefmt=dateStr,
             handlers=[
-                # RichHandler(rich_tracebacks=True, tracebacks_show_locals=True, show_path=False),
                 RotatingFileHandler(self.log_file.absolute(),  maxBytes=250000, backupCount=5,),
             ],
         )
         return logging.getLogger(self.log_file.stem)
 
-    def print_file(self) -> None:
-        console.print(self.log_file.read_text(),)
+    def print_file(self, pytest: bool = False, show_all: bool = False, unused_mocks: bool = False) -> None:
+        if unused_mocks:  # pragma: no cover
+            unused_mock_file = self.log_file.parent / "pytest-unused-mocks.log"
+            logs = unused_mock_file.read_text()
+        elif not pytest:
+            logs = self.log_file.read_text()
+        else:
+            pytest_log_file = self.log_file.parent / "pytest.log"
+            logs = pytest_log_file.read_text()
+            if not show_all:
+                lines = logs.splitlines(keepends=True)
+                for idx, line in enumerate(lines[::-1], start=1):
+                    if "test run start" in line.lower():  # pragma: no cover
+                        break
+                logs = "".join(lines[len(lines) - idx:])
 
-    def follow(self) -> None:
-        '''generator function that yields new lines in log file
-        '''
-        with self.log_file.open("r") as lf:
+        console.print(logs)
+
+
+
+
+
+    def follow(self, pytest: bool = False) -> None:  # pragma: no cover requires a tty
+        """generator function that yields new lines in log file"""
+        file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
+        with file.open("r") as lf:
             lines = lf.readlines()
             console.print("".join(lines[int(f"-{len(lines) if len(lines) <= 20 else 20}"):]).rstrip())
 
@@ -108,12 +116,14 @@ class MyLogger:
 
     @property
     def caption(self) -> None | str:
-        """render log messages queued for display in output caption.
-        """
-        if not self._caption:
-            return
-        else:
+        """render log messages queued for display in output caption."""
+        if self._caption:
             return "\n".join([f' {msg}' for msg in self._caption])
+
+    @caption.setter
+    def caption(self, caption: str | list[str]):
+        caption = caption if not isinstance(caption, str) else [caption]
+        self._caption += caption
 
     @staticmethod
     def _remove_rich_markups(log_msg: str) -> str:
@@ -127,41 +137,44 @@ class MyLogger:
 
         return cap.get()
 
-    def log_print(self, msgs, log: bool = False, show: bool = False, caption: bool = False, level: str = 'info', *args, **kwargs) -> None:
+    def log_print(
+            self, msgs: str | list[str], *args, log: bool = None, show: bool = None, caption: bool = False, level: str = 'info',
+            exc_info: bool = None, extra: bool = None, stack_info: bool = False, stacklevel: int = 1, **kwargs
+        ) -> None:
+        log = log if log is not None else not caption  # we log by default unless caption=True then the msg is displayed in caption, but not logged (unless log=True)
         msgs = [msgs] if not isinstance(msgs, list) else msgs
-        _msgs = []
-        _logged = []
+        _msgs, _logged = [], []
+
         for i in msgs:
             i = str(i)
-            if not show and any([i.startswith(silent_exit) for silent_exit in PYCENTRAL_SILENT_EXIT]):
+            if not show and any([i.startswith(silent_exit) for silent_exit in PYCENTRAL_SILENT_EXIT]):  # pragma: no cover
                 show = True
             if not self.DEBUG and [i for d in DEBUG_ONLY_MSGS if d in i]:  # messages we ignore if debug is not enabled.
                 continue
 
-            if i not in _logged:
+            if i not in _logged:  # prevents errant duplicates.
                 if log:
-                    getattr(self._log, level)(self._remove_rich_markups(i), *args, **kwargs)
+                    getattr(self._log, level)(self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:
                     _msgs.append(i)
 
-        if show is not False and True in [show, self.show]:
+        warning_emoji = "[dark_orange3]\u26a0[/]  "
+        if show is not False and any([show, self.show]):
             self.log_msgs += _msgs
             for m in self.log_msgs:
-                if console.is_terminal or environ.get("PYTEST_CURRENT_TEST"):
+                if console.is_terminal or env.is_pytest:
                     _pfx = '' if not self.DEBUG else '\n'  # Add a CR before showing log when in debug due to spinners
-                    con = econsole
-                    warning_emoji = "[dark_orange3]\u26a0[/]  "
-                    con.print(f"{_pfx}{warning_emoji if level not in ['info', 'debug'] else ''}{m}", emoji=":cd:" not in m.lower())  # avoid :cd: emoji common in mac addresses
+                    econsole.print(f"{_pfx}{warning_emoji if level not in ['info', 'debug'] else ''}{m}", emoji=":cd:" not in m.lower())  # avoid :cd: emoji common in mac addresses
 
             self.log_msgs = []
 
         if caption:
-            _warn = "\u26a0"
-            self._caption = [*self._caption, *[f"{f'{_warn}  ' if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
+            msgs = [line for m in msgs for line in str(m).splitlines()]
+            self._caption = [*self._caption, *[f"{warning_emoji if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
 
     @property
-    def level_name(self) -> str | int:
+    def level_name(self) -> str | int:  # pragma: no cover
         return logging.getLevelName(self._log.level)
 
     @property
@@ -174,40 +187,11 @@ class MyLogger:
         self.show = value
         self.setLevel(logging.DEBUG if value else logging.INFO)
 
-    # If caption=True we assume log=False unless you specify log=True, default it to log, no caption.
-    def debug(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='debug', *args, **kwargs)
-
-    def debugv(self, msgs: Union[list, str], log: bool = True, show: bool = None, *args, **kwargs) -> None:
+    def debugv(self, msgs: list[str] | str, log: bool = True, show: bool = None, *args, **kwargs) -> None:
         """More verbose debugging - set via debugv: True in config
         """
         if self.DEBUG and self.verbose:
             self.log_print(msgs, log=log, show=show, level='debug', *args, **kwargs)
-
-    def info(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, *args, **kwargs)
-
-    def warning(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='warning', *args, **kwargs)
-
-    def error(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='error', *args, **kwargs)
-
-    def exception(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='exception', *args, **kwargs)
-
-    def critical(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='critical', *args, **kwargs)
-
-    def fatal(self, msgs: Union[list, str], log: bool = None, show: bool = None, caption: bool = False, *args, **kwargs) -> None:
-        log = log if log is not None else not caption
-        self.log_print(msgs, log=log, show=show, caption=caption, level='fatal', *args, **kwargs)
 
     def setLevel(self, level):
         getattr(self._log, 'setLevel')(level)

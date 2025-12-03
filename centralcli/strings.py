@@ -2,16 +2,20 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from typing import Literal, List, Dict, Any
-from rich.console import Console
-from rich.syntax import Syntax
-from rich.markup import escape
-from pygments.lexers.data import JsonLexer, YamlLexer
-from centralcli import log, utils
-from centralcli.vendored.csvlexer.csv import CsvLexer
+import json
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal
+
 import tablib
 import yaml
-import json
+from pygments.lexers.data import JsonLexer, YamlLexer
+from rich.console import Console
+from rich.markup import escape
+from rich.syntax import Syntax
+
+from centralcli import log, utils
+from centralcli.vendored.csvlexer.csv import CsvLexer
+
 console = Console(emoji=False)
 
 # [italic]Also supports a simple list of serial numbers with no header 1 per line.[reset]  # TODO implement this device del
@@ -33,21 +37,21 @@ ADD_FIELDS = {
         "required": ["serial", "mac"],
         "optional": {
             "group": "Pre-provision device to group",
-            "license": "Apply license to device"
+            "subscription": "Apply subscription to device"
         }
     },
     "groups": {
         "required": ["name"],
         "optional": {
-            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [grey42]{escape("[default: All but sdwan allowed]")}[/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or {escape("[cx,ap,gw]")}',
-            "wired-tg": f"Set to true to make the group a template group for switches. [grey42]{escape('[default: False]')}[/]",
-            "wlan-tg": f"Set to true to make the group a template group for APs.  [grey42]{escape('[default: False]')}[/]",
-            "gw-role": f"[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [grey42]{escape('[default: branch]')}[/]",
-            "aos10": f"Set to true to enable group as aos10 group (APs).  [grey42]{escape('[default: AOS8 IAP]')}[/]",
-            "microbranch": f"Set to true to configure APs in the group as micro-branch APs (implies aos_10). [grey42]{escape('[default: False]')}[/]",
+            "types": f'Defines what type of devices are allowed in the group.\n{_pad}Valid values: ["ap", "gw", "cx", "sw"] [dim]{escape("[default: All but sdwan allowed]")}[/]\n{_pad}For csv the field can be blank (all device types) or any of these formats: "cx" or "cx,ap" or {escape("[cx,ap,gw]")}',
+            "wired-tg": f"Set to true to make the group a template group for switches. [dim]{escape('[default: False]')}[/]",
+            "wlan-tg": f"Set to true to make the group a template group for APs.  [dim]{escape('[default: False]')}[/]",
+            "gw-role": f"[cyan]branch[/], [cyan]vpnc[/] or [cyan]wlan[/] only applies if gw type is allowed. [dim]{escape('[default: branch]')}[/]",
+            "aos10": f"Set to true to enable group as aos10 group (APs).  [dim]{escape('[default: AOS8 IAP]')}[/]",
+            "microbranch": f"Set to true to configure APs in the group as micro-branch APs (implies aos_10). [dim]{escape('[default: False]')}[/]",
             "monitor-only-cx": "Set to true to enable CX switches as monitor only.",
             "monitor-only-sw": "Set to true to enable AOS-SW switches as monitor only.",
-            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [grey42]{escape('[default: False]')}[/]",
+            "cnx": f"Make group compatible with New Central (cnx)\n{_pad}:warning:  All configurations will be pushed from New Central configuration model. [dim]{escape('[default: False]')}[/]",
             "gw-config": "Path to file containing gw group level config or jinja2 template.",
             "ap-config": "Path to file containing ap group level config or jinja2 template.",
             "gw-vars": "Path to variables used if gw-config is a j2 template.",
@@ -57,12 +61,13 @@ ADD_FIELDS = {
 }
 MOVE_FIELDS = {
      "devices": {
-          "required": ["serial", "mac"],
+          "required": ["serial"],
           "optional": {
+              "mac": "Device MAC address.",
               "group": "Move device to group",
               "site": "Move device to site",
               "label": "Assign label to device",
-              "retain_config": "Retain devices current configuration as device level override. [grey42](Applies to CX switches Only)[/]"
+              "retain_config": "Retain devices current configuration as device level override. [dim](Applies to CX switches Only)[/]"
           }
     }
 }
@@ -83,6 +88,13 @@ LEXERS = {
         "json": JsonLexer(ensurenl=False),
         "yaml": YamlLexer(ensurenl=False)
 }
+
+
+@dataclass
+class Warnings:
+    no_outfile = "[deep_sky_blue1]\u2139[/]  [cyan]--out <FILE PATH>[/] not provided.  The command can be repeated without doing API calls with [cyan]cencli show last --out <FILE PATH>[/]"
+
+
 class ExampleSegment:
     def __init__(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = "csv", example_title: str = None) -> None:
         self.original = example_text
@@ -98,7 +110,7 @@ class ExampleSegment:
         return "\n".join(self.list)
 
     def __rich__(self):
-        return str(self)
+        return str(self)  # pragma: no cover
 
     def _format_example_text(self, example_text: str, example_type: Literal["csv", "yaml", "json"] = None) -> Syntax:
         example_type = example_type or self.example_type
@@ -173,11 +185,11 @@ class Example:
                 if " " in value:
                     return value.split()
                 elif "," in value:  # csv should only support space seperated, but leaving this in for now.
-                    return value.lstrip("[").rstrip("]").split(",")
+                    return value.lstrip("[").rstrip("]").split(",")  # pragma: no cover
                 elif value == "":
                     return None
                 else:
-                    return [value]
+                    return [value]  # pragma: no cover
             elif value.lower() in bool_strings:
                 return True if value.lower() in ["true", "yes"] else False
             elif value.isdigit():
@@ -244,7 +256,7 @@ class Example:
     def txt_file_example(self) -> List[str] | None:
         if not self.by_text_field:
             return
-        if self.by_text_field not in self.ds.dict[0]:
+        if self.by_text_field not in self.ds.dict[0]:  # pragma: no cover
             log.error(f"Example provided by_text_field {self.by_text_field}, but it does not exist in the example data")
             return
 
@@ -265,14 +277,14 @@ common_add_delete_end = """
 """
 
 generic_end = """
-[italic]:information:  Most batch operations are designed so the same file can be used for multiple automations
+[italic]:information:  Most batch operations are designed so the same file can be used for multiple automations.
    the fields not required for a particular automation will be ignored.[/]
 """
 
 # -- // ADD DEVICES \\ --  NOT USED
 # This uses example.full_text property, retaining for reference
 device_add_data = """
-serial,mac,group,license
+serial,mac,group,subscription
 CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
 CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
 """
@@ -404,7 +416,7 @@ Where [cyan]serial[/] The serial of the AP to be updated
 
 # -- // DELETE DEVICES \\ --
 data = """
-serial,license
+serial,subscription
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap
@@ -417,7 +429,7 @@ Accepts the following keys (include as header row for csv import):
 
 {example.ignore_text}
 
-[italic]Examples show extra [cyan]license[/] field which is ignored:
+[italic]Examples show extra [cyan]subscription[/] field which is ignored:
 {example}
 {example.parent_key_text}
 {common_add_delete_end}
@@ -577,7 +589,7 @@ This is a placeholder
 TODO add deploy example
 """
 
-# -- // SUBSCRIBE DEVICES \\ --
+# -- // CLASSIC SUBSCRIBE DEVICES \\ --
 data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
@@ -591,6 +603,52 @@ Requires the following keys (include as header row for csv import):
 
 
 {example}
+{example.parent_key_text}
+{generic_end}
+"""
+
+
+# -- // GLP SUBSCRIBE DEVICES \\ --
+data="""serial,subscription
+CN12345678,foundation_switch_6300
+CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
+CN12345680,advanced_ap"""
+example = Example(data, type="devices", action="other")
+clibatch_assign_subscriptions = f"""[italic cyan]cencli batch assign subscription IMPORT_FILE[/]:
+
+Requires the following keys (include as header row for csv import):
+    [cyan]serial[/], [cyan]subscription[/] [italic](both are required)[/]
+    [italic]Other keys/columns are allowed, but will be ignored.
+
+
+{example}
+[italic]:information:  A simple list of [cyan]serial numbers[/] is acceptable when subscription is provided via [cyan]--sub[/] flag[/]
+i.e. [cyan]cencli batch assign subscriptions --sub advanced-switch-6200 import-file.txt[/]
+----------- [cyan]csv or txt[/] -----------------
+serial     [magenta]<-- this is the header column[/] [grey42](optional for txt)[/]
+CN12345678
+CN12345679
+CN12345680
+----------------------------------------
+
+[italic]:information:  A simplified yaml keyed by [cyan]subscription [dim](name or id)[/dim][/cyan] followed by a list of [cyan]serial numbers[/]
+to be assigned to the subscription. i.e.[/italic]
+----------- Simplified [bright_green].yaml example[/] ---------------
+foundation_switch_6300:  [dim italic]<-- Can be subscription Name or ID[/]
+  - CN12345678
+  - CN12345679
+  - CN12345680
+0f468bdf-e485-087f-abff-fc881f54373c:
+  - US12345678
+  - US87654321
+  - TW01234565
+--------------------------------------------------
+
+[italic]:information:  If Subscription name is used, and multiple subscriptions with that name are available the
+   subscription with with unused subscriptions available and the most remaining time is used.  Specify the
+   subscription by id to assign devices to a specific subscription.  Use [cyan]cencli show subscriptions[/] to see
+   subscription IDs.[/italic]
+
 {example.parent_key_text}
 {generic_end}
 """
@@ -680,9 +738,10 @@ class ImportExamples:
         self.move_devices = Example(device_move_data, type="devices", action="move").full_text
         self.rename_aps = clibatch_rename_aps
         self.update_aps = clibatch_update_aps
+        self.assign_subscriptions = clibatch_assign_subscriptions
 
     def __getattr__(self, key: str):
-        if key not in self.__dict__.keys():
+        if key not in self.__dict__.keys():  # pragma: no cover
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
 
@@ -691,4 +750,56 @@ cron_weekly = """#!/usr/bin/env bash
 /bin/su -c "{{py_path}} {{exec_path}} refresh token -d {{accounts}}" {{user}} &&
     logger -t centralcli "Token Refreshed via cron" ||
     logger -t centralcli "Token Refresh returned error"
+"""
+
+cencli_config_example = """CFG_VERSION: 2
+
+workspaces:
+  default:
+    cluster: internal
+    ssl_verify: true                                                  # Optional, Can be set globally or within a workspace.  Defaults to True if not provided anywhere.
+    glp:                                                              # --- GreenLake ---
+      client_id: 7268afzt-4d84-2b14-ac3c-4c3gcvra11a9                 # Refer to: https://developer.arubanetworks.com/new-central/docs/generating-and-managing-access-tokens
+      client_secret: 1349d637688a330a81d3423df566e7b0
+      base_url: https://global.api.greenlake.hpe.com                  # Optional The glp base url is the same for all public clusters, this is potentially required for VPC/On Prem deployments.
+    central:                                                          # --- New Central ---
+      base_url: https://internal.api.central.arubanetworks.com        # Optional, Can provide the 'cluster' at the parent level.  cencli can then determine the base_url
+    classic:                                                          # --- Classic Central ---
+      base_url: https://internal-apigw.central.arubanetworks.com      # Optional, Can provide the 'cluster' at the parent level.  cencli can then determine the base_url
+      client_id: CZ3r5b7ctiaHr6PaL3R00155dc048Fe                      # Refer to: https://developer.arubanetworks.com/central/docs/api-gateway
+      client_secret: jqXrs7lsf28557f2wADeIssOc001O3s
+      username: wade@example.com                                      # Optional, but allow cencli to create a new set of token if the current refresh token expires
+      password: somepassword                                          # Use 'cencli show cron' to see how to setup cron to automatically refresh the tokens once a week.
+      tokens:
+        access: M4wADeIsS0c00148KGipv1v09k4uB3cM                      # FYI: the tokens in the config become stale as soon as they are refreshed by cencli.  The refreshed tokens
+        refresh: s4lhIvwADeIsS0c00Lxlo7Llr0OURQMT                     #   are stored elsewhere in the cache.  This allows for an easy place to update them if needed.
+        webhook: 7RSaW8hZQkO1qVAqzPsE                                 # Port this system would listen on for webhooks from Aruba Central.  Only applies if optional extra 'hook-proxy' is installed.  See README
+        wss_key: ezkGbGd_really_long_key_blah_blah                    # Optional, but required to use -f option with 'cencli show logs -f' and 'cencli show audit logs -f'.  Streaming should be subscribed for Audit and Monitoring.
+      webhook:                                                        # This section only applies if optional extra 'hook-proxy' is installed.  See README
+        port: 9443                                                    # Optional, Port this system would listen on for webhooks from Aruba Central.  Only applies if optional extra 'hook-proxy' is installed.  See README
+        token: 7RSaW8hZQkO1qVAqzPsE                                   # Optional, you can put the token here, or under the tokens key.
+    other-workspace:                                                  # webhook proxy will listen on 9443 by default
+      cluster: us5
+      # ... Same format as above.  Repeat for any other workspaces you want to interact with
+
+# -- The following items are optional --
+ssl_verify: true      # Can be set globally or in a workspace config.  Workspace config takes precedence if set.  Defaults to True.
+debug: false          # Enable debug, for more logs/messages.  Default is False
+debugv: false         # Verbose debug.  Default is False
+cache_client_days: 90 # The local cache will store clients that have connected within the last 90 days.
+forget_ws_after: 90   # when using an alternate workspace via --ws myotherws.  If this is set, cencli will continue to use
+                      # myotherws workspace until no command has been issued for n minutes (90 in this case),
+                      # or until -d (use default) or --account some_other_ws is used
+
+                      # By default it will remember the last account used forever and only switch back to the default account when -d is used
+                      # Set to 0 to disable sticky account functionality.  (Would use default account unless --account <account-name> is provided.)
+
+                      # You can also set env var ARUBA_ACCOUNT to the workspace name configured in this file.
+
+dev_options:          # --- Developer Options ---
+  limit: 10           # Overrides the default pagination limit requested for each API call.  To test pagination/rate-limiting
+  sanitize: false     # Sanitize output (for video demo, animated GIF creation).
+  capture_raw: false  # Captures the raw response of all get commands in a common file.  So they can be used for automated testing.
+  # There are also hidden command line flags supported globally for these options
+  # --debug-limit --sanitize --capture-raw
 """

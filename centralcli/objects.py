@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal
 from json import JSONEncoder
-import pendulum
 from pathlib import Path
+from typing import Literal
 
+import pendulum
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
+
 
 class DateTime():
     """DateTime object with a number of timestamp to string converters for various representations used by the CLI.
@@ -72,22 +73,27 @@ class DateTime():
         """
         if isinstance(timestamp, str):
             if not timestamp.isdigit():
-                return pendulum.parse(timestamp).timestamp()
+                return pendulum.parse(timestamp).int_timestamp
             else:
                 timestamp = int(timestamp)
 
         if str(timestamp).isdigit() and len(str(int(timestamp))) > 10:
             timestamp = timestamp / 1000
 
-        return timestamp if not str(timestamp).endswith(".0") else int(timestamp)
+        return None if timestamp is None else round(timestamp)
+
+
+    @property
+    def is_expired(self) -> bool:
+        return self.ts >= pendulum.now(tz="UTC").timestamp()
 
     @property
     def expiration(self) -> str:
         """Render date/time in format provided during instantiation colorized to indicate how near expiration the date is.
 
         return is colorized:
-          - orange: if expiration within 6 months
-          - red: if expiration within 3 months
+            - orange: if expiration within 6 months
+            - red: if expiration within 3 months
 
         Returns:
             str: Potentially colorized date str.
@@ -99,6 +105,16 @@ class DateTime():
             return f"[dark_orange3]{self.pretty}[/]"
         else:
             return self.pretty
+
+    @property
+    def iso(self) -> str:
+        """Render date in ISO format
+
+        Returns:
+            str: Date as string in format: '2013-03-31T03:30:00+02:00'
+        """
+        return pendulum.from_timestamp(self.ts, tz=self.tz).to_iso8601_string()
+
 
     @property
     def day_datetime(self) -> str:
@@ -173,7 +189,7 @@ class DateTime():
         Returns:
             str: Date as string in format: 'May 7, 2020 3:49:24 AM' or 'May 7, 2020 03:49:24 AM' if pad_hour=True
         """
-        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD, YYYY {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def log(self) -> str:
@@ -190,7 +206,7 @@ class DateTime():
             except TypeError:
                 return self.ts
 
-        return pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
     def date_string(self) -> str:
@@ -199,14 +215,21 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Dec 10, 2019'
         """
-        return pendulum.from_timestamp(self.ts, tz=self.tz).to_formatted_date_string()
+        return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).to_formatted_date_string()
 
 
 class Encoder(JSONEncoder):
     """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
     def default(self, obj):
-        return obj if not isinstance(obj, DateTime) and not isinstance(obj, Path) else str(obj)
+        if isinstance(obj, DateTime) or isinstance(obj, Path):
+            return str(obj)
+        elif hasattr(obj, "as_dict"):
+            return obj.as_dict
+        elif hasattr(obj, "model_dump"):
+            return obj.model_dump()
+        else:
+            return obj
 
 class ShowInterfaceFilters:
     def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):

@@ -38,51 +38,131 @@ Bottom Line.
 
 
 """
-# from cli import cli as common
-from centralcli.cli import log, cli as common, config
-import json
+import sys
+import time
+from traceback import print_exception
+from functools import partial
 from pathlib import Path
-from typing import Dict, Any
+from unittest import mock
 
-class InvalidAccountError(Exception):
-    ...
+import pytest
+import pendulum
+from click.testing import Result
+from rich.console import Console
+from rich.markup import escape
 
-class BatchImportFileError(Exception):
-    ...
+from centralcli import cache, config, log
+from centralcli.cache import CacheDevice
+from centralcli.clicommon import APIClients
+from centralcli.exceptions import CentralCliException
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.http_exceptions import ContentLengthError
 
-class ConfigNotFoundError(Exception):
-    ...
+from ._mock_request import mock_request
+from ._test_data import test_data as test_data
 
-def update_log(txt: str):
-    with test_log_file.open("a") as f:
-        f.write(f'{txt.rstrip()}\n')
+expected_exceptions = [SystemExit, ClientConnectorError, ClientOSError, ContentTypeError, ContentLengthError]
+api_clients = APIClients()
+econsole = Console(stderr=True)
+in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
+_2_days_ago = pendulum.now() - pendulum.duration(days=2)
+_180_days_ago = pendulum.now() - pendulum.duration(days=180)
+at_str = in_45_mins.to_datetime_string().replace(" ", "T")[0:-3]
+end_2_days_ago = _2_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
+now_str = pendulum.now().to_datetime_string().replace(" ", "T")[0:-3]
+start_180_days_ago = _180_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 
-def get_test_data():
-    test_file = Path(__file__).parent / 'test_devices.json'
-    if not test_file.is_file():
-        raise FileNotFoundError(f"Required test file {test_file} is missing.  Refer to {test_file.name}.example")
-    return json.loads(test_file.read_text())
+class NonDefaultWorkspaceException(CentralCliException): ...
 
-def setup_batch_import_file(test_data: dict, import_type: str = "sites") -> Path:
-    test_batch_file = config.cache_dir / f"test_runner_{import_type}.json"
-    res = test_batch_file.write_text(
-        json.dumps(test_data["batch"][import_type])
-    )
-    if not res:
-        raise BatchImportFileError("Batch import file creation from test_data returned 0 chars written")
-    return test_batch_file
 
-def ensure_default_account(test_data: dict):
-    if common.central.auth.central_info["customer_id"] != str(test_data["customer_id"]):
-        msg = f'customer_id {common.central.auth.central_info["customer_id"]} script initialized with does not match customer_id in test_data.\nRun a command with -d to revert to default account'
-        raise InvalidAccountError(msg)
+def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):
+    test_func = test_func or "UNDEFINED"
+    _msg = 'returned error' if not expect_failure else 'Passed when failure was expected'
+    if result.exit_code != (0 if not expect_failure else 1) or log_output:  # pragma: no cover
+        log.error(f"{test_func} {_msg if not log_output else 'output'}:\n{escape(f'{result.stdout = }')}", show=True)
+        if "unable to gather device" in result.stdout:  # pragma: no cover
+            cache_devices = "\n".join([CacheDevice(d) for d in cache.devices])
+            log.error(f"{repr(cache)} devices\n{cache_devices}")
+    if result.exception and not any([isinstance(result.exception, exc) for exc in expected_exceptions]):  # pragma: no cover
+        with log.log_file.open("a") as log_file:
+            print_exception(result.exception, file=log_file)
 
-if __name__ == "tests":
-    test_log_file: Path = log.log_file.parent / "pytest.log"
-    # update_log(f"\n__init__: cache: {id(common.cache)}")
-    test_data: Dict[str, Any] = get_test_data()
-    ensure_default_account(test_data=test_data)
-    test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
-    test_site_file: Path = setup_batch_import_file(test_data=test_data)
-    gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
-    test_batch_device_file: Path = test_data["batch"]["devices"]
+
+def ensure_default_account():  # pragma: no cover
+    if "--collect-only" in sys.argv:
+        return
+
+    if config.workspace != config.default_workspace:
+        raise NonDefaultWorkspaceException(f"Test Run started with non default account {config.workspace}.  Aborting as a safety measure.  Use `cencli -d` to restore to default workspace, then re-run tests.")
+
+
+def clean_mac(mac: str) -> str:
+    return mac.replace(":", "").replace("-", "").replace(".", "").lower()
+
+
+def monkeypatch_terminal_size():
+    TestConsole = partial(Console, height=55, width=190)
+    def get_terminal_size(*args, **kwargs):
+        return (190, 55)
+    pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
+    pytest.MonkeyPatch().setattr("shutil.get_terminal_size", get_terminal_size)
+
+
+aiosleep_mock = mock.AsyncMock()
+aiosleep_mock.return_value = None
+
+
+def store_tokens(*args, **kwargs) -> bool:
+    log.info("mock store_tokens called.")
+    return True
+
+def refresh_tokens(_, old_token: dict) -> dict:
+    log.info("mock refresh_tokens called.  Simulating token refresh.")
+    return old_token
+
+def mock_write_file(outfile: Path, outdata: str) -> None:
+    econsole.print(f"[cyan]Writing output to {outfile}... [italic green]Done[/]")
+
+class MockSleep:
+    real_sleep: bool = False
+
+    @classmethod
+    def real(cls, do_sleep: bool):
+        cls.real_sleep = do_sleep  # pragma: no cover
+
+    def __call__(self, sleep_time: int | float, *args, **kwargs) -> None:
+        if self.real_sleep:
+            start = time.perf_counter()
+            while time.perf_counter() - start < sleep_time:
+                continue
+            log.info(f"slept for {time.perf_counter() - start}, {sleep_time = }, {args = }, {kwargs = }")
+        else:  # pragma: no cover
+            ...
+
+    def __enter__(self):
+        self.real_sleep = True
+        return self
+
+    def __exit__(self, *args):
+        self.real_sleep = False
+
+
+mock_sleep = MockSleep()
+
+
+if __name__ in ["tests", "__main__"]:  # pragma: no cover
+    monkeypatch_terminal_size()
+    if config.dev.mock_tests:
+        pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)
+        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.storeToken", store_tokens)
+        pytest.MonkeyPatch().setattr("pycentral.base.ArubaCentralBase.refreshToken", refresh_tokens)
+        pytest.MonkeyPatch().setattr("time.sleep", mock_sleep)  # We don't need to inject any delays when using mocked responses
+        pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
+        pytest.MonkeyPatch().setattr("centralcli.render.write_file", mock_write_file)
+    else:  # pragma: no cover
+        ...
+    ensure_default_account()
+    if "--collect-only" not in sys.argv:
+        log.info(f"{' Test Run START ':{'-'}^{140}}")
+    else:  # pragma: no cover
+        ...

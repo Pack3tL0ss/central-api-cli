@@ -1,8 +1,13 @@
-from centralcli import log
-from pathlib import Path
 import sys
+from pathlib import Path
 
-batch_dir = Path("/home/wade/git/myrepos/cencli-batch")
+# vscode v1.103.1 and may have started prior to that release... launches debug even if you hit Escape in promptString dialogue.
+if '${input:cliArgs}' in str(sys.argv):
+    sys.exit()
+
+debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
+
+batch_dir = Path().home() / "git/myrepos/cencli-batch"
 
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():
@@ -56,7 +61,8 @@ def vscode_arg_handler():
                         sys.argv += vsc_args.split()
 
     except Exception as e:
-        log.exception(f"Exception in vscode arg handler (arg split) {e.__class__.__name__}.{e}", show=True)
+        # log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}")
+        print(f"{e.__class__.__name__} Exception in vscode arg handler (arg split).\n{e}", file=sys.stderr)
         return
 
     # update launch.json default if launched by vscode debugger
@@ -102,11 +108,18 @@ def vscode_arg_handler():
                         log_old_line = line.split('"')[-2]
                         log_new_line = new_line.split('"')[-2]
                         do_update = True
-                        log.debugv(
-                            f"changing default arg for promptString:\n"
-                            f"    from: {log_old_line}\n"
-                            f"    to: {log_new_line}"
-                        )
+                        # log.debug(
+                        #     f"changing default arg for promptString:\n"
+                        #     f"    from: {log_old_line}\n"
+                        #     f"    to: {log_new_line}"
+                        # )
+                        if debug:
+                            print(
+                                f"changing default arg for promptString:\n"
+                                f"    from: {log_old_line}\n"
+                                f"    to: {log_new_line}",
+                                file=sys.stderr
+                            )
                         launch_data[idx] = new_line
 
                 elif history_lines and "options" in line and "// VSC_ARG_HISTORY" in line:
@@ -115,11 +128,18 @@ def vscode_arg_handler():
                     new_line = f'{" ":{_spaces}}"options": {json.dumps(history_lines)},  // VSC_ARG_HISTORY'
                     if line != new_line:
                         do_update = True
-                        log.debugv(
-                            f"changing options arg for pickString:\n"
-                            f"    from: {line.strip()}\n"
-                            f"    to: {new_line.strip()}"
-                        )
+                        # log.debug(
+                        #     f"changing options arg for pickString:\n"
+                        #     f"    from: {line.strip()}\n"
+                        #     f"    to: {new_line.strip()}"
+                        # )
+                        if debug:
+                            print(
+                                f"changing options arg for pickString:\n"
+                                f"    from: {line.strip()}\n"
+                                f"    to: {new_line.strip()}",
+                                file=sys.stderr
+                            )
                         launch_data[idx] = new_line
 
         if do_update and launch_data:
@@ -132,4 +152,5 @@ def vscode_arg_handler():
             launch_file.write_text("\n".join(launch_data) + "\n")
 
     except Exception as e:
-        log.exception(f"Exception in vscode arg handler (launch.json update) {e.__class__.__name__}.{e}", show=True)
+        print(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}", file=sys.stderr)
+        # log.exception(f"{e.__class__.__name__} Exception in vscode arg handler (launch.json update).\n{e}")

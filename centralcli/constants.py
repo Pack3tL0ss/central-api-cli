@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal
 
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
@@ -15,16 +16,104 @@ dynamic_antenna_models = ["679"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
 LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete  # TODO make separate one without sdwan and refactor, won't be valid in most places
+SwitchTypes = Literal["cx", "sw"]
 DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
 EventDeviceTypes = Literal["ap","gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
-SendConfigTypes = Literal["ap", "gw"]
-CloudAuthUploadTypes = Literal["mpsk", "mac"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
-LogType = Literal["event", "audit"]
-InsightSeverityType = Literal["high", "med", "low"]
+
+
+CLUSTER_URLS = {
+    "internal": {
+        "cnx": "https://internal.api.central.arubanetworks.com",
+        "classic": "https://internal-apigw.central.arubanetworks.com",
+        "aka": None
+    },
+    "us1": {
+        "cnx": "https://us1.api.central.arubanetworks.com",
+        "classic": "https://app1-apigw.central.arubanetworks.com",
+        "aka": "prod"
+    },
+    "us2": {
+        "cnx": "https://us2.api.central.arubanetworks.com",
+        "classic": "https://apigw-prod2.central.arubanetworks.com",
+        "aka": "central-prod2"
+    },
+    "us4": {
+        "cnx": "https://us4.api.central.arubanetworks.com",
+        "classic": "https://apigw-uswest4.central.arubanetworks.com",
+        "aka": "uswest4"
+    },
+    "us5": {
+        "cnx": "https://us5.api.central.arubanetworks.com",
+        "classic": "https://apigw-uswest5.central.arubanetworks.com",
+        "aka": "uswest5"
+    },
+    "us6": {
+        "cnx": "https://us6.api.central.arubanetworks.com",
+        "classic": "https://apigw-us-east-1.central.arubanetworks.com",
+        "aka": "us-east-1"
+    },
+    "eu1": {
+        "cnx": "https://de1.api.central.arubanetworks.com",
+        "classic": "https://eu-apigw.central.arubanetworks.com",
+        "aka": "de1"
+    },
+    "eu2": {
+        "cnx": "https://de2.api.central.arubanetworks.com",
+        "classic": "https://apigw-eucentral2.central.arubanetworks.com",
+        "aka": "de2"
+    },
+    "eu3": {
+        "cnx": "https://de3.api.central.arubanetworks.com",
+        "classic": "https://apigw-eucentral3.central.arubanetworks.com",
+        "aka": "de3"
+    },
+    "ca1": {
+        "cnx": "https://ca1.api.central.arubanetworks.com",
+        "classic": "https://app1-apigw.central.arubanetworks.com.cn",
+        "aka": "Canada-1 / starman"
+    },
+    "in1": {
+        "cnx": "https://in.api.central.arubanetworks.com",
+        "classic": "https://api-ap.central.arubanetworks.com",
+        "aka": "apac1 / India"
+    },
+    "jp1": {
+        "cnx": "https://jp1.api.central.arubanetworks.com",
+        "classic": "https://apigw-apaceast.central.arubanetworks.com",
+        "aka": "apac-east-1 / Japan"
+    },
+    "au1": {
+        "cnx": "https://au1.api.central.arubanetworks.com",
+        "classic": "https://apigw-apacsouth.central.arubanetworks.com",
+        "aka": "apac-south-1 / Australia"
+    },
+    "ae1": {
+        "cnx": "https://ae1.api.central.arubanetworks.com",
+        "classic": "https://apigw-uaenorth1.central.arubanetworks.com",
+        "aka": "uae-north1"
+    }
+}
+
+
+class ClusterName(str, Enum):
+    internal = "internal"
+    us1 = "us1"
+    us2 = "us2"
+    us4 = "us4"
+    us5 = "us5"
+    us6 = "us6"
+    eu1 = "eu1"
+    eu2 = "eu2"
+    eu3 = "eu3"
+    ca1 = "ca1"
+    in1 = "in1"
+    jp1 = "jp1"
+    au1 = "au1"
+    ae1 = "ae1"
 
 
 class AllDevTypes(str, Enum):
@@ -44,6 +133,34 @@ class GenericDevTypes(str, Enum):
 
 
 class DevTypes(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+    # sdwan = "sdwan"
+
+
+class ExportDevType(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+
+    @property
+    def header(self):
+        return "Gateway" if self.value == "gw" else self.value.upper()
+
+    @property
+    def path(self):
+        if self.value in ["cx", "sw"]:
+            return "switches"
+        elif self.value == "gw":
+            return "gateways"
+        else:
+            return "aps"
+
+
+class GroupDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
     cx = "cx"
@@ -108,6 +225,19 @@ class ShowInventoryArgs(str, Enum):
     gw = "gw"
     vgw = "vgw"
     switch = "switch"
+
+
+class SortGuestOptions(str, Enum):
+    portal = "portal"
+    id = "id"
+    name = "name"
+    email = "email"
+    phone = "phone"
+    created = "created"
+    expires = "expires"
+    remaining = "remaining"
+    enabled = "enabled"
+    status = "status"
 
 
 class SortSwarmOptions(str, Enum):
@@ -388,6 +518,7 @@ class CacheArgs(str, Enum):
     all = "all"
     devices = "devices"
     inventory = "inventory"
+    subscriptions = "subscriptions"
     sites = "sites"
     clients = "clients"
     templates = "templates"
@@ -405,6 +536,8 @@ class CacheArgs(str, Enum):
     tables = "tables"
     guests = "guests"
     certs = "certs"
+    floor_plan_buildings = "floor_plan_buildings"
+    floor_plan_aps = "floor_plan_aps"
 
 
 class KickArgs(str, Enum):
@@ -417,29 +550,9 @@ class BatchApArgs(str, Enum):
     rename = "rename"
 
 
-class BatchAddArgs(str, Enum):
-    sites = "sites"
-    groups = "groups"
-    devices = "devices"
-    labels = "labels"
-    macs = "macs"
-    mpsk = "mpsk"
-
-
-class BatchUpdateArgs(str, Enum):
-    aps = "aps"
-
-
 class CloudAuthUploadType(str, Enum):
     mpsk = "mpsk"
     mac = "mac"
-
-
-class BatchDelArgs(str, Enum):
-    sites = "sites"
-    groups = "groups"
-    devices = "devices"
-    labels = "labels"
 
 
 class WlanType(str, Enum):
@@ -455,7 +568,6 @@ class BatchRenameArgs(str, Enum):
 
 class EnableDisableArgs(str, Enum):
     auto_sub = "auto-sub"
-
 
 
 class DhcpArgs(str, Enum):
@@ -483,6 +595,16 @@ class SortLabelOptions(str, Enum):
     devices = "devices"
     id_ = "id"
     name = "name"
+
+
+class SortBSSIDOptions(str, Enum):
+    ap = "ap"
+    name = "name"
+    serial = "serial"
+    mac = "mac"
+    band = "band"
+    ssid = "ssid"
+    bssid = "bssid"
 
 
 class LicenseTypes(str, Enum):
@@ -531,6 +653,27 @@ class SubscriptionArgs(str, Enum):
     names = "names"
     auto = "auto"
 
+
+class HelpObject(str, Enum):
+    groups = "groups"
+    sites = "sites"
+    devices = "devices"
+    inventory = "inventory"
+    serials = "serials"
+    invmondevs = "invmondevs"
+    certs = "certs"
+    clients = "clients"
+    buildings = "buildings"
+    floor_aps = "floor-aps"
+    guests = "guests"
+    labels = "labels"
+    mpsks = "mpsks"
+    mpsk_nets = "mpsk-nets"
+    portals = "portals"
+    subs = "subs"
+    templates = "templates"
+
+
 class ArgToWhat:
     def __init__(self):
         """Mapping object to map supported variations of input for 'what' argument
@@ -565,13 +708,27 @@ class ArgToWhat:
         self.token = self.tokens = "token"
         self.subscriptions = self.subscription = "subscriptions"
         self.portal = self.portals = "portals"
-        self.certs = self.certificates = "certs"
         self.guests = self.guest = "guests"
         self.swarms = self.swarm = "swarms"
-        self.certs = self.cert = self.certificates = "certs"
+        self.certs = self.cert = self.certificates = self.certificate = "certs"
+        self.bssids = self.bssid = "bssids"
+        self.labels = self.label = "labels"
+
+    def _init_export(self):
+        self.configs = self.config = "configs"
 
     def _init_refresh(self):
         self.token = self.tokens = "token"
+        self.webhook = self.webhooks = "webhook"
+
+    def _init_assign(self):
+        self.subscription = self.subscriptions = "subscription"
+        self.label = self.labels = "label"
+
+    def _init_unassign(self):
+        self.subscription = self.subscriptions = "subscription"
+        self.license = self.licenses = "license"  # TODO # DEPRECATED need to add unassign subscription and hide license if config.glp.ok
+        self.label = self.labels = "label"
 
     def _init_cancel(self):
         self.device = self.devices = "device"
@@ -597,7 +754,7 @@ class ArgToWhat:
     def _init_delete(self):
         self.site = self.sites = "site"
         self.group = self.groups = "group"
-        self.certificate = self.certs = self.certificates = self.cert = "certificate"
+        self.cert = self.certificate = self.certs = self.certificates = "cert"
         self.wlan = self.wlans = "wlan"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
@@ -615,16 +772,20 @@ class ArgToWhat:
         self.site = self.sites = "site"
         self.group = self.groups = "group"
         self.wlan = self.wlans = "wlan"
+        self.label = self.labels = "label"
         self.device = self.devices = self.dev = "device"
         self.webhooks = self.webhook = "webhook"
         self.template = self.templates = "template"
         self.guest = self.guests = "guest"
-        self.certificate = self.cert = "certificate"
+        self.cert = self.certs = self.certificate = self.certificates = "cert"
 
     def _init_test(self):
         self.webhooks = self.webhook = "webhook"
 
-    def _init_tshoot(self):
+    def _init_convert(self):
+        self.template = self.templates = "template"
+
+    def _init_ts(self):
         self.ap = self.aps = self.iap = "ap"
         self.gateway = self.gateways = self.gw = "gateway"
         self.switch = self.switch = self.switches = "switch"
@@ -644,7 +805,7 @@ class ArgToWhat:
     def _init_caas(self):
         self.send_cmd = self.send_cmds = "send_cmds"
 
-    def __call__(self, key: Union[ShowArgs, str], default: str = None, cmd: str = "show") -> str:
+    def __call__(self, key: ShowArgs | str, default: str = None, cmd: str = "show") -> str:
         if cmd != "show":
             if hasattr(self, f"_init_{cmd}"):
                 getattr(self, f"_init_{cmd}")()
@@ -687,7 +848,7 @@ class LibToAPI:
         self.switches = self.switch = "switch"
         self.SW = self.sw = self.HPPC = self.HP = "sw"
         self.CX = self.cx = "cx"
-        self.method_iden = None,
+        self.method_iden = None
 
         # from CentralApi consistent value to Random API endpoint value
         self.monitoring_to_api = {
@@ -799,19 +960,20 @@ class WhatToPretty:
         case for display.  Normally title case.  i.e. switch --> Switches
 
         """
-        self.gateway = self.gateways = "Gateways"
+        self.gateway = self.gateways = self.gw = "Gateways"
         self.aps = self.ap = self.iap = "Access Points"
-        self.switch = self.switches = "Switches"
+        self.switch = self.switches = self.cx = self.sw = "Switches"
         self.groups = self.group = "Groups"
         self.site = self.sites = "Sites"
         self.template = self.templates = "Templates"
         self.variable = self.variables = "Variables"
+        self.vgw = "Virtual Gateways"
         self.all = "All Devices"
         self.device = self.devices = "Devices"
 
-    def __call__(self, key: Union[ShowArgs, str], default: str = None) -> str:
+    def __call__(self, key: ShowArgs | str, default: str = None) -> str:
         if isinstance(key, Enum):
-            key = key._value_
+            key = key.value
         return getattr(self, key, default or key)
 
 
@@ -1152,9 +1314,10 @@ class IdenMetaVars:
         self.dev_types = "[ap|gw|cx|sw]"
         self.dev_types_w_mas = "[ap|gw|cx|sw|mas]"
         self.group_or_dev = f"device {self.dev.upper()} | group [GROUP]"
-        self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|cencli]')}"
+        self.group_dev_cencli = f"{self.dev.upper().replace(']', '|GROUPNAME|self]')}"
         self.group_or_dev_or_site = "[DEVICE|\"all\"|GROUP|SITE]"
         self.portal = "[PORTAL_NAME]"
+        self.portal_many = "[PORTAL_NAME] ... (multiple allowed)"
         self.guest = "[name|email|phone|id]"
         self.ip_dhcp = "[IP_ADDRESS|'dhcp']"
 
@@ -1182,18 +1345,6 @@ LIB_DEV_TYPE = {
     "AOS-S": "sw",
     "gateway": "gw"
 }
-
-
-def get_cencli_devtype(dev_type: str) -> str:
-    """Convert device type returned by API to consistent cencli types
-
-    Args:
-        dev_type(str): device type provided by API response
-
-    Returns:
-        str: One of ["ap", "sw", "cx", "gw"]
-    """
-    return LIB_DEV_TYPE.get(dev_type, dev_type)
 
 
 state_abbrev_to_pretty = {
@@ -2235,7 +2386,12 @@ class IAPTimeZoneNames(str, Enum):
 
 NO_LOAD_COMMANDS = [
     "show config cencli",
+    "show config self",
+    "show logs cencli",
+    "show logs self",
     "show last",
+    "show version",
+    "dev \\w*.*",
     "convert"
 ]
 
@@ -2245,11 +2401,14 @@ NO_LOAD_FLAGS = [
     "--cencli",
     "--show-completion",
     "--install-completion",
+    "--version",
+    "-v",
+    "-V"
 ]
 
 
 def do_load_pycentral() -> bool:
-    """Determine if provided command requires pycentral load
+    """Determine if provided command requires pycentral load and cache initialization check.
 
     Allows command to complete even if config has yet to be configured.
     Useful for first run commands and auto docs.
@@ -2259,11 +2418,12 @@ def do_load_pycentral() -> bool:
         for command to complete.
     """
     args = [arg for arg in sys.argv[1:] if "--debug" not in arg]
-    for x in NO_LOAD_FLAGS:
-        if x in args:
-            return False
+    # for x in NO_LOAD_FLAGS:
+    if [a for a in args if a in NO_LOAD_FLAGS]:
+        return False
 
-    if " ".join([a for a in args if not a.startswith("-")]).lower() in NO_LOAD_COMMANDS:
+    cmd = " ".join([a for a in args if not a.startswith("-")]).lower()
+    if any([re.search(c, cmd) for c in NO_LOAD_COMMANDS]):
         return False
     else:
         return True

@@ -184,6 +184,7 @@ temp/
 # ignore for now, until dynamic
 # tests/__init__.py
 tests/test_devices.json
+tests/test_data.yaml
 
 # ignore dashboard module until built out
 centralcli/dashboard/*
