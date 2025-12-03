@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any, Coroutine, Dict, Generator, List, Optional
+from typing import Any, Dict, Generator, List, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
 
@@ -160,17 +160,6 @@ class BySubId():
     def is_overrun(self) -> bool:
         return len(self.devices) > self.cache_sub.available
 
-    async def _get_confirm_msgs(self, tags: bool = False, is_update: bool = True) -> list[Coroutine]:
-        tasks = [
-            asyncio.create_task(dev._get_confirm_msg(tags_override=tags and dev.tags)) for dev in self.devices
-        ]
-        return await asyncio.gather(*tasks)
-
-    def get_confirm_msg(self, tags: bool = False, max: int = 12) -> str:
-        confirm_header = f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {self.cache_sub.summary_text}|[magenta]Qty being assigned[/magenta][dim]:[/dim] {len(self)}"
-        confirm_msgs = asyncio.run(self._get_confirm_msgs(tags=tags))
-        return "\n".join([confirm_header, utils.summarize_list(confirm_msgs, color=None, max=max)])
-
 
 class _ImportSubDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
@@ -191,7 +180,7 @@ class _ImportSubDevice(BaseModel):
             v = v.replace(",", " ")
             return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
 
-        return v.lower().replace("_", "-")
+        return v
 
 class ImportSubDevice(_ImportSubDevice):
     _sub_object: CacheSub | None = None
@@ -347,24 +336,6 @@ class ImportSubDevices(RootModel):
 
     def get(self, serial: str, default: Any = None) -> ImportSubDevice | Any:
         return self.by_serial.get(serial, default)
-
-    def get_confirm_msg(self, sub: CacheSub, pad: int = 4, max: int = 15, tags_override: bool = False, is_update: bool = False) -> str:
-        if tags_override:
-            devs = [*[dev for dev in self.root if dev.tags], *[dev for dev in self.root if not dev.tags]]
-        else:
-            devs = self.root
-
-        if is_update:
-            devs = [dev for dev in devs if dev.assigned]
-
-        dev_msgs = [dev.get_confirm_msg(tags_override=tags_override) for dev in devs if sub == dev.sub]
-        return utils.summarize_list(dev_msgs, pad=pad, max=max, color=None).lstrip()
-
-    def serials_by_subscription(self) -> dict[str, list[str]]:
-        subs = set(dev.subscription for dev in self.root)
-        out_dict = {sub: [] for sub in subs}
-        _ = [out_dict[dev.subscription].append(dev.serial) for dev in self.root]
-        return out_dict
 
     async def get_inv_objects(self) -> list[CacheInvDevice | None]:
         # tasks = [asyncio.create_task(lambda: dev.inv) for dev in self.root]
