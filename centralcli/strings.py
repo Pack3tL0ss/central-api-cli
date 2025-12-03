@@ -277,7 +277,7 @@ common_add_delete_end = """
 """
 
 generic_end = """
-[italic]:information:  Most batch operations are designed so the same file can be used for multiple automations
+[italic]:information:  Most batch operations are designed so the same file can be used for multiple automations.
    the fields not required for a particular automation will be ignored.[/]
 """
 
