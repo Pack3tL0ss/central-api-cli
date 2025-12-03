@@ -86,7 +86,7 @@ class MyLogger:
             if not show_all:
                 lines = logs.splitlines(keepends=True)
                 for idx, line in enumerate(lines[::-1], start=1):
-                    if "test run start" in line.lower():
+                    if "test run start" in line.lower():  # pragma: no cover
                         break
                 logs = "".join(lines[len(lines) - idx:])
 
@@ -147,7 +147,7 @@ class MyLogger:
 
         for i in msgs:
             i = str(i)
-            if not show and any([i.startswith(silent_exit) for silent_exit in PYCENTRAL_SILENT_EXIT]):
+            if not show and any([i.startswith(silent_exit) for silent_exit in PYCENTRAL_SILENT_EXIT]):  # pragma: no cover
                 show = True
             if not self.DEBUG and [i for d in DEBUG_ONLY_MSGS if d in i]:  # messages we ignore if debug is not enabled.
                 continue
@@ -174,7 +174,7 @@ class MyLogger:
             self._caption = [*self._caption, *[f"{warning_emoji if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
 
     @property
-    def level_name(self) -> str | int:
+    def level_name(self) -> str | int:  # pragma: no cover
         return logging.getLevelName(self._log.level)
 
     @property

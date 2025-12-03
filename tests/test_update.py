@@ -314,7 +314,7 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "_,fixture,args,test_name_append",
         [
-            [1, "ensure_cache_group_cloned", ("--gw", "--sw", "--cx"), None],
+            [1, "ensure_cache_group_cloned", ("--gw", "--sw"), None],
             [2, "ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
             [3, "ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
             [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],

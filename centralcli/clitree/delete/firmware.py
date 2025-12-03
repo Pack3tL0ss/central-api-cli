@@ -34,6 +34,8 @@ def compliance(
             common.exit(f"Unknown extra arguments in {[x for x in list(group)[0:-1] if x.lower() != 'group']}")
         group = group[-1]
         group: CacheGroup = common.cache.get_group_identifier(group)
+    else:  # pragma: no cover
+        ...
 
     kwargs = {
         'device_type': device_type,

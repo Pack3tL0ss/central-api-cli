@@ -121,7 +121,7 @@ exclude_lines = [
     "if len(match) > 1:",
     "if config.is_old_cfg:",
     "if config.dev.mock_tests:",
-    "def __repr__(self):"
+    "def __repr__(self):",
 ]
 exclude_also = [
     # 1. Exclude an except clause of a specific form:

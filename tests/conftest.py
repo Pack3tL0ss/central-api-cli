@@ -159,33 +159,45 @@ def clear_lru_caches():
 def ensure_cache_cert():
     if config.dev.mock_tests and "cencli-test" not in cache.certs_by_name:
         asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test", "type": "SERVER_CERT", "md5_checksum": "781b9320972dc571d9f3055c081e8a11", "expired": False, "expiration": 2071936577}, truncate=False))
+    else:  # pragma: no cover
+        ...
     yield
 
     if config.dev.mock_tests and "cencli-test" in cache.certs_by_name:
         doc_id = cache.certs_by_name["cencli-test"].doc_id
         asyncio.run(cache.update_db(cache.CertDB, doc_ids=[doc_id]))
+    else:  # pragma: no cover
+        ...
 
 
 @pytest.fixture(scope="function")
 def ensure_cache_cert_same_as_existing():
     if config.dev.mock_tests and "cencli-test-existing-cert" not in cache.certs_by_name:
         asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test-existing-cert", "type": "SERVER_CERT", "md5_checksum": "43e0c762fc2bc47d8c6847a4b7b27af4", "expired": False, "expiration": 2071936577}, truncate=False))
+    else:  # pragma: no cover
+        ...
     yield
 
     if config.dev.mock_tests and "cencli-test-existing-cert" in cache.certs_by_name:
         doc_ids = [c.doc_id for c in cache.certs if c["name"] == "cencli-test-existing-cert"]
         asyncio.run(cache.update_db(cache.CertDB, doc_ids=doc_ids))
+    else:  # pragma: no cover
+        ...
 
 
 @pytest.fixture(scope="function")
 def ensure_cache_cert_expired():
     if config.dev.mock_tests and "cencli-test-expired-cert" not in cache.certs_by_name:
         asyncio.run(cache.update_db(cache.CertDB, data={"name": "cencli-test-expired-cert", "type": "SERVER_CERT", "md5_checksum": "6bf2b4afbbe379f44589e4be994fa4c1", "expired": True, "expiration": 1736493627}, truncate=False))
+    else:  # pragma: no cover
+        ...
     yield
 
     if config.dev.mock_tests and "cencli-test-expired-cert" in cache.certs_by_name:
         doc_id = cache.certs_by_name["cencli-test-expired-cert"].doc_id
         asyncio.run(cache.update_db(cache.CertDB, doc_ids=[doc_id]))
+    else:  # pragma: no cover
+        ...
 
 
 @pytest.fixture(scope="function")
@@ -270,6 +282,34 @@ def ensure_cache_group4(request: pytest.FixtureRequest):
         if cache_data["name"] not in cache.groups_by_name:
             assert asyncio.run(cache.update_group_db(data=cache_data))
         elif cache.groups_by_name[cache_data["name"]].allowed_types != cache_data["allowed_types"]:  # pragma: no cover
+            update_data = {**cache.groups_by_name, **{cache_data["name"]: cache_data}}
+            assert asyncio.run(cache.update_db(cache.GroupDB, data=list(update_data.values()), truncate=True))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group4_cx_only():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "cencli_test_group4",
+            "allowed_types": ["cx"],
+            "gw_role": None,
+            "aos10": None,
+            "microbranch": None,
+            "wlan_tg": False,
+            "wired_tg": False,
+            "monitor_only_sw": False,
+            "monitor_only_cx": False,
+            "cnx": False
+        }
+        if cache_data["name"] not in cache.groups_by_name:
+            assert asyncio.run(cache.update_group_db(data=cache_data))
+        elif any(
+            [
+                    cache.groups_by_name[cache_data["name"]].allowed_types != cache_data["allowed_types"],
+                    cache.groups_by_name[cache_data["name"]].aos10 != cache_data["aos10"],
+            ]
+        ):   # pragma: no cover
             update_data = {**cache.groups_by_name, **{cache_data["name"]: cache_data}}
             assert asyncio.run(cache.update_db(cache.GroupDB, data=list(update_data.values()), truncate=True))
     yield
@@ -1182,7 +1222,7 @@ def ensure_cache_all_floor_plan():
         assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=doc_ids))
 
 
-def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"]):
+def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"],):
     allowed_types = sorted(allowed_types)
     if config.dev.mock_tests:
         cache_data = {
@@ -1218,6 +1258,11 @@ def ensure_cache_group_cloned():
 @pytest.fixture(scope="function")
 def ensure_cache_group_cloned_w_gw():
     yield from _ensure_cache_group_cloned(allowed_types=["ap", "gw"])
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_group_cloned_gw_only():
+    yield from _ensure_cache_group_cloned(allowed_types=["gw"])
 
 
 @pytest.fixture(scope="function")

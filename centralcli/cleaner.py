@@ -1295,7 +1295,7 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
     ]
     data = utils.strip_no_value(data)
 
-    if format == "rich" and not verbose and tty:
+    if format == "rich" and not verbose and tty:  # pragma: no cover condition depends on tty
         data = data[0:tty.rows - 12]
 
     return data
@@ -1626,8 +1626,8 @@ def get_overlay_interfaces(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
             }
             for i in data
         ]
-    except Exception as e:
-        log.error(f'get_overlay_interfaces cleaner threw {e.__class__.__name__} trying to get apo name from mac, skipping.', show=True)
+    except Exception as e:  # pragma: no cover
+        log.error(f'get_overlay_interfaces cleaner threw {repr(e)} trying to get ap name from mac, skipping.', show=True)
 
     return simple_kv_formatter(data)
 
@@ -1722,7 +1722,7 @@ def cloudauth_upload_status(data: list[dict[str, Any]] | dict[str, Any]) -> dict
     try:
         resp_model = CloudAuthUploadResponse(**data)
         data = resp_model.model_dump()
-    except Exception as e:
+    except Exception as e:  # pragma: no cover
         log.error("Attempt to normalize cloudauth upload status response through model failed.")
         log.exception(e)
 

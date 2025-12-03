@@ -7,9 +7,10 @@ from centralcli.cli import app
 from centralcli.environment import env
 from centralcli.exceptions import InvalidConfigException
 
-from . import capture_logs, config
+from . import capture_logs, config, log
 from ._test_data import (
     test_data,
+    test_outfile,
     test_invalid_empty_file,
     test_deploy_file,
     test_device_file,
@@ -25,23 +26,38 @@ from ._test_data import (
     test_sub_file_yaml,
     test_update_aps_file,
     test_verify_file,
+    test_switch_var_file_flat,
+    test_device_file_w_dup,
+    test_device_file_none_exist,
+    test_device_file_one_not_exist,
+    test_cloud_auth_mac_file,
+    test_cloud_auth_mac_file_invalid,
 )
 
 runner = CliRunner()
 
 
-def test_batch_add_groups():
+def test_batch_add_groups(ensure_cache_group4):  # TODO may need to adjust fixture to remove group4 from cache if it already being there interferes with subsequent tests
     result = runner.invoke(app, ["batch", "add",  "groups", str(test_group_file), "-Y"])
     capture_logs(result, "test_batch_add_groups")
     assert result.exit_code == 0
-    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"]) + 1  # Plus 1 as confirmation prompt includes "created"
+    assert "⚠" in result.stdout  # group4 already exists, so skipped
+    assert result.stdout.lower().count("created") == len(test_data["batch"]["groups_by_name"])  # confirmation prompt includes "created" but group4 is skipped
 
 
-def test_batch_add_macs():
-    result = runner.invoke(app, ["batch", "add",  "macs", test_data["cloud_auth"]["mac_file"], "-Y"])
-    capture_logs(result, "test_batch_add_macs")
-    assert result.exit_code == 0
-    assert "202" in result.stdout
+@pytest.mark.parametrize(
+    "idx,file,debug,exit_code,pass_condition",
+    [
+        [1, str(test_cloud_auth_mac_file), True, 0, lambda r: "202" in r],
+        [2, str(test_cloud_auth_mac_file_invalid), False, 1, lambda r: "validation error" in r],
+    ]
+)
+def test_batch_add_macs(idx: int, file: str, debug: bool, exit_code: int, pass_condition: Callable):
+    log.DEBUG = debug
+    result = runner.invoke(app, ["batch", "add",  "macs", file, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
@@ -176,35 +192,40 @@ if config.dev.mock_tests:
             assert result.exit_code == 0
             assert "code: 202" in result.stdout
 
-
-    def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1):
-        result = runner.invoke(app, ["batch", "move",  "devices", f"{str(test_device_file)}", "-y"])
-        capture_logs(result, "test_batch_move", )
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, (str(test_device_file), "--cx-retain"), lambda r: "API" in r],
+            [2, (str(test_device_file_one_not_exist),), lambda r: "skipped" in r],
+        ]
+    )
+    def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1, ensure_cache_site1, idx: int, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(app, ["batch", "move",  "devices", *args, "-y"])
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
+        assert pass_condition(result.stdout)
 else:  # pragma: no cover
     ...
 
 
-def test_batch_move_no_import_file():
-    result = runner.invoke(app, ["batch", "move",  "devices"])
-    capture_logs(result, "test_batch_move_no_import_file", expect_failure=True)
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("devices",), lambda r: "Invalid" in r],
+        [2, ("devices", "nonexistfile.fake.json"), lambda r: "Invalid" in r],
+        [3, ("devices", f'{str(test_device_file)}', f'{str(test_rename_aps_file)}', "--label"), lambda r: "oo many" in r],
+        [4, ("devices", f'{str(test_site_file)}'), lambda r: "missing required field" in r],
+        [5, ("devices", f'{str(test_switch_var_file_flat)}'), lambda r: "AttributeError" in r],
+        [6, ("devices", f'{str(test_device_file_none_exist)}'), lambda r: "No devices found" in r],
+        [7, ("devices", f'{str(test_device_file_w_dup)}'), lambda r: "Duplicates exist" in r],
+    ]
+)
+def test_batch_move_fail(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", "move",  *args])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "Invalid" in result.stdout
-
-
-def test_batch_move_import_file_not_exists():
-    result = runner.invoke(app, ["batch", "move",  "devices", "nonexistfile.fake.json"])
-    capture_logs(result, "test_batch_move_import_file_not_exists", expect_failure=True)
-    assert result.exit_code == 1
-    assert "Invalid" in result.stdout
-
-
-def test_batch_move_too_many_args():
-    result = runner.invoke(app, ["batch", "move",  "devices", f'{str(test_device_file)}', f'{str(test_rename_aps_file)}', "--label"])
-    capture_logs(result, "test_batch_move_too_many_args", expect_failure=True)
-    assert result.exit_code == 1
-    assert "oo many" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_batch_rename_aps(ensure_dev_cache_no_last_rename_ap):
@@ -230,7 +251,7 @@ def test_batch_rename_aps_no_args():
 
 
 def test_batch_verify():
-    result = runner.invoke(app, ["batch", "verify", f'{str(test_verify_file)}'])
+    result = runner.invoke(app, ["batch", "verify", f'{str(test_verify_file)}', "--out", test_outfile])
     capture_logs(result, "test_batch_verify")
     assert result.exit_code == 0
     assert "validation" in result.stdout

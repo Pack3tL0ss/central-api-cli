@@ -2,6 +2,7 @@ import json
 import shutil
 from pathlib import Path
 from typing import Any, Callable, Literal
+import random
 
 import yaml
 
@@ -81,12 +82,15 @@ def _get_dump_func(sfx: str) -> Callable:
     }
     return dump_func.get(sfx, json.dumps)
 
-def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", invalid: bool = False) -> Path:
+def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", invalid: bool = False, duplicate: bool = False) -> Path:
     data = test_data["batch"]
     keys = import_type.split(":")
     import_type = keys[0]
     sfx = "json" if len(keys) < 2 else keys[1]
-    data = data[import_type] if sfx not in data[import_type] else data[import_type][sfx]
+    data = data[import_type] if isinstance(data[import_type], str) or sfx not in data[import_type] else data[import_type][sfx]
+
+    def _invalidate_fields(data: list[dict], fields: list[str]) -> list[dict]:
+        return [{k if k not in fields else f"invalid{idx}": v for idx, (k, v) in enumerate(inner.items())} for inner in data]
 
     if isinstance(data, str):  # pragma: no cover
         seed_file = Path(data)
@@ -94,15 +98,23 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", i
     else:
         data = data
 
+
     if invalid:
         if import_type == "devices":
-            data = [{k if k != "serial" else "invalid": v for k, v in inner.items()} for inner in data]
+            data = _invalidate_fields(data, fields=["serial"])
+            # data = [{k if k != "serial" else "invalid": v for k, v in inner.items()} for inner in data]
         elif import_type == "sites":
-            data = [{k if k not in ["site", "site_name", "name"] else "invalid": v for k, v in inner.items()} for inner in data]
+            data = _invalidate_fields(data, fields=["site", "site_name", "name"])
+            # data = [{k if k not in ["site", "site_name", "name"] else "invalid": v for k, v in inner.items()} for inner in data]
+        elif import_type == "cloud_auth_macs":
+            data = _invalidate_fields(data, fields=["mac", "Mac Address"])
         else:  # pragma: no cover
             ...
 
-    test_batch_file = config.cache_dir / f"test_runner_{import_type}.{sfx}"
+    if duplicate:
+        data += [data[0]]
+
+    test_batch_file = config.cache_dir / f"test_runner_{import_type}{'' if not duplicate else '_w_dup'}{'' if not invalid else '_invalid'}.{sfx}"
     out_str = _get_dump_func(sfx)(data)
     res = test_batch_file.write_text(out_str)
 
@@ -188,11 +200,38 @@ def _create_not_exist_site_file(file: Path, none_exists: bool = False) -> Path:
     out_file.write_text(json.dumps(site_data, indent=4))
     return out_file
 
+def _create_not_exist_device_file(file: Path, none_exists: bool = False) -> Path:
+    dev_data = json.loads(file.read_text())
+    def not_exist_dict(inner: dict) -> dict:
+        for key in ["serial", "mac", "name"]:
+            if key in inner:
+                value = inner[key]
+                if key == "mac":
+                    value = "".join([char for char in value if char not in list(".:-")])
+                value = list(value)
+                random.shuffle(value)
+                inner[key] = "".join(value)
+        return inner
+
+    if not none_exists:
+        dev_data[-1] = not_exist_dict(dev_data[-1])
+        out_file = file.parent / f"{file.stem}_one_not_exist{file.suffix}"
+    else:
+        dev_data = [not_exist_dict(inner) for inner in dev_data]
+        out_file = file.parent / f"{file.stem}_none_exist{file.suffix}"
+
+    out_file.write_text(json.dumps(dev_data, indent=4))
+    return out_file
+
 
 test_data: dict[str, Any] = get_test_data()
+test_outfile: Path = config.cache_dir / "test_runner_outfile"
 test_invalid_empty_file: Path = config.cache_dir / "test_runner_empty_file"
 test_invalid_empty_file.touch()
 test_device_file: Path = setup_batch_import_file(test_data=test_data, import_type="devices")
+test_device_file_w_dup: Path = setup_batch_import_file(test_data=test_data, import_type="devices:yaml", duplicate=True)
+test_device_file_one_not_exist: Path = _create_not_exist_device_file(test_device_file)
+test_device_file_none_exist: Path = _create_not_exist_device_file(test_device_file, none_exists=True)
 test_invalid_device_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="devices:csv", invalid=True)
 test_device_file_txt: Path = setup_batch_import_file(test_data=test_data, import_type="devices:txt")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
@@ -217,6 +256,8 @@ test_switch_var_file_flat = create_var_file(test_data["test_devices"]["switch"][
 test_switch_var_file_csv = create_var_file(test_data["test_devices"]["switch"]["variable_file"], file_type="csv")
 test_deploy_file = setup_deploy_file(group_file=test_group_file, site_file=test_site_file, label_file=test_label_file, device_file=test_device_file)
 test_j2_file = setup_j2_file()
+test_cloud_auth_mac_file = setup_batch_import_file(test_data=test_data, import_type="cloud_auth_macs")
+test_cloud_auth_mac_file_invalid = setup_batch_import_file(test_data=test_data, import_type="cloud_auth_macs", invalid=True)
 test_caas_devs_commands_file = _create_caas_commands_file("gateways")
 test_caas_groups_commands_file = _create_caas_commands_file("groups")
 test_caas_sites_commands_file = _create_caas_commands_file("sites")
@@ -228,8 +269,10 @@ test_ap_ui_group_variables = Path(test_data["template"]["ap_ui_group"]["variable
 gw_group_config_file = config.cache_dir / "test_runner_gw_grp_config"
 
 test_files = [
+    test_outfile,
     test_invalid_empty_file,
     test_device_file,
+    test_device_file_w_dup,
     test_invalid_device_file_csv,
     test_group_file,
     test_sub_file_csv,
@@ -258,4 +301,6 @@ test_files = [
     test_caas_sites_commands_file,
     test_caas_invalid_commands_file,
     test_caas_empty_commands_file,
+    test_cloud_auth_mac_file,
+    test_cloud_auth_mac_file_invalid,
 ]

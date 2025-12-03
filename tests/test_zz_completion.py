@@ -19,7 +19,22 @@ ctx.params={'what': 'overlay', 'device': None, 'yes': None, 'debug': None, 'defa
 
 # TODO most are hard-coded need to grab from test_data or dynamically from cache
 # TODO most need to be tested with a value and an empty string, parameritize decorator...
-def test_dev_completion(incomplete: str = "bsmt"):
+@pytest.mark.parametrize(
+    "_,incomplete,args",
+    [
+        [1, test_data["ap"]["name"], ("dev-type", "")],
+        [2, test_data["ap"]["name"], ("dev-type", "ap")],
+        [3, test_data["gateway"]["name"], ("dev-type", "clients")],
+        [4, test_data["switch"]["name"], ("dev-type", "switch")],
+    ]
+)
+def test_dev_completion(_: int, incomplete: str, args: tuple[str]):
+    result = [c for c in cache.dev_completion(incomplete, args)]
+    assert len(result) > 0
+    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
+
+
+def test_dev_completion_(incomplete: str = "bsmt"):
     result = [c for c in cache.dev_completion(incomplete)]
     assert len(result) > 0
     assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
@@ -93,6 +108,29 @@ def test_template_completion(idx: int, fixtures: str | list[str] | None, complet
     result = [c for c in complete_func(incomplete, args)]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
+
+@pytest.mark.parametrize(
+    "idx,fixtures,complete_func,incomplete,args",
+    [
+        [1, "ensure_cache_group2", cache.smg_kw_completion, "cencli_test_group2", ("group",)],
+        [2, "ensure_cache_group2", cache.smg_kw_completion, test_data["test_devices"]["ap"]["mac"], ("group", "cencli_test_group2", "mac")],
+        [3, "ensure_cache_group2", cache.smg_kw_completion, "ser", ("group", "cencli_test_group2",)],
+        [4, None, cache.smg_kw_completion, test_data["test_devices"]["ap"]["serial"], ("serial",)],
+    ]
+)
+def test_smg_keyword_completion(idx: int, fixtures: str | list[str] | None, complete_func: Callable, incomplete: str, request: pytest.FixtureRequest, args: tuple[str]):
+    expected = incomplete if args[-1] == "group" or args[-1] not in ["serial", "mac"] else args[-1].upper()
+    if fixtures:
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    if idx % 2 == 0:
+        ctx.params = {}
+        for _idx, arg in enumerate(args, start=1):
+            ctx.params = {**ctx.params, f"kw{_idx}": arg} if _idx % 1 == 0 else {args[_idx - 1]: arg}
+            args = ()
+    result = [c for c in complete_func(ctx, incomplete, args) if c not in ["|", incomplete]]
+    assert len(result) > 0
+    assert all([m.lower().lstrip("<").startswith(expected.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 
 def test_dev_switch_completion(incomplete: str = test_data["switch"]["name"].swapcase()):

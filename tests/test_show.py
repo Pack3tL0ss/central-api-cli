@@ -323,7 +323,7 @@ def test_show_inventory_fail(_: int, args: tuple[str], pass_condition: Callable,
     "_,args,pass_condition",
     [
         [1, (test_data["ap"]["name"], "--up"), lambda r: "mac" in r],
-        [2, ("--site", test_data["ap"]["site"]), lambda r: "mac" in r and "band" in r],
+        [2, ("--site", test_data["ap"]["site"], "--sort", "utilization"), lambda r: "mac" in r and "band" in r],
     ]
 )
 def test_show_radios(_: int, args: tuple[str], pass_condition: Callable):
@@ -351,19 +351,20 @@ def test_show_radios_fail(_: int, args: tuple[str], pass_condition: Callable, te
     assert pass_condition(result.stdout)
 
 
-def test_show_sites():
-    cache.check_fresh(site_db=True)
-    result = runner.invoke(app, ["show", "sites"],)  # also tests cached response
-    capture_logs(result, "test_show_sites")
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("-sc",), lambda r: "API" in r],
+        [2, (test_data["ap"]["site"],), lambda r: "API" in r],
+    ]
+)
+def test_show_sites(idx: int, args: tuple[str], pass_condition: Callable):
+    if idx % 1 == 0:
+        cache.check_fresh(site_db=True)  # tests cached response
+    result = runner.invoke(app, ["show", "sites", *args],)
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_site_by_name():
-    result = runner.invoke(app, ["show", "sites", test_data["ap"]["site"]],)
-    capture_logs(result, "test_show_site_by_name")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
@@ -1076,37 +1077,40 @@ def test_get_floor_details():
 
 cmac = test_data["client"]["wireless"]["mac"]
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        (["--table"], lambda r: "name" in r and "mac" in r),
-        (["--table", "-w", "--band", "6"], lambda r: "name" in r and "mac" in r),
-        (["-w"], lambda r: "name" in r and "mac" in r),
-        (["--wired", "--table"], lambda r: "vlan" in r and "mac" in r),
-        (["--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"], lambda r: "API" in r),
-        ([cmac], lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)),
-        (["--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]], lambda r: "ignored" in r and "API" in r),  # site is ignored
-        (["--failed", "--past", "1w"], lambda r: "past 1 week" in r and "API" in r),
+        [1, ("--table",), lambda r: "name" in r and "mac" in r],
+        [2, ("--table", "-w", "--band", "6"), lambda r: "name" in r and "mac" in r],
+        [3, ("-w",), lambda r: "name" in r and "mac" in r],
+        [4, ("--wired", "--table"), lambda r: "vlan" in r and "mac" in r],
+        [5, ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
+        [6, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
+        [7, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
+        [8, ("--failed", "--past", "1w"), lambda r: "past 1 week" in r and "API" in r],
     ]
 )
-def test_show_clients(args: list[str], pass_condition: Callable):
+def test_show_clients(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "clients", *args],)
-    capture_logs(result, "test_show_clients")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition,test_name_append",
     [
-        (["--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]], lambda r: "one of" in r),
-        ([], lambda r: "API" in r)
+        [1, ("--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r, None],
+        [2, (), lambda r: "API" in r, None],
+        [3, (), lambda r: "⚠" in r, "wired"],
     ]
 )
-def test_show_clients_fail(args: list[str], pass_condition: Callable):
+def test_show_clients_fail(idx: int, args: list[str], pass_condition: Callable, test_name_append: str | None):
     api.session.requests = []  # Clearing class var Session.requests did not work for some reason, this does.  Need requests cleared or first call is not run by itself
     cache.responses.client = None
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, ["show", "clients", *args],)
-    capture_logs(result, "test_show_clients_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
@@ -1206,15 +1210,22 @@ def test_show_config_sw_ui():
 
 
 
-@pytest.mark.parametrize("args", [(test_data["switch"]["ip"], "-p"), (test_data["template_switch"]["serial"],)])
-def test_show_poe(args: tuple[str]):
+@pytest.mark.parametrize(
+    "idx,args",
+    [
+        [1, (test_data["switch"]["ip"], "-p"),],
+        [2, (test_data["switch"]["ip"], "1/1/6"),],
+        [3, (test_data["template_switch"]["serial"],)],
+    ]
+)
+def test_show_poe(idx: int, args: tuple[str]):
     result = runner.invoke(app, [
             "show",
             "poe",
             *args
         ]
     )
-    capture_logs(result, "test_show_poe")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "API" in result.stdout
 
@@ -1394,7 +1405,7 @@ def test_show_firmware_device_no_args():
     "args",
     [
         (test_data["switch"]["name"], "-v"),
-        (test_data["aos8_ap"]["serial"], "-S"),
+        (test_data["aos8_ap"]["serial"], "-S", "--json"),
         (test_data["gateway"]["name"],),
         ("--dev-type", "cx"),
 
@@ -1709,17 +1720,6 @@ def test_show_version(_: int, exit_code: int, pass_condition: Callable, test_nam
     assert pass_condition(result.output)
 
 
-def test_show_subscriptions_auto():
-    result = runner.invoke(app, [
-            "show",
-            "subscriptions",
-            "auto"
-        ]
-    )
-    capture_logs(result, "test_show_subscriptions_auto")
-    assert result.exit_code == 0
-
-
 def test_show_tunnels():
     result = runner.invoke(app, [
             "show",
@@ -1732,36 +1732,24 @@ def test_show_tunnels():
     assert result.exit_code == 0
     assert "API" in result.stdout
 
-base = ["show", "subscriptions"]
-@pytest.mark.parametrize("args", (base, [*base, "--sort", "end-date", "-r"],))
-def test_show_subscriptions_details(args: list[str]):  # glp
-    result = runner.invoke(app, args)
-    capture_logs(result, "test_show_subscriptions_details")
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "ounts" in r],
+        [2, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
+        [3, ("stats",), lambda r: "used" in r],
+        [4, ("names",), lambda r: "advance" in r],
+        [5, ("auto",), lambda r: "API" in r],
+        [6, ("--dev-type", "switch"), lambda r: "ounts" in r],
+        [7, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch-6200" in r.rstrip().splitlines()[-1]],
+    ]
+)
+def test_show_subscriptions(idx: int, args: tuple[str], pass_condition: Callable):  # glp
+    result = runner.invoke(app, ["show", "subscriptions", *args])
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
-
-
-def test_show_subscription_stats():
-    result = runner.invoke(app, [
-            "show",
-            "subscriptions",
-            "stats",
-        ]
-    )
-    capture_logs(result, "test_show_subscription_stats")
-    assert result.exit_code == 0
-    assert "used" in result.stdout
-
-
-def test_show_subscription_names():
-    result = runner.invoke(app, [
-            "show",
-            "subscriptions",
-            "names",
-        ]
-    )
-    capture_logs(result, "test_show_subscription_names")
-    assert result.exit_code == 0
-    assert "advance" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_vsx(ensure_dev_cache_test_vsx_switch: None):

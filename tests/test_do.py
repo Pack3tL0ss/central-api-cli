@@ -36,9 +36,16 @@ def test_archive_multi(ensure_cache_batch_devices):
     assert "succeeded" in result.stdout
 
 
-def test_convert_template():
-    result = runner.invoke(app, ["convert", "template", test_data["j2_template"]])
-    capture_logs(result, "test_convert_template")
+@pytest.mark.parametrize(
+    "idx,args",
+    [
+        [1, (test_data["j2_template"],)],
+        [2, (test_data["j2_template"], test_data["j2_variables"])],
+    ]
+)
+def test_convert_template(idx: int, args: tuple[str]):
+    result = runner.invoke(app, ["convert", "template", *args])
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "hash" in result.stdout
 
@@ -174,7 +181,8 @@ def test_bounce_poe_multiport_invalid_range_across_members():
     [
         [1, None, (test_data["aos8_ap"]["group"], "cencli_test_cloned"), lambda r: "Created" in r],
         [2, "ensure_cache_group_cloned_w_gw", ("cencli_test_cloned", "cencli_test_cloned_upgdaos10", "--aos10"), lambda r: "⚠" in r],
-        [3, None, ("bsmt-staging", "cencli_test_cloned_cx"), lambda r: "Created" in r],
+        [3, "ensure_cache_group_cloned_gw_only", ("cencli_test_cloned", "cencli_test_cloned_gw_only_upgdaos10", "--aos10"), lambda r: "201" in r],
+        [4, None, ("bsmt-staging", "cencli_test_cloned_cx"), lambda r: "Created" in r],
     ]
 )
 def test_clone_group(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -263,19 +271,6 @@ def test_ts_mesh():
 
 
 if config.dev.mock_tests:
-    def test_nuke_wrong_ap():
-        result = runner.invoke(app, ["nuke", test_data["ap"]["serial"], "-y"])
-        capture_logs(result, "test_nuke_wrong_ap", expect_failure=True)
-        assert result.exit_code == 1
-        assert "valid" in result.stdout
-
-
-    def test_nuke_unsupported_type():
-        result = runner.invoke(app, ["nuke", test_data["switch"]["serial"]])
-        capture_logs(result, "test_nuke_unsupported_type", expect_failure=True)
-        assert result.exit_code == 1
-        assert "only applies to" in result.stdout
-
     @pytest.mark.parametrize(
         "args",
         [
@@ -290,18 +285,33 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_reboot_swarm():
-        result = runner.invoke(app, ["reboot",  test_data["aos8_ap"]["name"], "-sy"])
-        capture_logs(result, "test_reboot_swarm")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
+    @pytest.mark.parametrize(
+        "idx,args",
+        [
+            [1, (test_data["ap"]["serial"], "-s")],  # -s | --swarm only valid for aos8 AP
+            [2, (test_data["aos8_ap"]["name"],)], # aos8 AP without --swarm
+            [3, (test_data["switch"]["serial"],)],  # command not supported for cx switches
+        ]
+    )
+    def test_nuke_invalid(idx: int, args: tuple[str]):
+        result = runner.invoke(app, ["nuke", *args, "-y"])
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
 
 
-    def test_reboot_device():
-        result = runner.invoke(app, ["reboot",  test_data["ap"]["name"], "-sy"])  # -s is ignored as it doesn't apply to AOS10
-        capture_logs(result, "test_reboot_device")
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, (test_data["ap"]["name"], test_data["switch"]["name"], "-s"), lambda r: "⚠" in r],  # -s is ignored for both (AOS10/switch)
+            [2, (test_data["aos8_ap"]["name"], "-s"), lambda r: "200" in r],
+        ]
+    )
+    def test_reboot(idx: int, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(app, ["reboot",  *args, "-y"])
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
-        assert "200" in result.stdout
+        assert pass_condition(result.stdout)
 
 
     def test_enable_auto_sub():

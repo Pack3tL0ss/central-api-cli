@@ -5,6 +5,7 @@ from typer.testing import CliRunner
 
 from centralcli import utils
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import capture_logs, config
 from ._test_data import test_data, test_device_file, test_group_file, test_site_file_none_exist, test_site_file_one_not_exist, test_invalid_site_file
@@ -212,12 +213,20 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-
-    def test_delete_fw_compliance(ensure_cache_group2):
-        result = runner.invoke(app, ["delete", "firmware",  "compliance", "ap", "cencli_test_group2", "-y"])
-        capture_logs(result, "test_delete_fw_compliance")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
+    @pytest.mark.parametrize(
+        "idx,fixture,args,exit_code,pass_condition",
+        [
+            [1, "ensure_cache_group2", ("ap", "cencli_test_group2"), 0, lambda r: "200" in r],
+            [2, None, ("ap",), 1, lambda r: "404" in r],
+        ]
+    )
+    def test_delete_fw_compliance(idx: int, fixture: str | None, args: tuple[str], exit_code: int, pass_condition: Callable, request: pytest.FixtureRequest):
+        if fixture:
+            request.getfixturevalue(fixture)
+        result = runner.invoke(app, ["delete", "firmware",  "compliance", *args, "-y"])
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=bool(exit_code))
+        assert result.exit_code == exit_code
+        assert pass_condition(result.stdout)
 
 
     def test_delete_fw_compliance_invalid():

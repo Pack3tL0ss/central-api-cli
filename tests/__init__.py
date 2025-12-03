@@ -150,7 +150,7 @@ class MockSleep:
 mock_sleep = MockSleep()
 
 
-if __name__ in ["tests", "__main__"]:
+if __name__ in ["tests", "__main__"]:  # pragma: no cover
     monkeypatch_terminal_size()
     if config.dev.mock_tests:
         pytest.MonkeyPatch().setattr("aiohttp.client.ClientSession.request", mock_request)

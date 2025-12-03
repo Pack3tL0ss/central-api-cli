@@ -13,12 +13,14 @@ from typing import Callable
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import utils
+from centralcli import utils, common
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.constants import ShowArgs, arg_to_what
 from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
+from click.exceptions import Exit
+
 
 from . import capture_logs, config, test_data
 from ._test_data import test_ap_ui_group_template, test_cert_file
@@ -134,14 +136,7 @@ def test_monitoring_get_clients_fail(kwargs: dict[str, str | bool], exception: E
     [
         [1, "ensure_cache_group4", {"group": "cencli_test_group4", "aos10": False}, None, lambda r: "reverting back" in r.error, None],
         [2, "ensure_cache_group4", {"group": "cencli_test_group4"}, None, lambda r: not r.ok, "fail"],
-        [
-            3,
-            "ensure_cache_group4",
-            {"group": "cencli_test_group4", "microbranch": True},
-            None,
-            lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]),
-            None,
-        ],
+        [3, "ensure_cache_group4", {"group": "cencli_test_group4", "microbranch": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None,],
         [
             4,
             "ensure_cache_group1",
@@ -166,6 +161,30 @@ def test_monitoring_get_clients_fail(kwargs: dict[str, str | bool], exception: E
             lambda r: "Invalid device type" in "\n".join([res.output for res in utils.listify(r)]),
             None,
         ],
+        [
+            7,
+            "ensure_cache_group4_cx_only",
+            {"group": "cencli_test_group4", "allowed_types": "ap", "microbranch": True},
+            None,
+            lambda r: "Invalid combination" in "\n".join([res.output for res in utils.listify(r)]),
+            "cx_only",
+        ],
+        [
+            8,
+            "ensure_cache_group4_cx_only",
+            {"group": "cencli_test_group4", "microbranch": True, "aos10": True},
+            None,
+            lambda r: "APs must be added to allowed" in "\n".join([res.output for res in utils.listify(r)]),
+            "cx_only",
+        ],
+        [
+            9,
+            "ensure_cache_group4_cx_only",
+            {"group": "cencli_test_group4", "allowed_types": "sw", "wired_tg": True, "monitor_only_sw": True},
+            None,
+            lambda r: "Monitor Only is not valid for Template" in "\n".join([res.output for res in utils.listify(r)]),
+            "cx_only",
+        ],
     ],
 )
 def test_configuration_update_group_properties(
@@ -184,6 +203,19 @@ def test_configuration_update_group_properties(
     else:
         result = api.session.request(api.configuration.update_group_properties, **kwargs)
         assert pass_condition(result)
+
+
+@pytest.mark.parametrize(
+    "_,func,kwargs,pass_condition",
+    [
+        (1, api.configuration.get_groups_template_status, {"groups": test_data["switch"]["group"]}, lambda r: r.status == 200),
+        (2, api.configuration.get_all_templates, {"groups": [test_data["template_switch"]["group"]]}, lambda r: r.status == 200),
+    ],
+)
+def test_configuration_classic(_: int, func: Callable, kwargs: dict[str, str], pass_condition: Callable):
+    resp = api.session.request(func, **kwargs)
+    assert pass_condition(resp)
+
 
 
 @pytest.mark.parametrize(
@@ -326,6 +358,18 @@ def test_visualrf(func: Callable, kwargs: dict[str, str]):
 
 
 @pytest.mark.parametrize(
+    "_,func,kwargs",
+    [
+        [1, api.monitoring.get_wlans, {}],
+        [2, api.monitoring.get_switch_ports_bandwidth_usage, {"serial": test_data["switch"]["serial"]}],
+    ],
+)
+def test_monitoring(_: int, func: Callable, kwargs: dict[str, str]):
+    resp = api.session.request(func, **kwargs)
+    assert resp.status == 200
+
+
+@pytest.mark.parametrize(
     "kwargs",
     [
         {"group": "cencli-test-group-fail", "allowed_types": ["ap", "invalid_type"], "monitor_only_sw": True},  # smon only w/out sw as allowed type (warning) + invalid type
@@ -434,3 +478,22 @@ def test_get_user_accounts():
 )
 def test_arg_to_what(cmd: str, key: str | ShowArgs, expected: str):
     assert arg_to_what(key=key, default="", cmd=cmd) == expected
+
+
+@pytest.mark.parametrize(
+    "idx,func,kwargs,pass_condition,exception",
+    [
+        [1, common.batch_move_devices, {}, None, Exit],
+    ]
+)
+def test_clicommon(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
+    if exception:
+        try:
+            _ = func(**kwargs)
+        except exception:
+            ...  # Test Passes
+        else:  # pragma: no cover
+            raise AssertionError(f"{env.current_test}{idx} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
+    else:  # pragma: no cover
+        resp = func(**kwargs)
+        assert pass_condition(resp)

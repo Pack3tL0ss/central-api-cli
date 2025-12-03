@@ -152,8 +152,8 @@ def devices(
         common.exit(render._batch_invalid_msg("cencli batch add devices [OPTIONS] [IMPORT_FILE]"))
 
     resp = common.batch_add_devices(import_file, yes=yes)
-    if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:
-        log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will typically stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True)
+    if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:  # pragma: no cover # TOGLP will add to tests once adjusted to use GLP
+        log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True, log=True)
         log.info(f"Use [cyan]cencli batch verify devices {import_file}[/] to check status of license assignment.", caption=True)
 
     render.display_results(resp, tablefmt="action", title="Batch Add devices",)

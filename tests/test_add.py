@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from centralcli.cli import app
+from centralcli.environment import env
 
 from . import cache, capture_logs, config, test_data
 from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json
@@ -55,18 +56,18 @@ def test_add_cert_fail(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "idx,args",
     [
-        ("cencli_test_group1",),
-        ("cencli_test_group2", "--sw", "--ap", "--wired-tg", "--wlan-tg"),
-        ("cencli_test_group3", "--ap"),
-        ("cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx"),
-        ("cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx"),
+        [1, ("cencli_test_group1",)],
+        [2, ("cencli_test_group2", "--sw", "--ap", "--wired-tg", "--wlan-tg")],
+        [3, ("cencli_test_group3", "--ap")],
+        [4, ("cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx")],
+        [5, ("cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx")],
     ]
 )
-def test_add_groups(args: tuple[str]):
+def test_add_groups(idx: int, args: tuple[str]):
     result = runner.invoke(app, ["add", "group",  *args, "-Y"])
-    capture_logs(result, "test_add_group1")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert any(
         [
             result.exit_code == 0 and "Created" in result.stdout,

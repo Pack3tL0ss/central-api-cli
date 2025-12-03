@@ -61,6 +61,7 @@ def _build_response(
         response_class: Optional[Type[ClientResponse]] = None,
         reason: Optional[str] = "OK"
     ) -> ClientResponse:
+    # no cover: start
     if response_class is None:
         response_class = ClientResponse
     if isinstance(payload, str):
@@ -71,6 +72,7 @@ def _build_response(
         body = str.encode(body)
     if request_headers is None:
         request_headers = {}
+    # no cover: stop
     loop = Mock()
     loop.get_debug = Mock()
     loop.get_debug.return_value = True
