@@ -3671,8 +3671,12 @@ class Cache:
         if not mpsk_id:
             net_resp = await self.refresh_mpsk_networks_db()
             if not net_resp.ok:
-                log.error("Unable to refresh named mpsks as call to fetch mpsk networks failed", show=True)
+                log.error("Unable to refresh named mpsks as call to fetch mpsk networks failed", caption=True)
                 return net_resp
+            if not net_resp.output:
+                log.info("Unable to refresh named mpsks as No MPSK networks are configured", caption=True)
+                return net_resp
+
             mpsk_networks = {net["id"]: net["ssid"] for net in net_resp.output}
             named_reqs = [
                 BatchRequest(api.cloudauth.get_named_mpsk, mpsk_id, name=name, role=role, status=status)

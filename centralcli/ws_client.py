@@ -3,7 +3,6 @@ import base64
 from typing import Literal
 
 import aiohttp
-from google.protobuf import json_format
 from rich import inspect
 from rich.console import Console
 
@@ -12,7 +11,7 @@ from centralcli.cache import api
 from centralcli.models.config import WSSConfig
 from centralcli.typedefs import LogType
 
-from . import config, log, utils
+from . import config, log
 from .objects import DateTime
 from .protobuf import audit_pb2, monitoring_pb2, streaming_pb2
 

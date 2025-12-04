@@ -1,16 +1,19 @@
-import nox
+from nox import Session, options
+from nox_uv import session
 from pathlib import Path
 
-@nox.session(python=['venv3.9/bin/python3', 'venv3.10/bin/python3', 'venv3.11/bin/python3', 'venv3.12/bin/python3', 'venv3.13/bin/python3'])
-def tests(session):
-    deps = nox.project.load_toml("pyproject.toml")["project"]["dependencies"]
-    speedups = nox.project.load_toml("pyproject.toml")["project"]["optional-dependencies"]["speedups"]
-    requirements = [*deps, *speedups]
-    session.install(*requirements)
-    session.install('pytest')
-    session.run('pytest')
+options.default_venv_backend = "uv"
 
-@nox.session()
-def lint(session):
-    session.install('ruff')
-    session.run('ruff', 'check', Path(__file__).parent / 'centralcli', '--config', Path(__file__).parent / 'pyproject.toml')
+@session(
+    python=["3.10", "3.11", "3.12", "3.13", "3.14"],
+    uv_groups=["test"],
+    uv_extras=["hook-proxy"],
+)
+def test(s: Session) -> None:
+    s.run("python", "-m", "pytest")
+
+@session(uv_only_groups=["lint"])
+def lint(s: Session) -> None:
+    s.run("ruff", "check", ".")
+    s.run('ruff', 'check', Path(__file__).parent / 'centralcli', '--config', Path(__file__).parent / 'pyproject.toml')
+
