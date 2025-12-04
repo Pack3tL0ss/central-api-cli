@@ -1,3 +1,6 @@
+CLI Reference Guide
+===================
+
 .. typer:: centralcli.cli:app
     :prog: cencli
     :theme: dark
