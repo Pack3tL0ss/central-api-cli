@@ -208,7 +208,7 @@ class VisualRFAPI:
 
         Args:
             macaddr (str): Provide a macaddr returned by
-                /visualrf_api/v1/floor/{floor_id}/*_location api. Example:
+                /visualrf_api/v1/floor/{floor_id}/..._location api. Example:
                 /visualrf_api/v1/client_location/ac:37:43:a9:ec:10
             offset (int, optional): Pagination offset Defaults to 0.
             limit (int, optional): Pagination limit. Max is 100 Defaults to 100 (max).
