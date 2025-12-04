@@ -127,7 +127,7 @@ pip upgrade centralcli
 ```
 
 ### pip (in system python environment)
-[Requires python3.9 or above and pip.](#if-you-dont-have-python)
+[Requires python3.10 or above and pip.](#if-you-dont-have-python)
 
 It's recommended to use the `uv` install method above, however if you don't use a lot of python apps (meaning a dependency conflict with other apps is not a concern).  Then simply installing via pip is possible (*albeit not recommended*).
 > This method is primarily feasible on Windows, as current versions of many Linux distributions do not allow installing apps in the system python environment.
