@@ -306,6 +306,7 @@ class Config:
         self.bulk_edit_file = self.dir / "bulkedit.csv"
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.default_cache_file = self.cache_dir / "db.json"
         self.sticky_workspace_file = self.cache_dir / "last_workspace"
         self.sanitize_file = self.dir / "redact.yaml"

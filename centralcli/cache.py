@@ -1276,9 +1276,6 @@ class Cache:
         self.updated: list = []  # TODO # DEPRECATED change from list of methods to something easier
         self.config = config
         self.responses = CacheResponses()
-        # self.get_label_identifier: CacheLabel | list[CacheLabel] = partial(self.get_name_id_identifier, "label")
-        # self.get_sub_identifier: CacheSub | list[CacheSub] = partial(self.get_name_id_identifier, "sub")
-        # self.get_portal_identifier: CachePortal | list[CachePortal] = partial(self.get_name_id_identifier, "portal")
         if config.valid and config.cache_dir.exists():
             self.DevDB: TinyDB = TinyDB(config.cache_file)
             self.InvDB: Table = self.DevDB.table("inventory")
