@@ -1110,8 +1110,8 @@ class CLICommon:
         group_mv_reqs, group_mv_msgs = {}, {}
         req_dict, msg_dict = {}, {}
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
-        _skip = False
         for cache_dev, mv_data in zip(cache_devs, import_data):
+            _skip = False
             has_connected = True if cache_dev.db.name == "devices" else False
             for idx in range(0, 2):
                 to_group = mv_data.get("group")
@@ -1269,9 +1269,9 @@ class CLICommon:
             if r.ok:
                 if move_type == "site":
                     site_success_serials = [s["device_id"] for s in r.raw["success"] if utils.is_serial(s["device_id"])]  # if .... is_serial stips out stack_id, success will have all member serials + the stack_id
-                    cache_by_serial = {serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}
-                if move_type == "group":  # All or none here as far as the rresponse.
-                    cache_by_serial = {serial: {**cache_by_serial[serial], "group": name} for serial in serials}
+                    cache_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}}
+                if move_type == "group":  # All or none here as far as the response.
+                    cache_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], "group": name} for serial in serials}}
 
         api.session.request(
             self.cache.update_dev_db,
@@ -1368,19 +1368,23 @@ class CLICommon:
             confirm_msgs += [f"\n[italic dark_olive_green2]Will result in {_tot_req} additional API Calls."]
 
         render.econsole.print("\n".join(confirm_msgs).strip(), emoji=False)  # stripping as we have a \n before and after coming from somewhere.
-        if render.confirm(yes):
-            site_rm_res = []
-            if site_rm_reqs:
-                site_rm_res = api.session.batch_request(site_rm_reqs)
-                if not all([r.ok for r in site_rm_res]):
-                    render.econsole.print("[bright_red]:warning:[/]  Some site remove requests failed, Aborting...")
-                    return site_rm_res
-            batch_res = api.session.batch_request(batch_reqs)
-            # FIXME when move stack only the serial for the conductor is in serials_by_site which mucks the logic in device_move_cache_update.  Need to get all switches with a matching stack_id.  Probably a get_swack_members() method in Cache
+        render.confirm(yes)
+        site_rm_res = []
+        if site_rm_reqs:
+            site_rm_res = api.session.batch_request(site_rm_reqs)
+            if not all([r.ok for r in site_rm_res]):
+                render.econsole.print("[bright_red]:warning:[/]  Some site remove requests failed, Aborting...")
+                return site_rm_res
+        batch_res = api.session.batch_request(batch_reqs)
+        # FIXME when move stack only the serial for the conductor is in serials_by_site which mucks the logic in device_move_cache_update.  Need to get all switches with a matching stack_id.  Probably a get_swack_members() method in Cache
+        # CACHE # FIXME verify cache update logic for stack site move (initially had no site assigned).  Cache after move did not reflect the site they weree moved to.
+        try:
             self.device_move_cache_update(batch_res, serials_by_site=serials_by_site, serials_by_group=serials_by_group)  # We don't store device labels in cache.  AP response does not include labels
-            # CACHE # FIXME verify cache update logic for stack site move (initially had not site assigned).  Cache after move did not reflect the site they weree moved to.
+        except Exception as e:
+            log.error(f"Exception {repr(e)} during attempt to update cache after moves.  Use [cyan]cencli show refresh cache[/], to manually update cache.", caption=True)
+            log.exception(f"Exception {repr(e)} during attempt to update cache in clicommon.batch_move_devices().\n{e}")
 
-            return [*site_rm_res, *batch_res]
+        return [*site_rm_res, *batch_res]
 
     def batch_delete_groups(
             self,
