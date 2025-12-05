@@ -79,7 +79,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
     {rtxt} 'SN'
     '%h[2:4]'  will use characters 2 through 4 of the switches hostname.
     {rtxt} 'NAN'
-    '%h-1'  will split the hostname into parts separating on '-' and use
+    '%h-1'  will split the upstream switches hostname into parts separating on '-' and use
             the firt segment.
     {rtxt} 'SNAN
     '%p'  represents the interface.
@@ -103,7 +103,6 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
     """
     while True:
         print(lldp_rename_text)
-        fstr = typer.prompt("Enter Desired format string",)
         fstr = render.ask("Enter Desired format string",)
         if "%%" in fstr:
             typer.clear()
