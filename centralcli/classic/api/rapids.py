@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, List
 
 from ... import log, utils
 from ...client import BatchRequest
+from centralcli.response import BatchResponse
 
 if TYPE_CHECKING:
     from ...client import Session
@@ -231,35 +232,33 @@ class RapidsAPI:
         }
 
         br = BatchRequest
-        funcs = [
-            self.wids_get_interfering_aps,
-            self.wids_get_neighbor_aps,
-            self.wids_get_suspect_aps,
-            self.wids_get_rogue_aps,
-        ]
+        funcs = {
+            "interfering_aps": self.wids_get_interfering_aps,
+            "neighbor_aps": self.wids_get_neighbor_aps,
+            "suspect_aps": self.wids_get_suspect_aps,
+            "rogue_aps": self.wids_get_rogue_aps,
+        }
 
         batch_req = [
-            br(f, **params) for f in funcs
+            br(f, **params) for f in funcs.values()
         ]
 
-        # TODO send to CombinedResponse
-        batch_res = await self.session._batch_request(batch_req)
-        resp = batch_res[-1]
-        ok_res = [idx for idx, res in enumerate(batch_res) if res.ok]
-        if not len(ok_res) == len(funcs):
-            failed = [x for x in range(0, len(funcs)) if x not in ok_res]
-            for f in failed:
-                if f in range(0, len(batch_res)):
-                    log.error(f"{batch_res[f].method} {batch_res[f].url.path} Returned Error Status {batch_res[f].status}. {batch_res[f].output or batch_res[f].error}", show=True)
-                    if ok_res:
-                        log.error(f"Partial Failure {batch_res[f].method}:{batch_res[f].url.path} returned {batch_res[f].status} {batch_res[f].error} [italic]see logs[/]", caption=True)
-        raw_keys = ["interfering_aps", "neighbor_aps", "suspect_aps"]
-        if resp.ok:
-            resp.raw = {"rogue_aps": resp.raw.get("rogue_aps", []), "_counts": {"rogues": resp.raw.get("total")}}  # TODO need more error handling
-        for idx, key in enumerate(raw_keys):
-            if idx in ok_res:
-                resp.raw = {**resp.raw, **{key: batch_res[idx].raw.get(key, [])}}
-                resp.raw["_counts"][key.rstrip("_aps")] = batch_res[idx].raw.get("total")
-                resp.output = [*resp.output, *batch_res[idx].output]
+        batch_res = BatchResponse(await self.session._batch_request(batch_req))
+        if not batch_res.passed:
+            return batch_res.failed[-1]  # should only be 1 item given batch_request will abort if first call fails
+
+        if batch_res.failed:
+            for f in batch_res.failed:
+                log.error(f"Partial Failure {f.method}:{f.url.path} returned {f.status} {f.error} [italic]see logs[/]", caption=True)
+
+        resp = batch_res.last
+        resp.raw["_counts"] = {}
+        resp.raw["_exit_code"] = 0
+        for key, res in zip(funcs.keys(), batch_res.responses):
+            if res.ok:
+                resp.raw["_counts"][key.rstrip("_aps")] = res.raw.get("total")
+                resp.output = [*resp.output, *res.output]
+            else:
+                resp.raw["_exit_code"] = 1
 
         return resp

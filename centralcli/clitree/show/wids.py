@@ -21,11 +21,14 @@ app = typer.Typer()
 class WidsResponse:
     def __init__(self, wids_cat: Literal["rogue", "interfering", "suspect", "all"], response: Response, start: None | datetime = None, end: None | datetime = None,) -> None:
         self.response = response
+        self.exit_code = 0 if response.ok else 1
+
         if response.ok:
             wids_model = Wids(response.output)
             self.response.output = wids_model.model_dump()
         if wids_cat == "all":
             self.caption = self.all_caption()
+            self.exit_code = response.raw.get("_exit_code") or self.exit_code
         else:
             caption = common.get_time_range_caption(start, end, default="in past 3 hours.")
             self.caption = f"[cyan]{len(response)}[/] [medium_spring_green]{wids_cat.capitalize()}[/] AP{'s' if len(response) != 1 else ''} {caption}"
@@ -33,7 +36,7 @@ class WidsResponse:
 
     def all_caption(self) -> str:
         caption = ""
-        sections = ["rogues", "suspect", "interfering", "neighbor"]
+        sections = ["rogue", "suspect", "interfering", "neighbor"]
         if self.response.raw.get("_counts"):
             for section in sections:
                 if section in self.response.raw["_counts"]:
@@ -278,11 +281,13 @@ def all(
         title="WIDS Report (All classification types)",
         caption=resp.caption,
         pager=pager,
+        exit_on_fail=False,
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
         cleaner=cleaner.wids,
     )
+    common.exit(code=resp.exit_code)
 
 
 @app.callback(invoke_without_command=True)
