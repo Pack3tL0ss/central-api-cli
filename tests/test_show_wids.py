@@ -36,18 +36,16 @@ def test_show_wids(fixture: str | None, args: tuple[str], pass_condition: Callab
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition,test_name_append", [
-        [("interfering", "-S", test_data["ap"]["mac"]), lambda result: result.exit_code == 1 and "AOS8" in result.stdout, None],
-        [(), lambda result: result.exit_code <= 1 and "⚠" in result.stdout, "partial"],
+    "idx,args,pass_condition,test_name_append", [
+        [1, ("interfering", "-S", test_data["ap"]["mac"]), lambda r: "AOS8" in r, None],
+        [2, (), lambda r: "⚠" in r, "partial"],  # TODO partial failure should return 1 as exit_code (currently does not)
+        [3, (), lambda r: "Response" in r, "all"],
     ]
 )
-def test_show_wids_fail(args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+def test_show_wids_fail(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
-    result = runner.invoke(app, [
-            "show",
-            "wids",
-            *args
-        ]
-    )
-    assert pass_condition(result)
+    result = runner.invoke(app, ["show", "wids", *args])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert pass_condition(result.stdout)

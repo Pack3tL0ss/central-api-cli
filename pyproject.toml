@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "9.0.4"
+version = "9.0.4-1"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -83,8 +83,8 @@ pytest-asyncio = ">=1.2.0"
 jsonref = ">=1.1.0"
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -103,7 +103,6 @@ exclude = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["centralcli"]
-
 
 [dependency-groups]
 nox = [
@@ -145,6 +144,7 @@ exclude_lines = [
     "if __name__ == '__main__':",
     "if TYPE_CHECKING:",
     "# pragma: no cover",
+    "@overload",
     "if show_example:",
     "if not import_file:",
     "if result.exit_code != 0",

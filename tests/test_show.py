@@ -359,7 +359,7 @@ def test_show_radios_fail(_: int, args: tuple[str], pass_condition: Callable, te
     ]
 )
 def test_show_sites(idx: int, args: tuple[str], pass_condition: Callable):
-    if idx % 1 == 0:
+    if idx % 2 == 1:
         cache.check_fresh(site_db=True)  # tests cached response
     result = runner.invoke(app, ["show", "sites", *args],)
     capture_logs(result, f"{env.current_test}{idx}")
