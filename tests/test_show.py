@@ -1336,16 +1336,17 @@ def test_show_notifications():
 
 
 @pytest.mark.parametrize(
-    "args,should_fail,test_name_append,pass_condition",
+    "idx,args,should_fail,test_name_append,pass_condition",
     [
-        [(test_data["aos8_ap"]["name"],), False, None, None],
-        [(test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
-        [("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [(test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [1, (test_data["aos8_ap"]["name"],), False, None, None],
+        [2, (test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
+        [3, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
+        [4, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
+        [5, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
+        [6, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
     ]
 )
-def test_show_firmware_swarm(args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
+def test_show_firmware_swarm(idx: int, args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
@@ -1355,7 +1356,7 @@ def test_show_firmware_swarm(args: tuple[str], should_fail: bool, test_name_appe
             *args
         ]
     )
-    capture_logs(result, env.current_test, expect_failure=should_fail)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=should_fail)
     assert result.exit_code == (0 if not should_fail else 1)
     assert "API" in result.stdout
     if pass_condition:
