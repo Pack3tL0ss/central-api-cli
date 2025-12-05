@@ -1761,10 +1761,10 @@ class Cache:
     ):
         dev_type = None
         if args:
-            if "dev_type" in args and len(args) > 1:
-                dev_type = args[args.index("dev_type") + 1]  # HACK we can't add parameters typer doesn't expect this allows us to call this from other funcs
-            elif args[-1].lower() in ["gateways", "clients", "server"]:
+            if args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
+            elif "dev-type" in args and len(args) > 1:
+                dev_type = args[args.index("dev-type") + 1]
             elif args[-1].lower().startswith("switch"):
                 dev_type = "switch"
             elif args[-1].lower() in ["aps", "ap"]:
