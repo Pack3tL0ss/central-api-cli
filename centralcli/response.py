@@ -534,7 +534,9 @@ class BatchResponse:
 
     @cached_property
     def last(self):
-        resp = [*self.failed, *self.passed][-1]
+        last_resp = [*self.failed, *self.passed][-1]
+        raw = self.raw
+        resp = Response(last_resp._response, raw=raw)
         resp.rl = self.last_rl
         return resp
 

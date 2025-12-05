@@ -209,17 +209,15 @@ def test_clone_group_fail(idx: int, args: list[str]):
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args,expected,test_name_append",
+    "_,fixture,args,expected",
     [
-        [1, None, ("client", test_data["client"]["wireless"]["name"][0:-2], "--refresh"), "200", None],
-        [2, None, ("all", test_data["ap"]["serial"]), "200", None],
-        [3, None, ("all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"]), "200", None],
-        [4, "ensure_cache_client_not_connected", ("client", "aabb.ccdd.eeff",), "200", None],
+        [1, None, ("client", test_data["client"]["wireless"]["name"][0:-2], "--refresh"), "200"],
+        [2, None, ("all", test_data["ap"]["serial"]), "200"],
+        [3, None, ("all", test_data["ap"]["serial"], "--ssid", test_data["kick_ssid"]), "200"],
+        [4, "ensure_cache_client_not_connected", ("client", "aabb.ccdd.eeff",), "200"],
     ]
 )
-def test_kick(_:int, fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
-    if test_name_append:
-        env.current_test = f"{env.current_test}_{test_name_append}"
+def test_kick(_:int, fixture: str | None, args: list[str], expected: str, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["kick", *args, "--yes"])
