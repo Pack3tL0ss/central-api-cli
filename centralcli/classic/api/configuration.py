@@ -445,7 +445,7 @@ class ConfigAPI:
             mon_only_switches += ["AOS_CX"]
 
         arch = None
-        if "AccessPoints" in allowed_types:
+        if "ap" in allowed_types:
             arch = "AOS10" if aos10 else "Instant"
 
         allowed_types = list(set([dev_type_dict.get(t) for t in allowed_types]))
