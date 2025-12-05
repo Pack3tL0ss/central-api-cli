@@ -936,50 +936,38 @@ def test_show_audit_acp_logs(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [1, ("--dev", test_data["ap"]["name"], "-S"), lambda r: "description" in r],
-        [2, ("--dev", test_data["switch"]["name"], "-S"), lambda r: "description" in r],
-        [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
-        [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
-        [5, ("1",), lambda r: "299" in r],
+        [1, ("--dev", test_data["ap"]["name"], "-S", "--past", "30m"), lambda r: "description" in r],
+        [2, ("--dev", test_data["switch"]["name"], "-S", "--past", "30m"), lambda r: "description" in r],
+        [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
+        [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
+        [5, ("1", "--past", "30m"), lambda r: "299" in r],
+        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],
+        [7, ("-a", "--client", test_data["client"]["wireless"]["name"]), lambda r: "200" in r],
+        [8, ("self",), lambda r: "INFO" in r],
+        [9, ("pytest",), lambda r: "INFO" in r],
     ]
 )
-def test_show_logs(_: int, args: list[str], pass_condition: Callable):
-    result = runner.invoke(app, ["show", "logs", "--past", "30m", *args,])
-    capture_logs(result, "test_show_logs")
+def test_show_logs(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "logs", *args,])
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
 
-sfl = ["show", "logs", "-a", "--client"]
-@pytest.mark.parametrize("args", [[*sfl, test_data["client"]["wireless"]["mac"]], [*sfl, test_data["client"]["wireless"]["name"]]])
-def test_show_logs_client(args: list[str]):
-    result = runner.invoke(app, args,)
-    capture_logs(result, "test_show_logs_client")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_show_logs_self():
-    result = runner.invoke(app, ["show", "logs", "self"],)
-    capture_logs(result, "test_show_logs_self")
-    assert result.exit_code == 0
-    assert "INFO" in result.stdout
-
-
-def test_show_logs_pytest():
-    result = runner.invoke(app, ["show", "logs", "pytest"],)
-    capture_logs(result, "test_show_logs_pytest")
-    assert result.exit_code == 0
-    assert "INFO" in result.stdout
-
-
-def test_show_logs_invalid():
-    result = runner.invoke(app, ["show", "logs", "-a", "--past", "30m"],)
-    capture_logs(result, "test_show_logs_invalid", expect_failure=True)
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("9999",), lambda r: "⚠" in r],
+        [2, ("-a", "--past", "30m",), lambda r: "⚠" in r],
+    ]
+)
+def test_show_logs_invalid(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "logs", *args,])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "\u26a0" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_mpsk_networks():

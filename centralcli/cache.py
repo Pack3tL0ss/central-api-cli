@@ -1996,7 +1996,7 @@ class Cache:
 
             if retry and not match and self.responses.guest is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and self.guests and not silent:
+                if FUZZ and self.guests and not silent:  # pragma: no cover requires tty
                     match = self.fuzz_lookup(query_str, db=self.GuestDB, portal_id=portal_id)
                 if not match:
                     if not portal_id:

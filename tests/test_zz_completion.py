@@ -171,10 +171,17 @@ def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 
-def test_mpsk_completion():
-    mpsk = cache.get_mpsk_network_identifier(test_data["mpsk_ssid"])
+@pytest.mark.parametrize(
+    "_,incomplete",
+    [
+        [1, test_data["mpsk_ssid"][0:-2]],
+        [2, ""],
+    ]
+)
+def test_mpsk_completion(_: int, incomplete: str):
+    mpsk = cache.get_mpsk_network_identifier(incomplete)
     for incomplete in {mpsk.name, mpsk.id}:
-        result = [c for c in cache.mpsk_network_completion(ctx, incomplete[0:-2])]
+        result = [c for c in cache.mpsk_network_completion(ctx, incomplete)]
         assert len(result) > 0
         assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
