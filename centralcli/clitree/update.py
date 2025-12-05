@@ -136,7 +136,7 @@ def group(
     group: str = common.arguments.group,
     wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(None, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help=f"Gateway Role {render.help_block('branch')}", show_default=True,),
+    gw_role: GatewayRole = typer.Option(None, help=f"Gateway Role {render.help_block('branch')}", show_default=False,),
     aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default AOS8/IAP)", show_default=False),
     mb: bool = typer.Option(None, "--mb", help="Configure Group for MicroBranch APs (AOS10 only"),
     ap: bool = typer.Option(None, "--ap", help="Allow APs in group"),
@@ -162,6 +162,11 @@ def group(
         )
     if not aos10 and mb:
         common.exit("[bright_red]Error[/]: Microbranch is only valid if group is configured as [cyan]AOS10[/] group.")
+    if aos10 and not group.aos10 and ("gw" in group.allowed_types or "ap" in group.allowed_types):
+        common.exit(
+            f"[cyan]--aos10[/] can only be set when APs or GWs are initially added as allowed device types for the group.\n"
+            f"[cyan]{group.name}[/] currently alllows: {utils.color(group.allowed_types)}"
+        )
     if (mo_sw or mo_cx) and wired_tg:
         common.exit("[bright_red]Error[/]: Monitor only is not valid for template group.")
     if mo_sw is not None and not sw:
