@@ -1805,7 +1805,7 @@ class CLICommon:
             if ap.dynamic_ant_mode and cache_ap.model not in dynamic_antenna_models:
                 log.error(f"Ignored [cyan]antenna_width[/] option for {ap_iden}. AP{cache_ap.model} is not a dyanamic antenna AP", caption=True)
                 ap.dynamic_ant_mode = None
-            if (ap.ip and ap.ip != cache_ap.ip) or any([ap.mask, ap.gateway, ap.dns, ap.domain]) or ap.uplink_vlan:
+            if (ap.ip and ap.ip != cache_ap.ip) or any([ap.mask, ap.gateway, ap.dns, ap.domain, ap.ant_24_gain, ap.ant_5_gain, ap.ant_6_gain]) or ap.uplink_vlan:
                 requires_reboot[ap.serial] = [cache_ap]
 
             kwargs = ap.api_params
@@ -1846,7 +1846,7 @@ class CLICommon:
         if skipped_reboots:
             log.warning(f"Reboot was not performed on the following APs as the Update call returned an error\n{utils.summarize_list([ap.summary_text for ap in skipped_reboots])}", caption=True)
 
-        if reboot_reqs:
+        if reboot_reqs:  # TODO prob makes sense to check dirty diff or verify AP has taken update prior to reboot
             return api.session.batch_request(reboot_reqs)
 
     # Header rows used by CAS

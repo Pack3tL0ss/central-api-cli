@@ -1542,6 +1542,9 @@ class ConfigAPI:
         dynamic_ant_mode: DynamicAntenna = None,
         flex_dual_exclude: RadioType = None,
         boot_partition: int = None,
+        ant_24_gain: int = None,
+        ant_5_gain: int = None,
+        ant_6_gain: int = None,
     ) -> BatchRequest | Response:
         url = f"/configuration/v1/ap_settings_cli/{serial}"
 
@@ -1586,7 +1589,11 @@ class ConfigAPI:
             "uplink-vlan": uplink_vlan,
             "dynamic-ant": dynamic_ant_mode,
             "flex-dual-band": flex_dual,
+            "g-external-antenna": ant_24_gain,
+            "a-external-antenna": ant_5_gain,
+            # "radio-6-external-antenna": ant_6_gain,
             "os_partition": boot_partition
+
         }
         if all([v is None for v in cli_items.values()]):
             return Response(error="No Values provided to update")
@@ -1641,6 +1648,9 @@ class ConfigAPI:
         zone: str = None,
         dynamic_ant_mode: DynamicAntenna = None,
         flex_dual_exclude: RadioType = None,
+        ant_24_gain: int = None,
+        ant_5_gain: int = None,
+        ant_6_gain: int = None,
         as_dict: Dict[str, Dict[str | int | List[str] | bool | DynamicAntenna | RadioType]] = None
     ) -> List[Response]:
         """Update per AP settings (AP ENV)
@@ -1672,7 +1682,10 @@ class ConfigAPI:
             "uplink_vlan": uplink_vlan,
             "zone": zone,
             "dynamic_ant_mode": dynamic_ant_mode,
-            "flex_dual_exclude": flex_dual_exclude
+            "flex_dual_exclude": flex_dual_exclude,
+            "ant_5_gain": ant_5_gain,
+            "ant_24_gain": ant_24_gain,
+            "ant_6_gain": ant_6_gain,
         }
         as_dict = as_dict or {}
         if any(kwargs.values()) and not serial:

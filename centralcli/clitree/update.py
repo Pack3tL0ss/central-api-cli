@@ -467,6 +467,9 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
+    gain_24: int = typer.Option(None, "--gain-24", help="Configure external antenna gain for the 2.4Ghz radio"),
+    gain_5: int = typer.Option(None, "--gain-5", help="Configure external antenna gain for the 5Ghz radio"),
+    gain_6: int = typer.Option(None, "--gain-6", help="Configure external antenna gain for the 6Ghz radio"),
     antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [dim italic]Only applies to AP 679[/]", show_default=False,),
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
     gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [dim italic]Must be set for 6Ghz SP[/]", show_default=False,),
@@ -514,7 +517,10 @@ def ap(
         "dynamic_ant_mode": antenna_width,
         "uplink_vlan": uplink_vlan,
         "gps_altitude": gps_altitude,
-        "boot_partition": partition
+        "boot_partition": partition,
+        "ant_24_gain": gain_24,
+        "ant_5_gain": gain_5,
+        # "external_antenna_gain_6": gain_6,
     }
     kwargs = utils.strip_none(kwargs)
     if not kwargs:
