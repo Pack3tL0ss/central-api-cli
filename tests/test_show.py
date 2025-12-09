@@ -172,15 +172,16 @@ def test_show_branch_health(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition,expect_failure",
+    "idx,args,pass_condition,expect_failure",
     [
-        [("-S",), lambda r: "Ignoring" in r, False],  # also test warning for ignored -S (swarm) without dev
-        [("--yaml",), lambda r: "API" in r, False],
-        [(test_data["ap"]["name"],),lambda r: "API" in r, False],
-        [("--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r, True],  # too many filters
+        [1, ("-S",), lambda r: "Ignoring" in r, False],  # also test warning for ignored -S (swarm) without dev
+        [2, ("--yaml",), lambda r: "API" in r, False],
+        [3, (test_data["ap"]["name"],),lambda r: "API" in r, False],
+        [4, ("--ssid", "HPE_Aruba"),lambda r: "API" in r, False],
+        [5, ("--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r, True],  # too many filters
     ]
 )
-def test_show_bssids(args: tuple[str], pass_condition: Callable, expect_failure: bool):
+def test_show_bssids(idx: int, args: tuple[str], pass_condition: Callable, expect_failure: bool):
     result = runner.invoke(app, ["show", "bssids", *args],)
     capture_logs(result, "test_show_bssids", expect_failure=expect_failure)
     assert result.exit_code == (0 if not expect_failure else 1)

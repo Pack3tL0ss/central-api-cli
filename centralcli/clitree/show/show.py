@@ -3361,6 +3361,7 @@ def bssids(
     site: str = common.options.site,
     label: str = common.options.label,
     band: RadioBandOptions = common.options.get("band", help="Filter by radio band/frequency"),
+    ssid: str = common.options.get("ssid", help="Fetch BSSIDs for a specific SSID."),
     sort_by: SortBSSIDOptions = common.options.get("sort_by", default=SortBSSIDOptions.ap, show_default=True,),
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -3387,7 +3388,12 @@ def bssids(
         "site": None if not site else site.name,
         "label": None if not label else label.name,
     }
-    title_sfx = [f"{k} {v}" for k, v in kwargs.items() if v]
+    title_kwargs = {
+        **kwargs,
+        "ssid": None if not ssid else ssid,
+        "band": None if not band else f"{band.value}Ghz"
+    }
+    title_sfx = [f"{k} {v}" for k, v in title_kwargs.items() if v]
 
     if dev:
         key = "serial" if not swarm else "swarm_id"
@@ -3402,7 +3408,8 @@ def bssids(
 
     resp = api.session.request(api.monitoring.get_bssids, **kwargs)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+    if not ssid:
+        caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
     title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
 
     render.display_results(
@@ -3419,7 +3426,8 @@ def bssids(
         min_width=85,
         cleaner=cleaner.get_bssids,
         output_format=tablefmt,
-        band=band
+        band=band,
+        ssid=ssid
     )
 
 
