@@ -72,7 +72,7 @@ end_2_days_ago = _2_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 now_str = pendulum.now().to_datetime_string().replace(" ", "T")[0:-3]
 start_180_days_ago = _180_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 
-class NonDefaultWorkspaceException(CentralCliException): ...
+class NonDefaultWorkspaceException(CentralCliException): ...  # pragma: no cover
 
 
 def capture_logs(result: Result, test_func: str = None, log_output: bool = False, expect_failure: bool = False):

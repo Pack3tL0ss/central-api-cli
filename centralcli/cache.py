@@ -1761,10 +1761,10 @@ class Cache:
     ):
         dev_type = None
         if args:
-            if "dev_type" in args and len(args) > 1:
-                dev_type = args[args.index("dev_type") + 1]  # HACK we can't add parameters typer doesn't expect this allows us to call this from other funcs
-            elif args[-1].lower() in ["gateways", "clients", "server"]:
+            if args[-1].lower() in ["gateways", "clients", "server"]:
                 dev_type = "gw"
+            elif "dev-type" in args and len(args) > 1:
+                dev_type = args[args.index("dev-type") + 1]
             elif args[-1].lower().startswith("switch"):
                 dev_type = "switch"
             elif args[-1].lower() in ["aps", "ap"]:
@@ -1996,7 +1996,7 @@ class Cache:
 
             if retry and not match and self.responses.guest is None:
                 econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]No Match found for[/] [cyan]{query_str}[/].")
-                if FUZZ and self.guests and not silent:
+                if FUZZ and self.guests and not silent:  # pragma: no cover requires tty
                     match = self.fuzz_lookup(query_str, db=self.GuestDB, portal_id=portal_id)
                 if not match:
                     if not portal_id:

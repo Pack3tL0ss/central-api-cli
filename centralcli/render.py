@@ -62,23 +62,23 @@ class TTY:
     def __init__(self):
         self._rows, self._cols = self.get_tty_size()
 
-    def get_tty_size(self):
+    def get_tty_size(self) -> tuple[int, int]:
         self._cols, self._rows = shutil.get_terminal_size()
         return self._rows, self._cols
 
     def __bool__(self):
         return sys.stdin.isatty()
 
-    def __call__(self):
-        self._rows, self._cols = self.get_tty_size()
+    def __call__(self) -> tuple[int, int]:
+        return self.get_tty_size()
 
     @property
-    def rows(self):
+    def rows(self) -> int:
         self._rows, self._cols = self.get_tty_size()
         return self._rows
 
     @property
-    def cols(self):
+    def cols(self) -> int:
         self._rows, self._cols = self.get_tty_size()
         return self._cols
 
@@ -273,7 +273,7 @@ def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this fu
         outfile (Path): The file to write to.
         outdata (str): The text to write.
     """
-    if outfile and outdata:
+    if outfile and outdata:  # In case outdata is empty / empty response
         if config.cwd != config.outdir:
             if (
                 outfile.parent.resolve().name == "central-api-cli" and

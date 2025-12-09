@@ -447,7 +447,7 @@ class Config:
         return f"CFG_VERSION: 2\n\n{data_str}{example_str}\n"
 
     def get_cnx_url(self, classic_base_url: str | None):
-        if not classic_base_url:  # This can occur if they use --workspace flag with an account that is not configured
+        if not classic_base_url:  # This can occur if they use --ws flag with an workspace that is not configured
             return
 
         cluster_name = [k for k, v in CLUSTER_URLS.items() if v["classic"] == classic_base_url.lower()]

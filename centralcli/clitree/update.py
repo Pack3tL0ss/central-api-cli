@@ -136,7 +136,7 @@ def group(
     group: str = common.arguments.group,
     wired_tg: bool = typer.Option(None, "--wired-tg", help="Manage switch configurations via templates"),
     wlan_tg: bool = typer.Option(None, "--wlan-tg", help="Manage AP configurations via templates"),
-    gw_role: GatewayRole = typer.Option(None, help=f"Gateway Role {render.help_block('branch')}", show_default=True,),
+    gw_role: GatewayRole = typer.Option(None, help=f"Gateway Role {render.help_block('branch')}", show_default=False,),
     aos10: bool = typer.Option(None, "--aos10", is_flag=True, help="Create AOS10 Group (default AOS8/IAP)", show_default=False),
     mb: bool = typer.Option(None, "--mb", help="Configure Group for MicroBranch APs (AOS10 only"),
     ap: bool = typer.Option(None, "--ap", help="Allow APs in group"),
@@ -162,6 +162,11 @@ def group(
         )
     if not aos10 and mb:
         common.exit("[bright_red]Error[/]: Microbranch is only valid if group is configured as [cyan]AOS10[/] group.")
+    if aos10 and not group.aos10 and ("gw" in group.allowed_types or "ap" in group.allowed_types):
+        common.exit(
+            f"[cyan]--aos10[/] can only be set when APs or GWs are initially added as allowed device types for the group.\n"
+            f"[cyan]{group.name}[/] currently alllows: {utils.color(group.allowed_types)}"
+        )
     if (mo_sw or mo_cx) and wired_tg:
         common.exit("[bright_red]Error[/]: Monitor only is not valid for template group.")
     if mo_sw is not None and not sw:
@@ -462,6 +467,9 @@ def ap(
         help="The radio to be excluded on flex dual band APs.  i.e. [cyan]--flex-exclude 2.4[/] means the 5Ghz and 6Ghz radios will be used.",
         show_default=False
     ),
+    gain_24: int = typer.Option(None, "--gain-24", help="Configure external antenna gain for the 2.4Ghz radio"),
+    gain_5: int = typer.Option(None, "--gain-5", help="Configure external antenna gain for the 5Ghz radio"),
+    gain_6: int = typer.Option(None, "--gain-6", help="Configure external antenna gain for the 6Ghz radio"),
     antenna_width: DynamicAntMode = typer.Option(None, "-w", "--antenna-width", help="Dynamic Antenna Width [dim italic]Only applies to AP 679[/]", show_default=False,),
     uplink_vlan: int = typer.Option(None, "-u", "--uplink-vlan", help="Configure Uplink VLAN (tagged).", show_default=False,),
     gps_altitude: float = typer.Option(None, "-a", "--altitude", help="The mounting height from the ground in meters.  [dim italic]Must be set for 6Ghz SP[/]", show_default=False,),
@@ -509,7 +517,10 @@ def ap(
         "dynamic_ant_mode": antenna_width,
         "uplink_vlan": uplink_vlan,
         "gps_altitude": gps_altitude,
-        "boot_partition": partition
+        "boot_partition": partition,
+        "ant_24_gain": gain_24,
+        "ant_5_gain": gain_5,
+        # "external_antenna_gain_6": gain_6,
     }
     kwargs = utils.strip_none(kwargs)
     if not kwargs:

@@ -521,23 +521,25 @@ def test_show_dhcp_pools_gw():
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [(test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
-        [("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
-        [(test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
-        [(test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
-        [("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
-        [(test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
-        [(test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
-        [(test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
-        [("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
+        [1, (test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
+        [2, ("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
+        [3, (test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
+        [4, (test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
+        [5, ("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
+        [6, ("--site", test_data["ap"]["site"], "--ap", "--up", "--down"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --up and --down both being used
+        [7, ("--site", test_data["ap"]["site"], "--ap", "--down", "--fast"), lambda r: "API" in r and "⚠" in r],  # ⚠ is for warning regarding --down and --fast both being used
+        [8, (test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
+        [9, (test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
+        [10, (test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
+        [11, ("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
 
     ]
 )
-def test_show_interfaces(args: tuple[str], pass_condition: Callable):
+def test_show_interfaces(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "interfaces", *args],)
-    capture_logs(result, "test_show_interfaces_gw")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -936,50 +938,38 @@ def test_show_audit_acp_logs(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [1, ("--dev", test_data["ap"]["name"], "-S"), lambda r: "description" in r],
-        [2, ("--dev", test_data["switch"]["name"], "-S"), lambda r: "description" in r],
-        [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
-        [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
-        [5, ("1",), lambda r: "299" in r],
+        [1, ("--dev", test_data["ap"]["name"], "-S", "--past", "30m"), lambda r: "description" in r],
+        [2, ("--dev", test_data["switch"]["name"], "-S", "--past", "30m"), lambda r: "description" in r],
+        [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
+        [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
+        [5, ("1", "--past", "30m"), lambda r: "299" in r],
+        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],
+        [7, ("-a", "--client", test_data["client"]["wireless"]["name"]), lambda r: "200" in r],
+        [8, ("self",), lambda r: "INFO" in r],
+        [9, ("pytest",), lambda r: "INFO" in r],
     ]
 )
-def test_show_logs(_: int, args: list[str], pass_condition: Callable):
-    result = runner.invoke(app, ["show", "logs", "--past", "30m", *args,])
-    capture_logs(result, "test_show_logs")
+def test_show_logs(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "logs", *args,])
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
 
-sfl = ["show", "logs", "-a", "--client"]
-@pytest.mark.parametrize("args", [[*sfl, test_data["client"]["wireless"]["mac"]], [*sfl, test_data["client"]["wireless"]["name"]]])
-def test_show_logs_client(args: list[str]):
-    result = runner.invoke(app, args,)
-    capture_logs(result, "test_show_logs_client")
-    assert result.exit_code == 0
-    assert "200" in result.stdout
-
-
-def test_show_logs_self():
-    result = runner.invoke(app, ["show", "logs", "self"],)
-    capture_logs(result, "test_show_logs_self")
-    assert result.exit_code == 0
-    assert "INFO" in result.stdout
-
-
-def test_show_logs_pytest():
-    result = runner.invoke(app, ["show", "logs", "pytest"],)
-    capture_logs(result, "test_show_logs_pytest")
-    assert result.exit_code == 0
-    assert "INFO" in result.stdout
-
-
-def test_show_logs_invalid():
-    result = runner.invoke(app, ["show", "logs", "-a", "--past", "30m"],)
-    capture_logs(result, "test_show_logs_invalid", expect_failure=True)
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("9999",), lambda r: "⚠" in r],
+        [2, ("-a", "--past", "30m",), lambda r: "⚠" in r],
+    ]
+)
+def test_show_logs_invalid(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "logs", *args,])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "\u26a0" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_mpsk_networks():
@@ -1336,16 +1326,17 @@ def test_show_notifications():
 
 
 @pytest.mark.parametrize(
-    "args,should_fail,test_name_append,pass_condition",
+    "idx,args,should_fail,test_name_append,pass_condition",
     [
-        [(test_data["aos8_ap"]["name"],), False, None, None],
-        [(test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
-        [("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [(test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [1, (test_data["aos8_ap"]["name"],), False, None, None],
+        [2, (test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
+        [3, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
+        [4, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
+        [5, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
+        [6, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
     ]
 )
-def test_show_firmware_swarm(args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
+def test_show_firmware_swarm(idx: int, args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
@@ -1355,7 +1346,7 @@ def test_show_firmware_swarm(args: tuple[str], should_fail: bool, test_name_appe
             *args
         ]
     )
-    capture_logs(result, env.current_test, expect_failure=should_fail)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=should_fail)
     assert result.exit_code == (0 if not should_fail else 1)
     assert "API" in result.stdout
     if pass_condition:

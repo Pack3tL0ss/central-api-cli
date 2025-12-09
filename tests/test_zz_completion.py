@@ -34,16 +34,6 @@ def test_dev_completion(_: int, incomplete: str, args: tuple[str]):
     assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
 
 
-def test_dev_completion_(incomplete: str = "bsmt"):
-    result = [c for c in cache.dev_completion(incomplete)]
-    assert len(result) > 0
-    assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
-
-def test_dev_completion_case_insensitive(incomplete: str = "BSmT"):
-    result = [c for c in cache.dev_completion(incomplete)]
-    assert len(result) > 0
-    assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-
 @pytest.mark.parametrize("expected,args", [(test_data["ap"]["name"], ["show", "overlay", "summary"]), ("self", ["cencli", "show", "config"])])
 def test_dev_ap_gw_completion(expected: str, args: list[str]):
     ctx = Context(Command("cencli show config"), info_name="cencli show config", resilient_parsing=True)
@@ -181,10 +171,17 @@ def test_dev_ap_completion_partial_serial(incomplete: str = "CNDDK"):
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 
-def test_mpsk_completion():
-    mpsk = cache.get_mpsk_network_identifier(test_data["mpsk_ssid"])
+@pytest.mark.parametrize(
+    "_,incomplete",
+    [
+        [1, test_data["mpsk_ssid"][0:-2]],
+        [2, ""],
+    ]
+)
+def test_mpsk_completion(_: int, incomplete: str):
+    mpsk = cache.get_mpsk_network_identifier(incomplete)
     for incomplete in {mpsk.name, mpsk.id}:
-        result = [c for c in cache.mpsk_network_completion(ctx, incomplete[0:-2])]
+        result = [c for c in cache.mpsk_network_completion(ctx, incomplete)]
         assert len(result) > 0
         assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
@@ -394,8 +391,17 @@ def test_get_identifier_funcs(fixture: str | None, iden_func: Callable, query_st
         assert pass_condition(result)
 
 
-@pytest.mark.parametrize("incomplete,args", [("cencli_test_group1", ("group",)), ("cencli_test_site", ("site",)), ("", ("ap",)), ("sit", ("arg1", "arg2")), ("grou", ("arg1", "arg2"))])
-def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, incomplete: str, args: tuple[str]):
+@pytest.mark.parametrize(
+    "idx,incomplete,args",
+    [
+        [1, "cencli_test_group1", ("group",)],
+        [2, "cencli_test_site", ("site",)],
+        [3, "", ("ap",)],
+        [4, "sit", ("arg1", "arg2")],
+        [5, "grou", ("arg1", "arg2")],
+    ]
+)
+def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, idx: int, incomplete: str, args: tuple[str]):
     ctx = Context(Command("cencli move"), info_name="move", resilient_parsing=True)
     result = list(cache.dev_kwarg_completion(ctx, incomplete=incomplete, args=args))
     assert len(result) > 0

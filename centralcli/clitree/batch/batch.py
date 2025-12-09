@@ -79,7 +79,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
     {rtxt} 'SN'
     '%h[2:4]'  will use characters 2 through 4 of the switches hostname.
     {rtxt} 'NAN'
-    '%h-1'  will split the hostname into parts separating on '-' and use
+    '%h-1'  will split the upstream switches hostname into parts separating on '-' and use
             the firt segment.
     {rtxt} 'SNAN
     '%p'  represents the interface.
@@ -103,7 +103,6 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
     """
     while True:
         print(lldp_rename_text)
-        fstr = typer.prompt("Enter Desired format string",)
         fstr = render.ask("Enter Desired format string",)
         if "%%" in fstr:
             typer.clear()
@@ -116,25 +115,45 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no co
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
     """
     br = BatchRequest
-    lldp_reqs = [br(api.topo.get_ap_lldp_neighbor, ap) for ap in ap_dict]
-    lldp_resp = api.session.batch_request(lldp_reqs)
+    out = {}
 
-    if not all(r.ok for r in lldp_resp):
-        log.error("Error occured while gathering lldp neighbor info", show=True)
-        render.display_results(lldp_resp, exit_on_fail=True)
+    sites = list(set([ap["site"] for ap in ap_dict.values() if ap.get("site")]))
+    cache_sites = [common.cache.get_site_identifier(s) for s in sites]
+    topo_reqs = [br(api.topo.get_topo_for_site, s.id) for s in cache_sites]
+    if topo_reqs:
+        topo_resp = api.session.batch_request(topo_reqs)
 
-    _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]  # type: ignore
-    lldp_dict = {d["serial"]: {k: v for k, v in d.items()} for d in _unlistified_output}
-    ap_dict = {
-        ser: {
-            **val,
-            "neighborHostName": lldp_dict[ser]["neighborHostName"],
-            "remotePort": lldp_dict[ser]["remotePort"],
+        if not all(r.ok for r in topo_resp):
+            log.error("Error occured while gathering site topo info", show=True)
+            render.display_results(topo_resp, exit_on_fail=True)
+
+        topo_aps = {dev["serial"]: dev for r in topo_resp if r.ok for dev in r.output["devices"] if dev["role"] == "IAP"}
+        ap_connections = {edge["toIf"]["serial"]: edge for r in topo_resp if r.ok for edge in r.output["edges"] if edge["toIf"]["serial"] in topo_aps}
+        out = {serial: {**ap_data, "neighborHostName": ap_connections[serial]["fromIf"]["deviceName"], "remotePort": ap_connections[serial]["fromIf"]["name"]} for serial, ap_data in ap_dict.items() if serial in ap_connections}
+
+
+    # Any APs that lack a site or lack upstream device info from topo API ... need to fetch neighbor per AP
+    lldp_reqs = [br(api.topo.get_ap_lldp_neighbor, serial) for serial in ap_dict if serial not in out]
+    if lldp_reqs:
+        lldp_resp = api.session.batch_request(lldp_reqs)
+
+        if not all(r.ok for r in lldp_resp):
+            log.error("Error occured while gathering lldp neighbor info", show=True)
+            render.display_results(lldp_resp, exit_on_fail=True)
+
+        _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]  # type: ignore
+        lldp_dict = {d["serial"]: {k: v for k, v in d.items()} for d in _unlistified_output}
+        by_ap_dict = {
+            serial: {
+                **ap_data,
+                "neighborHostName": lldp_dict[serial]["neighborHostName"],
+                "remotePort": lldp_dict[serial]["remotePort"],
+            }
+            for serial, ap_data in ap_dict.items() if serial in lldp_dict
         }
-        for ser, val in ap_dict.items()
-    }
+        out = {**out, **by_ap_dict}
 
-    return ap_dict
+    return out
 
 def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> list[dict[str, str]]:  # pragma: no cover requires tty
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
@@ -171,14 +190,21 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
     if not ap_dict:
         common.exit("Something went wrong, no ap_dict provided or empty")
 
-    num_calls = len(ap_dict) * 3 if need_lldp else len(ap_dict) * 2
+    num_calls = len(ap_dict) * 2
+    if need_lldp:
+        topo_calls = len(set([ap["site"] for ap in ap_dict.values() if ap.get("site")]))
+        per_ap_calls = len([ap for ap in ap_dict.values() if not ap.get("site")])
+        lldp_calls = topo_calls + per_ap_calls
+        num_calls += lldp_calls
 
     if len(ap_dict) > 5:
         _warn = "\n\n[dark_orange3]:warning:[/]  [blink bright_red blink]WARNING[reset]"
         if need_lldp:
             _warn = f"{_warn} Format provided requires details about the upstream switch.\n"
-            _warn = f"{_warn} This automation will result in [cyan]{num_calls}[/] API calls. 3 per AP.\n"
-            _warn = f"{_warn} 1 to gather details about the upstream switch\n"
+            _warn = f"{_warn} Best case... This automation will result in [cyan]{num_calls}[/] API calls.\n\n"
+            _warn = f"{_warn} Minimum [cyan]{lldp_calls}[/] to gather details about the upstream switches.\n"
+            _warn = f"{_warn} [dim italic]Could be more. If topo API doesn't have data for an AP (fallback is to make call per AP when topo API lack upstream details)[/]\n\n"
+            _warn = f"{_warn} The remaining operations require 2 calls per AP:\n"
         else:
             _warn = f"{_warn} This automation will result in [cyan]{num_calls}[/] API calls, 2 for each AP.\n"
         _warn = f"{_warn} 1 to get the aps current settings (all settings need to be provided during the update, only the name changes).\n"

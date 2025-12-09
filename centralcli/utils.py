@@ -496,7 +496,8 @@ class Utils:
         cli_cmds = [out for out in [line.rstrip() for line in data.splitlines()] if out]
 
         if not cli_cmds:
-            print(":x: [bright_red]Error:[/] No cli commands.")
+            econsole = Console(stderr=True)
+            econsole.print(":x: [bright_red]Error:[/] No cli commands.")
             raise typer.Exit(1)
 
         return cli_cmds

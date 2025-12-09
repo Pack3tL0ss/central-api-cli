@@ -69,6 +69,9 @@ class APUpdate(BaseModel):
     uplink_vlan: Optional[int] = Field(None, alias=AliasChoices("uplink_vlan", "tagged_uplink_vlan"))
     gps_altitude: Optional[float] = None
     boot_partition: Annotated[int, {"min": 0, "max": 1}] = None
+    ant_24_gain: Optional[int] = Field(None, alias=AliasChoices("ant_24_gain", "g_external_antenna", "g-external-antenna", "external_antenna_gain_24"))
+    ant_5_gain: Optional[int] = Field(None, alias=AliasChoices("ant_5_gain", "a_external_antenna", "a-external-antenna", "external_antenna_gain_5"))
+    ant_6_gain: Optional[int] = Field(None, alias=AliasChoices("ant_6_gain", "radio-6-external-antenna", "external_antenna_gain_6"))  # not sure what this value should be yet
 
     def __str__(self):
         console = Console(force_terminal=False, emoji=False)
