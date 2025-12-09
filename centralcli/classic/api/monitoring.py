@@ -521,7 +521,6 @@ class MonitoringAPI:
         serial: str = None,
         mac: str = None,
         cluster_id: str = None,
-        calculate_total: bool = None,
         sort: str = None,
         offset: int = 0,
         limit: int = 1000,
@@ -536,7 +535,6 @@ class MonitoringAPI:
             serial (str, optional): Filter by AP serial number
             mac (str, optional): Filter by AP MAC address
             cluster_id (str, optional): Filter by Mobility Controller serial number
-            calculate_total (bool, optional): Whether to calculate total APs
             sort (str, optional): Sort parameter may be one of +serial, -serial, +macaddr,-macaddr,
                 +swarm_id, -swarm_id. Default is '+serial'
             offset (int, optional): Pagination offset Defaults to 0.
@@ -555,7 +553,7 @@ class MonitoringAPI:
             "site": site,
             'macaddr': mac,
             'cluster_id': cluster_id,
-            'calculate_total': calculate_total,
+            'calculate_total': "True",  #  For pagination
             'sort': sort,
             "offset": offset,
             "limit": limit,
