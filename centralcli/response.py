@@ -8,7 +8,6 @@ from functools import cached_property
 from typing import Any, Dict, List, Literal, Union
 
 from aiohttp import ClientResponse
-from rich import print
 from rich.console import Console
 from rich.text import Text
 from yarl import URL
@@ -289,7 +288,7 @@ class Response:
     def ok(self, ok: bool):
         self._ok = ok
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
 
     def __rich__(self):
@@ -406,7 +405,6 @@ class Response:
         return cap.get()
 
     def __setitem__(self, name: str, value: Any) -> None:
-        print(f"set name {name} value {value}")
         if isinstance(name, (str, int)) and hasattr(self, "output") and name in self.output:
             self.output[name] = value
 
@@ -640,7 +638,7 @@ class CombinedResponse(Response):
     def __len__(self):
         return sum([len(r) for r in self.responses if r.ok])
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         _errors = list(self.errors.values())
         _unique_errors = set(_errors)
         err_msg = '|'.join([f'{e}:{_errors.count(e)}' for e in _unique_errors])

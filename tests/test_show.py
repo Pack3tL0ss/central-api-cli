@@ -521,23 +521,25 @@ def test_show_dhcp_pools_gw():
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [(test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
-        [("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
-        [(test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
-        [(test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
-        [("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
-        [(test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
-        [(test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
-        [(test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
-        [("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
+        [1, (test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
+        [2, ("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
+        [3, (test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
+        [4, (test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
+        [5, ("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
+        [6, ("--site", test_data["ap"]["site"], "--ap", "--up", "--down"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --up and --down both being used
+        [7, ("--site", test_data["ap"]["site"], "--ap", "--down", "--fast"), lambda r: "API" in r and "⚠" in r],  # ⚠ is for warning regarding --down and --fast both being used
+        [8, (test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
+        [9, (test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
+        [10, (test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
+        [11, ("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
 
     ]
 )
-def test_show_interfaces(args: tuple[str], pass_condition: Callable):
+def test_show_interfaces(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "interfaces", *args],)
-    capture_logs(result, "test_show_interfaces_gw")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 

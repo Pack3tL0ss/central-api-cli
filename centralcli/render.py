@@ -273,7 +273,7 @@ def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this fu
         outfile (Path): The file to write to.
         outdata (str): The text to write.
     """
-    if outfile and outdata:
+    if outfile and outdata:  # In case outdata is empty / empty response
         if config.cwd != config.outdir:
             if (
                 outfile.parent.resolve().name == "central-api-cli" and
