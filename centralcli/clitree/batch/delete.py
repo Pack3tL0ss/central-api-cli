@@ -59,7 +59,7 @@ def batch_delete_sites(data: list | dict, *, yes: bool = False) -> list[Response
 
 @app.command()
 def sites(
-    import_file: Path = common.arguments.get("import_file", default=...),
+    import_file: Path = common.arguments.get("import_file"),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -75,6 +75,9 @@ def sites(
         render.console.print(examples.delete_sites)
         return
 
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch delete sites [OPTIONS] [IMPORT_FILE]"))
+
     data = common._get_import_file(import_file, import_type="sites",)
     resp = batch_delete_sites(data, yes=yes)
     render.display_results(resp, tablefmt="action")
@@ -82,7 +85,7 @@ def sites(
 
 @app.command()
 def groups(
-    import_file: Path = common.arguments.get("import_file", default=...),
+    import_file: Path = common.arguments.get("import_file",),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -97,6 +100,9 @@ def groups(
     if show_example:
         render.console.print(examples.delete_groups)
         return
+
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch delete groups [OPTIONS] [IMPORT_FILE]"))
 
     data = common._get_import_file(import_file, import_type="groups",)
     resp = common.batch_delete_groups(data, yes=yes)
