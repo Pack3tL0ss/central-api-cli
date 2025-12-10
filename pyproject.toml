@@ -145,7 +145,6 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "# pragma: no cover",
     "@overload",
-    "if show_example:",
     "if not import_file:",
     "if result.exit_code != 0",
     "if result.exception:",

@@ -158,12 +158,12 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "ensure_cache_subscription", [982], indirect=True
     )
-    def test_batch_assign_subscriptions_with_tags_yaml(ensure_cache_subscription):
-        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
+    def test_batch_subscribe_with_tags_yaml(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
         if config.is_old_cfg:
             assert isinstance(result.exception, InvalidConfigException)
         else:
-            capture_logs(result, "test_batch_assign_subscriptions_with_tags_yaml")
+            capture_logs(result, "test_batch_subscribe_with_tags_yaml")
             assert result.exit_code == 0
             assert result.stdout.count("code: 202") == 2
 
@@ -171,24 +171,24 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "ensure_cache_subscription", [981], indirect=True
     )
-    def test_batch_assign_subscriptions_csv(ensure_cache_subscription):
-        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_csv)}', "-d", "-Y"])
+    def test_batch_subscribe_csv(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_csv)}', "-d", "-Y"])
         if config.is_old_cfg:
             assert isinstance(result.exception, InvalidConfigException)
         else:
-            capture_logs(result, "test_batch_assign_subscriptions_csv")
+            capture_logs(result, "test_batch_subscribe_csv")
             assert result.exit_code == 0
             assert result.stdout.count("code: 202") >= 2
 
     @pytest.mark.parametrize(
         "ensure_cache_subscription", [980], indirect=True
     )
-    def test_batch_assign_subscriptions_w_sub(ensure_cache_subscription):
-        result = runner.invoke(app, ["batch", "assign", "subscriptions", f'{str(test_sub_file_test_ap)}', "--sub", "advanced-ap", "-Y"])
+    def test_batch_subscribe_w_sub(ensure_cache_subscription):
+        result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_test_ap)}', "--sub", "advanced-ap", "-Y"])
         if config.is_old_cfg:
             assert isinstance(result.exception, InvalidConfigException)
         else:
-            capture_logs(result, "test_batch_assign_subscriptions_w_sub")
+            capture_logs(result, "test_batch_subscribe_w_sub")
             assert result.exit_code == 0
             assert "code: 202" in result.stdout
 
@@ -300,3 +300,34 @@ def test_batch_deploy():
     assert result.exit_code == 0
     assert "201" in result.stdout
     assert "200" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("add", "devices"), lambda r: "cencli batch add devices" in r],
+        [2, ("add", "groups"), lambda r: "cencli batch add groups" in r],
+        [3, ("add", "labels"), lambda r: "cencli batch add labels" in r],
+        [4, ("add", "macs"), lambda r: "cencli batch add macs" in r],
+        [5, ("add", "mpsk"), lambda r: "cencli batch add mpsk" in r],
+        [6, ("add", "sites"), lambda r: "cencli batch add sites" in r],
+        [7, ("archive",), lambda r: "cencli batch archive" in r],
+        [8, ("delete", "devices"), lambda r: "cencli batch delete devices" in r],
+        [9, ("delete", "groups"), lambda r: "cencli batch delete groups" in r],
+        [10, ("delete", "labels"), lambda r: "cencli batch delete labels" in r],
+        [11, ("delete", "sites"), lambda r: "cencli batch delete sites" in r],
+        [12, ("move",), lambda r: "cencli batch move" in r],
+        [13, ("rename", "aps"), lambda r: "cencli batch rename aps" in r],
+        [14, ("subscribe",), lambda r: "cencli batch subscribe" in r],
+        [15, ("unarchive",), lambda r: "cencli batch unarchive" in r],
+        [16, ("unsubscribe",), lambda r: "cencli batch unsubscribe" in r],
+        [17, ("update", "aps"), lambda r: "cencli batch update aps" in r],
+        [18, ("update", "devices"), lambda r: "cencli batch update devices" in r],
+        [19, ("verify",), lambda r: "cencli batch verify" in r],
+    ]
+)
+def test_batch_examples(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", *args, "--example"])
+    capture_logs(result, f"{env.current_test}{idx}")
+    assert result.exit_code == 0
+    assert pass_condition(result.stdout)
