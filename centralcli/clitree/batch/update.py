@@ -39,7 +39,8 @@ def aps(
     common.batch_update_aps(data, yes=yes, reboot=reboot)
 
 
-@app.command()
+# TODO this is intended to be a GLP update
+@app.command(hidden=True)
 def devices(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
@@ -55,11 +56,11 @@ def devices(
     Use [cyan]--example[/] to see expected import file format and required fields.
     """
     if show_example:
-        render.console.print(examples.update_aps)
+        render.console.print(examples.update_devices)
         return
 
     if not import_file:
-        common.exit(render._batch_invalid_msg("cencli batch update aps [OPTIONS] [IMPORT_FILE]"))
+        common.exit(render._batch_invalid_msg("cencli batch update devices [OPTIONS] [IMPORT_FILE]"))
 
     data = common._get_import_file(import_file, "devices")
     common.batch_update_aps(data, yes=yes, reboot=reboot)
