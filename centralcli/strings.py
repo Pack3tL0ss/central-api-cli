@@ -14,6 +14,7 @@ from rich.markup import escape
 from rich.syntax import Syntax
 
 from centralcli import log, utils
+from centralcli.render import tty
 from centralcli.vendored.csvlexer.csv import CsvLexer
 
 console = Console(emoji=False)
@@ -63,7 +64,7 @@ MOVE_FIELDS = {
      "devices": {
           "required": ["serial"],
           "optional": {
-              "mac": "Device MAC address.",
+              "mac": "Device MAC address",
               "group": "Move device to group",
               "site": "Move device to site",
               "label": "Assign label to device",
@@ -71,14 +72,32 @@ MOVE_FIELDS = {
           }
     }
 }
+VERIFY_FIELDS = {
+     "devices": {
+          "required": ["serial"],
+          "optional": {
+              "mac": "Device MAC address",
+              "group": "Verify device is in group",
+              "site": "Verify device is assigned to site",
+              "label": "Verify device is assigned label",
+              "subscription": "Verify subscription assigned to device"
+          }
+    }
+}
+FIELDS = {
+    "add": ADD_FIELDS,
+    "move": MOVE_FIELDS,
+    "verify": VERIFY_FIELDS
+}
 COMMAND_TEXT = {
     "devices": {
-        "add": "[italic cyan]cencli batch add devices IMPORT_FILE[/]",
-        "delete": "[italic cyan]cencli batch delete devices IMPORT_FILE[/]",
-        "move": "[italic cyan]cencli batch move devices IMPORT_FILE[/]"
+        "add": "[italic cyan]cencli batch add devices [OPTIONS] IMPORT_FILE[/]",
+        "delete": "[italic cyan]cencli batch delete devices [OPTIONS] IMPORT_FILE[/]",
+        "move": "[italic cyan]cencli batch move devices [OPTIONS] IMPORT_FILE[/]",
+        "verify": "[italic cyan]cencli batch verify [OPTIONS] IMPORT_FILE[/]",
     },
     "groups": {
-        "add": "[italic cyan]cencli batch add groups IMPORT_FILE[/]"
+        "add": "[italic cyan]cencli batch add groups [OPTIONS] IMPORT_FILE[/]"
     }
 }
 
@@ -103,7 +122,7 @@ class ExampleSegment:
         example_title = None if not example_title else f" {example_title.strip()} "
         self.title = example_title or f" .{example_type} example "
         max_len = max([len(line.strip()) for line in example_text.splitlines()])
-        self.max_len = max_len if max_len >= 57 else 57
+        self.max_len = (max_len if max_len >= 57 else 57) if max_len <= tty.cols else tty.cols
 
 
     def __str__(self):
@@ -202,10 +221,10 @@ class Example:
         return [{k: _convert_bool(v, expecting_list=k in ["types"]) for k, v in inner_dict.items()} for inner_dict in data.dict]
 
     def get_json(self):
-        return json.dumps(self.clean, indent=4)
+        return json.dumps(self.clean, sort_keys=False, indent=4)
 
     def get_yaml(self):
-        return yaml.safe_dump(self.clean).rstrip()
+        return yaml.safe_dump(self.clean, sort_keys=False).rstrip()
 
     def get_csv(self):
         return self.ds.csv.rstrip()
@@ -213,7 +232,7 @@ class Example:
     @property
     def header(self):
         header =  ["Accepts the following keys (include as header row for csv import):"]
-        field_dict = ADD_FIELDS if self.action == "add" else MOVE_FIELDS
+        field_dict = FIELDS[self.action]
         required_strings =  utils.color(field_dict[self.type]["required"], "red")
         header += [f'    {required_strings}']
         if field_dict[self.type].get("optional"):
@@ -279,6 +298,12 @@ common_add_delete_end = """
 generic_end = """
 [italic]:information:  Most batch operations are designed so the same file can be used for multiple automations.
    the fields not required for a particular automation will be ignored.[/]
+"""
+
+device_verify_data = """
+serial,mac,group,site,label,subscription
+CN12345678,aabbccddeeff,phl-access,WadeLab,label1,foundation_switch_6300
+CN12345679,aa:bb:cc:00:11:22,phl-access,Barn,,advanced_ap
 """
 
 # -- // ADD DEVICES \\ --  NOT USED
@@ -371,20 +396,23 @@ fields = [
     'flex_dual_exclude',
     'antenna_width',
     'uplink_vlan',
-    'gps_altitude'
+    'gps_altitude',
+    'ant_24_gain',
+    'ant_5_gain',
+    'ant_6_gain',
 ]
 data=f"""
 {','.join(fields)}
-CN12345678,barn.615.ab12,,,,,consolepi.com,2.4,,,,,,,,
-CN12345679,snantx.655.afb1,10.0.31.101,255.255.255.0,10.0.31.1,10.0.30.51 10.0.30.52,consolepi.com,,,,,,6,,,
-CN12345680,ind.755.af9b,,,,,,,,,,2.4 5 6,,,,
+CN12345678,barn.615.ab12,,,,,consolepi.com,2.4,,,,,,,,,,
+CN12345679,snantx.655.afb1,10.0.31.101,255.255.255.0,10.0.31.1,10.0.30.51 10.0.30.52,consolepi.com,,,,,,6,,,,,
+CN12345680,ind.755.af9b,,,,,,,,,,2.4 5 6,,,,,,
 """
 
 example = Example(data, type="devices", action="update")
 clibatch_update_aps = f"""[italic cyan]cencli batch update aps IMPORT_FILE[/]:
 
 Accepts the following keys (include as header row for csv import):
-    {utils.color(['serial'], "red")}, {utils.color(fields[1:], "cyan")} [italic red](red=required)[/]
+    [red]serial[/], {utils.color(fields[1:], "cyan")} [italic red](red=required)[/]
 
 Where [cyan]serial[/] The serial of the AP to be updated
       [cyan]hostname[/] The desired name to be applied if renaming AP
@@ -400,7 +428,7 @@ Where [cyan]serial[/] The serial of the AP to be updated
         [italic][bright_green]i.e.[/]: "2.4 6" or [2.4, 6] or "2.4"[/]
         [cyan]disable_radios[/] Radio(s) to disable
         [cyan]enable_radios[/] Radio(s) to enable
-        [cyan]access_radios[/]  Radio(s) to set to access mode (the default)
+        [cyan]access_radios[/]  Radio(s) to set to access mode [dim italic](the default)[/]
         [cyan]monitor_radios[/] Radio(s) to set to monitor mode
         [cyan]spectrum_radios[/] Radio(s) to set to spectrum mode
 
@@ -408,6 +436,9 @@ Where [cyan]serial[/] The serial of the AP to be updated
       [cyan]antenna_width[/] Only valid for APs that support dynamic antenna width (i.e.: 679).  Valid values: [cyan]narrow[/], [cyan]wide[/]
       [cyan]uplink_vlan[/] Provide PVID for VLAN if AP is to be managed over a [bright_green]tagged[/] VLAN
       [cyan]gps_altitude[/] For 6Ghz Standard Power: APs installation height / the number of meters from the ground
+      [cyan]ant_24_gain[/] Set External antenna gain for 2.4Ghz radio
+      [cyan]ant_5_gain[/] Set External antenna gain for 2.4Ghz radio
+      [cyan]ant_6_gain[/] Set External antenna gain for 2.4Ghz radio
 
 {example}
 
@@ -608,13 +639,53 @@ Requires the following keys (include as header row for csv import):
 """
 
 
+# -- // ARCHIVE / UNARCHIVE \\ --
+clibatch_archive = f"""[italic cyan]cencli batch archive IMPORT_FILE[/]:
+
+Requires the following keys (include as header row for csv import):
+    [cyan]serial[/]  [dim italic]Other keys/columns are allowed, but will be ignored.[/dim italic]
+
+
+[italic]:information:  A text file with a simple list of [cyan]serial numbers[/] is also acceptable[/]
+----- [bright_green]csv or txt[/] ------
+serial     [magenta]<-- this is the header column[/] [grey42](optional for txt)[/]
+CN12345678
+CN12345679
+CN12345680
+-----------------------
+
+-------- .json example --------
+[
+    {{
+        "serial": "CN12345678"
+    }},
+    {{
+        "serial": "CN12345679"
+    }},
+    {{
+        "serial": "CN12345680"
+    }}
+]
+------------------------------
+
+------ .yaml example ------
+- serial: CN12345678
+- serial: CN12345679
+- serial: CN12345680
+---------------------------
+
+{example.parent_key_text}
+{generic_end}
+"""
+
+
 # -- // GLP SUBSCRIBE DEVICES \\ --
 data="""serial,subscription
 CN12345678,foundation_switch_6300
 CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_assign_subscriptions = f"""[italic cyan]cencli batch assign subscription IMPORT_FILE[/]:
+clibatch_assign_subscriptions = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]subscription[/] [italic](both are required)[/]
@@ -623,7 +694,7 @@ Requires the following keys (include as header row for csv import):
 
 {example}
 [italic]:information:  A simple list of [cyan]serial numbers[/] is acceptable when subscription is provided via [cyan]--sub[/] flag[/]
-i.e. [cyan]cencli batch assign subscriptions --sub advanced-switch-6200 import-file.txt[/]
+i.e. [cyan]cencli batch subscribe --sub advanced-switch-6200 import-file.txt[/]
 ----------- [cyan]csv or txt[/] -----------------
 serial     [magenta]<-- this is the header column[/] [grey42](optional for txt)[/]
 CN12345678
@@ -721,23 +792,25 @@ Requires the following keys (include as header row for csv import):
 class ImportExamples:
     def __init__(self):
         self.add_devices = Example(device_add_data, type="devices", action="add").full_text
+        self.verify = Example(device_verify_data, type="devices", action="verify").full_text
         self.add_sites = self.add_site = clibatch_add_sites
         self.add_groups = clibatch_add_groups
         self.add_labels = clibatch_add_labels
         self.add_macs = clibatch_add_macs
         self.add_mpsk = clibatch_add_mpsk
-        self.delete_devices = clibatch_delete_devices
+        self.delete_devices = clibatch_archive.replace("archive", "delete devices")
         self.delete_sites = clibatch_delete_sites
         self.delete_groups = clibatch_delete_groups
         self.delete_labels = clibatch_delete_labels
         self.deploy = clibatch_deploy
         self.subscribe = clibatch_subscribe
         self.unsubscribe = clibatch_unsubscribe
-        self.archive = clibatch_unsubscribe.replace("unsubscribe", "archive")
-        self.unarchive = clibatch_unsubscribe.replace("unsubscribe", "unarchive").replace("any subscriptions associated with the serial will be removed.\n", "")
+        self.archive = clibatch_archive
+        self.unarchive = clibatch_archive.replace("archive", "unarchive")
         self.move_devices = Example(device_move_data, type="devices", action="move").full_text
         self.rename_aps = clibatch_rename_aps
         self.update_aps = clibatch_update_aps
+        self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
         self.assign_subscriptions = clibatch_assign_subscriptions
 
     def __getattr__(self, key: str):

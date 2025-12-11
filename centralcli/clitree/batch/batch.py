@@ -10,13 +10,13 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render, utils
+from centralcli import cleaner, common, log, render, utils, config, cache
 from centralcli.cache import CentralObject, api
 from centralcli.client import BatchRequest
 from centralcli.constants import BatchRenameArgs, iden_meta
 from centralcli.response import Response
 
-from . import add, assign, delete, examples, update
+from . import add, delete, examples, update
 
 try:
     import readline  # noqa imported for backspace support during prompts.
@@ -24,7 +24,6 @@ except Exception:  # pragma: no cover
     pass
 
 app = typer.Typer()
-app.add_typer(assign.app, name="assign",)
 app.add_typer(delete.app, name="delete",)
 app.add_typer(add.app, name="add",)
 app.add_typer(update.app, name="update",)
@@ -375,6 +374,7 @@ def batch_deploy(import_file: Path, yes: bool = False) -> list[Response]:
 @app.command()
 def verify(
     import_file: Path = common.arguments.import_file,
+    show_example: bool = common.options.show_example,
     no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
     failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
     passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
@@ -383,10 +383,14 @@ def verify(
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Validate batch Add operations using import data from file.
+    """Validate batch Add/Move (devices) operations using import data from file.
 
     The same import file used to add/move can be used to validate.
     """
+    if show_example:
+        render.console.print(examples.verify)
+        return
+
     data = common._get_import_file(import_file, import_type="devices")
 
     resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
@@ -547,9 +551,8 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     return devices, ignored, requests
 
 
-# TOGLP batch assign subscription is the GLP subscribe, need to decide if makes sense to keep it there, or update this command to support GLP
-@app.command()
-def subscribe(
+@app.command("_subscribe" if config.glp.ok else "subscribe", hidden=config.glp.ok)
+def classic_subscribe(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
@@ -580,6 +583,43 @@ def subscribe(
     render.confirm(yes)
     resp = api.session.batch_request(sub_reqs)
     render.display_results(resp, tablefmt="action")
+
+
+@app.command("subscribe" if config.glp.ok else "_subscribe", hidden=not config.glp.ok)
+def glp_subscribe(
+    import_file: Path = common.arguments.import_file,
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = typer.Option(None, "-t", "--tags", help="Tags to be assigned to [bright_green]all[/] imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]"),
+    sub: str = common.options.get(
+        "subscription",
+        help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
+        autocompletion=cache.sub_completion,
+    ),  # TODO sub_completion ... get_sub_identifier add match capability based on subscription key, this is what is visible in GLP
+    show_example: bool = common.options.show_example,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Assign Subscriptions to devices [bright_green](GreenLake)[/].
+
+    [cyan]--sub <subscription name|key|glp_id>[/] can be used to specify the subscription.  It will be applied to [bright_green]all[/] devices found in import [red italic](even if the device has a subsciption defined in the import)[/]
+    [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
+    """
+    if show_example:
+        render.console.print(examples.assign_subscriptions, emoji=True)
+        return
+
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch assign subscriptions [OPTIONS] [IMPORT_FILE]"))
+
+    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
+    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+
+    data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
+    resp = common.batch_assign_subscriptions(data, tags=tag_dict, subscription=sub, yes=yes)
+    render.display_results(resp, tablefmt="action")
+
 
 @app.command()
 def unsubscribe(

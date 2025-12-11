@@ -1899,7 +1899,7 @@ def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
     return data
 
 
-def get_bssids(data: list[dict[str, str | int]], output_format: TableFormat = "rich", band: RadioBandOptions | None = None) -> list[dict[str, str | int]]:
+def get_bssids(data: list[dict[str, str | int]], output_format: TableFormat = "rich", band: RadioBandOptions | None = None, ssid: str = None) -> list[dict[str, str | int]]:
     key_order = ["name", "serial", "macaddr", "radio_bssids"]  # "swarm_id",
     pretty_band = {0: "5Ghz", 1: "2.4Ghz", 2: "6Ghz"}
     data = simple_kv_formatter(data, key_order=key_order)
@@ -1912,12 +1912,12 @@ def get_bssids(data: list[dict[str, str | int]], output_format: TableFormat = "r
             if output_format == "rich":
                 ap_data += [
                     {"ap": f'{ap["name"]} [dim]({ap["serial"]})[/dim]', "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
-                    for r in bssids if band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band
+                    for r in bssids if (band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band) and (ssid is None or r["essid"] == ssid)
                 ]
             else:
                 ap_data += [
                     {**{k: v for k, v in ap.items() if "bssid" not in k}, "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
-                    for r in bssids if band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band
+                    for r in bssids if (band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band) and (ssid is None or r["essid"] == ssid)
                 ]
         data_out += sorted(ap_data, key=lambda r: r["band"])
 
