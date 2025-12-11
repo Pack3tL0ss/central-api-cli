@@ -64,7 +64,12 @@ classifiers = [
 
 [project.optional-dependencies]
 hook-proxy = [ "fastapi", "uvicorn", "psutil"]
-speedups = [ "aiodns>=3.2.0;platform_system != 'Windows'", "Brotli;platform_python_implementation == \"CPython\"", "brotlicffi;platform_python_implementation != 'CPython'"]
+speedups = [
+    "aiodns>=3.2.0;platform_system != 'Windows'", 
+    "pycares<5.0.0;platform_system != 'Windows'",
+    "Brotli;platform_python_implementation == \"CPython\"", 
+    "brotlicffi;platform_python_implementation != 'CPython'"
+]
 
 [project.urls]
 documentation = "https://central-api-cli.readthedocs.org"
