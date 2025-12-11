@@ -2388,7 +2388,7 @@ def clients(
         autocompletion=common.cache.client_completion,
         show_default=False,
     ),
-    location: bool = typer.Option(False, help=f"Show Location for client [dim](AP must be on a floor plan)[/] {render.help_block('client argument', help_type='requires')}"),
+    location: bool = typer.Option(False, "-L", "--location", help=f"Show Location for client [dim](AP must be on a floor plan)[/] {render.help_block('client argument', help_type='requires')}"),
     past: TimeRange = common.options("3h", include_mins=False).past,
     group: str = typer.Option(None, metavar="<Group>", help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, metavar="<Site>", help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
@@ -2415,7 +2415,7 @@ def clients(
 ) -> None:
     """Show clients/details
 
-    Shows clients that have connected within the last 3 hours by default.
+    Shows clients that have connected / attempted to connect.  [italic]Within the last 3 hours by default.[/]
     """
     if [site, group, label].count(None) < 2:
         common.exit("You can only specify one of [cyan]--group[/], [cyan]--label[/], [cyan]--site[/] filters")
