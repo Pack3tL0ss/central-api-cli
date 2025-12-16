@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
+from rich.traceback import install
 
 from centralcli import config, log, render, utils
 from centralcli.clioptions import CLIArgs, CLIOptions
@@ -41,6 +42,7 @@ if TYPE_CHECKING:  # pragma: no cover
     from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
     from centralcli.typedefs import CacheTableName, LogType, SendConfigTypes
 
+install(show_locals=True)
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
@@ -1942,7 +1944,11 @@ class CLICommon:
         except KeyboardInterrupt:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
-            self.exit(str(e))
+            from rich.traceback import Traceback
+            from rich import print
+            with log.log_file.open("a") as file:
+                print(Traceback(), file=file)
+            self.exit(repr(e))
 
     def parse_var_value_list(self, var_value: list[str, str], *, error_name: str = "variables") -> dict[str, str]:
         vars, vals, get_next = [], [], False
