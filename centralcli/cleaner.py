@@ -412,6 +412,7 @@ def get_archived_devices(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def show_groups(data: list[dict], cleaner_format: TableFormat = "rich") -> list[dict]:
     if cleaner_format == "csv":  # Makes allowed types a space separated str, to match format of import file for batch add groups
         data = [{k: v if k != "allowed_types" or not isinstance(v, list) else " ".join(v) for k, v in inner.items()} for inner in data]
+        data = [{k: v if v != "NA" else "" for k, v in inner.items()} for inner in data]  # strip all "NA" values
     else:
         collapse_keys = ["wlan_tg", "wired_tg", "monitor_only_sw", "monitor_only_cx"]
         data = [
