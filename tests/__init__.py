@@ -157,7 +157,9 @@ class MockConsoleDimensions():
     def __repr__(self):  # pragma: no cover
         return f"{self.__class__.__name__}(width={self.width}, height={self.height})"
 
-
+    def __iter__(self):
+        yield self.width
+        yield self.height
 
 
 if __name__ in ["tests", "__main__"]:  # pragma: no cover
