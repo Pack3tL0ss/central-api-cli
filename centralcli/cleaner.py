@@ -58,7 +58,7 @@ def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | list[LibAllDevTy
     else:
         # TODO circular import if placed at top review import logic
         from centralcli import cache
-        match = cache.get_dev_identifier(mac, dev_type=dev_type, retry=False, silent=True)
+        match: CacheDevice | list[CacheDevice] = cache.get_dev_identifier(mac, dev_type=dev_type, retry=False, silent=True)
         if not match:
             return mac
 
@@ -131,7 +131,7 @@ _short_value = {
     "token_created": lambda x: DateTime(x, "mdyt"),
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
-    # "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
+    "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
     "firmware_scheduled_at": lambda x: DateTime(x, "mdyt"),
     "Unknown": "?",
     "HPPC": "SW",
@@ -1884,7 +1884,7 @@ def get_swarm_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, Any
 
     return simple_kv_formatter(data, key_order=key_order)
 
-def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
+def show_radios(data: list[dict[str, str | int]], band: RadioBandOptions | None = None) -> list[dict[str, str | int]]:
     key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
     def pretty_mode(mode: int) -> str | int:
         try:
@@ -1896,6 +1896,11 @@ def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
     global _short_value
     _short_value["mode"] = lambda m: pretty_mode(m)
     data = simple_kv_formatter(data, key_order=key_order)
+    # data = [{"ap": f'{ap["name"]} [dim]({ap["serial"]})[/dim]', "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
+    #         for r in bssids if (band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band) and (ssid is None or r["essid"] == ssid)
+    # ]
+    if band:
+        data = [r for r in data if r["band"].startswith(band.value)]
 
     return data
 
