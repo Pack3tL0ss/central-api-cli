@@ -398,7 +398,7 @@ def start(
     ),
     port: int = typer.Option(config.webhook.port, help="Port to listen on (overrides config value if provided)", show_default=True),
     collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", hidden=True),
-    yes: bool = common.options.yes,
+    yes: int = common.options.yes_int,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
