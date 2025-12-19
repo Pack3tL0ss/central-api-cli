@@ -24,6 +24,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
+from functools import cached_property
 
 import click
 import typer
@@ -256,6 +257,28 @@ if "--again" in sys.argv:
     args = [*[arg for arg in sys.argv if arg in valid_options], *out_args]
     sys.argv = [sys.argv[0], "show", "last", *args]
 
+from .classic.api import ClassicAPI
+from .cnx.api import CentralAPI, GreenLakeAPI
+
+class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
+    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url):
+        self.classic_base_url = classic_base_url
+        self.glp_base_url = glp_base_url
+        self.cnx_base_url = cnx_base_url
+
+    @cached_property
+    def classic(self):
+        return ClassicAPI(self.classic_base_url)
+
+    @cached_property
+    def glp(self):
+        return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url)
+
+    @cached_property
+    def cnx(self):
+        return None if not config.cnx.ok else CentralAPI(self.cnx_base_url)
+
+api_clients = APIClients()
 
 from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding
 

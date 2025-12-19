@@ -2,12 +2,11 @@ import csv
 from pathlib import Path
 from typing import Any
 
-from centralcli import common, config, render, utils
+from centralcli import api_clients, common, config, render, utils
 
-from .classic.api import ClassicAPI
 from .response import Response
 
-api = ClassicAPI(config.classic.base_url)
+api = api_clients.classic
 
 
 class BuildCLI:
