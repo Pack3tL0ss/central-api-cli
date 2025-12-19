@@ -24,10 +24,9 @@ try:
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
-from centralcli import caas, cache, cleaner, common, config, log, render, utils
+from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheDevice, CentralObject
-from centralcli.clicommon import APIClients
 from centralcli.client import BatchRequest
 from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
@@ -56,6 +55,7 @@ from centralcli.constants import (
     SortDevOptions,
     SortDhcpOptions,
     SortGroupOptions,
+    SortGuestOptions,
     SortInsightOptions,  # noqa
     SortInventoryOptions,
     SortLabelOptions,
@@ -69,7 +69,6 @@ from centralcli.constants import (
     SortVlanOptions,
     SortWebHookOptions,
     SortWlanOptions,
-    SortGuestOptions,
     StatusOptions,
     SubscriptionArgs,
     TimeRange,
@@ -103,7 +102,7 @@ app.add_typer(cloudauth.app, name="cloud-auth")
 app.add_typer(mpsk.app, name="mpsk")
 app.add_typer(bandwidth.app, name="bandwidth")
 
-api_clients = APIClients()
+
 api = api_clients.classic
 glp_api = api_clients.glp
 
@@ -3231,7 +3230,7 @@ def guests(
     if failed:
         common.exit()
 
-def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
+def _build_radio_caption(data: List[Dict[str, str | int]], group: str = None, site: str = None, label: str = None) -> str |  None:
     try:
         two_four_cnt, five_cnt, six_cnt, ap_names = 0, 0, 0, []
         two_four_up_cnt, five_up_cnt, six_up_cnt = 0, 0, 0
@@ -3251,9 +3250,13 @@ def _build_radio_caption(data: List[Dict[str, str | int]]) -> str |  None:
                     six_up_cnt += 1
         radio_cnt = len(ap_names)
         ap_cnt = len(list(set(ap_names)))
+        filters = {"group": group, "site": site, "label": label}
+        _filter_text = [f"{k}: [spring_green1]{v}[/]" for k, v in filters.items() if v is not None] or ""
+        if _filter_text:
+            _filter_text = f" [grey42 italic]({','.join(_filter_text)})[/]"
         caption = ''.join(
             [
-                f"Counts [grey42 italic](in this output)[/]: Total APs [cyan]{ap_cnt}[/], Total Radios: [cyan]{radio_cnt}[/], ",
+                f"Counts{_filter_text}: Total APs [cyan]{ap_cnt}[/], Total Radios: [cyan]{radio_cnt}[/], ",
                 f"2.4Ghz: [cyan]{two_four_cnt}[/] ([bright_green]{two_four_up_cnt}[/], [red]{two_four_cnt - two_four_up_cnt}[/]) ",
                 f"5Ghz: [cyan]{five_cnt}[/] ([bright_green]{five_up_cnt}[/], [red]{five_cnt - five_up_cnt}[/]) ",
                 f"6Ghz: [cyan]{six_cnt}[/] ([bright_green]{six_cnt}[/], [red]{six_cnt - six_up_cnt}[/])",
@@ -3276,6 +3279,7 @@ def radios(
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
+    band: RadioBandOptions = common.options.get("band", help="Filter by radio band/frequency"),
     sort_by: str = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -3301,6 +3305,8 @@ def radios(
     title="Radio Details"
     for filter_, filter_name in zip((group, site, label), ("group", "site", "label")):
         title = f"{title}{'' if not filter_ else f' for APs in {filter_name} [cyan]{filter_.name}[/]'}"
+    if band:
+        title = f"{title} [italic]([spring_green1]{band.value} Ghz[/] radios)[/]"
 
     params = {
         "group": None if not group else group.name,
@@ -3344,11 +3350,11 @@ def radios(
         else:
             resp.output = list(sorted(resp.output, key=lambda ap: (ap["name"], ap["radio_name"])))
 
-        caption = _build_radio_caption(resp.output)
+        caption = _build_radio_caption(resp.output, group=group if not group else group.name, site=site if not site else site.name, label=label if not label else label.name)
         if status:
             resp.output = list(filter(lambda radio: radio["status"] == status, resp.output))
 
-    render.display_results(resp, tablefmt=tablefmt, title=title, reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name", cleaner=cleaner.show_radios)
+    render.display_results(resp, tablefmt=tablefmt, title=title, reverse=reverse, outfile=outfile, pager=pager, caption=caption, group_by="name" if not band else None, cleaner=cleaner.show_radios, band=band)
     if failed:
         common.exit()
 
