@@ -10,7 +10,7 @@ import yaml
 from rich.markup import escape
 from rich.text import Text
 
-from centralcli import cleaner, common, log, render, utils, config
+from centralcli import cleaner, common, log, render, utils
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
 from centralcli.client import BatchRequest
