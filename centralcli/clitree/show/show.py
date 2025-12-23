@@ -307,7 +307,10 @@ def _get_details_for_specific_devices(
         if include_inventory:  # Combine results with inventory results
             _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
             for r, dev in zip(batch_res, devs):
-                r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
+                if r.ok:
+                    r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
+                else:
+                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.reason}", caption=True)
 
         _update_cache_for_specific_devices(batch_res, devs)
 
