@@ -587,9 +587,9 @@ def unarchive(
 
 
 # TOGLP
-@app.command(hidden=True)
+@app.command(hidden=False)
 def enable(
-    what: EnableDisableArgs = typer.Argument("auto-sub"),
+    what: EnableDisableArgs = typer.Argument(...),
     services: list[common.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -601,14 +601,9 @@ def enable(
     Enabling auto subscribe sets the level (i.e. foundation/advanced) for all devices of the same type as the subscription provided.
     i.e. `enable auto-sub advanced-switch-6300` will enable auto subscribe for all switch tiers (6100, 6200, etc)
     """
-    _msg = "[bright_green]Enable[/] auto-subscribe for license"
-    if len(services) > 1:  # pragma: no cover
-        _svc_msg = '\n    '.join([s.name for s in services])
-        _msg = f'{_msg}s:\n    {_svc_msg}\n'
-    else:
-        svc = services[0]
-        _msg = f'{_msg} {svc.name}'
-    render.econsole.print(_msg)
+    services: list[LicenseTypes] = services  # retyping common.cache.LicenseTypes
+    _msg = "[bright_green]Enable[/] auto-subscribe for the following subscription tiers:"
+    render.econsole.print(f"{_msg} {utils.summarize_list(services, max=None)}")
     render.econsole.print('\n[dark_orange]!![/] Enabling auto-subscribe applies the specified tier (i.e. foundation/advanced) for [green bold]all[/] devices of the same type.')
     render.econsole.print('[cyan]enable auto-sub advanced-switch-6300[/] will result in [green bold]all[/] switch models being set to auto-subscribe the advanced license appropriate for that model.')
     render.econsole.print('Not just the 6300 models.')
@@ -619,9 +614,9 @@ def enable(
     render.display_results(resp, tablefmt="action")
 
 
-@app.command(hidden=True)
+@app.command(hidden=False)
 def disable(
-    what: EnableDisableArgs = typer.Argument("auto-sub"),
+    what: EnableDisableArgs = typer.Argument(...),
     services: list[common.cache.LicenseTypes] = typer.Argument(..., show_default=False),  # type: ignore
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -634,14 +629,8 @@ def disable(
     i.e. `disable auto-sub advanced-switch-6300` will disable auto subscribe for all switch tiers (6100, 6200, etc)
     """
     services: list[LicenseTypes] = services  # retyping common.cache.LicenseTypes
-    _msg = "[bright_green]Disable[/] auto-subscribe for license"
-    if len(services) > 1:  # pragma: no cover
-        _svc_msg = '\n    '.join([s.name for s in services])
-        _msg = f'{_msg}s:\n    {_svc_msg}\n'
-    else:
-        svc = services[0]
-        _msg = f'{_msg} {svc.name}'
-    render.econsole.print(_msg)
+    _msg = "[bright_green]Disable[/] auto-subscribe for the following subscription tiers:"
+    render.econsole.print(f"{_msg} {utils.summarize_list(services, max=None)}")
     render.econsole.print('\n[dark_orange3]:warning:[/]  Disabling auto subscribe removes auto-subscribe for all models of the same type.')
     render.econsole.print('[cyan]disable auto-sub advanced-switch-6300[/] will result in auto-subscribe being disabled for [green bold]all[/] switch models.')
     render.econsole.print('Not just the 6300.')
