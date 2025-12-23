@@ -7,7 +7,6 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
@@ -29,7 +28,7 @@ from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
 from centralcli.utils import ToBool
 
-from .classic.api import ClassicAPI
+from . import api_clients
 from .client import BatchRequest, Session
 from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
@@ -47,7 +46,7 @@ install(show_locals=True)
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
-api = ClassicAPI()
+api = api_clients.classic
 
 
 class MoveData:
@@ -124,17 +123,6 @@ class PreConfig:
     dev_type: Literal["ap", "gw"]
     config: str
     request: BatchRequest
-
-
-class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-
-    @cached_property
-    def classic(self):
-        return ClassicAPI(config.classic.base_url)
-
-    @cached_property
-    def glp(self):
-        return None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)
 
 
 class CLICommon:
@@ -1919,6 +1907,41 @@ class CLICommon:
         render.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
         self.exit(code=0 if all([r.ok for r in [*batch_resp, *reboot_resp]]) else 1)
 
+    @staticmethod
+    def get_banner_from_user() -> Path:
+        banner_text = utils.get_multiline_input("[bright_green]Paste desired banner text into terminal[/]...")
+        print()  # move cursor past ^D line
+        temp_file = config.cache_dir / ("banner" if "{{" not in banner_text else "banner.j2")
+        temp_file.write_text(banner_text)
+
+        return temp_file
+
+    def batch_update_ap_banner(self, data: list | dict, banner_file: Path, *, group_level: bool = False, yes: bool = False):
+        iden_field = "serial" if not group_level else "name"
+        update_word = "APs" if not group_level else "Groups"
+        raw_banner_text = banner_file.read_text()
+        data = utils.listify(data)
+        if len(data) == 1:
+            update_word = update_word.rstrip("s")
+
+        if banner_file.suffix == ".j2":
+            args = ()
+            kwargs = {"as_dict": {d[iden_field]: utils.generate_template(banner_file, config_data=d) for d in data}}
+            conf_msg_banner = f'{kwargs["as_dict"][data[-1][iden_field]]}'
+            if len(data) > 1:
+                conf_msg_banner = f'{conf_msg_banner}\n[dark_olive_green2 italic]Showing converted banner for one of provided {update_word}.[/]'
+        else:
+            args = ([d[iden_field] for d in data],)
+            kwargs = {"banner": raw_banner_text}
+            conf_msg_banner = raw_banner_text
+
+
+        render.econsole.print(f"Update AP banner text for the following {update_word}: {utils.summarize_list([d[iden_field] for d in data])}")
+        render.econsole.print(f"[bright_green]With the following banner[/]:\n[reset]{conf_msg_banner}")
+        render.confirm(yes)
+        resp = api.session.request(api.configuration.update_ap_banner, *args, **kwargs)
+        render.display_results(resp, tablefmt="action")
+
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
 
@@ -1944,8 +1967,8 @@ class CLICommon:
         except KeyboardInterrupt:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
-            from rich.traceback import Traceback
             from rich import print
+            from rich.traceback import Traceback
             with log.log_file.open("a") as file:
                 print(Traceback(), file=file)
             self.exit(repr(e))

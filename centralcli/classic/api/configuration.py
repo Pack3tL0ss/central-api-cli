@@ -1963,7 +1963,109 @@ class ConfigAPI:
         skipped = [Response(ok=True, error="No CHANGES", output=f"AP Altitude Update skipped for {iden}. ap-altitude {as_dict[iden]} exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
-        update_resp = await self.session._batch_request(update_reqs)
+        update_resp = [] if not update_reqs else await self.session._batch_request(update_reqs)
+
+        return [*update_resp, *skipped, *list(failed.values())]
+
+    async def _add_banner_to_config(self, data: List[str], banner: str | list[str]) -> List[str] | None:
+            """Adds banner motd text to existing AP or swarm config
+
+            Args:
+                data (str): str representing the current configuration.
+                banner (str | list[str]): The banner text as str or list of str.
+
+            Raises:
+                CentralCliException: If no commands remain after stripping empty lines.
+
+            Returns:
+                List[str] | None: Original config with with banner text inserted.
+                    Returns None if desired ap-altitude is already in current configuration
+            """
+            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+            existing_banner = [line for line in cli_cmds if line.startswith("banner motd")]
+            if isinstance(banner, str):
+                banner = banner.splitlines()
+
+            def _format_banner_line(banner_line: str) -> str:
+                return banner_line if banner_line.startswith("banner motd") else f'banner motd "{banner_line}"'
+
+            banner = [_format_banner_line(line.strip()) for line in banner]
+
+            if not cli_cmds:
+                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+
+            if not existing_banner:
+                cli_cmds += banner
+            elif banner == existing_banner:
+                return # No change banner text is as desired
+            else:
+                cli_cmds = [line for line in cli_cmds if not line.strip().startswith("banner motd")]
+                cli_cmds += banner
+
+            return cli_cmds
+
+    async def update_ap_banner(
+        self,
+        iden: str | list[str] = None,
+        banner: str = None,
+        as_dict: dict[str, str] = None,
+    ) -> List[Response]:
+        """Set or Update ap motd banner at group or device level for APs (UI group).
+
+        Pulls existing config and adds or updates provided banner.
+        Performs 2 API calls per AP.
+
+        Multiple APs can be provided using as_dict.
+
+        Args:
+            iden (str | list[str], optional): Group name swarm id or serial # (AOS10 AP) or list of the same.
+                Example: Retail or 6a5d123b1b77c828a085f04f... or USF7JSS9L1 or ['USF7JSS9L1', 'USF7JSS9L2'].
+            banner (str, optional): The banner text to be added at the AP or group level.
+                Note: Despite the CLI command being ap-altitude, it is not from sea level, it's from the ground.
+            as_dict: (dict[str, str], optional): A dict providing ap serial numbers and altitudes.
+                i.e.: {"AP1serial": "banner text", "AP2serial": "banner text" ...}
+
+        If banner is the same, multiple APs/groups can be processed by sending a list for iden parameter.
+        If banners are unique for each iden, multiple APs/Groups can be processed by sending as_dict where
+        group name/serial is the key and the desired banner text is the value.  i.e.
+        {
+            "USF7JSS9L1": "banner text ... connected to USF7JSS9L1",
+            "USF7JSS9L2": "banner text ... connected to USF7JSS9L2"
+        }
+
+        Returns:
+            List[Response]: Returns a List of Response objects.
+        """
+        base_url = "/configuration/v1/ap_cli"
+        as_dict = as_dict or {}
+        if iden:
+            if not banner:
+                raise ValueError("banner is required when iden is provided")
+            as_dict = {**as_dict, **{i: banner for i in utils.listify(iden)}}
+        if not as_dict:
+            raise ValueError("Missing required parameter: iden and banner and/or as_dict is required")
+
+        current_reqs = [BatchRequest(self.session.get, f"{base_url}/{iden}") for iden in as_dict]
+        current_resp = await self.session._batch_request(current_reqs)
+
+        passed: Dict[str, Response] = {}
+        failed: Dict[str, Response] = {}
+        for iden, resp in zip(as_dict.keys(), current_resp):
+            if resp.ok:
+                passed[iden] = resp
+            else:
+                failed[iden] = resp
+
+        if not passed:
+            return current_resp
+
+        updated_clis_list = [await self._add_banner_to_config(resp.output, banner=as_dict[iden]) for iden, resp in passed.items()]
+
+
+        skipped = [Response(ok=True, error="No CHANGES", output=f"Banner Update skipped for {iden}. desired banner text already exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
+        update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
+
+        update_resp = [] if not update_reqs else await self.session._batch_request(update_reqs)
 
         return [*update_resp, *skipped, *list(failed.values())]
 
@@ -2140,7 +2242,7 @@ class ConfigAPI:
         include_groups: List[str] = None,
         exclude_groups: List[str] = None,
         do_not_delete: bool = False,
-    ) -> Response:
+    ) -> Response:  # pragma: no cover ... not used by any command
         """Create new configuration backup for multiple groups.
 
         Either include_groups or exclude_groups should be provided, but not both.

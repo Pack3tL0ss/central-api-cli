@@ -10,7 +10,7 @@ import yaml
 from rich.markup import escape
 from rich.text import Text
 
-from centralcli import cleaner, common, log, render, utils
+from centralcli import cleaner, common, log, render, utils, config
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
 from centralcli.client import BatchRequest
@@ -245,8 +245,10 @@ If providing a jinja2 template, this command will automatically look for a [cyan
 @app.command("config", help=config_help)
 def config_(
     group_dev: str = common.arguments.get("group_dev", autocompletion=common.cache.group_dev_ap_gw_completion),
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
+    cli_file: Path = typer.Argument(None, help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, show_default=False,),
+    banner_file: Path = common.options.banner_file,
+    banner: bool = common.options.banner,
     do_gw: bool = common.options.do_gw,
     do_ap: bool = common.options.do_ap,
     yes: bool = common.options.yes,
@@ -254,7 +256,23 @@ def config_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    is_tmp_file = False
     group_dev: CacheDevice | CacheGroup = common.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
+    if banner:  # pragma: no cover requires tty
+        banner_file = common.get_banner_from_user()
+        is_tmp_file = True
+
+    if not cli_file and not banner_file:
+        common.exit("cli_file or --banner-file <banner file> is required")
+    if banner_file:
+        if do_gw or group_dev.is_dev and not group_dev.type == "ap":
+            common.exit("banner update only valid for APs or AP Groups")
+
+        common.batch_update_ap_banner(data=dict(group_dev), banner_file=banner_file, group_level=group_dev.is_group, yes=yes)
+        if is_tmp_file:  # pragma: no cover
+            banner_file.unlink(missing_ok=True)
+        common.exit(code=0)  # will exit from batch_update_ap_banner in display_results if it failed.
+
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
 
