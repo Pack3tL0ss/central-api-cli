@@ -160,6 +160,14 @@ class ExportDevType(str, Enum):
             return "aps"
 
 
+class DeviceStatusFilter(str, Enum):
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
+
+class APDeployment(str, Enum):
+    STANDALONE = "Standalone"
+    CLUSTER = "Cluster"
+
 class GroupDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
@@ -2402,7 +2410,6 @@ NO_LOAD_FLAGS = [
     "--show-completion",
     "--install-completion",
     "--version",
-    "-v",
     "-V"
 ]
 
