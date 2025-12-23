@@ -24,7 +24,7 @@ from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
 
-from centralcli.typedefs import StrOrURL
+from centralcli.typedefs import StrOrURL, StrEnum
 
 if TYPE_CHECKING:
     from .typedefs import PrimaryDeviceTypes
@@ -607,7 +607,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False) -> str:
+    def summarize_list(items: List[str, StrEnum], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -621,6 +621,8 @@ class Utils:
             fmt = ""
             item_sep = "...".rjust(pad + 3)
 
+        enum_attr = "value" if not use_enum_name else "name"
+        items = [item if not hasattr(item, enum_attr) else getattr(item, enum_attr) for item in items]
         items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
         if len(items) == 1:  # If there is only 1 item we return it with just the formatting and strip the pad
             return items[0].lstrip()
