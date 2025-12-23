@@ -81,7 +81,10 @@ def cache(
     This is not necessary under normal circumstances as the cli will automatically refresh the cache if you provide an identifier
     that doesn't have a match.
     """
-    common.cache(refresh=True)
+    res = common.cache(refresh=True)
+
+    exit_code = 0 if all([r.ok if not hasattr(r, "all_ok") else r.all_ok for r in res]) else 1
+    common.exit(code=exit_code)
 
 
 # CACHE add cache for webhooks
