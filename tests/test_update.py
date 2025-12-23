@@ -9,7 +9,7 @@ from centralcli.environment import env
 from centralcli.exceptions import ConfigNotFoundException
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables
+from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables, test_banner_file
 
 runner = CliRunner()
 
@@ -492,24 +492,25 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "idx,fixture,args",
+        "idx,fixtures,args,test_name_append",
         [
-            [1, "ensure_cache_group4", ("cencli_test_group4", "--ap")],
-            [2, "ensure_cache_group4", ("cencli_test_group4", str(test_ap_ui_group_variables), "--ap")],
-            [3, "ensure_dev_cache_test_ap", ("cencli-test-ap", str(test_ap_ui_group_variables))],
+            [1, "ensure_cache_group4", ("cencli_test_group4", "--ap"), None],
+            [2, "ensure_cache_group4", ("cencli_test_group4", str(test_ap_ui_group_variables), "--ap"), None],
+            [3, ["ensure_cache_group1", "ensure_dev_cache_test_ap"], ("cencli-test-ap", "--banner-file", str(test_banner_file)), None],
         ]
     )
-    def test_update_config(fixture: str | None, idx: int, args: tuple[str], request: pytest.FixtureRequest):
-        if fixture:
-            request.getfixturevalue(fixture)
+    def test_update_config(fixtures: str | list[str] | None, idx: int, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
+        if test_name_append:  # pragma: no cover
+            env.current_test = f"{env.current_test}_{test_name_append}"
+        if fixtures:
+            [request.getfixturevalue(fixture) for fixture in utils.listify(fixtures)]
+        _args = args if "--banner-file" in args else [args[0], str(test_ap_ui_group_template), *args[1:]]
         result = runner.invoke(
             app,
             [
                 "update",
                 "config",
-                args[0],
-                str(test_ap_ui_group_template),
-                *args[1:],
+                *_args,
                 "--yes",
             ]
         )
@@ -524,22 +525,22 @@ if config.dev.mock_tests:
             [1, None, (test_data["ap"]["serial"], "--gw")],
             [2, None, (test_data["gateway"]["serial"], "--ap")],
             [3, "ensure_cache_group4", ("cencli_test_group4",)],
+            [4, None, (test_data["gateway"]["serial"], "--banner-file", str(test_banner_file))],
         ]
     )
     def test_update_config_invalid(fixture: str | None, idx: int, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             request.getfixturevalue(fixture)
+        _args = args if "--banner-file" in args else [args[0], str(test_ap_ui_group_template), *args[1:]]
         result = runner.invoke(
             app,
             [
                 "update",
                 "config",
-                args[0],
-                str(test_ap_ui_group_template),
-                *args[1:],
+                *_args,
             ]
         )
-        capture_logs(result, f"{env.current_test}{idx}")
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
 

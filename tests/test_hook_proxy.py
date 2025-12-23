@@ -17,7 +17,7 @@ if config.classic.webhook.token:
 
 
     def test_start_hook_proxy():
-        result = runner.invoke(app, ["start", "hook-proxy", "-y"])
+        result = runner.invoke(app, ["start", "hook-proxy", "-yy"])
         capture_logs(result, "test_start_hook_proxy")
         assert result.exit_code == 0
         assert "Started" in result.stdout

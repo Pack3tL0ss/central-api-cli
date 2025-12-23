@@ -128,13 +128,18 @@ if config.dev.mock_tests:
         assert "uccess" in result.stdout
 
 
-    def test_del_template(ensure_cache_template, ensure_cache_group2):
+    @pytest.mark.parametrize(
+        "idx,args",
+        [
+            [1, ("cencli_test_template", "--group", "cencli_test_group2",)],
+            [2, ("cencli_test_template",)],
+        ]
+    )
+    def test_del_template(ensure_cache_template, ensure_cache_group2, idx: int, args: tuple[str]):
         result = runner.invoke(app, [
             "delete",
             "template",
-            "cencli_test_template",
-            "--group",
-            "cencli_test_group2",
+            *args,
             "-Y"
             ])
         capture_logs(result, "test_del_template")

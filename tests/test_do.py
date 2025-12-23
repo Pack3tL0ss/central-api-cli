@@ -20,14 +20,14 @@ def test_add_device_missing_mac():
     assert "required" in result.stdout
 
 
-def test_archive(ensure_inv_cache_test_ap):
+def test_archive(ensure_inv_cache_test_ap: None):
     result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "-y"])
     capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
 
 
-def test_archive_multi(ensure_cache_batch_devices):
+def test_archive_multi(ensure_cache_batch_devices: None):
     devices = common._get_import_file(test_device_file, import_type="devices")
     serials = [dev["serial"] for dev in devices[::-1]][0:2]
     result = runner.invoke(app, ["archive", *serials, "-y"])
@@ -57,28 +57,28 @@ def test_convert_template_var_file_not_exist():
     assert "no variable file found" in result.stdout.lower()
 
 
-def test_convert_template_auto_var_file(ensure_cache_j2_var_yaml):
+def test_convert_template_auto_var_file(ensure_cache_j2_var_yaml: None):
     result = runner.invoke(app, ["convert", "template", str(test_j2_file)])
     capture_logs(result, "test_convert_template_auto_var_file")
     assert result.exit_code == 0
     assert "some_value" in result.stdout
 
 
-def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml, ensure_cache_j2_var_csv):
+def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml: None, ensure_cache_j2_var_csv: None):
     result = runner.invoke(app, ["convert", "template", str(test_j2_file)])
     capture_logs(result, "test_convert_template_too_many_var_file_matches", expect_failure=True)
     assert result.exit_code == 1
     assert "Too many matches" in result.stdout
 
 
-def test_move_pre_provision(ensure_cache_group1, ensure_inv_cache_test_ap):
+def test_move_pre_provision(ensure_cache_group1: None, ensure_inv_cache_test_ap: None):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")
     assert result.exit_code == 0
     assert "201" in result.stdout
 
 
-def test_move_group_and_site(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
+def test_move_group_and_site(ensure_cache_group3: None, ensure_cache_group1: None, ensure_cache_site3: None, ensure_cache_site1: None, ensure_inv_cache_test_ap: None, ensure_dev_cache_test_ap: None):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group3", "site", "cencli_test_site3", "--reset-group", "-y"])
     capture_logs(result, "test_move_group_and_site")
     assert result.exit_code == 0
@@ -86,7 +86,7 @@ def test_move_group_and_site(ensure_cache_group3, ensure_cache_group1, ensure_ca
     assert "ignored" in result.stdout  # reset group is ignored
 
 
-def test_move_reset_group(ensure_cache_group3, ensure_cache_group1, ensure_cache_site3, ensure_cache_site1, ensure_inv_cache_test_ap, ensure_dev_cache_test_ap):
+def test_move_reset_group(ensure_cache_group3: None, ensure_cache_group1: None, ensure_cache_site3: None, ensure_cache_site1: None, ensure_inv_cache_test_ap: None, ensure_dev_cache_test_ap: None):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "--reset-group", "-y"])
     capture_logs(result, "test_move_reset_group")
     assert result.exit_code == 0
@@ -100,7 +100,7 @@ def test_move_missing_args():
     assert "issing" in result.stdout
 
 
-def test_remove_test_ap_from_site(ensure_inv_cache_test_ap, ensure_dev_cache_test_ap, ensure_cache_site1):
+def test_remove_test_ap_from_site(ensure_inv_cache_test_ap: None, ensure_dev_cache_test_ap: None, ensure_cache_site1: None):
     result = runner.invoke(app, ["remove", test_data["test_devices"]["ap"]["serial"], "site", "cencli_test_site1", "-y"])
     capture_logs(result, "test_remove_test_ap_from_site")
     assert result.exit_code == 0
@@ -422,7 +422,7 @@ if config.dev.mock_tests:
             (["ap", "cencli_test_group2", "10.7.2.1_93286", "--at", at_str]),
         ]
     )
-    def test_set_fw_compliance(ensure_cache_group2, args: list[str]):
+    def test_set_fw_compliance(ensure_cache_group2: None, args: list[str]):
         result = runner.invoke(app, ["set", "firmware", "compliance", *args, "-y"])
         capture_logs(result, "test_set_fw_compliance")
         assert result.exit_code == 0
@@ -441,6 +441,13 @@ if config.dev.mock_tests:
         capture_logs(result, "test_refresh_cache")
         assert result.exit_code == 0
         assert "refresh completed" in result.stdout.lower()
+
+
+    def test_refresh_cache_fail():
+        result = runner.invoke(app, ["refresh", "cache"])
+        capture_logs(result, "test_refresh_cache", expect_failure=True)
+        assert result.exit_code == 1
+        assert "❌" in result.stdout
 
 
     def test_refresh_token():
@@ -464,7 +471,7 @@ if config.dev.mock_tests:
             [test_data["ap"]["name"], lambda r: "299" in r]
         ]
     )
-    def test_rename_ap(ensure_dev_cache_ap, new_name: str, pass_condition: Callable):
+    def test_rename_ap(ensure_dev_cache_ap: None, new_name: str, pass_condition: Callable):
         result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, "test_rename_ap")
         assert result.exit_code == 0
@@ -477,21 +484,21 @@ if config.dev.mock_tests:
             [test_data["ap"]["name"][0:-5], lambda r: "call to fetch" in r],
         ]
     )
-    def test_rename_ap_fail(ensure_dev_cache_ap, new_name: str, pass_condition: Callable):
+    def test_rename_ap_fail(ensure_dev_cache_ap: None, new_name: str, pass_condition: Callable):
         result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, env.current_test, expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
 
-    def test_rename_group(ensure_cache_group3):
+    def test_rename_group(ensure_cache_group3: None):
         result = runner.invoke(app, ["rename", "group",  "cencli_test_group3", "cencli_test_group30", "--yes"])
         capture_logs(result, "test_rename_group", expect_failure=True)
         assert result.exit_code == 1
         assert "400" in result.stdout
 
 
-    def test_rename_site(ensure_cache_site4):
+    def test_rename_site(ensure_cache_site4: None):
         result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40", "--yes"])
         capture_logs(result, "test_rename_site")
         assert result.exit_code == 0

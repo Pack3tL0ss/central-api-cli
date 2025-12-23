@@ -1728,7 +1728,7 @@ def test_show_tunnels():
 @pytest.mark.parametrize(
     "idx,args,pass_condition",
     [
-        [1, (), lambda r: "ounts" in r],
+        [1, ("--csv",), lambda r: "ounts" in r],
         [2, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
         [3, ("stats",), lambda r: "used" in r],
         [4, ("names",), lambda r: "advance" in r],
