@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING, List
 import typer
 from rich import print
 
-from centralcli import common, config, render, utils
-from centralcli.cache import CacheCert, CacheLabel, CacheSite, api
+from centralcli import api_clients, common, config, render, utils
+from centralcli.cache import CacheCert, CacheLabel, CacheSite
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
 from centralcli.response import Response
@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 app = typer.Typer()
 app.add_typer(firmware.app, name="firmware")
 
+api = api_clients.classic
 
 @app.command()
 def cert(

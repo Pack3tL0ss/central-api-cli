@@ -27,7 +27,7 @@ from yarl import URL
 from centralcli import config, constants, log, render, utils
 from centralcli.response import CombinedResponse
 
-from .classic.api import ClassicAPI
+from . import api_clients
 from .client import BatchRequest, Session
 from .cnx.models.cache import Inventory as GlpInventory
 from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
@@ -37,19 +37,15 @@ from .models import cache as models
 from .objects import DateTime
 from .response import Response
 
-api = ClassicAPI(config.classic.base_url)
 
-if config.glp.ok:
-    from .cnx.api import GreenLakeAPI
-    glp_api = GreenLakeAPI(config.glp.base_url)
-else:
-    glp_api = None  # pragma: no cover
+api = api_clients.classic
+glp_api = api_clients.glp
 
 if TYPE_CHECKING:
     from tinydb.table import Document, Table
 
     from .config import Config
-    from .typedefs import CacheSiteDict, CertType, MPSKStatus, PortalAuthTypes, SiteData, ClientType
+    from .typedefs import CacheSiteDict, CertType, ClientType, MPSKStatus, PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -943,7 +939,7 @@ class CacheBuilding(CentralObject, Text):
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
 
-    def __repr__(self):
+    def __repr__(self):  # pragma: no cover
         return f"<{self.__module__}.{type(self).__name__} (Building|{self.name}) object at {hex(id(self))}>"
 
     def __eq__(self, value: CacheBuilding | str):
@@ -1006,43 +1002,6 @@ class CacheFloorPlanAP(CentralObject, Text):
     def __hash__(self):
         return hash(self.id)
 
-    # def __rich__(self):
-    #     return f'[bright_green]{self.name}[/]|[cyan]{self.serial}[/]|[bright_green]{self.mac}[/]'
-
-    # @cached_property
-    # def text(self) -> Text:
-    #     return Text.from_markup(self.__rich__())
-
-    # @property
-    # def rich_help_text(self):
-    #     return self.text.markup
-
-    # @property
-    # def summary_text(self):
-    #     return self.text.markup
-
-    # @property
-    # def help_text(self) -> str:
-    #     return self.text.plain
-
-    # def __str__(self) -> str:
-    #     return self.text.plain
-
-    # def __rich__(self) -> str:
-    #     return self.text.markup
-
-    # @property
-    # def summary_text(self) -> str:
-    #     return self.text.markup
-
-    # @property
-    # def help_text(self):
-    #     return render.rich_capture(self.text.markup)
-
-    # @property
-    # def building(self) -> CacheBuilding | None:
-    #     return self.get_building()
-
     @property
     def location(self) -> dict[str, str]:
         return {
@@ -1051,16 +1010,6 @@ class CacheFloorPlanAP(CentralObject, Text):
             "building": self.building.name,
             "floor": self.level
         }
-
-    # def get_building(self) -> CacheBuilding | None:
-    #     if self._building_object is None:
-    #         query = Query()
-    #         match = self.building_db.search(query.id == self.building_id)
-    #         if not match:
-    #             return
-    #         self._building_object = CacheBuilding(match[0])
-    #     return self._building_object
-
 
 class CacheResponses:
     def __init__(
@@ -1096,13 +1045,14 @@ class CacheResponses:
         self._guest = guest
         self._cert = cert
         self._device_type = utils.listify(device_type)
+        self._res_list = [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert]
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call."""
         if resp is None:
             return
 
-        _last_rl = sorted([r.rl for r in [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert] if r is not None])
+        _last_rl = sorted([r.rl for r in self._res_list if r is not None])
         if _last_rl:
             resp.rl = _last_rl[0]
         return resp
@@ -1303,9 +1253,9 @@ class Cache:
             self.Q: Query = Query()
 
 
-    def __call__(self, refresh=False) -> None:
+    def __call__(self, refresh=False) -> list[Response]:
         if refresh:
-            self.check_fresh(refresh)
+            return self.check_fresh(refresh)
 
     def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
         yield from self.all_tables
@@ -4063,6 +4013,13 @@ class Cache:
     def get_dev_identifier(
         query_str: str,
         dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes],
+        swack_only: Literal[True],
+    ) -> CacheDevice: ...  # pragma: no cover
+
+    @overload
+    def get_dev_identifier(
+        query_str: str,
+        dev_type: constants.LibAllDevTypes,
         swack_only: Literal[True],
     ) -> CacheDevice: ...  # pragma: no cover
 

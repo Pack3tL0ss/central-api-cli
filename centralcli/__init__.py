@@ -261,22 +261,23 @@ from .classic.api import ClassicAPI
 from .cnx.api import CentralAPI, GreenLakeAPI
 
 class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url):
+    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url, silent: bool = False):
         self.classic_base_url = classic_base_url
         self.glp_base_url = glp_base_url
         self.cnx_base_url = cnx_base_url
+        self.silent = silent
 
     @cached_property
     def classic(self):
-        return ClassicAPI(self.classic_base_url)
+        return ClassicAPI(self.classic_base_url, silent=self.silent)
 
     @cached_property
     def glp(self):
-        return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url)
+        return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url, silent=self.silent)
 
     @cached_property
     def cnx(self):
-        return None if not config.cnx.ok else CentralAPI(self.cnx_base_url)
+        return None if not config.cnx.ok else CentralAPI(self.cnx_base_url, silent=self.silent)
 
 api_clients = APIClients()
 

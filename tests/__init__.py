@@ -51,9 +51,8 @@ from click.testing import Result
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cache, config, log
+from centralcli import api_clients as api_clients, cache, config, log
 from centralcli.cache import CacheDevice
-from centralcli.clicommon import APIClients
 from centralcli.exceptions import CentralCliException
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
@@ -62,7 +61,6 @@ from ._mock_request import mock_request
 from ._test_data import test_data as test_data
 
 expected_exceptions = [SystemExit, ClientConnectorError, ClientOSError, ContentTypeError, ContentLengthError]
-api_clients = APIClients()
 econsole = Console(stderr=True)
 in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
 _2_days_ago = pendulum.now() - pendulum.duration(days=2)

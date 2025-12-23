@@ -7,14 +7,12 @@ from typing import List
 
 import typer
 
-from centralcli import common, config, log, render
+from centralcli import api_clients, common, config, log, render
 from centralcli.client import Session
 from centralcli.response import Response
 
-from ..cache import api
-from ..constants import SortGroupOptions
-
 app = typer.Typer()
+api = api_clients.classic
 
 
 # CACHE add cache for webhooks
@@ -188,8 +186,7 @@ def method(
 
 @app.command(hidden=True,)
 def command(
-    import_file: Path = common.arguments.import_file,
-    sort_by: SortGroupOptions = common.options.sort_by,
+    sort_by: str = common.options.sort_by,
     reverse: bool = common.options.reverse,
     yes: bool = common.options.yes,
     do_json: bool = common.options.do_json,
@@ -211,6 +208,12 @@ def command(
 
     What this command does changes based on what needs to be tested at the time.
     """
+    from ..cnx.api import CentralAPI
+    # from centralcli.constants import APDeployment, DeviceStatusFilter
+    api = CentralAPI()
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
+    resp = api.session.request(api.monitoring.get_aps, limit=1)  #  deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
+    render.display_results(resp, tablefmt=tablefmt, outfile=outfile, pager=pager, sort_by=sort_by, reverse=reverse, output_by_key="deviceName")
     ...
 
 
