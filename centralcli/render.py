@@ -234,7 +234,7 @@ class Output():
                         strings = strings.replace(old, f"{new:{len(old)}}")
         return strings
 
-    def menu(self, data_len: int = None) -> str:
+    def menu(self, data_len: int = None) -> str:  # pragma: no cover requires tty
         def isborder(line: str) -> bool:
             return all(not c.isalnum() for c in list(line))
 
@@ -265,7 +265,7 @@ class Output():
             return self.tty  # this should not happen
 
         try:
-            return typer.unstyle(self._file)
+            return typer.unstyle(self.tty)
         except TypeError:
             return self._file
 
@@ -419,7 +419,7 @@ def build_rich_table_rows(data: List[Dict[str, Text | str]], table: Table, group
         return table
 
     if not isinstance(data, list) or group_by not in data[0]:
-        log.error(f"Error in render.do_group_by_table invalid type {type(data)} or {group_by} not found in header.")
+        log.error(f"Error in render.build_rich_table_rows invalid type {type(data)} or {group_by} not found in header.")
         [table.add_row(*list(in_dict.values())) for in_dict in data]
         return table
 
@@ -634,6 +634,8 @@ def output(
                 return ""
             elif isinstance(value, DateTime):
                 return str(value.iso)
+            elif value in ["❌", "✅"]:
+                return False if value == "❌" else True
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
         def normalize_key_for_csv(key: str) -> str:
