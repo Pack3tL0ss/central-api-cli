@@ -76,7 +76,7 @@ def subscription(
     if not glp_api:  # pragma: no cover
         common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
 
-    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
+    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date, best_match=True)  # TODO add qty param and return list of sub objects if best sub object can not satisfy the qty necessary
     if len(devices) > sub.available:
         log.warning(f"{len(devices)} devices exceeds {sub.available}... the number of available subscriptions for [bright_green]{sub.name}[/bright_green]|[medium_spring_green]{sub.key}[/].  [dim italic]As of last Subscription cache update[/]", show=True)
 
