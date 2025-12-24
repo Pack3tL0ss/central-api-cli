@@ -29,7 +29,7 @@ console = Console(emoji=False)
 
 
 TabLibFormats = Literal['json', 'yaml', 'csv', 'tsv', 'dbf', 'html', 'jira', 'latex', 'df', 'rst', 'cli']
-ExampleType = Literal["devices", "sites", "groups", "labels", "macs", "mpsk"]
+ExampleType = Literal["devices", "sites", "groups", "labels", "macs", "mpsk", "variables"]
 Action = Literal["add", "delete", "move", "rename", "other"]
 
 _pad = " " * 6
@@ -156,7 +156,7 @@ class Example:
         self.type = type or "devices"
         self.action = action or "add"
         self.ds = tablib.Dataset().load(self.data, format=data_format)
-        self.clean = self._get_clean_data(self.ds)
+        self.clean = self._get_clean_data(self.ds,)
         self.json = self.get_json()
         self.yaml = self.get_yaml()
         self.csv = self.get_csv()
@@ -195,7 +195,11 @@ class Example:
     def _get_clean_data(self, data: tablib.Dataset = None) -> List[Dict[str, Any]]:
         data = data or self.ds
         out = self._handle_bools(data)
-        return [utils.strip_none(inner) for inner in out]
+        out = [utils.strip_none(inner) for inner in out]
+        if not self.type == "variables":
+            return out
+        else:
+            return {dev["_sys_serial"]: dev for dev in out}
 
     def _handle_bools(self, data: tablib.Dataset) -> List[Dict[str, Any]]:
         bool_strings = ["true", "false", "yes", "no"]
@@ -638,6 +642,21 @@ Requires the following keys (include as header row for csv import):
 {generic_end}
 """
 
+# -- // VARIABLES \\ --
+data="""_sys_serial,_sys_lan_mac,_sys_hostname,_sys_gateway,_sys_module_command,user_var1,user_var2
+US12345678,aabbccddeeff,snantx-idf1-sw1,10.0.30.1,type jl728a,value1,value2
+SG12345679,ffee.ddcc.bbaa,snantx-idf1-sw2,10.0.30.1,type jl728a,value1,value2
+TW12345680,01:aa:bb:cc:dd:ee,snantx-idf1-sw3,10.0.30.1,type jl728a,value1,value2"""
+example = Example(data, type="variables", action="other")
+clibatch_update_variables = f"""[italic cyan]cencli batch update variables IMPORT_FILE[/]:
+
+Requires the following keys (include as header row for csv import):
+    [cyan]_sys_serial[/], [cyan]_sys_lan_mac[/] [italic](both are required)[/].
+
+
+{example}
+"""
+
 
 # -- // ARCHIVE / UNARCHIVE \\ --
 clibatch_archive = f"""[italic cyan]cencli batch archive IMPORT_FILE[/]:
@@ -810,11 +829,13 @@ class ImportExamples:
         self.move_devices = Example(device_move_data, type="devices", action="move").full_text
         self.rename_aps = clibatch_rename_aps
         self.update_aps = clibatch_update_aps
+        self.update_variables = clibatch_update_variables
+        self.add_variables = clibatch_update_variables.replace("update variables", "add variables")
         self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
         self.assign_subscriptions = clibatch_assign_subscriptions
 
     def __getattr__(self, key: str):
-        if key not in self.__dict__.keys():  # pragma: no cover
+        if key != "__iter__" and key not in self.__dict__.keys():  # pragma: no cover
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
 

@@ -12,6 +12,7 @@ from rich.markup import escape
 
 from centralcli import cleaner, common, log, render, utils
 from centralcli.cache import api
+from centralcli.constants import APIAction
 from centralcli.models.imports import ImportMACs, ImportMPSKs
 
 from . import examples
@@ -182,6 +183,29 @@ def labels(
 
     resp = common.batch_add_labels(import_file, yes=yes)
     render.display_results(resp, tablefmt="action", title="Batch Add Labels",)
+
+
+@app.command()
+def variables(
+    import_file: Path = common.arguments.get("import_file", help="Path to file with variables"),
+    show_example: bool = common.options.show_example,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Batch add variables for devices based on data from required import file.
+
+    Use [cyan]cencli batch add variables --example[/] to see example import file formats.
+    [italic]Accepts same format as Aruba Central UI, but also accepts .yaml[/]
+    """
+    if show_example:
+        render.console.print(examples.add_variables)
+        return
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch add variables [OPTIONS] [IMPORT_FILE]"))
+
+    common.batch_add_update_replace_variables(import_file, action=APIAction.ADD, yes=yes)
 
 
 @app.command()

@@ -185,10 +185,15 @@ def _create_caas_commands_file(scope: Literal["groups", "sites", "gateways", "in
     return commands_file
 
 
-def _create_invalid_var_file(file: str) -> Path:
+def _create_invalid_var_file(file: str, bad_json: bool = False) -> Path:
     var_file = Path(file)
-    test_var_file = config.cache_dir / f"test_runner_invalid_variables{var_file.suffix}"
-    test_var_file.write_text("".join([line for line in var_file.read_text().splitlines(keepends=True) if "_sys_lan_mac" not in line]))
+    test_var_file = config.cache_dir / f"test_runner_invalid_variables{'_bad_json' if bad_json else ''}{var_file.suffix}"
+    file_data = "".join([line for line in var_file.read_text().splitlines(keepends=True) if "_sys_lan_mac" not in line])
+    if bad_json:
+        test_var_file.write_text(file_data.lstrip("{").lstrip("["))
+    else:
+        test_var_file.write_text(file_data)
+
     return test_var_file
 
 
@@ -288,6 +293,7 @@ test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"]["pem"]
 test_cert_file_p12: Path = setup_cert_file(cert_path=test_data["certificate"]["p12"], sfx="p12")
 test_cert_file_der: Path = setup_cert_file(cert_path=test_data["certificate"]["der"], sfx="der")
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
+test_invalid_var_file_bad_json = _create_invalid_var_file(test_data["template"]["variable_file"], bad_json=True)
 test_switch_var_file_json = create_var_file(test_data["test_devices"]["switch"]["variable_file"])
 test_switch_var_file_flat = create_var_file(test_data["test_devices"]["switch"]["variable_file"], flat=True)
 test_switch_var_file_csv = create_var_file(test_data["test_devices"]["switch"]["variable_file"], file_type="csv")

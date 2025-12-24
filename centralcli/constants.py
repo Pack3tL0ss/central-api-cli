@@ -406,6 +406,11 @@ class DynamicAntMode(str, Enum):
     narrow = "narrow"
     wide = "wide"
 
+class APIAction(str, Enum):
+    ADD = "ADD"
+    UPDATE = "UPDATE"
+    REPLACE = "REPLACE"
+
 class RadioMode(str, Enum):
     access = "access"
     monitor = "monitor"

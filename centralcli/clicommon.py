@@ -22,7 +22,7 @@ from rich.traceback import install
 
 from centralcli import config, log, render, utils
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import dynamic_antenna_models, flex_dual_models
+from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
@@ -39,7 +39,7 @@ from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
     from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
-    from centralcli.typedefs import CacheTableName, LogType, SendConfigTypes
+    from centralcli.typedefs import ImportType, LogType, SendConfigTypes
 
 install(show_locals=True)
 
@@ -536,14 +536,14 @@ class CLICommon:
 
         return devices
 
-    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, subscriptions: bool = False, text_ok: bool = False,) -> list[dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: ImportType = None, subscriptions: bool = False, text_ok: bool = False, required_fields: list[str] = None) -> list[dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
                 data = config.get_file_data(import_file, text_ok=text_ok)
-            except UserWarning as e:
+            except Exception as e:
                 log.exception(e)
-                self.exit(e)
+                self.exit(repr(e))
 
         if not data:
             self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -551,7 +551,7 @@ class CLICommon:
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
-        if subscriptions:
+        if subscriptions:  # import type can be devices, still need to parse sub data
             data = self._parse_subscription_data(data)
 
         import_type = import_type or ""
@@ -559,7 +559,10 @@ class CLICommon:
             if import_type in ["groups", "sites", "mpsk", "mac"]:  # accept yaml/json keyed by name for groups and sites
                 data = [{"name": k, **v} for k, v in data.items()]
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
-                data = [{"serial": k, **v} for k, v in data.items()]
+                if import_type == "variables":
+                    data = list(data.values())
+                else:
+                    data = [{"serial": k, **v} for k, v in data.items()]
         elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
             if import_type == "devices" and utils.is_serial(data[-1]):  # spot check the last key to ensure it looks like a serial
                 data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
@@ -572,6 +575,10 @@ class CLICommon:
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
+            if required_fields:
+                rows_missing_fields = [idx for idx, item in enumerate(data, start=1) if not all([f in item for f in required_fields])]
+                if rows_missing_fields:
+                    self.exit(f"The following entries are missing required fields [dim]({utils.color(required_fields)})[/dim].  {', '.join(map(str, rows_missing_fields))}")
 
         if not data:  # TODO add exit_if_no_data: bool = True to consolidate the check for all functions that use this.  (easier for coverage)
             log.warning("No data after import from file.", caption=True)
@@ -1942,6 +1949,23 @@ class CLICommon:
         resp = api.session.request(api.configuration.update_ap_banner, *args, **kwargs)
         render.display_results(resp, tablefmt="action")
 
+    def batch_add_update_replace_variables(self, import_file: Path, action: APIAction, yes: bool = False):
+        data = utils.listify(self._get_import_file(import_file, "variables", required_fields=["_sys_serial", "_sys_lan_mac"]))
+        replace = action == APIAction.REPLACE
+        action_word = "Add" if action == APIAction.ADD else "Update"  # TODO we could potentially cache all devices that have variables defined, then determine if it should be an update/replace vs add
+
+        render.econsole.print(f"[bright_green]{action_word}{'ing' if yes else ''}[/] variables for {len(data)} devices found in [cyan]{import_file.name}[/]", emoji=False)
+        if replace:
+            render.econsole.print(f"\n[dark_orange3]:warning:[/]  [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: used. [bright_red]All existing variables will be flushed[/] for the {len(data)} devices found in [cyan]{import_file.name}[/]")
+        render.confirm(yes)
+        if action == APIAction.ADD:
+            batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev) for dev in data]
+        else:
+            batch_reqs = [BatchRequest(api.configuration.update_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev, replace=replace) for dev in data]
+
+        batch_resp = api.session.batch_request(batch_reqs)
+        render.display_results(batch_resp, tablefmt="action")
+
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
 
@@ -1993,7 +2017,7 @@ class CLICommon:
                 get_next = False
 
         if len(vars) != len(vals):
-            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")  # pragma: no cover
+            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
 
         return {k: v for k, v in zip(vars, vals)}
 

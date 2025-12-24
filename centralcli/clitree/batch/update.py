@@ -7,6 +7,7 @@ from pathlib import Path
 import typer
 
 from centralcli import common, render
+from centralcli.constants import APIAction
 
 from . import examples
 
@@ -132,11 +133,37 @@ def ap_banner(
     if is_tmp_file:  # pragma: no cover
         banner_file.unlink(missing_ok=True)
 
+@app.command()
+def variables(
+    import_file: Path = common.arguments.get("import_file", help="Path to file with variables"),
+    replace: bool = typer.Option(False, "-R", "--replace", help=f"Replace all existing variables with the variables provided {render.help_block('existing variables are retained unless updated in this payload')}"),
+    show_example: bool = common.options.show_example,
+    yes: bool = common.options.yes,
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Batch update/replace variables for devices based on data from required import file.
+
+    Use [cyan]cencli batch update variables --example[/] to see example import file formats.
+    [italic]Accepts same format as Aruba Central UI, but also accepts .yaml[/]
+
+    [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: Will flush all existing variables (for the devices in the import_file) and replace with the variables from the import_file.
+    By default: Existing variables not in the import_file are left intact.
+    """
+    if show_example:
+        render.console.print(examples.update_variables)
+        return
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch update variables [OPTIONS] [IMPORT_FILE]"))
+
+    action = APIAction.REPLACE if replace else APIAction.UPDATE
+    common.batch_add_update_replace_variables(import_file, action=action, yes=yes)
 
 
 @app.callback()
 def callback():
-    """Batch update devices (GreenLake Inventory) / aps."""
+    """Batch update devices (GreenLake Inventory) / aps / variables."""
     pass
 
 

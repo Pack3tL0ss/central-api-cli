@@ -277,23 +277,49 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
-    def test_update_variable():
+    # TODO need fixture for all devices in test_data file ensure_inv_cache_... etc
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, (test_data["test_devices"]["switch"]["serial"], "mac_auth_ports", "=", "5",), lambda r: "200" in r],
+            [2, (test_data["test_devices"]["switch"]["serial"], "dog=ziva", "--file", test_data["test_devices"]["switch"]["variable_file"],), lambda r: "200" in r],
+            [3, (test_data["test_devices"]["switch"]["serial"], "--file", test_data["test_devices"]["switch"]["variable_file"], "-R"), lambda r: "200" in r],
+        ]
+    )
+    def test_update_variables(idx: int, args: tuple[str], pass_condition: Callable):
         result = runner.invoke(
             app,
             [
                 "update",
                 "variables",
-                test_data["test_devices"]["switch"]["serial"],
-                "mac_auth_ports",
-                "=",
-                "5",
+                *args,
                 "-y"
             ]
         )
-        capture_logs(result, "test_update_variable")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
-        assert "200" in result.stdout
+        assert pass_condition(result.stdout)
+
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, (test_data["test_devices"]["switch"]["serial"], "dog", "=ziva", "--file", test_data["test_devices"]["switch"]["variable_file"],), lambda r: "⚠" in r],
+            [2, (test_data["test_devices"]["switch"]["serial"],), lambda r: "⚠" in r],
+        ]
+    )
+    def test_update_variables_fail(idx: int, args: tuple[str], pass_condition: Callable):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "variables",
+                *args,
+                "-y"
+            ]
+        )
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+        assert result.exit_code == 1
+        assert pass_condition(result.stdout)
 
     def test_update_webhook():
         result = runner.invoke(
