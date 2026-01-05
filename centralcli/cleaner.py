@@ -1674,7 +1674,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
         pretty_data += [ssid_data]
 
     # override default which swaps in unicode checkmark/X (for rich output)
-    if format != "rich" and "disable_ssid" in data[-1].keys():
+    if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
         _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
 
     pretty_data = simple_kv_formatter(pretty_data)
