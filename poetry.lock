@@ -835,6 +835,19 @@ files = [
 ]
 
 [[package]]
+name = "et-xmlfile"
+version = "2.0.0"
+description = "An implementation of lxml.xmlfile for the standard library"
+optional = true
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "extra == \"xlsx\""
+files = [
+    {file = "et_xmlfile-2.0.0-py3-none-any.whl", hash = "sha256:7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"},
+    {file = "et_xmlfile-2.0.0.tar.gz", hash = "sha256:dab3f4764309081ce75662649be815c4c9081e88f0837825f90fd28317d4da54"},
+]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.2"
 description = "Backport of PEP 654 (exception groups)"
@@ -1446,7 +1459,7 @@ version = "0.6.3"
 description = "Facilitate nox integration with uv for Python projects"
 optional = false
 python-versions = ">=3.9"
-groups = ["nox"]
+groups = ["dev", "nox"]
 files = [
     {file = "nox_uv-0.6.3-py3-none-any.whl", hash = "sha256:650cc4dafcde281a77d0526ac9ff9c92de5cd7759ecc9fdbf98393e4ab24490f"},
     {file = "nox_uv-0.6.3.tar.gz", hash = "sha256:7940dc4fed7326d00c9687d6dac65d625db21064dd02631af64cfdfa738e817b"},
@@ -1509,6 +1522,22 @@ files = [
 rsa = ["cryptography (>=3.0.0)"]
 signals = ["blinker (>=1.4.0)"]
 signedtoken = ["cryptography (>=3.0.0)", "pyjwt (>=2.0.0,<3)"]
+
+[[package]]
+name = "openpyxl"
+version = "3.1.5"
+description = "A Python library to read/write Excel 2010 xlsx/xlsm files"
+optional = true
+python-versions = ">=3.8"
+groups = ["main"]
+markers = "extra == \"xlsx\""
+files = [
+    {file = "openpyxl-3.1.5-py2.py3-none-any.whl", hash = "sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2"},
+    {file = "openpyxl-3.1.5.tar.gz", hash = "sha256:cf0e3cf56142039133628b5acffe8ef0c12bc902d2aadd3e0fe5878dc08d1050"},
+]
+
+[package.dependencies]
+et-xmlfile = "*"
 
 [[package]]
 name = "packaging"
@@ -2508,6 +2537,9 @@ files = [
     {file = "tablib-3.6.1.tar.gz", hash = "sha256:040685fde11e9237675f43e985edb94b63250a5e9236f89d561ce6fb1465b839"},
 ]
 
+[package.dependencies]
+openpyxl = {version = ">=2.6.0", optional = true, markers = "extra == \"xlsx\""}
+
 [package.extras]
 all = ["odfpy", "openpyxl (>=2.6.0)", "pandas", "pyyaml", "tabulate", "xlrd", "xlwt"]
 cli = ["tabulate"]
@@ -2825,8 +2857,9 @@ propcache = ">=0.2.0"
 [extras]
 hook-proxy = ["fastapi", "psutil", "uvicorn"]
 speedups = ["Brotli", "aiodns", "brotlicffi", "pycares"]
+xlsx = ["tablib"]
 
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<4.0"
-content-hash = "6572ae8b74a6c4e6b889dfb0b21746c47af7242ccb981b3be080154d8e956d3c"
+content-hash = "2f4074967737cd5e9ef4dce3708b97fa31f5c31649728e6d07c1b67f2409ac09"
