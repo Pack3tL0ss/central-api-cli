@@ -220,15 +220,16 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "args",
+        "idx,args",
         [
-            (test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk"),
-            (test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk"),
+            [1, (test_data["update_wlan"]["ssid"], "--psk", "cencli_test_psk")],
+            [2, (test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--psk", "cencli_test_psk")],
+            [3, (test_data["update_wlan"]["ssid"], test_data["update_wlan"]["group"], "--hide")],
         ]
     )
-    def test_update_wlan(args: tuple[str]):
+    def test_update_wlan(idx: int, args: tuple[str]):
         result = runner.invoke(app, ["update",  "wlan", *args, "-y"])
-        capture_logs(result, "test_upgrade_wlan")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
 
@@ -276,6 +277,27 @@ if config.dev.mock_tests:
         capture_logs(result, "test_update_template")
         assert result.exit_code == 0
         assert "200" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "idx,args",
+        [
+            [1, (test_data["switch"]["ip"], test_data["template"]["template_file"],)],
+        ]
+    )
+    def test_update_template_fail(idx: int, args: tuple[str]):
+        result = runner.invoke(
+            app,
+            [
+                "update",
+                "template",
+                *args,
+                "--yes",
+            ]
+        )
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
 
     # TODO need fixture for all devices in test_data file ensure_inv_cache_... etc
     @pytest.mark.parametrize(
@@ -343,7 +365,7 @@ if config.dev.mock_tests:
             [1, "ensure_cache_group_cloned", ("--gw", "--sw"), None],
             [2, "ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
             [3, "ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
-            [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10",), "cx_only"],
+            [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--gw", "--gw-role", "vpnc"), "cx_only"],
             [5, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--mb"), "cx_only"],
         ]
     )
@@ -451,7 +473,16 @@ if config.dev.mock_tests:
         assert "⚠" in result.stdout
 
 
-    def test_update_guest_disable(ensure_cache_guest1):
+    @pytest.mark.parametrize(
+        "idx,args",
+        [
+            [1, ("-D",)],
+            [2, ("-E",)],
+            [3, ("--password", "cencli-test-pass")],
+            [4, ("--phone", test_data["portal"]["guest"]["phone"])],
+        ]
+    )
+    def test_update_guest(ensure_cache_guest1, idx: int, args: tuple[str]):
         result = runner.invoke(
             app,
             [
@@ -459,44 +490,11 @@ if config.dev.mock_tests:
                 "guest",
                 test_data["portal"]["name"],
                 test_data["portal"]["guest"]["name"],
-                "-DY",
-            ]
-        )
-        capture_logs(result, "test_update_guest_disable")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-
-    def test_update_guest_enable(ensure_cache_guest1):
-        result = runner.invoke(
-            app,
-            [
-                "update",
-                "guest",
-                test_data["portal"]["name"],
-                test_data["portal"]["guest"]["name"],
-                "-EY",
-            ]
-        )
-        capture_logs(result, "test_update_guest_enable")
-        assert result.exit_code == 0
-        assert "200" in result.stdout
-
-
-    def test_update_guest_phone(ensure_cache_guest1):
-        result = runner.invoke(
-            app,
-            [
-                "update",
-                "guest",
-                test_data["portal"]["name"],
-                test_data["portal"]["guest"]["name"],
-                "--phone",
-                test_data["portal"]["guest"]["phone"],
+                *args,
                 "-Y",
             ]
         )
-        capture_logs(result, "test_update_guest_phone")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
@@ -523,6 +521,7 @@ if config.dev.mock_tests:
             [1, "ensure_cache_group4", ("cencli_test_group4", "--ap"), None],
             [2, "ensure_cache_group4", ("cencli_test_group4", str(test_ap_ui_group_variables), "--ap"), None],
             [3, ["ensure_cache_group1", "ensure_dev_cache_test_ap"], ("cencli-test-ap", "--banner-file", str(test_banner_file)), None],
+            [4, None, (test_data["aos8_ap"]["name"], "--ap"), None],
         ]
     )
     def test_update_config(fixtures: str | list[str] | None, idx: int, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
@@ -548,22 +547,22 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,fixture,args",
         [
-            [1, None, (test_data["ap"]["serial"], "--gw")],
-            [2, None, (test_data["gateway"]["serial"], "--ap")],
-            [3, "ensure_cache_group4", ("cencli_test_group4",)],
-            [4, None, (test_data["gateway"]["serial"], "--banner-file", str(test_banner_file))],
+            [1, None, (test_data["ap"]["serial"], str(test_ap_ui_group_template), "--gw")],
+            [2, None, (test_data["gateway"]["serial"], str(test_ap_ui_group_template), "--ap")],
+            [3, "ensure_cache_group4", ("cencli_test_group4", str(test_ap_ui_group_template))],  # --ap or --gw must be supplied for group level
+            [4, "ensure_cache_group4", ("cencli_test_group4",)],
+            [5, None, (test_data["gateway"]["serial"], "--banner-file", str(test_banner_file))],
         ]
     )
     def test_update_config_invalid(fixture: str | None, idx: int, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             request.getfixturevalue(fixture)
-        _args = args if "--banner-file" in args else [args[0], str(test_ap_ui_group_template), *args[1:]]
         result = runner.invoke(
             app,
             [
                 "update",
                 "config",
-                *_args,
+                *args,
             ]
         )
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
@@ -579,6 +578,7 @@ if config.dev.mock_tests:
             [3, ["ensure_cache_cert", "ensure_cache_group4"], ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r], # invalid group (no aps/gws)
             [4, ["ensure_cache_cert_same_as_existing", "ensure_cache_group1"], ("cencli_test-existing-cert", "-G", "cencli_test_group1",), True, lambda r: "skipped" in r], # cert same as existing
             [5, ["ensure_cache_cert_expired", "ensure_cache_group1"], ("cencli-test-expired-cert", "-G", "cencli_test_group1",), True, lambda r: "xpired" in r], # cert expired
+            [6, ["ensure_cache_cert"], ("cencli_test", "all",), False, lambda r: "200" in r],
         ]
     )
     def test_update_cp_cert(idx: int, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):

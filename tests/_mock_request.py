@@ -18,6 +18,7 @@ from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, Conte
 from aiohttp.client_reqrep import ConnectionKey
 from aiohttp.http_exceptions import ContentLengthError
 from pathlib import Path
+import re
 
 from centralcli import config, log, utils
 from centralcli.environment import env
@@ -134,35 +135,91 @@ class TestResponses:
             # Render the template with the dates
             return json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months))
 
-    def _get_candidates(self, key: str) -> dict[str, Any]:  # LEFT-OFF-HERE  Add support for regex match of url key str within test block  i.e. "GET_/configuration/v1/ap_settings_cli/.*"
+    @staticmethod
+    def _adjust_payload(res: dict, url_path: str) -> dict:
+        if isinstance(res.get("payload"), str) and res.get("url", "").split("/")[-1] == res["payload"]:
+            res["payload"] = url_path.split("/")[-1]
+
+        return res
+
+    def _get_candidates(self, key: str) -> dict[str, Any]:
         parts = key.split("_")
         method = parts[0]
         url = "_".join(parts[1:])
         path = url.split("?")[0]
 
+        # If there are per-test responses configured, try exact match first, then regex match
         if env.current_test in self.responses:
-            if key in self.responses[env.current_test]:
-                if isinstance(self.responses[env.current_test][key], str):
-                    if self.responses[env.current_test][key] == "ClientConnectorError":
+            per_map = self.responses[env.current_test]
+            matched_val = None
+
+            if key in per_map:
+                matched_val = per_map[key]
+            else:
+                for pattern in per_map.keys():
+                    try:
+                        if re.fullmatch(pattern, key):
+                            matched_val = per_map[pattern]
+                            break
+                    except re.error:
+                        # ignore invalid regex patterns
+                        continue
+
+            if matched_val is not None:
+                if isinstance(matched_val, str):
+                    if matched_val == "ClientConnectorError":
                         con_key = ConnectionKey(host=Path(config.base_url).name, port=443, proxy=None, proxy_auth=None, is_ssl=True, ssl=True, proxy_headers_hash=None)
                         raise ClientConnectorError(connection_key=con_key, os_error=OSError())
-                    elif self.responses[env.current_test][key] == "ContentLengthError":
+                    elif matched_val == "ContentLengthError":
                         raise ContentLengthError("mock content length error")
                     else:  # pragma: no cover
-                        raise str_to_exc[self.responses[env.current_test][key]]
+                        raise str_to_exc[matched_val]
 
-                candidates = utils.listify(self.responses[env.current_test][key])
-                return (True, [{**c, "url": path, "method": method} for c in candidates])
+                candidates = utils.listify(matched_val)
+                return (True, [{**self._adjust_payload(c, url_path=path), "url": path, "method": method} for c in candidates])
 
         key = url.replace("/", "_").lstrip("_")
-        ok_responses = self.responses["ok_responses"]
+        ok_responses = self.responses.get("ok_responses", {})
+
         # strip audit_trail id from url, so any id will match.  this is for showing audit details for a specific log id.
         if "_audit_trail_" in key:
             key = f'{key.split("_audit_trail_")[0]}_audit_trail_'
-            return (False, [ok_responses[method][[k for k in ok_responses[method].keys() if key in k][0]]])
+            candidates = [v for k, v in ok_responses.get(method, {}).items() if key in k]
+            return (False, [candidates[0]]) if candidates else (False, [])
 
-        res = ok_responses[method].get(key, self.responses["failed_responses"].get(method, {}).get(key))
-        return (False, []) if not res else (False, [{**res, "url": path, "method": method}])
+        # Try exact match, then regex match in ok_responses for this method
+        matched_res = None
+        method_map = ok_responses.get(method, {})
+        if key in method_map:
+            matched_res = method_map[key]
+        else:
+            for pattern, val in method_map.items():
+                try:
+                    if re.fullmatch(pattern, key):
+                        matched_res = val
+                        break
+                except re.error:
+                    continue
+
+        # If not found in ok_responses, try failed_responses for the method
+        if not matched_res:
+            failed_map = self.responses.get("failed_responses", {}).get(method, {})
+            if key in failed_map:
+                matched_res = failed_map[key]
+            else:
+                for pattern, val in failed_map.items():
+                    try:
+                        if re.fullmatch(pattern, key):
+                            matched_res = val
+                            break
+                    except re.error:
+                        continue
+
+        if not matched_res:
+            return (False, [])
+
+        res = self._adjust_payload(matched_res, url_path=path)
+        return (False, [{**res, "url": path, "method": method}])
 
     @property
     def unused(self) -> list[str]:  # pragma: no cover

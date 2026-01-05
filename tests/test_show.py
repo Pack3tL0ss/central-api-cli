@@ -535,6 +535,7 @@ def test_show_dhcp_pools_gw():
         [9, (test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
         [10, (test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
         [11, ("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
+        [12, ("--group", test_data["switch"]["group"].swapcase(), "--switch", "-v"), lambda r: "API" in r and "Counts" in r],
 
     ]
 )
@@ -1786,7 +1787,7 @@ def test_show_webhooks():
     [
         [1, None, ()],
         [2, None, ("-v",)],
-        [3, None, ("--group", test_data["ap"]["group"])],
+        [3, None, ("--group", test_data["ap"]["group"], "--csv")],
         [4, None, (test_data["tunneled_ssid"]["ssid"],)],
         [5, None, ("--swarm", test_data["aos8_ap"]["name"])],
         [6, None, ("--site", test_data["ap"]["site"])],
