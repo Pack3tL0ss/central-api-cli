@@ -86,6 +86,7 @@ pytest-cov = ">=6.2.1"
 nox = ">=2025.5.1"
 pytest-asyncio = ">=1.2.0"
 jsonref = ">=1.1.0"
+nox-uv = ">=0.6.3"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
