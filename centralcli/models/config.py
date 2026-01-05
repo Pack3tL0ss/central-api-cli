@@ -56,6 +56,10 @@ class Glp(BaseModel):
 class Central(BaseModel):  # New Central
     base_url: Optional[str] = None
 
+    @property
+    def ok(self) -> bool:
+        return self.base_url is not None
+
 
 class Tokens(BaseModel):
     access: Optional[str] = Field(..., alias=AliasChoices("access", "access_token", "access-token"))

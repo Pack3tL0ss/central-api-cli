@@ -9,7 +9,6 @@ from typing import Any, Dict, List, Literal, Union
 
 from aiohttp import ClientResponse
 from rich.console import Console
-from rich.text import Text
 from yarl import URL
 
 from centralcli import config, log, utils
@@ -156,7 +155,7 @@ class Response:
         self.caption = caption
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
-            self.error = response.reason or "OK" if response.ok else "ERROR"  # visualrf does not send OK for reason when call is successful
+            self.error = response.reason or ("OK" if response.ok else "ERROR")  # visualrf does not send OK for reason when call is successful
             if isinstance(response, ClientResponse):
                 self.status = response.status
                 self.method = response.method
@@ -330,7 +329,7 @@ class Response:
 
             if data:
                 r = render.output([data], tablefmt="yaml")
-                r = Text.from_ansi(r.tty)
+                # r = Text.from_ansi(r.tty)  # now yaml now set r.tty to rich.Text
                 r = "\n".join([f"  {line}" for line in str(r).splitlines()])
             else:
                 emoji = '\u2139' if self.ok else '\u26a0'

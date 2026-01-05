@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
+import string
+import binascii
+import urllib
 from dataclasses import dataclass
 from datetime import datetime
-from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union, Self
+from functools import cached_property
 
 import pendulum
 import typer
@@ -19,16 +22,20 @@ from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
+from rich.traceback import install
+from rich.table import Table
+from rich.box import HORIZONTALS
+from pydantic import BaseModel
 
 from centralcli import config, log, render, utils
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import dynamic_antenna_models, flex_dual_models
+from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction, MacFormat
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
 from centralcli.utils import ToBool
 
-from .classic.api import ClassicAPI
+from . import api_clients
 from .client import BatchRequest, Session
 from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
@@ -39,13 +46,221 @@ from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
     from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
-    from centralcli.typedefs import CacheTableName, LogType, SendConfigTypes
+    from centralcli.typedefs import ImportType, LogType, SendConfigTypes
 
+install(show_locals=True)
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
-api = ClassicAPI()
+api = api_clients.classic
+
+
+class VendorDetails(BaseModel):
+    oui: str
+    companyName: str
+    companyAddress: str
+    countryCode: str
+
+class BlockDetails(BaseModel):
+    blockSize: int
+    dateCreated: str
+
+class MacDetails(BaseModel):
+    wiresharkNotes: str
+    isValid: bool
+
+class Vendor(BaseModel):
+    vendor_details: VendorDetails
+    block_details: BlockDetails
+    mac_details: MacDetails
+
+class Convert:
+    def __init__(self, mac: str, fuzzy: bool = False):
+        self.orig = mac
+        if not mac:
+            mac = '0'
+        if not fuzzy:
+            self.clean = ''.join([c for c in list(mac) if c in string.hexdigits])
+            self.ok = True if len(self.clean) == 12 else False
+        else:
+            for delim in list('.-:'):
+                mac = mac.replace(delim, '')
+
+            self.clean = mac
+            if len([c for c in list(self.clean) if c in string.hexdigits]) == len(self):
+                self.ok = True
+            else:
+                self.ok = False
+
+    @staticmethod
+    def _do_format(mac: str, delim: str = ":", chunk_size: int = 2) -> str:
+        for _delim in list('.-:'):
+            clean = mac.replace(_delim, '')
+        cols = delim.join(clean[i:i+chunk_size] for i in range(0, len(clean), chunk_size))
+        if cols.strip().endswith(delim):  # handle macs starting with 00 for oobm
+            cols = f"00:{cols.strip().rstrip(delim)}"
+        return cols
+
+    @property
+    def cols(self) -> str:
+        return self._do_format(self.clean)
+
+    @property
+    def dashes(self) -> str:
+        return self._do_format(self.clean, delim="-")
+        # return '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+
+    @property
+    def dots(self) -> str:
+        return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+
+    @property
+    def dec(self) -> int:
+        try:
+            return 0 if not self.ok else int(self.clean, 16)
+        except ValueError:
+            return 0
+
+    @property
+    def url(self) -> str:
+        return urllib.parse.quote_plus(self.cols)  # type: ignore
+
+    def __len__(self):
+        return len(self.clean)
+
+    @cached_property
+    def bssids(self) -> dict[str, list[str]] | str:
+        if not self.ok:
+            return "Invalid MAC"
+        oui = self.clean[0:6]
+        # work on last 3 octets of MAC
+        end_part = self.clean.removeprefix(oui)
+        # drop the first nibble and shift everything left, then add a 0 at end
+        end_part = f"{end_part[1:]}0"
+        # XOR the new first nibble with an 8
+        first_nibble = hex(int(end_part[0], 16) ^ 8).removeprefix("0x")
+        radio0_mac = f"{oui}{first_nibble}{end_part[1:]}"
+        radio0_dec = int(radio0_mac, 16)
+        radio1_dec = radio0_dec + 16
+        radio2_dec = radio1_dec + 16
+        radio_macs = [list(map(lambda m: hex(m).removeprefix("0x"), range(base, base + 16))) for base in {radio0_dec, radio1_dec, radio2_dec}]
+
+        return {
+            "radio 0": [self._do_format(m, delim="-") for m in radio_macs[0]],
+            "radio 1": [self._do_format(m, delim="-") for m in radio_macs[1]],
+            "radio 2": [self._do_format(m, delim="-") for m in radio_macs[2]],
+        }
+
+
+
+
+class Mac(Convert):
+    def __init__(self, mac: str | bytes, vendor_lookup: bool = False, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
+        if isinstance(mac, bytes):
+            mac: str = binascii.hexlify(mac).decode('utf-8')
+        super().__init__(mac, fuzzy=fuzzy)
+        oobm = hex(self.dec + 1).lstrip('0x')
+        self.oobm = Convert(oobm)
+        self.plus_one = Convert(oobm).cols.replace("      ", "  ")
+        self.mac_range = mac_range
+        self.range_format = range_format
+        self.do_bssids = bssids
+        self.num_bssids = num_bssids
+        self.tablefmt = tablefmt or "table"
+        self._show_mac_info = show_mac_info
+
+        if vendor_lookup:
+            if config.lookup_configured:
+                # TODO each attribute has lower <8 spaces> upper as a single string.  refactor so each has own attr
+                self.vendor = asyncio.run(self.get_vendor(self.clean.split()[0]))
+            else:
+                self.vendor = f"  Vendor Lookup Not Possible please configure macaddress.io:api_key in {config.file}"
+        else:
+            self.vendor: Vendor = None
+
+    def __bool__(self):
+        return self.ok
+
+    def __eq__(self, value: str | Self):
+        other = value if isinstance(value, Mac) else Convert(value)
+        return other.dec == self.dec
+
+    def __hash__(self):
+        return self.dec
+
+    def get_range(self, items: int = 10, mac_format: MacFormat = MacFormat.cols):
+        mac_objects = [Convert(hex(mac_dec).lstrip("0x")) for mac_dec in range(self.dec, self.dec + items)]
+        if mac_format.upper() == MacFormat.OBJECT:
+            return mac_objects
+
+        mac_format = mac_format if isinstance(mac_format, MacFormat) else MacFormat(mac_format)
+        case_func = str.lower if mac_format.value.islower() else str.upper
+        return list(map(case_func, [getattr(mac, mac_format.value.lower()) for mac in mac_objects]))
+
+    @staticmethod
+    def _lower_upper(value: str) -> str:
+        return f"{value:<19}{value.upper()}"
+
+    def __str__(self):
+        out_str = ""
+        if self._show_mac_info:
+            out_dict = {
+                "valid": self.ok,
+                "clean": self.clean,
+                "cols": self.cols,
+                "dashes": self.dashes,
+                "dots": self.dots,
+                "plus_one": self.plus_one,
+                "dec": self.dec
+            }
+            omit = ["valid", "dec"]
+            mac_info = [f"{k:>8}: {v if k in omit else self._lower_upper(v)}" for k, v in out_dict.items()]
+            title = f"Mac Address Details for {self.cols}"
+            line = f'[dark_olive_green2]{"-" * 52}[/]'
+            out_str = render.rich_capture("\n".join([line, f"[magenta]{title:^52}[/]", line, *mac_info]) + "\n")
+
+            if self.vendor:
+                out_str += f"\n\n{self.vendor}"
+
+            if self.mac_range:
+                console = Console(emoji=False)
+                with console.capture() as cap:
+                    mac_range = "\n".join(self.get_range(self.mac_range, self.range_format))
+                    console.print(f"[magenta]Mac Range with [cyan]{self.mac_range}[/] Addresses[/]\n{mac_range}")
+                out_str += f"\n{cap.get()}"
+
+        if self.do_bssids:
+            if not self.ok:
+                out_str += render.rich_capture(f"[dark_orange3]\u26a0[/]  Unable to generate BSSIDs {self.orig} does not appear to be a valid MAC address")  # \u26a0 is warning emoji
+                if Path(self.orig).exists():
+                    out_str += render.rich_capture(f"\n[italic][deep_sky_blue]\u2139[/]  Use [cyan]--file[/] {self.orig} to generate BSSIDs from file.")  # \u2139 = is information emoji
+            else:
+                console = Console(emoji=False)
+                if self.tablefmt != "vertical":
+                    table = Table(
+                        show_header=True,
+                        title=f"[magenta]Radio MACs (first bssid) given Ethernet MAC[/] [cyan]{self.cols}[/]",
+                        header_style='magenta',
+                        show_lines=False,
+                        box=HORIZONTALS,
+                        row_styles=['none', 'dark_sea_green'],
+                    )
+
+                    _ = [table.add_column(head) for head in self.bssids.keys()]
+                    _ = [table.add_row(*["\n".join(row_data) for row_data in self.bssids.values()])]
+
+                    with console.capture() as cap:
+                        console.print(table)
+                    out_str += f"\n{cap.get()}"
+                else:
+                    with console.capture() as cap:
+                        console.print(f"[magenta]Radio MACs (first bssid) given Ethernet MAC[/] [cyan]{self.cols}[/]")
+                        [console.print(bssid) for radio_bssid_list in self.bssids.values() for bssid in radio_bssid_list[0:self.num_bssids]]
+
+                    out_str += f"\n{cap.get()}"
+
+        return out_str
 
 
 class MoveData:
@@ -122,17 +337,6 @@ class PreConfig:
     dev_type: Literal["ap", "gw"]
     config: str
     request: BatchRequest
-
-
-class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-
-    @cached_property
-    def classic(self):
-        return ClassicAPI(config.classic.base_url)
-
-    @cached_property
-    def glp(self):
-        return None if not config.glp.ok else GreenLakeAPI(config.glp.base_url)
 
 
 class CLICommon:
@@ -546,14 +750,14 @@ class CLICommon:
 
         return devices
 
-    def _get_import_file(self, import_file: Path = None, import_type: CacheTableName = None, subscriptions: bool = False, text_ok: bool = False,) -> list[dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: ImportType = None, subscriptions: bool = False, text_ok: bool = False, required_fields: list[str] = None) -> list[dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
                 data = config.get_file_data(import_file, text_ok=text_ok)
-            except UserWarning as e:
+            except Exception as e:
                 log.exception(e)
-                self.exit(e)
+                self.exit(repr(e))
 
         if not data:
             self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -561,7 +765,7 @@ class CLICommon:
         if isinstance(data, dict) and import_type and import_type in data:
             data = data[import_type]
 
-        if subscriptions:
+        if subscriptions:  # import type can be devices, still need to parse sub data
             data = self._parse_subscription_data(data)
 
         import_type = import_type or ""
@@ -569,7 +773,10 @@ class CLICommon:
             if import_type in ["groups", "sites", "mpsk", "mac"]:  # accept yaml/json keyed by name for groups and sites
                 data = [{"name": k, **v} for k, v in data.items()]
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
-                data = [{"serial": k, **v} for k, v in data.items()]
+                if import_type == "variables":
+                    data = list(data.values())
+                else:
+                    data = [{"serial": k, **v} for k, v in data.items()]
         elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
             if import_type == "devices" and utils.is_serial(data[-1]):  # spot check the last key to ensure it looks like a serial
                 data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
@@ -582,6 +789,10 @@ class CLICommon:
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
+            if required_fields:
+                rows_missing_fields = [idx for idx, item in enumerate(data, start=1) if not all([f in item for f in required_fields])]
+                if rows_missing_fields:
+                    self.exit(f"The following entries are missing required fields [dim]({utils.color(required_fields)})[/dim].  {', '.join(map(str, rows_missing_fields))}")
 
         if not data:  # TODO add exit_if_no_data: bool = True to consolidate the check for all functions that use this.  (easier for coverage)
             log.warning("No data after import from file.", caption=True)
@@ -1917,6 +2128,58 @@ class CLICommon:
         render.display_results([*batch_resp, *reboot_resp], tablefmt="action", caption=caption)
         self.exit(code=0 if all([r.ok for r in [*batch_resp, *reboot_resp]]) else 1)
 
+    @staticmethod
+    def get_banner_from_user() -> Path:
+        banner_text = utils.get_multiline_input("[bright_green]Paste desired banner text into terminal[/]...")
+        print()  # move cursor past ^D line
+        temp_file = config.cache_dir / ("banner" if "{{" not in banner_text else "banner.j2")
+        temp_file.write_text(banner_text)
+
+        return temp_file
+
+    def batch_update_ap_banner(self, data: list | dict, banner_file: Path, *, group_level: bool = False, yes: bool = False):
+        iden_field = "serial" if not group_level else "name"
+        update_word = "APs" if not group_level else "Groups"
+        raw_banner_text = banner_file.read_text()
+        data = utils.listify(data)
+        if len(data) == 1:
+            update_word = update_word.rstrip("s")
+
+        if banner_file.suffix == ".j2":
+            args = ()
+            kwargs = {"as_dict": {d[iden_field]: utils.generate_template(banner_file, config_data=d) for d in data}}
+            conf_msg_banner = f'{kwargs["as_dict"][data[-1][iden_field]]}'
+            if len(data) > 1:
+                conf_msg_banner = f'{conf_msg_banner}\n[dark_olive_green2 italic]Showing converted banner for one of provided {update_word}.[/]'
+        else:
+            args = ([d[iden_field] for d in data],)
+            kwargs = {"banner": raw_banner_text}
+            conf_msg_banner = raw_banner_text
+
+
+        render.econsole.print(f"Update AP banner text for the following {update_word}: {utils.summarize_list([d[iden_field] for d in data])}")
+        render.econsole.print(f"[bright_green]With the following banner[/]:\n[reset]{conf_msg_banner}")
+        render.confirm(yes)
+        resp = api.session.request(api.configuration.update_ap_banner, *args, **kwargs)
+        render.display_results(resp, tablefmt="action")
+
+    def batch_add_update_replace_variables(self, import_file: Path, action: APIAction, yes: bool = False):
+        data = utils.listify(self._get_import_file(import_file, "variables", required_fields=["_sys_serial", "_sys_lan_mac"]))
+        replace = action == APIAction.REPLACE
+        action_word = "Add" if action == APIAction.ADD else "Update"  # TODO we could potentially cache all devices that have variables defined, then determine if it should be an update/replace vs add
+
+        render.econsole.print(f"[bright_green]{action_word}{'ing' if yes else ''}[/] variables for {len(data)} devices found in [cyan]{import_file.name}[/]", emoji=False)
+        if replace:
+            render.econsole.print(f"\n[dark_orange3]:warning:[/]  [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: used. [bright_red]All existing variables will be flushed[/] for the {len(data)} devices found in [cyan]{import_file.name}[/]")
+        render.confirm(yes)
+        if action == APIAction.ADD:
+            batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev) for dev in data]
+        else:
+            batch_reqs = [BatchRequest(api.configuration.update_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev, replace=replace) for dev in data]
+
+        batch_resp = api.session.batch_request(batch_reqs)
+        render.display_results(batch_resp, tablefmt="action")
+
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
 
@@ -1942,7 +2205,11 @@ class CLICommon:
         except KeyboardInterrupt:
             self.exit(" ", code=0)  # The empty string is to advance a line so ^C is not displayed before the prompt
         except Exception as e:
-            self.exit(str(e))
+            from rich import print
+            from rich.traceback import Traceback
+            with log.log_file.open("a") as file:
+                print(Traceback(), file=file)
+            self.exit(repr(e))
 
     def parse_var_value_list(self, var_value: list[str, str], *, error_name: str = "variables") -> dict[str, str]:
         vars, vals, get_next = [], [], False
@@ -1964,7 +2231,7 @@ class CLICommon:
                 get_next = False
 
         if len(vars) != len(vals):
-            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")  # pragma: no cover
+            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
 
         return {k: v for k, v in zip(vars, vals)}
 

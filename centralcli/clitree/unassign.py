@@ -6,18 +6,15 @@ from datetime import datetime
 
 import typer
 
-from centralcli import common, log, render, utils
+from centralcli import api_clients, common, log, render, utils
 from centralcli.cache import CacheDevice, CacheLabel, CacheSub
-from centralcli.clicommon import APIClients
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
 from centralcli.objects import DateTime
 
-api_clients = APIClients()
+app = typer.Typer()
 api = api_clients.classic
 glp_api = api_clients.glp
-
-app = typer.Typer()
 
 
 # TOGLP

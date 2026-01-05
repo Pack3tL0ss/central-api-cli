@@ -284,4 +284,3 @@ class ShowInterfaceFilters:
             self._error += ["[cyan]--down[/] & [cyan]--fast[/]|[cyan]-f[/] or [cyan]--slow[/]|[cyan]-s[/]"]
 
         return valid
-

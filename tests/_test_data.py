@@ -40,6 +40,15 @@ caas_commands_gateways_data  = """gateways:
   - mock-gw
 """
 
+banner_text_j2 = r"""
+banner motd "___       __      _________    ______        ______"
+banner motd "__ |     / /_____ ______  /_______  / ______ ___  /_"
+banner motd "__ | /| / /_  __ `/  __  /_  _ \_  /  _  __ `/_  __ \"
+banner motd "__ |/ |/ / / /_/ // /_/ / /  __/  /___/ /_/ /_  /_/ /"
+banner motd "____/|__/  \__,_/ \__,_/  \___//_____/\__,_/ /_.___/"
+banner motd "Connected To: {{ name }} AP"
+"""
+
 
 caas_file_data = {
     "groups": caas_commands_group_data,
@@ -137,6 +146,34 @@ def _create_test_ap_import_file(test_data: dict[str, str]):
 
     return test_batch_file
 
+def _create_banner_update_import_devices(test_data: dict[str, str]):
+    test_batch_file = config.cache_dir / "test_runner_device_banner_ap_import_file.csv"
+    header = ",".join(test_data.keys())
+    values = ",".join([test_data[key] for key in header.split(",")])
+    test_batch_file.write_text(f"{header}\n{values}\n")
+
+    return test_batch_file
+
+def _create_banner_update_import_groups():
+    test_batch_file = config.cache_dir / "test_runner_group_banner_ap_import_file.csv"
+    header = "name,"
+    values = ",\n".join(map(lambda g: f"cencli_test_group{g}", [1, 2, 3]))
+    test_batch_file.write_text(f"{header}\n{values},\n")
+
+    return test_batch_file
+
+def _create_banner_file(template: bool = True):
+    if template:
+        test_batch_file = config.cache_dir / "test_runner_ap_banner.j2"
+        test_batch_file.write_text(banner_text_j2.lstrip())
+    else:
+        test_batch_file = config.cache_dir / "test_runner_ap_banner"
+        file_data = "\n".join([line.removeprefix('banner motd "').rstrip('"') for line in banner_text_j2.lstrip().splitlines() if "{{" not in line])
+        file_data = f"{file_data.strip()}\n"
+        test_batch_file.write_text(file_data)
+
+    return test_batch_file
+
 
 def _create_caas_commands_file(scope: Literal["groups", "sites", "gateways", "invalid", "empty"]) -> Path:
     commands_file = config.cache_dir / f"test_runner_caas_{scope}.yaml"
@@ -148,10 +185,15 @@ def _create_caas_commands_file(scope: Literal["groups", "sites", "gateways", "in
     return commands_file
 
 
-def _create_invalid_var_file(file: str) -> Path:
+def _create_invalid_var_file(file: str, bad_json: bool = False) -> Path:
     var_file = Path(file)
-    test_var_file = config.cache_dir / f"test_runner_invalid_variables{var_file.suffix}"
-    test_var_file.write_text("".join([line for line in var_file.read_text().splitlines(keepends=True) if "_sys_lan_mac" not in line]))
+    test_var_file = config.cache_dir / f"test_runner_invalid_variables{'_bad_json' if bad_json else ''}{var_file.suffix}"
+    file_data = "".join([line for line in var_file.read_text().splitlines(keepends=True) if "_sys_lan_mac" not in line])
+    if bad_json:
+        test_var_file.write_text(file_data.lstrip("{").lstrip("["))
+    else:
+        test_var_file.write_text(file_data)
+
     return test_var_file
 
 
@@ -251,6 +293,7 @@ test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"]["pem"]
 test_cert_file_p12: Path = setup_cert_file(cert_path=test_data["certificate"]["p12"], sfx="p12")
 test_cert_file_der: Path = setup_cert_file(cert_path=test_data["certificate"]["der"], sfx="der")
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
+test_invalid_var_file_bad_json = _create_invalid_var_file(test_data["template"]["variable_file"], bad_json=True)
 test_switch_var_file_json = create_var_file(test_data["test_devices"]["switch"]["variable_file"])
 test_switch_var_file_flat = create_var_file(test_data["test_devices"]["switch"]["variable_file"], flat=True)
 test_switch_var_file_csv = create_var_file(test_data["test_devices"]["switch"]["variable_file"], file_type="csv")
@@ -263,6 +306,10 @@ test_caas_groups_commands_file = _create_caas_commands_file("groups")
 test_caas_sites_commands_file = _create_caas_commands_file("sites")
 test_caas_invalid_commands_file = _create_caas_commands_file("invalid")
 test_caas_empty_commands_file = _create_caas_commands_file("empty")
+test_banner_file_j2 = _create_banner_file()
+test_banner_file = _create_banner_file(template=False)
+test_banner_devices_file = _create_banner_update_import_devices(test_data["test_devices"]["ap"])
+test_banner_groups_file = _create_banner_update_import_groups()
 # Persistent files, not deleted
 test_ap_ui_group_template = Path(test_data["template"]["ap_ui_group"]["template_file"])
 test_ap_ui_group_variables = Path(test_data["template"]["ap_ui_group"]["variable_file"])
@@ -289,7 +336,6 @@ test_files = [
     test_invalid_var_file,
     test_label_file,
     test_sub_file_yaml,
-    test_sub_file_csv,
     test_deploy_file,
     test_j2_file,
     test_update_aps_file,
@@ -303,4 +349,8 @@ test_files = [
     test_caas_empty_commands_file,
     test_cloud_auth_mac_file,
     test_cloud_auth_mac_file_invalid,
+    test_banner_file_j2,
+    test_banner_file,
+    test_banner_devices_file,
+    test_banner_groups_file,
 ]

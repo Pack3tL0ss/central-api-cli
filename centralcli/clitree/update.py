@@ -10,7 +10,7 @@ import yaml
 from rich.markup import escape
 from rich.text import Text
 
-from centralcli import cleaner, common, log, render, utils
+from centralcli import cleaner, common, log, render, utils, config
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
 from centralcli.client import BatchRequest
@@ -104,31 +104,50 @@ def template(
         _ = api.session.request(common.cache.update_template_db, data=cache_template.data)
 
 
-@app.command(help="Update existing or add new Variables for a device/template")
+@app.command()
 def variables(
-    device: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
-    var_value: list[str] = typer.Argument(..., help="comma seperated list 'variable = value, variable2 = value2'", show_default=False,),
+    device: str = common.arguments.device,
+    var_value: list[str] = typer.Argument(None, help=f"comma seperated list 'variable = value, variable2 = value2' [dim]{escape('[')}[red]required[/red] unless [cyan]--var-file[/] is specified{escape(']')}[/dim]", show_default=False,),
+    var_file:  Path = typer.Option(None, "-F", "--file", help="Path to file with variables", exists=True, show_default=False,),
+    replace: bool = typer.Option(False, "-R", "--replace", help=f"Replace all existing variables with the variables provided {render.help_block('existing variables are retained unless updated in this payload')}"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    """Update/replace existing or add new Variables for a device
+
+    Use [cyan]cencli batch update variables [IMPORT_FILE][/] to update multiple devices.
+    If providing [cyan]--file[/] :triangular_flag: Only the device specified via the device argument will be processed, even if the file has variables for other devices defined.
+
+    [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: Will flush all existing variables leaving only the variables provided.
+    """
     dev = common.cache.get_inv_identifier(device)
     serial = dev.serial
 
-    var_dict = common.parse_var_value_list(var_value)
-
-    msg = "Sending Update" if yes else "Please Confirm: [bright_green]Update[/]"
-    render.econsole.print(f"{msg} {dev.rich_help_text}", emoji=False)
-    _ = [render.econsole.print(f'    {k}: [bright_green]{v}[/]', emoji=False) for k, v in var_dict.items()]
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.configuration.update_device_template_variables,
-            serial,
-            dev.mac,
-            var_dict=var_dict
+    var_dict = {} if not var_file else utils.unlistify(config.get_file_data(var_file))
+    var_dict = var_dict.get(dev.serial, var_dict)  # json by serial
+    if var_value:
+        var_dict = {**var_dict, **common.parse_var_value_list(var_value)}
+    if not var_dict:
+        common.exit(
+            "Missing required paramerter.  [cyan]var_value[/] (args) and/or [cyan]--file[/] is required.\n"
+            "See [cyan]cencli update variables --help[/] for more details."
         )
-        render.display_results(resp, tablefmt="action")
+
+    render.econsole.print(f"[bright_green]Update{'ing' if yes else ''}[/] {dev.rich_help_text}", emoji=False)
+    render.econsole.print(*[f'    {k}: [bright_green]{v}[/]' for k, v in var_dict.items()], emoji=False, sep="\n")
+    if replace:
+        render.econsole.print(f"\n[dark_orange3]:warning:[/]  [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: used. [bright_red]All existing variables will be flushed[/].  Only the variables above will be defined for [cyan]{dev.serial}[/]")
+    render.confirm(yes)
+    resp = api.session.request(
+        api.configuration.update_device_template_variables,
+        serial,
+        dev.mac,
+        var_dict=var_dict,
+        replace=replace
+    )
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -245,8 +264,10 @@ If providing a jinja2 template, this command will automatically look for a [cyan
 @app.command("config", help=config_help)
 def config_(
     group_dev: str = common.arguments.get("group_dev", autocompletion=common.cache.group_dev_ap_gw_completion),
-    cli_file: Path = typer.Argument(..., help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
+    cli_file: Path = typer.Argument(None, help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, show_default=False,),
+    banner_file: Path = common.options.banner_file,
+    banner: bool = common.options.banner,
     do_gw: bool = common.options.do_gw,
     do_ap: bool = common.options.do_ap,
     yes: bool = common.options.yes,
@@ -254,7 +275,23 @@ def config_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    is_tmp_file = False
     group_dev: CacheDevice | CacheGroup = common.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
+    if banner:  # pragma: no cover requires tty
+        banner_file = common.get_banner_from_user()
+        is_tmp_file = True
+
+    if not cli_file and not banner_file:
+        common.exit("cli_file or --banner-file <banner file> is required")
+    if banner_file:
+        if do_gw or group_dev.is_dev and not group_dev.type == "ap":
+            common.exit("banner update only valid for APs or AP Groups")
+
+        common.batch_update_ap_banner(data=dict(group_dev), banner_file=banner_file, group_level=group_dev.is_group, yes=yes)
+        if is_tmp_file:  # pragma: no cover
+            banner_file.unlink(missing_ok=True)
+        common.exit(code=0)  # will exit from batch_update_ap_banner in display_results if it failed.
+
     config_out = utils.generate_template(cli_file, var_file=var_file)
     cli_cmds = utils.validate_config(config_out)
 

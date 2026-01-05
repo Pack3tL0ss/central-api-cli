@@ -155,9 +155,10 @@ class Spinner(Status):
     ) -> None:
         self.stop()
 
-
+# TODO Partial support for sending rich.Text needs to cleaned up and make all output returned to display_results rich.text, use console.print vs typer.echo in display_results
+# Output class can likely be elliminated and return rich.Text from render.output
 class Output():
-    def __init__(self, rawdata: str = "", prettydata: str = "", config: Config = None, tablefmt: TableFormat | None = None):
+    def __init__(self, rawdata: str = "", prettydata: str | Text = "", config: Config = None, tablefmt: TableFormat | None = None):
         self.config = config
         self._file = rawdata  # found typer.unstyle AFTER I built this
         self.tty = prettydata
@@ -168,9 +169,10 @@ class Output():
 
     def __str__(self):
         if self.tty:
+            out = self.tty if not isinstance(self.tty, Text) else str(self.tty)
             pretty_up = typer.style("Up\n", fg="green")
             pretty_down = typer.style("Down\n", fg="red")
-            out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
+            out = out.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
         else:
             out = self.file
 
@@ -178,11 +180,19 @@ class Output():
         return out if out else "\u26a0  No Data.  This may be normal."
 
     def __rich__(self):
-        pretty_up = "[green]Up[/]\n"
-        pretty_down = "[red]Down[/]\n"
-        out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
+        is_text = False
+        if isinstance(self.tty, Text):
+            is_text = True
+            out = self.format_rich_text()
+            out = self.tty.markup
+        else:
+            pretty_up = "[green]Up[/]\n"
+            pretty_down = "[red]Down[/]\n"
+            out = self.tty.replace("Up\n", pretty_up).replace("Down\n", pretty_down)
 
         out = self.sanitize_strings(out)
+        if all([is_text, out]):
+            out = Text.from_markup(out, emoji=":cd:" not in out)
         return out if out else "\u26a0  No Data.  This may be normal."
 
     def __iter__(self):
@@ -194,6 +204,11 @@ class Output():
 
     def __contains__(self, item) -> bool:
         return item in self.file
+
+    def format_rich_text(self) -> Text:
+        self.tty.highlight_words([" Up ", "UP "], "bright_green")
+        self.tty.highlight_words([" Down ", " DOWN "], "red")
+        return self.tty
 
     def sanitize_strings(self, strings: str, config=None) -> str:  # pragma: no cover
         """Sanitize Output for demos
@@ -219,7 +234,7 @@ class Output():
                         strings = strings.replace(old, f"{new:{len(old)}}")
         return strings
 
-    def menu(self, data_len: int = None) -> str:
+    def menu(self, data_len: int = None) -> str:  # pragma: no cover requires tty
         def isborder(line: str) -> bool:
             return all(not c.isalnum() for c in list(line))
 
@@ -250,7 +265,7 @@ class Output():
             return self.tty  # this should not happen
 
         try:
-            return typer.unstyle(self._file)
+            return typer.unstyle(self.tty)
         except TypeError:
             return self._file
 
@@ -404,7 +419,7 @@ def build_rich_table_rows(data: List[Dict[str, Text | str]], table: Table, group
         return table
 
     if not isinstance(data, list) or group_by not in data[0]:
-        log.error(f"Error in render.do_group_by_table invalid type {type(data)} or {group_by} not found in header.")
+        log.error(f"Error in render.build_rich_table_rows invalid type {type(data)} or {group_by} not found in header.")
         [table.add_row(*list(in_dict.values())) for in_dict in data]
         return table
 
@@ -608,7 +623,10 @@ def output(
         outdata = utils.unlistify(outdata)
         # TODO custom yaml Representer
         raw_data = yaml.safe_dump(json.loads(json.dumps(outdata, cls=Encoder)), sort_keys=False)
-        table_data = rich_capture(raw_data)
+        # table_data = rich_capture(raw_data.replace("'", ""))
+        table_data = rich_capture(Syntax(rich_capture(raw_data.replace("'", "")), "yaml", background_color=None, theme='native'))
+        table_data = Text.from_ansi(table_data, overflow="fold")
+        ...
 
     elif tablefmt == "csv":
         def normalize_for_csv(value: Any) -> str:
@@ -616,6 +634,8 @@ def output(
                 return ""
             elif isinstance(value, DateTime):
                 return str(value.iso)
+            elif value in ["❌", "✅"]:
+                return False if value == "❌" else True
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
         def normalize_key_for_csv(key: str) -> str:
@@ -782,7 +802,7 @@ def help_block(default_txt: str, help_type: Literal["default", "requires"] = "de
     Returns:
         str: Formatted default text.  i.e. [default: some value] (with color markups)
     """
-    style = "dim" if help_type == "default" else "dim red"
+    style = "dim red" if help_type == "requires" else "dim"
     return f"[{style}]{escape(f'[{help_type}: {default_txt}]')}[/{style}]"
 
 
@@ -945,7 +965,16 @@ def _display_results(
             json.dumps({k: v if not isinstance(v, DateTime) else v.ts for k, v in kwargs.items() if k != "config"}, cls=Encoder)
         )
 
-    typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
+    # display output to screen.
+    if isinstance(outdata.tty, Text):
+        emoji = ":cd:" not in outdata  # HACK prevent :cd: often found in MAC addresses from being rendered as 💿
+        if pager and tty and len(outdata) > tty.rows:
+            with console.pager:
+                console.print(outdata, emoji=emoji)
+        else:
+            console.print(outdata, emoji=emoji)
+    else:
+        typer.echo_via_pager(outdata) if pager and tty and len(outdata) > tty.rows else typer.echo(outdata)
 
     if caption and outdata.tablefmt != "rich":  # rich prints the caption by default for all others we need to add it to the output
         econsole.print("".join([line.lstrip() for line in caption.splitlines(keepends=True)]))

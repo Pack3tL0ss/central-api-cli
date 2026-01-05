@@ -3,35 +3,41 @@ from typing import Callable
 import pytest
 from typer.testing import CliRunner
 
+from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
 from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config, log
 from ._test_data import (
+    test_banner_devices_file,
+    test_banner_file_j2,
+    test_banner_groups_file,
+    test_cloud_auth_mac_file,
+    test_cloud_auth_mac_file_invalid,
     test_data,
-    test_outfile,
-    test_invalid_empty_file,
     test_deploy_file,
     test_device_file,
+    test_device_file_none_exist,
+    test_device_file_one_not_exist,
     test_device_file_txt,
-    test_invalid_device_file_csv,
+    test_device_file_w_dup,
     test_group_file,
+    test_invalid_device_file_csv,
+    test_invalid_empty_file,
+    test_invalid_var_file,
+    test_invalid_var_file_bad_json,
     test_label_file,
     test_mpsk_file,
+    test_outfile,
     test_rename_aps_file,
     test_site_file,
     test_sub_file_csv,
     test_sub_file_test_ap,
     test_sub_file_yaml,
+    test_switch_var_file_flat,
     test_update_aps_file,
     test_verify_file,
-    test_switch_var_file_flat,
-    test_device_file_w_dup,
-    test_device_file_none_exist,
-    test_device_file_one_not_exist,
-    test_cloud_auth_mac_file,
-    test_cloud_auth_mac_file_invalid,
 )
 
 runner = CliRunner()
@@ -243,6 +249,74 @@ def test_batch_update_aps(what: str):
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
 
 
+@pytest.mark.parametrize(
+    "idx,fixtures,args,test_name_append",
+    [
+        [1, ["ensure_cache_group1", "ensure_cache_group2", "ensure_cache_group3"], (str(test_banner_groups_file), str(test_banner_file_j2), "-G",), None],
+        [2, "ensure_dev_cache_test_ap", (str(test_banner_devices_file), "--banner-file", str(test_banner_file_j2),), None],
+        [3, "ensure_dev_cache_test_ap", (str(test_banner_devices_file), "--banner-file", str(test_banner_file_j2),), "has_current_banner"],
+        [4, "ensure_dev_cache_test_ap", (str(test_banner_devices_file), "--banner-file", str(test_banner_file_j2),), "has_current_matching_banner"],
+    ]
+)
+def test_batch_update_ap_banner(idx: int, fixtures: str | list[str] | None, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
+    if fixtures:
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    if test_name_append:  # pragma: no cover
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["batch", "update",  "ap-banner", *args, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}")
+    assert result.exit_code == 0
+    assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
+
+
+@pytest.mark.parametrize(
+    "idx,fixtures,args",
+    [
+        [1, None, ("-G",)],
+        [2, None, (str(test_banner_devices_file),)],
+        [3, "ensure_dev_cache_test_ap", (str(test_banner_devices_file), str(test_banner_file_j2))],
+    ]
+)
+def test_batch_update_ap_banners_fail(idx: int, fixtures: str | list[str] | None, args: tuple[str], request: pytest.FixtureRequest):
+    if fixtures:
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    result = runner.invoke(app, ["batch", "update",  "ap-banner", *args, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠" in result.stdout or "ERROR" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "idx,fixtures,args,pass_condition",
+    [
+        [1, None, (test_data["batch"]["variable_file"],), lambda r: r.count("200") == 2],
+        [2, None, (test_data["batch"]["variable_file"], "-R"), lambda r: r.count("200") == 2],
+    ]
+)
+def test_batch_update_variables(idx: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixtures:  # pragma: no cover
+        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    result = runner.invoke(app, ["batch", "update",  "variables", *args, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}")
+    assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "⚠" in r],
+        [2, (str(test_invalid_var_file),), lambda r: "⚠" in r],
+        [3, (str(test_invalid_var_file_bad_json),), lambda r: "JSONDecodeError" in r],
+    ]
+)
+def test_batch_update_variables_fail(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["batch", "update",  "variables", *args, "-Y"])
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert pass_condition(result.stdout)
+
+
 def test_batch_rename_aps_no_args():
     result = runner.invoke(app, ["batch", "rename",  "aps",])
     capture_logs(result, "test_batch_rename_aps_no_args", expect_failure=True)
@@ -324,6 +398,9 @@ def test_batch_deploy():
         [17, ("update", "aps"), lambda r: "cencli batch update aps" in r],
         [18, ("update", "devices"), lambda r: "cencli batch update devices" in r],
         [19, ("verify",), lambda r: "cencli batch verify" in r],
+        [20, ("update", "ap-banner"), lambda r: "example" in r],
+        [21, ("update", "variables"), lambda r: "cencli batch update variables" in r],
+        [22, ("add", "variables"), lambda r: "cencli batch add variables" in r],
     ]
 )
 def test_batch_examples(idx: int, args: tuple[str], pass_condition: Callable):

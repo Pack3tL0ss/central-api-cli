@@ -35,6 +35,7 @@ MAX_CALLS_PER_CHUNK = 6
 econsole = Console(stderr=True)
 INIT_TS = time.monotonic()
 
+
 class LoggedRequests:
     def __init__(self, url: str, method: str = "GET", ok: bool = None):
         self.ts = float(f"{time.monotonic() - INIT_TS:.2f}")
@@ -365,6 +366,11 @@ class Session():
                     spin_txt_retry =  "(retry after token refresh)"
                     if hasattr(self.auth, "handle_expired_token"):
                         self.auth.handle_expired_token()
+                elif resp.status == 401 and self.is_cnx:
+                    spin_txt_retry =  "(retry after token refresh)"
+                    self.spinner.start(f"Attempting to Refresh {'' if not self.is_cnx else '[green]GLP[/] '}Token")
+                    self.auth.handle_expired_token()
+                    self.spinner.succeed()
                 elif resp.status == 500:
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
@@ -506,17 +512,39 @@ class Session():
 
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
+            # TODO # TOGLP  need to use "next" as pagination field
+            # if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + (params.get("limit", 0) * params["next"]) < r.raw["total"]):
             is_events = True if url.endswith("/monitoring/v2/events") else False
+            do_next = do_pagination = False
+            if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) if params["next"] in [None, 1] else len(r.output) + (params.get("limit", 0)) * params["next"]) < r.raw["total"]:
+                do_pagination = True
+                do_next = True
             if params.get(offset_key, 99) == 0 and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + params.get("limit", 0) < r.raw.get("total", 0)):
+                do_pagination = True
+
+            if do_pagination:
                 _total = count or r.raw["total"] if not is_events or r.raw["total"] <= 10_000 else 10_000  # events endpoint will fail if offset + limit > 10,000
                 if _total > len(r.output):
                     _limit = params.get("limit", 100)
-                    _offset = params.get(offset_key, 0)
-                    br = BatchRequest
-                    _reqs = [
-                        br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, offset_key: i, "limit": _limit}, **kwargs)
-                        for i in range(len(r.output), _total, _limit)
-                    ]
+                    if not do_next:
+                        _offset = params.get(offset_key, 0)
+                        br = BatchRequest
+                        _reqs = [
+                            br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, offset_key: i, "limit": _limit}, **kwargs)
+                            for i in range(len(r.output), _total, _limit)
+                        ]
+                    else:
+                        _next_possible_range = list(range(int(r.raw["next"]), _total + 1))
+                        _next_range = [i for i in _next_possible_range if i * _limit <= _total]
+                        if _next_range[-1] * _limit < _total:
+                            _next_range += [min([i for i in _next_possible_range if i * _limit > _total])]  # TODO more elegant way to do this.
+
+                        br = BatchRequest
+                        _reqs = [
+                            br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, "next": i, "limit": _limit}, **kwargs)
+                            for i in _next_range
+                        ]
+
 
                     batch_res: List[Response] = await self._batch_request(_reqs)
                     failures: List[Response] = [r for r in batch_res if not r.ok]  # A failure means both the original attempt and the retry failed.
@@ -722,9 +750,12 @@ class Session():
         self.silent = True
         m_resp: List[Response] = []
         _tot_start = time.perf_counter()
+        max_calls_per_chunk = MAX_CALLS_PER_CHUNK
+        if self.base_url == config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
+            max_calls_per_chunk = 10
 
         if self.requests: # a call has been made no need to verify first call (token refresh)
-            chunked_calls = utils.chunker(api_calls, MAX_CALLS_PER_CHUNK)
+            chunked_calls = utils.chunker(api_calls, max_calls_per_chunk)
         else:
             resp: Response = await api_calls[0].func(
                 *api_calls[0].args,
@@ -734,7 +765,7 @@ class Session():
                 return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
 
             m_resp: List[Response] = utils.listify(resp)
-            chunked_calls = utils.chunker(api_calls[1:], MAX_CALLS_PER_CHUNK)
+            chunked_calls = utils.chunker(api_calls[1:], max_calls_per_chunk)
 
         # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
         # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk

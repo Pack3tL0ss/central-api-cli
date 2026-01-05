@@ -552,7 +552,8 @@ class Config:
                             "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
                         )
             except Exception as e:
-                raise UserWarning(f'Unable to load configuration from {import_file}\n{e.__class__.__name__}\n\n{e}')
+                e.add_note(f'Unable to load data from {import_file} due to error above')
+                raise e
 
             if isinstance(import_data, list):
                 return model(**{list(model.__fields__.keys())[0]: import_data})

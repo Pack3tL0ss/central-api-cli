@@ -160,6 +160,14 @@ class ExportDevType(str, Enum):
             return "aps"
 
 
+class DeviceStatusFilter(str, Enum):
+    ONLINE = "ONLINE"
+    OFFLINE = "OFFLINE"
+
+class APDeployment(str, Enum):
+    STANDALONE = "Standalone"
+    CLUSTER = "Cluster"
+
 class GroupDevTypes(str, Enum):
     ap = "ap"
     sw = "sw"
@@ -182,6 +190,18 @@ class PoEDetectionStatus(Enum):
     Undefined = 1  # TODO figure out what this status is
     Searching = 2
     Delivering = 3
+
+
+class MacFormat(str, Enum):
+    COLS = "COLS"
+    DASHES = "DASHES"
+    DOTS = "DOTS"
+    CLEAN = "CLEAN"
+    cols = "cols"
+    dashes = "dashes"
+    dots = "dots"
+    clean = "clean"
+
 
 # Here are all the types for the below Enum
 # 3: Bridge (Switch)
@@ -397,6 +417,11 @@ class RadioBandOptions(str, Enum):  # 5m, 1h, 1d, 1w
 class DynamicAntMode(str, Enum):
     narrow = "narrow"
     wide = "wide"
+
+class APIAction(str, Enum):
+    ADD = "ADD"
+    UPDATE = "UPDATE"
+    REPLACE = "REPLACE"
 
 class RadioMode(str, Enum):
     access = "access"
@@ -2402,7 +2427,6 @@ NO_LOAD_FLAGS = [
     "--show-completion",
     "--install-completion",
     "--version",
-    "-v",
     "-V"
 ]
 

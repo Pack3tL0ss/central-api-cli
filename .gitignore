@@ -71,6 +71,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 pytestdebug.log
+.ruff_cache
 
 # Translations
 *.mo

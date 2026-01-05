@@ -15,11 +15,11 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
-    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band"
+    "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band", "banner", "banner_file",
 ]
 
 class CLIArgs:
@@ -37,6 +37,7 @@ class CLIArgs:
         self.site: ArgumentInfo = typer.Argument(..., metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
         self.ssid: ArgumentInfo = typer.Argument(..., help="SSIDs are not cached.  Ensure text/case is accurate.", show_default=False,)
         self.import_file: ArgumentInfo = typer.Argument(None, exists=True, show_default=False,)
+        self.banner_file: ArgumentInfo = typer.Argument(None, help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.portal: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cache.portal_completion, show_default=False,)
         self.portals: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal_many, autocompletion=cache.portal_completion, show_default=False,)
@@ -189,6 +190,8 @@ class CLIOptions:
         self.pager: OptionInfo = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
         self.ssid: OptionInfo = typer.Option(None, help="Filter/Apply command to a specific SSID", show_default=False)
         self.band: OptionInfo = typer.Option(None, help=f"Show Bandwidth for a specific band [dim]{escape('[ap must be provided]')}[/]", show_default=False)
+        self.banner_file: OptionInfo = typer.Option(None, "--banner-file", help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
+        self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,

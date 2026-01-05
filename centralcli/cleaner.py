@@ -58,7 +58,7 @@ def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | list[LibAllDevTy
     else:
         # TODO circular import if placed at top review import logic
         from centralcli import cache
-        match = cache.get_dev_identifier(mac, dev_type=dev_type, retry=False, silent=True)
+        match: CacheDevice | list[CacheDevice] = cache.get_dev_identifier(mac, dev_type=dev_type, retry=False, silent=True)
         if not match:
             return mac
 
@@ -131,7 +131,7 @@ _short_value = {
     "token_created": lambda x: DateTime(x, "mdyt"),
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
-    # "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
+    "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
     "firmware_scheduled_at": lambda x: DateTime(x, "mdyt"),
     "Unknown": "?",
     "HPPC": "SW",
@@ -412,6 +412,7 @@ def get_archived_devices(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def show_groups(data: list[dict], cleaner_format: TableFormat = "rich") -> list[dict]:
     if cleaner_format == "csv":  # Makes allowed types a space separated str, to match format of import file for batch add groups
         data = [{k: v if k != "allowed_types" or not isinstance(v, list) else " ".join(v) for k, v in inner.items()} for inner in data]
+        data = [{k: v if v != "NA" else "" for k, v in inner.items()} for inner in data]  # strip all "NA" values
     else:
         collapse_keys = ["wlan_tg", "wired_tg", "monitor_only_sw", "monitor_only_cx"]
         data = [
@@ -1673,7 +1674,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
         pretty_data += [ssid_data]
 
     # override default which swaps in unicode checkmark/X (for rich output)
-    if format != "rich" and "disable_ssid" in data[-1].keys():
+    if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
         _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
 
     pretty_data = simple_kv_formatter(pretty_data)
@@ -1883,7 +1884,7 @@ def get_swarm_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, Any
 
     return simple_kv_formatter(data, key_order=key_order)
 
-def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
+def show_radios(data: list[dict[str, str | int]], band: RadioBandOptions | None = None) -> list[dict[str, str | int]]:
     key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
     def pretty_mode(mode: int) -> str | int:
         try:
@@ -1895,6 +1896,11 @@ def show_radios(data: list[dict[str, str | int]]) -> list[dict[str, str | int]]:
     global _short_value
     _short_value["mode"] = lambda m: pretty_mode(m)
     data = simple_kv_formatter(data, key_order=key_order)
+    # data = [{"ap": f'{ap["name"]} [dim]({ap["serial"]})[/dim]', "band": pretty_band[radio["index"]], "ssid": r["essid"], "bssid": r["macaddr"]}
+    #         for r in bssids if (band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band) and (ssid is None or r["essid"] == ssid)
+    # ]
+    if band:
+        data = [r for r in data if r["band"].startswith(band.value)]
 
     return data
 

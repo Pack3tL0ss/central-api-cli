@@ -3,3 +3,4 @@ pytest
 nox
 pytest-cov
 pytest-asyncio
+jsonref

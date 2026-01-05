@@ -7,7 +7,7 @@ if '${input:cliArgs}' in str(sys.argv):
 
 debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
 
-batch_dir = Path().home() / "git/myrepos/cencli-batch"
+batch_dir = Path().home() / "git/cencli-batch"
 
 # -- break up arguments passed as single string from vscode promptString --
 def vscode_arg_handler():

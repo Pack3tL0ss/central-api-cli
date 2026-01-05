@@ -28,7 +28,7 @@ SiteData = Union[
 ]
 PortalAuthType = Literal["user/pass", "anon", "self-reg"]
 PortalAuthTypes = Sequence[PortalAuthType]
-CacheTableName = Literal["devices", "sites", "groups", "labels", "macs", "mpsk", "subscriptions"]
+ImportType = Literal["devices", "sites", "groups", "labels", "macs", "mpsk", "subscriptions", "variables"]
 DynamicAntenna = Literal["narrow", "wide"]
 RadioType = Literal["2.4", "5", "6"]
 MPSKStatus = Literal["enabled", "disabled"]

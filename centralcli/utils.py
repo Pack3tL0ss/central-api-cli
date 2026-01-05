@@ -24,7 +24,7 @@ from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
 
-from centralcli.typedefs import StrOrURL
+from centralcli.typedefs import StrOrURL, StrEnum
 
 if TYPE_CHECKING:
     from .typedefs import PrimaryDeviceTypes
@@ -452,24 +452,25 @@ class Utils:
 
 
     @staticmethod
-    def generate_template(template_file: Path | str, var_file: Path | str | None,) -> str:
+    def generate_template(template_file: Path | str, var_file: Path | str | None = None, *, config_data: list | dict = None) -> str:
         """Generate configuration files based on j2 templates and provided variables."""
         template_file = Path(str(template_file)) if not isinstance(template_file, Path) else template_file
         if var_file is not None:
             var_file = Path(str(var_file)) if not isinstance(var_file, Path) else var_file
 
         if template_file.suffix == ".j2":
-            if not var_file:  # no var file specified look for file in same dir as template with same base name and yaml/json suffix
-                for file in template_file.parent.iterdir():
-                    if file.stem == template_file.stem and file.suffix in [".yaml", ".yml", ".json"]:
-                        var_file = file
-                        break
-            if not var_file:
-                econsole = Console(stderr=True)
-                econsole.print("[dark_orange3]:warning:[/]  [cyan].j2[/] file provided with no matching variable file")
-                raise typer.Exit(1)
+            if not config_data:
+                if not var_file:  # no var file specified look for file in same dir as template with same base name and yaml/json suffix
+                    for file in template_file.parent.iterdir():
+                        if file.stem == template_file.stem and file.suffix in [".yaml", ".yml", ".json"]:
+                            var_file = file
+                            break
+                if not var_file:
+                    econsole = Console(stderr=True)
+                    econsole.print("[dark_orange3]:warning:[/]  [cyan].j2[/] file provided with no matching variable file")
+                    raise typer.Exit(1)
 
-            config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
+                config_data = yaml.load(var_file.read_text(), Loader=yaml.SafeLoader)
 
             env = Environment(loader=FileSystemLoader(str(template_file.parent)), trim_blocks=True, lstrip_blocks=True)
             template = env.get_template(template_file.name)
@@ -606,7 +607,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False) -> str:
+    def summarize_list(items: List[str, StrEnum], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -620,6 +621,8 @@ class Utils:
             fmt = ""
             item_sep = "...".rjust(pad + 3)
 
+        enum_attr = "value" if not use_enum_name else "name"
+        items = [item if not hasattr(item, enum_attr) else getattr(item, enum_attr) for item in items]
         items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
         if len(items) == 1:  # If there is only 1 item we return it with just the formatting and strip the pad
             return items[0].lstrip()

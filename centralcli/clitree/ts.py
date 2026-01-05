@@ -9,9 +9,8 @@ from typing import Any
 import typer
 from rich.progress import track
 
-from centralcli import cleaner, common, render, utils
+from centralcli import api_clients, cleaner, common, render, utils
 from centralcli.cache import CacheDevice
-from centralcli.clicommon import APIClients
 from centralcli.constants import iden_meta, lib_to_api
 
 try:
@@ -21,9 +20,7 @@ except Exception:  # pragma: no cover
     FUZZ = False
 
 
-api_clients = APIClients()
 api = api_clients.classic
-
 app = typer.Typer()
 typer.Argument = partial(typer.Argument, show_default=False)
 typer.Option = partial(typer.Option, show_default=False)

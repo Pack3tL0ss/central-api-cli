@@ -137,14 +137,7 @@ def test_monitoring_get_clients_fail(kwargs: dict[str, str | bool], exception: E
         [1, "ensure_cache_group4", {"group": "cencli_test_group4", "aos10": False}, None, lambda r: "reverting back" in r.error, None],
         [2, "ensure_cache_group4", {"group": "cencli_test_group4"}, None, lambda r: not r.ok, "fail"],
         [3, "ensure_cache_group4", {"group": "cencli_test_group4", "microbranch": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None,],
-        [
-            4,
-            "ensure_cache_group1",
-            {"group": "cencli_test_group1", "monitor_only_sw": True},
-            None,
-            lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]),
-            None,
-        ],
+        [4, "ensure_cache_group1", {"group": "cencli_test_group1", "monitor_only_sw": True}, None, lambda r: "can only be set" in "\n".join([res.output for res in utils.listify(r)]), None,],
         [
             5,
             "ensure_cache_group1",
@@ -185,6 +178,14 @@ def test_monitoring_get_clients_fail(kwargs: dict[str, str | bool], exception: E
             lambda r: "Monitor Only is not valid for Template" in "\n".join([res.output for res in utils.listify(r)]),
             "cx_only",
         ],
+        [
+            10,
+            "ensure_cache_group_cloned",
+            {"group": "cencli_test_cloned", "aos10": True},
+            None,
+            lambda r: "initially added" in "\n".join([res.output for res in utils.listify(r)]),
+            None,
+        ],
     ],
 )
 def test_configuration_update_group_properties(
@@ -196,25 +197,35 @@ def test_configuration_update_group_properties(
     if exception:  # pragma: no cover
         try:
             api.session.request(api.configuration.update_group_properties, **kwargs)
-        except ValueError:
+        except exception:
             ...  # Test Passes
         else:  # pragma: no cover
-            raise AssertionError(f"{env.current_test} should have raised a ValueError due to invalid params, but did not.  {kwargs =}")
+            raise AssertionError(f"{env.current_test} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
     else:
         result = api.session.request(api.configuration.update_group_properties, **kwargs)
         assert pass_condition(result)
 
 
 @pytest.mark.parametrize(
-    "_,func,kwargs,pass_condition",
+    "_,func,kwargs,exception,pass_condition",
     [
-        (1, api.configuration.get_groups_template_status, {"groups": test_data["switch"]["group"]}, lambda r: r.status == 200),
-        (2, api.configuration.get_all_templates, {"groups": [test_data["template_switch"]["group"]]}, lambda r: r.status == 200),
+        (1, api.configuration.get_groups_template_status, {"groups": test_data["switch"]["group"]}, None, lambda r: r.status == 200),
+        (2, api.configuration.get_all_templates, {"groups": [test_data["template_switch"]["group"]]}, None, lambda r: r.status == 200),
+        (3, api.configuration.update_ap_banner, {}, ValueError, None),
+        (4, api.configuration.update_ap_banner, {"iden": "random"}, ValueError, None),
     ],
 )
-def test_configuration_classic(_: int, func: Callable, kwargs: dict[str, str], pass_condition: Callable):
-    resp = api.session.request(func, **kwargs)
-    assert pass_condition(resp)
+def test_configuration_classic(_: int, func: Callable, kwargs: dict[str, str], exception: Exception, pass_condition: Callable):
+    if exception:  # pragma: no cover
+        try:
+            api.session.request(func, **kwargs)
+        except exception:
+            ...  # Test Passes
+        else:  # pragma: no cover
+            raise AssertionError(f"{env.current_test} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
+    else:
+        resp = api.session.request(func, **kwargs)
+        assert pass_condition(resp)
 
 
 

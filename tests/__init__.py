@@ -51,9 +51,8 @@ from click.testing import Result
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cache, config, log
+from centralcli import api_clients as api_clients, cache, config, log
 from centralcli.cache import CacheDevice
-from centralcli.clicommon import APIClients
 from centralcli.exceptions import CentralCliException
 from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
@@ -62,7 +61,6 @@ from ._mock_request import mock_request
 from ._test_data import test_data as test_data
 
 expected_exceptions = [SystemExit, ClientConnectorError, ClientOSError, ContentTypeError, ContentLengthError]
-api_clients = APIClients()
 econsole = Console(stderr=True)
 in_45_mins = pendulum.now() + pendulum.duration(minutes=45)
 _2_days_ago = pendulum.now() - pendulum.duration(days=2)
@@ -149,6 +147,18 @@ class MockSleep:
 
 mock_sleep = MockSleep()
 
+class MockConsoleDimensions():
+    def __init__(self, *args, **kwargs):
+        self.width: int = 190
+        self.height: int = 55
+
+    def __repr__(self):  # pragma: no cover
+        return f"{self.__class__.__name__}(width={self.width}, height={self.height})"
+
+    def __iter__(self):
+        yield self.width
+        yield self.height
+
 
 if __name__ in ["tests", "__main__"]:  # pragma: no cover
     monkeypatch_terminal_size()
@@ -159,6 +169,7 @@ if __name__ in ["tests", "__main__"]:  # pragma: no cover
         pytest.MonkeyPatch().setattr("time.sleep", mock_sleep)  # We don't need to inject any delays when using mocked responses
         pytest.MonkeyPatch().setattr("asyncio.sleep", aiosleep_mock)
         pytest.MonkeyPatch().setattr("centralcli.render.write_file", mock_write_file)
+        pytest.MonkeyPatch().setattr("rich.console.ConsoleDimensions", MockConsoleDimensions)
     else:  # pragma: no cover
         ...
     ensure_default_account()

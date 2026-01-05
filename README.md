@@ -38,7 +38,7 @@ The recommended method is to use uv, which is a single Rust binary that you can 
 You don't even need to worry about installing Python yourself - uv will manage everything for you.
 
 ### uv
-#### Install `uv` on Linx/Mac:
+#### Install `uv` on Linux/Mac:
 ```bash
 # quick install on MacOS/Linux
 curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -57,10 +57,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 #### Install `centralcli` via `uv`
 ```bash
 # install centralcli (showing command with optional `--python 3.13` flag see note below)
-uv tool install --python 3.13 centralcli
+uv tool install --python 3.14 centralcli
 ```
 
-> Including `--python 3.13` above is optional provided you have python installed on the system.  However uv facilitates deploying a stand-alone version of python with the package.  There are likely speed advantages to doing this if your current version is dated (check with `python -V`)
+> Including `--python 3.14` above is optional.  However uv facilitates deploying a stand-alone version of python with the package.  There are likely speed advantages to doing this if your current version is dated (check with `python -V`)
+
+> Run `cencli --install-completion` to enable auto/tab completion in your shell once installed. *Shell needs to be restarted to take effect*.
 
 
 Then to Upgrade `centralcli`

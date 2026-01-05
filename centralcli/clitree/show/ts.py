@@ -4,11 +4,9 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cleaner, common, render
-from centralcli.clicommon import APIClients
+from centralcli import api_clients, cleaner, common, render
 from centralcli.constants import SortTsCmdOptions, TSDevTypes, iden_meta, lib_to_api  # noqa
 
-api_clients = APIClients()
 api = api_clients.classic
 
 app = typer.Typer()

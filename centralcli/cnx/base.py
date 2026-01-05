@@ -12,7 +12,6 @@ import pendulum
 from typing import Literal
 
 
-
 class NewCentralURLs:
     Authentication = {"OAUTH": "https://sso.common.cloud.hpe.com/as/token.oauth2"}
 
@@ -113,7 +112,7 @@ class NewCentralBase:
             return token_data.get("access_token")
 
 
-    def get_access_token(self, app_name: Literal["new_central", "glp"] = "glp"):
+    def get_access_token(self, app_name: Literal["new_central", "glp"] = "glp") -> str:
         """
         Create a new access token for the specified application.
 
@@ -172,8 +171,8 @@ class NewCentralBase:
         :param app_name: Name of the application.
         :type app_name: str
         """
-        log.info(f"{app_name} access Token has expired.", show=True)
-        log.info("Handling Token Expiry...", show=True)
+        log.info(f"{app_name} access Token expired/invalid.  Fetching new token...")
+
         client_id, client_secret = self._return_client_credentials(app_name)
         if any(credential is None for credential in [client_id, client_secret]):
             exit(
