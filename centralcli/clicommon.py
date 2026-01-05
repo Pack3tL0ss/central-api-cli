@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 import sys
 import time
+import string
+import binascii
+import urllib
 from dataclasses import dataclass
 from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union, Self
+from functools import cached_property
 
 import pendulum
 import typer
@@ -19,10 +23,13 @@ from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
 from rich.traceback import install
+from rich.table import Table
+from rich.box import HORIZONTALS
+from pydantic import BaseModel
 
 from centralcli import config, log, render, utils
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction
+from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction, MacFormat
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
@@ -47,6 +54,213 @@ TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw"
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
 api = api_clients.classic
+
+
+class VendorDetails(BaseModel):
+    oui: str
+    companyName: str
+    companyAddress: str
+    countryCode: str
+
+class BlockDetails(BaseModel):
+    blockSize: int
+    dateCreated: str
+
+class MacDetails(BaseModel):
+    wiresharkNotes: str
+    isValid: bool
+
+class Vendor(BaseModel):
+    vendor_details: VendorDetails
+    block_details: BlockDetails
+    mac_details: MacDetails
+
+class Convert:
+    def __init__(self, mac: str, fuzzy: bool = False):
+        self.orig = mac
+        if not mac:
+            mac = '0'
+        if not fuzzy:
+            self.clean = ''.join([c for c in list(mac) if c in string.hexdigits])
+            self.ok = True if len(self.clean) == 12 else False
+        else:
+            for delim in list('.-:'):
+                mac = mac.replace(delim, '')
+
+            self.clean = mac
+            if len([c for c in list(self.clean) if c in string.hexdigits]) == len(self):
+                self.ok = True
+            else:
+                self.ok = False
+
+    @staticmethod
+    def _do_format(mac: str, delim: str = ":", chunk_size: int = 2) -> str:
+        for _delim in list('.-:'):
+            clean = mac.replace(_delim, '')
+        cols = delim.join(clean[i:i+chunk_size] for i in range(0, len(clean), chunk_size))
+        if cols.strip().endswith(delim):  # handle macs starting with 00 for oobm
+            cols = f"00:{cols.strip().rstrip(delim)}"
+        return cols
+
+    @property
+    def cols(self) -> str:
+        return self._do_format(self.clean)
+
+    @property
+    def dashes(self) -> str:
+        return self._do_format(self.clean, delim="-")
+        # return '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+
+    @property
+    def dots(self) -> str:
+        return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+
+    @property
+    def dec(self) -> int:
+        try:
+            return 0 if not self.ok else int(self.clean, 16)
+        except ValueError:
+            return 0
+
+    @property
+    def url(self) -> str:
+        return urllib.parse.quote_plus(self.cols)  # type: ignore
+
+    def __len__(self):
+        return len(self.clean)
+
+    @cached_property
+    def bssids(self) -> dict[str, list[str]] | str:
+        if not self.ok:
+            return "Invalid MAC"
+        oui = self.clean[0:6]
+        # work on last 3 octets of MAC
+        end_part = self.clean.removeprefix(oui)
+        # drop the first nibble and shift everything left, then add a 0 at end
+        end_part = f"{end_part[1:]}0"
+        # XOR the new first nibble with an 8
+        first_nibble = hex(int(end_part[0], 16) ^ 8).removeprefix("0x")
+        radio0_mac = f"{oui}{first_nibble}{end_part[1:]}"
+        radio0_dec = int(radio0_mac, 16)
+        radio1_dec = radio0_dec + 16
+        radio2_dec = radio1_dec + 16
+        radio_macs = [list(map(lambda m: hex(m).removeprefix("0x"), range(base, base + 16))) for base in {radio0_dec, radio1_dec, radio2_dec}]
+
+        return {
+            "radio 0": [self._do_format(m, delim="-") for m in radio_macs[0]],
+            "radio 1": [self._do_format(m, delim="-") for m in radio_macs[1]],
+            "radio 2": [self._do_format(m, delim="-") for m in radio_macs[2]],
+        }
+
+
+
+
+class Mac(Convert):
+    def __init__(self, mac: str | bytes, vendor_lookup: bool = False, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
+        if isinstance(mac, bytes):
+            mac: str = binascii.hexlify(mac).decode('utf-8')
+        super().__init__(mac, fuzzy=fuzzy)
+        oobm = hex(self.dec + 1).lstrip('0x')
+        self.oobm = Convert(oobm)
+        self.plus_one = Convert(oobm).cols.replace("      ", "  ")
+        self.mac_range = mac_range
+        self.range_format = range_format
+        self.do_bssids = bssids
+        self.num_bssids = num_bssids
+        self.tablefmt = tablefmt or "table"
+        self._show_mac_info = show_mac_info
+
+        if vendor_lookup:
+            if config.lookup_configured:
+                # TODO each attribute has lower <8 spaces> upper as a single string.  refactor so each has own attr
+                self.vendor = asyncio.run(self.get_vendor(self.clean.split()[0]))
+            else:
+                self.vendor = f"  Vendor Lookup Not Possible please configure macaddress.io:api_key in {config.file}"
+        else:
+            self.vendor: Vendor = None
+
+    def __bool__(self):
+        return self.ok
+
+    def __eq__(self, value: str | Self):
+        other = value if isinstance(value, Mac) else Convert(value)
+        return other.dec == self.dec
+
+    def __hash__(self):
+        return self.dec
+
+    def get_range(self, items: int = 10, mac_format: MacFormat = MacFormat.cols):
+        mac_objects = [Convert(hex(mac_dec).lstrip("0x")) for mac_dec in range(self.dec, self.dec + items)]
+        if mac_format.upper() == MacFormat.OBJECT:
+            return mac_objects
+
+        mac_format = mac_format if isinstance(mac_format, MacFormat) else MacFormat(mac_format)
+        case_func = str.lower if mac_format.value.islower() else str.upper
+        return list(map(case_func, [getattr(mac, mac_format.value.lower()) for mac in mac_objects]))
+
+    @staticmethod
+    def _lower_upper(value: str) -> str:
+        return f"{value:<19}{value.upper()}"
+
+    def __str__(self):
+        out_str = ""
+        if self._show_mac_info:
+            out_dict = {
+                "valid": self.ok,
+                "clean": self.clean,
+                "cols": self.cols,
+                "dashes": self.dashes,
+                "dots": self.dots,
+                "plus_one": self.plus_one,
+                "dec": self.dec
+            }
+            omit = ["valid", "dec"]
+            mac_info = [f"{k:>8}: {v if k in omit else self._lower_upper(v)}" for k, v in out_dict.items()]
+            title = f"Mac Address Details for {self.cols}"
+            line = f'[dark_olive_green2]{"-" * 52}[/]'
+            out_str = render.rich_capture("\n".join([line, f"[magenta]{title:^52}[/]", line, *mac_info]) + "\n")
+
+            if self.vendor:
+                out_str += f"\n\n{self.vendor}"
+
+            if self.mac_range:
+                console = Console(emoji=False)
+                with console.capture() as cap:
+                    mac_range = "\n".join(self.get_range(self.mac_range, self.range_format))
+                    console.print(f"[magenta]Mac Range with [cyan]{self.mac_range}[/] Addresses[/]\n{mac_range}")
+                out_str += f"\n{cap.get()}"
+
+        if self.do_bssids:
+            if not self.ok:
+                out_str += render.rich_capture(f"[dark_orange3]\u26a0[/]  Unable to generate BSSIDs {self.orig} does not appear to be a valid MAC address")  # \u26a0 is warning emoji
+                if Path(self.orig).exists():
+                    out_str += render.rich_capture(f"\n[italic][deep_sky_blue]\u2139[/]  Use [cyan]--file[/] {self.orig} to generate BSSIDs from file.")  # \u2139 = is information emoji
+            else:
+                console = Console(emoji=False)
+                if self.tablefmt != "vertical":
+                    table = Table(
+                        show_header=True,
+                        title=f"[magenta]Radio MACs (first bssid) given Ethernet MAC[/] [cyan]{self.cols}[/]",
+                        header_style='magenta',
+                        show_lines=False,
+                        box=HORIZONTALS,
+                        row_styles=['none', 'dark_sea_green'],
+                    )
+
+                    _ = [table.add_column(head) for head in self.bssids.keys()]
+                    _ = [table.add_row(*["\n".join(row_data) for row_data in self.bssids.values()])]
+
+                    with console.capture() as cap:
+                        console.print(table)
+                    out_str += f"\n{cap.get()}"
+                else:
+                    with console.capture() as cap:
+                        console.print(f"[magenta]Radio MACs (first bssid) given Ethernet MAC[/] [cyan]{self.cols}[/]")
+                        [console.print(bssid) for radio_bssid_list in self.bssids.values() for bssid in radio_bssid_list[0:self.num_bssids]]
+
+                    out_str += f"\n{cap.get()}"
+
+        return out_str
 
 
 class MoveData:

@@ -10,7 +10,7 @@ from rich.markup import escape
 from centralcli import cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade
+from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade, generate
 from centralcli.clitree import dev as clidev
 from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
@@ -51,6 +51,7 @@ app.add_typer(export.app, name="export",)
 app.add_typer(check.app, name="check",)
 app.add_typer(cancel.app, name="cancel",)
 app.add_typer(convert.app, name="convert",)
+app.add_typer(generate.app, name="generate",)
 app.add_typer(clidev.app, name="dev", hidden=True)
 
 

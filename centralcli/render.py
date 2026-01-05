@@ -802,7 +802,7 @@ def help_block(default_txt: str, help_type: Literal["default", "requires"] = "de
     Returns:
         str: Formatted default text.  i.e. [default: some value] (with color markups)
     """
-    style = "dim" if help_type == "default" else "dim red"
+    style = "dim red" if help_type == "requires" else "dim"
     return f"[{style}]{escape(f'[{help_type}: {default_txt}]')}[/{style}]"
 
 

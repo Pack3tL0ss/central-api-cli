@@ -191,6 +191,18 @@ class PoEDetectionStatus(Enum):
     Searching = 2
     Delivering = 3
 
+
+class MacFormat(str, Enum):
+    COLS = "COLS"
+    DASHES = "DASHES"
+    DOTS = "DOTS"
+    CLEAN = "CLEAN"
+    cols = "cols"
+    dashes = "dashes"
+    dots = "dots"
+    clean = "clean"
+
+
 # Here are all the types for the below Enum
 # 3: Bridge (Switch)
 # DOCSIS Cable Device
