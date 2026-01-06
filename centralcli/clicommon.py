@@ -13,7 +13,7 @@ from datetime import datetime
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union, Self
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
 from functools import cached_property
 
 import pendulum
@@ -182,7 +182,7 @@ class Mac(Convert):
     def __bool__(self):
         return self.ok
 
-    def __eq__(self, value: str | Self):
+    def __eq__(self, value: str | Mac):
         other = value if isinstance(value, Mac) else Convert(value)
         return other.dec == self.dec
 
