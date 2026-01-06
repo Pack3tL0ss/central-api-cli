@@ -27,12 +27,12 @@ class CsvLexer(RegexLexer):
         Class Variables:
             name {str} -- name of lexer:
                 * http://pygments.org/docs/api/#pygments.lexer.Lexer.name
-            aliases {list} – languages, against whose GFM block names CsvLexer will apply
+            aliases {list} - languages, against whose GFM block names CsvLexer will apply
                 * https://git.io/fhjla
-            filenames {list} – file name patterns, for whose contents CsvLexer will apply
-            tokens {dict} – regular expressions internally matching CsvLexer’s components
+            filenames {list} - file name patterns, for whose contents CsvLexer will apply
+            tokens {dict} - regular expressions internally matching CsvLexer's components
 
-        Based on StackOverflow user Adobe’s code:
+        Based on StackOverflow user Adobe's code:
             * https://stackoverflow.com/a/25508711/298171
     """
 
@@ -42,64 +42,64 @@ class CsvLexer(RegexLexer):
 
     tokens = {
         'root': [
-            (r'^[^,\n]*',       Operator,                                       'second'),
+            (r'^[^,\n]*', Operator, 'second'),
         ],
         'second': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'third'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Name.Constant), 'third'),
         ],
         'third': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Declaration),     'fourth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Keyword.Declaration), 'fourth'),
         ],
         'fourth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'fifth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.Number), 'fifth'),
         ],
         'fifth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'sixth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.String.Single), 'sixth'),
         ],
         'sixth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'seventh'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Name.Constant), 'seventh'),
         ],
         'seventh': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Namespace),       'eighth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Keyword.Namespace), 'eighth'),
         ],
         'eighth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'ninth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.Number), 'ninth'),
         ],
         'ninth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'tenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.String.Single), 'tenth'),
         ],
         'tenth': [
-            (r'(,)([^,\n]*)',   Operator,                                       'eleventh'),
+            (r'(,)([^,\n]*)', Operator, 'eleventh'),
         ],
         'eleventh': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'twelfth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Name.Constant), 'twelfth'),
         ],
         'twelfth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Declaration),     'thirteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Keyword.Declaration), 'thirteenth'),
         ],
         'thirteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'fourteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.Number), 'fourteenth'),
         ],
         'fourteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'fifteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.String.Single), 'fifteenth'),
         ],
         'fifteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Name.Constant),           'sixteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Name.Constant), 'sixteenth'),
         ],
         'sixteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Namespace),       'seventeenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Keyword.Namespace), 'seventeenth'),
         ],
         'seventeenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.Number),          'eighteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.Number), 'eighteenth'),
         ],
         'eighteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Literal.String.Single),   'nineteenth'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Literal.String.Single), 'nineteenth'),
         ],
         'nineteenth': [
-            (r'(,)([^,\n]*)',   bygroups(Punctuation, Keyword.Type),            'unsupported'),
+            (r'(,)([^,\n]*)', bygroups(Punctuation, Keyword.Type), 'unsupported'),
         ],
         'unsupported': [
-            (r'(.+)',           bygroups(Punctuation)),
+            (r'(.+)', bygroups(Punctuation)),
         ],
     }
 
