@@ -4,7 +4,8 @@ CLI Reference Guide
 .. typer:: centralcli.cli:app
     :prog: cencli
     :theme: dark
-    :width: 65
+    :width: 70
+    :preferred: svg
     :show-nested:
     :make-sections:
 

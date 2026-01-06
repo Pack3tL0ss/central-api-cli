@@ -5,8 +5,12 @@
    :parser: myst_parser.sphinx_
 
 .. toctree::
+   :maxdepth: 1
+
+   alternative_install
+
+.. toctree::
    :maxdepth: 3
-   :caption: CLI Reference Guide
 
    cli
 

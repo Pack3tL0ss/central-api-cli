@@ -67,18 +67,19 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # html_theme = "sphinx_rtd_theme"
 # html_theme = "sphinx_book_theme"
 html_theme = "sphinx_material"
+# html_theme = "conestack"
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ["_static"]
 
-html_sidebars = {
-    "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
-}
 html_show_sourcelink = False
 
 if html_theme == "sphinx_material":
+    html_sidebars = {
+        "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
+    }
     html_theme_options = {
 
         # Set the name of the project to appear in the navigation.
