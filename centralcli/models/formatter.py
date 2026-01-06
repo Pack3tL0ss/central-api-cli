@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_serializer, ConfigDict
-from typing import Dict, Any
+from typing import Any
 from datetime import datetime
 import pendulum
 from ..objects import DateTime
@@ -18,15 +18,17 @@ class CloudAuthUploadResponse(BaseModel):
             datetime: lambda v: pendulum.from_timestamp(v).to_day_datetime_string(),
         },
     )
-    details: Dict[str, Any]
+    details: dict[str, Any] | None
     status: str
     stats: CloudAuthUploadStats
-    submittedAt: datetime
-    lastUpdatedAt: datetime
+    submittedAt: datetime | None
+    lastUpdatedAt: datetime | None
     durationNanos: int
     fileName: str
 
     @field_serializer("lastUpdatedAt", "submittedAt")
     @classmethod
     def pretty_dt(cls, dt: datetime) -> DateTime:
+        if datetime(1, 1, 1, 0, 0, tzinfo=dt.tzinfo) == dt:
+            return None
         return DateTime(dt.timestamp())

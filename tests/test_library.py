@@ -13,7 +13,7 @@ from typing import Callable
 import pytest
 from typer.testing import CliRunner
 
-from centralcli import utils, common
+from centralcli import utils, common, api_clients
 from centralcli.cache import api
 from centralcli.cli import app
 from centralcli.constants import ShowArgs, arg_to_what
@@ -507,4 +507,23 @@ def test_clicommon(idx: int, func: Callable, kwargs: dict, pass_condition: Calla
             raise AssertionError(f"{env.current_test}{idx} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
     else:  # pragma: no cover
         resp = func(**kwargs)
+        assert pass_condition(resp)
+
+
+@pytest.mark.parametrize(
+    "idx,func,kwargs,pass_condition,exception",
+    [
+        [1, api_clients.glp.devices.get_glp_devices, {"sort_by": "archived", "reverse": True}, lambda r: r.ok, None],
+    ]
+)
+def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
+    if exception:
+        try:
+            _ = api_clients.glp.session.request(func, **kwargs)
+        except exception:
+            ...  # Test Passes
+        else:  # pragma: no cover
+            raise AssertionError(f"{env.current_test}{idx} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
+    else:  # pragma: no cover
+        resp = api_clients.glp.session.request(func, **kwargs)
         assert pass_condition(resp)

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cleaner, common, log, render
+from centralcli import cleaner, common, render
 from centralcli.cache import api
 from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType, TimeRange
 
@@ -76,10 +76,7 @@ def upload(
     resp = api.session.request(api.cloudauth.get_upload_status, upload_type=what.value)
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="action")
     if resp.ok:
-        try:
-            resp.output = cleaner.cloudauth_upload_status(resp.output)
-        except Exception as e:  # pragma: no cover
-            log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}")
+        resp.output = cleaner.cloudauth_upload_status(resp.output)
 
     render.display_results(
         resp,

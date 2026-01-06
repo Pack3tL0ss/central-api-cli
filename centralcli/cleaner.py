@@ -1724,7 +1724,7 @@ def cloudauth_upload_status(data: list[dict[str, Any]] | dict[str, Any]) -> dict
         resp_model = CloudAuthUploadResponse(**data)
         data = resp_model.model_dump()
     except Exception as e:  # pragma: no cover
-        log.error("Attempt to normalize cloudauth upload status response through model failed.")
+        log.error(f"Attempt to normalize cloudauth upload status response through model failed.  {repr(e)}", caption=True)
         log.exception(e)
 
     if "durationNanos" in data:

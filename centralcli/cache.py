@@ -55,7 +55,7 @@ except Exception:  # pragma: no cover
 try:
     from fuzzywuzzy import process  # type: ignore noqa
     FUZZ = True
-except Exception:  # pragma: no cover
+except (ModuleNotFoundError, ImportError):  # pragma: no cover
     FUZZ = False
 
 # Used to debug completion
@@ -582,7 +582,7 @@ class CacheGuest(CentralObject):
         self.created: int = data["created"]
         self.expires: int = data["expires"]
         email_str = None if not self.email or self.email == self.name else f"|[dark_olive_green2]{self.email}[/]"
-        self._help_text_parts = [self.name, f"[magenta]portal[/]: [cyan]{self.portal}[/]", self.status,  email_str, f"[dim][magenta]id[/]: [cyan]{self.id}[/][/dim]"]
+        self._help_text_parts = [self.name, f"[magenta]portal[/]: [cyan]{self.portal}[/]", self.status, email_str, f"[dim][magenta]id[/]: [cyan]{self.id}[/][/dim]"]
 
 
     @classmethod
@@ -4194,7 +4194,7 @@ class Cache:
         silent: Optional[bool] = False,
         include_inventory: Optional[bool] = False,
         exit_on_fail: Optional[bool] = True,
-    ) -> CacheDevice | CacheInvDevice | list[CacheDevice] | list[CacheDevice | CacheInvDevice] | list[CacheDevice | CacheInvDevice |  None] | None:
+    ) -> CacheDevice | CacheInvDevice | list[CacheDevice] | list[CacheDevice | CacheInvDevice] | list[CacheDevice | CacheInvDevice | None] | None:
         """Get Devices from local cache, starting with most exact match, and progressively getting less exact.
 
         If multiple matches are found user is promted to select device.
