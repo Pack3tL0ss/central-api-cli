@@ -64,9 +64,9 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 # a list of builtin themes.
 #
 # html_theme = 'alabaster'
-# html_theme = "sphinx_rtd_theme"
 # html_theme = "sphinx_book_theme"
-html_theme = "sphinx_material"
+# html_theme = "sphinx_material"
+html_theme = "sphinx_rtd_theme"
 # html_theme = "conestack"
 
 # Add any paths that contain custom static files (such as style sheets) here,
@@ -76,7 +76,9 @@ html_static_path = ["_static"]
 
 html_show_sourcelink = False
 
-if html_theme == "sphinx_material":
+if html_theme == "sphinx_rtd_theme":
+    html_css_files = ['rtd.css',]
+elif html_theme == "sphinx_material":
     html_sidebars = {
         "**": ["logo-text.html", "globaltoc.html", "localtoc.html", "searchbox.html"]
     }

@@ -1,0 +1,5 @@
+/* Increase the overall content width to 1200px (default is ~800px) */
+.wy-nav-content {
+    max-width: 1200px !important;
+    /* max-width: 75% !important; */
+}
