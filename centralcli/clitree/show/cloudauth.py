@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cleaner, common, log, render
+from centralcli import cleaner, common, render
 from centralcli.cache import api
 from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType, TimeRange
 
