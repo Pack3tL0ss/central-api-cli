@@ -212,7 +212,7 @@ def command(
     # from centralcli.constants import APDeployment, DeviceStatusFilter
     api = CentralAPI()
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    resp = api.session.request(api.monitoring.get_aps, limit=1)  #  deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
+    resp = api.session.request(api.monitoring.get_aps)  #  deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
     render.display_results(resp, tablefmt=tablefmt, outfile=outfile, pager=pager, sort_by=sort_by, reverse=reverse, output_by_key="deviceName")
     ...
 

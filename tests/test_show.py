@@ -468,6 +468,20 @@ def test_show_devices(_: int, fixture: str | None, args: tuple[str], pass_condit
     assert pass_condition(result.stdout)
 
 
+# TODO this will need to be folded into real command once show commands have ability to use cnx endpoints
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "──" in r],
+    ]
+)
+def test_show_devices_cnx(idx: int, args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["test", "command"])
+    capture_logs(result, f"{env.current_test}{idx}")
+    assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
 def test_show_device_by_name():
     result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
     capture_logs(result, "test_show_device_by_name")
