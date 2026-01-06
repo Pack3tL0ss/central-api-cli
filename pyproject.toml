@@ -112,10 +112,8 @@ exclude = [
 packages = ["centralcli"]
 
 [dependency-groups]
-nox = [
-    "nox-uv>=0.6.3",
-]
 test = [
+    "nox-uv>=0.6.3",
     "pytest",
     "pytest-cov",
     "pytest-asyncio",
@@ -123,6 +121,15 @@ test = [
 ]
 lint = [
     "ruff",
+]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=6",
+    "pytest-cov>=6.2.1",
+    "nox>=2025.5.1",
+    "pytest-asyncio>=1.2.0",
+    "jsonref>=1.1.0",
+    "nox-uv>=0.6.3",
 ]
 
 [tool.pytest.ini_options]
