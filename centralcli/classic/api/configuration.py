@@ -2017,7 +2017,8 @@ class ConfigAPI:
         Pulls existing config and adds or updates provided banner.
         Performs 2 API calls per AP.
 
-        Multiple APs can be provided using as_dict.
+        If banner is the same, multiple APs/groups can be processed by sending a list for iden parameter.
+        If banners are unique for each iden, multiple APs/Groups can be processed via as_dict parameter.
 
         Args:
             iden (str | list[str], optional): Group name swarm id or serial # (AOS10 AP) or list of the same.
@@ -2026,14 +2027,6 @@ class ConfigAPI:
                 Note: Despite the CLI command being ap-altitude, it is not from sea level, it's from the ground.
             as_dict: (dict[str, str], optional): A dict providing ap serial numbers and altitudes.
                 i.e.: {"AP1serial": "banner text", "AP2serial": "banner text" ...}
-
-        If banner is the same, multiple APs/groups can be processed by sending a list for iden parameter.
-        If banners are unique for each iden, multiple APs/Groups can be processed by sending as_dict where
-        group name/serial is the key and the desired banner text is the value.  i.e.
-        {
-            "USF7JSS9L1": "banner text ... connected to USF7JSS9L1",
-            "USF7JSS9L2": "banner text ... connected to USF7JSS9L2"
-        }
 
         Returns:
             List[Response]: Returns a List of Response objects.
