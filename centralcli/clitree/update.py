@@ -639,7 +639,7 @@ def site(
     # We also populate Country for US if it's one of the US states/territories
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)
-        if not country and state in state_abbrev_to_pretty.values():
+        if not country and state in state_abbrev_to_pretty.values():  # pragma: no cover
             country = "United States"
     if country and (country.upper() in ["US", "USA"] or "united states" in country.lower()):
         country = "United States"
@@ -667,10 +667,10 @@ def site(
         # Only provided new name send current address info to endpoint along with new name (name alone not allowed)
         if not address_fields:  # update requires either address fields or lon/lat even to change the name so send back existing data from cache with new name
             rename_only = True
-            geo_keys = ["latitude", "longitude"]
+            geo_keys = {"lat": "latitude", "lon": "longitude"}  # cache stores lat/lon API and central.update_site() use long form
             address_fields = {k: v for k, v in site_now.data.items() if k in kwargs.keys() and k not in geo_keys and v}
             if not address_fields:
-                address_fields = {k: v for k, v in site_now.data.items() if k in geo_keys and v}
+                address_fields = {geo_keys[k]: v for k, v in site_now.data.items() if k in geo_keys and v}
 
         render.econsole.print(f"  Chang{'e' if not yes else 'ing'} Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
     if rename_only:

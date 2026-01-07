@@ -271,6 +271,7 @@ class CentralAPI:
 
         site_address = utils.strip_none(site_address)
         geolocation = utils.strip_none(geolocation)
+        geolocation = {k: str(v) for k, v in geolocation.items()}  # API expects lat/lon as string.
 
         json_data = {
             "site_name": site_name,
