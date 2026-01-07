@@ -239,13 +239,13 @@ class Example:
         field_dict = FIELDS[self.action]
         required_strings =  utils.color(field_dict[self.type]["required"], "red")
         header += [f'    {required_strings}']
-        if field_dict[self.type].get("optional"):
-            header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
-            if self.action == "move":
-                header += [f'    [italic]At least one of {utils.color(["group", "site", "label"], "cyan")} is also required[/]']
-            header += [""]
-            for idx, (field, description) in enumerate(field_dict[self.type]["optional"].items(), start=1):
-                header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/]: [italic dark_olive_green2]{description}[/]"]
+        # if field_dict[self.type].get("optional"):  # currently all defined have optional fields
+        header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
+        if self.action == "move":
+            header += [f'    [italic]At least one of {utils.color(["group", "site", "label"], "cyan")} is also required[/]']
+        header += [""]
+        for idx, (field, description) in enumerate(field_dict[self.type]["optional"].items(), start=1):
+            header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/]: [italic dark_olive_green2]{description}[/]"]
 
         return "\n".join(header)
 
