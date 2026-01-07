@@ -119,14 +119,13 @@ def group(
 
     ver_msg = ["[cyan]Upgrade[/]"] if not at else [f'Schedule [cyan]Upgrade[/] @ [italic cornflower_blue]{DateTime(at, "mdyt")}[/] for']
 
-    if dev_type:
-        if dev_type == "ap":
-            reboot = True
-            if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
-                needless_prefix = version.split("-")[0]
-                if not version.count(needless_prefix) == 2:
-                    version = f"{needless_prefix}-{version}"
-        ver_msg += [lib_to_gen_plural(dev_type)]
+    if dev_type == "ap":
+        reboot = True
+        if version and "beta" in version:  # beta for APs always looks like this "10.7.1.0-10.7.1.0-beta_91138"
+            needless_prefix = version.split("-")[0]
+            if not version.count(needless_prefix) == 2:
+                version = f"{needless_prefix}-{version}"
+    ver_msg += [lib_to_gen_plural(dev_type)]
 
     if model:
         if "sw" not in group.allowed_types:
@@ -150,17 +149,17 @@ def group(
     ver_msg = f"{ver_msg} and :recycle:  reboot" if reboot else f"{ver_msg} ('-R' not specified, device will not be rebooted)"
 
     render.econsole.print(ver_msg)
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.firmware.upgrade_firmware,
-            scheduled_at=at,
-            group=group.name,
-            device_type=dev_type,
-            firmware_version=version,
-            model=model,
-            reboot=reboot
-        )
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(
+        api.firmware.upgrade_firmware,
+        scheduled_at=at,
+        group=group.name,
+        device_type=dev_type,
+        firmware_version=version,
+        model=model,
+        reboot=reboot
+    )
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
