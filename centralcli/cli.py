@@ -183,7 +183,6 @@ def bounce(
 def remove(
     devices: list[str] = common.arguments.get("devices", autocompletion=common.cache.remove_completion),
     site: str = common.arguments.get("site", metavar="[site <SITE>]", autocompletion=common.cache.remove_completion),
-    # site: str = common.arguments.get("site", default=None, metavar="[site <SITE>]", help=f"Site to remove device from {render.help_block('Remove from current site based on Cache')}", autocompletion=common.cache.remove_completion),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -219,8 +218,8 @@ def remove(
 
 @app.command()
 def reboot(
-    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
-    swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [dim italic](IAP cluster)[/] associated with the provided device (AP)."),
+    devices: list[str] = common.arguments.devices,
+    swarm: bool = common.options.get("swarm", help="Reboot the swarm [dim italic](IAP cluster)[/] associated with the provided device (AP)."),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -228,7 +227,7 @@ def reboot(
 ) -> None:
     """Reboot devices or swarms
 
-    Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
+    Use -S|--swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
     devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
 
