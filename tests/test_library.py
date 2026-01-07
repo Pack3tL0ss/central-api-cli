@@ -517,7 +517,7 @@ def test_clicommon(idx: int, func: Callable, kwargs: dict, pass_condition: Calla
     ]
 )
 def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
-    if exception:
+    if exception:  # pragma: no cover
         try:
             _ = api_clients.glp.session.request(func, **kwargs)
         except exception:
