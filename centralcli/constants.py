@@ -739,9 +739,6 @@ class ArgToWhat:
         self.bssids = self.bssid = "bssids"
         self.labels = self.label = "labels"
 
-    def _init_export(self):
-        self.configs = self.config = "configs"
-
     def _init_refresh(self):
         self.token = self.tokens = "token"
         self.webhook = self.webhooks = "webhook"
@@ -831,9 +828,8 @@ class ArgToWhat:
         self.send_cmd = self.send_cmds = "send_cmds"
 
     def __call__(self, key: ShowArgs | str, default: str = None, cmd: str = "show") -> str:
-        if cmd != "show":
-            if hasattr(self, f"_init_{cmd}"):
-                getattr(self, f"_init_{cmd}")()
+        if cmd != "show" and hasattr(self, f"_init_{cmd}"):
+            getattr(self, f"_init_{cmd}")()
 
         if isinstance(key, Enum):
             key = key.value
@@ -2442,7 +2438,6 @@ def do_load_pycentral() -> bool:
         for command to complete.
     """
     args = [arg for arg in sys.argv[1:] if "--debug" not in arg]
-    # for x in NO_LOAD_FLAGS:
     if [a for a in args if a in NO_LOAD_FLAGS]:
         return False
 
