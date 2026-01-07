@@ -22,10 +22,11 @@ def test_add_device_missing_mac():
 
 
 def test_archive(ensure_inv_cache_test_ap: None):
-    result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "-y"])
+    result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "99-not-a-serial", "USD8H1R1KG", "--yes"])
     capture_logs(result, "test_archive")
     assert result.exit_code == 0
     assert "succeeded" in result.stdout
+    assert "⚠" in result.stdout  # "99-not-a-serial" is skipped as it's not a serial number and is not found in inventory/cache
 
 
 def test_archive_multi(ensure_cache_batch_devices: None):
@@ -302,8 +303,9 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
         [
-            [1, (test_data["ap"]["name"], test_data["switch"]["name"], "-s"), lambda r: "⚠" in r],  # -s is ignored for both (AOS10/switch)
-            [2, (test_data["aos8_ap"]["name"], "-s"), lambda r: "200" in r],
+            [1, (test_data["ap"]["name"], test_data["switch"]["name"], "-S"), lambda r: "⚠" in r],  # -s is ignored for both (AOS10/switch)
+            [2, (test_data["ap"]["name"],), lambda r: "200" in r],
+            [3, (test_data["aos8_ap"]["name"], "--swarm"), lambda r: "200" in r],
         ]
     )
     def test_reboot(idx: int, args: tuple[str], pass_condition: Callable):

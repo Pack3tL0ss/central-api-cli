@@ -34,7 +34,7 @@ def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, An
     render.display_results(resp, tablefmt="action", exit_on_fail=exit_on_fail)
 
     if not resp:
-        return
+        return  # TODO verify implications of removing exit_on_fail and always letting display_results exit if POST fails here.
 
     complete = False
     while not complete:

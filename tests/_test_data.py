@@ -302,6 +302,7 @@ test_invalid_site_file: Path = setup_batch_import_file(test_data=test_data, impo
 test_cert_file: Path = setup_cert_file(cert_path=test_data["certificate"]["pem"])
 test_cert_file_p12: Path = setup_cert_file(cert_path=test_data["certificate"]["p12"], sfx="p12")
 test_cert_file_der: Path = setup_cert_file(cert_path=test_data["certificate"]["der"], sfx="der")
+test_cert_file_invalid_sfx: Path = setup_cert_file(cert_path=test_data["certificate"]["pem"], sfx="abc")
 test_invalid_var_file = _create_invalid_var_file(test_data["template"]["variable_file"])
 test_invalid_var_file_bad_json = _create_invalid_var_file(test_data["template"]["variable_file"], bad_json=True)
 test_switch_var_file_json = create_var_file(test_data["test_devices"]["switch"]["variable_file"])
@@ -347,6 +348,9 @@ test_files = [
     test_site_file_none_exist,
     test_invalid_site_file,
     test_cert_file,
+    test_cert_file_p12,
+    test_cert_file_der,
+    test_cert_file_invalid_sfx,
     test_mpsk_file,
     test_invalid_var_file,
     test_label_file,

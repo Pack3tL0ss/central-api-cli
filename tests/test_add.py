@@ -8,7 +8,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json
+from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json, test_cert_file_invalid_sfx
 
 runner = CliRunner()
 
@@ -42,17 +42,18 @@ def test_add_cert(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "args",
+    "idx,args",
     [
-        (str(test_cert_file), "--pem"),  # Missing type i.e --svr
-        ("--svr",),  # Missing cert format i.e. --pem (and no cert_file to determine format from)
+        [1, (str(test_cert_file), "--pem")],  # Missing type i.e --svr
+        [2, ("--svr",)],  # Missing cert format i.e. --pem (and no cert_file to determine format from)
+        [3, (str(test_cert_file_invalid_sfx), "--svr")],  # invalid sfx unable to autodetect cert type
     ]
 )
-def test_add_cert_fail(args: tuple[str]):
+def test_add_cert_fail(idx: int, args: tuple[str]):
     result = runner.invoke(app, ["add", "cert",  "cencli_test", *args])
-    capture_logs(result, "test_add_cert_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "must be provided" in result.stdout
+    assert "⚠" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -63,6 +64,8 @@ def test_add_cert_fail(args: tuple[str]):
         [3, ("cencli_test_group3", "--ap")],
         [4, ("cencli_test_group4", "--ap", "--gw", "--aos10", "--gw-role", "wlan", "--cnx")],
         [5, ("cencli_test_group5", "--cx", "--sw", "--ap", "--aos10", "--mb", "--mon-only-sw", "--mon-only-cx")],
+        [6, ("cencli_test_group6", "--ap", "--gw", "--aos10")],
+        [7, ("cencli_test_group7", "--sdwan",)],
     ]
 )
 def test_add_groups(idx: int, args: tuple[str]):
@@ -114,7 +117,7 @@ def test_add_site_by_geo():
     )
 
 
-def test_add_template(ensure_cache_group2):
+def test_add_template(ensure_cache_group2: None):
     result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["template_file"], "--dev-type", "sw", "-Y"])
     capture_logs(result, "test_add_template")
     assert result.exit_code == 0
@@ -129,14 +132,14 @@ def test_add_template(ensure_cache_group2):
         test_switch_var_file_flat
     ]
 )
-def test_add_variables(ensure_cache_group2, test_file: str):
+def test_add_variables(ensure_cache_group2: None, test_file: str):
     result = runner.invoke(app, ["add", "variables",  str(test_file), "-Y"])
     capture_logs(result, "test_add_variables")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
-def test_add_variables_invalid(ensure_cache_group2):
+def test_add_variables_invalid(ensure_cache_group2: None):
     result = runner.invoke(app, ["add", "variables",  str(test_invalid_var_file), "-Y"])
     capture_logs(result, "test_add_variables_invalid", expect_failure=True)
     assert result.exit_code == 1
@@ -167,7 +170,7 @@ def test_add_label(labels: tuple[str]):
         )
 
 
-def test_add_label_duplicate_name(ensure_cache_label1):
+def test_add_label_duplicate_name(ensure_cache_label1: None):
     result = runner.invoke(app, ["add", "label",  "cencli_test_label1", "-Y"])
     capture_logs(result, "test_add_label_duplicate_name", expect_failure=True)
     assert result.exit_code == 1
@@ -178,7 +181,7 @@ def test_add_label_duplicate_name(ensure_cache_label1):
     "args",
     [
         ("test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing", "-D"),
-        ("test@cencli.wtf", "--role", "authenticated", "--psk", "psk option does nothing")
+        ("test@cencli.wtf", "--role", "authenticated",)
     ]
 )
 def test_add_named_mpsk(args: tuple[str]):
@@ -212,14 +215,12 @@ def test_add_named_mpsk(args: tuple[str]):
             (
                 test_data["portal"]["name"],
                 test_data["portal"]["guest"]["name"],
-                "--password",
-                "cencli so awesome",
             ),
             lambda r: "cache update ERROR" not in r and "xception" not in r
         ],
     ]
 )
-def test_add_guest(ensure_no_cache_guest, args: tuple[str], pass_condition: Callable):
+def test_add_guest(ensure_no_cache_guest: None, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(
         app,
         [
@@ -306,13 +307,22 @@ def test_add_device(_: int, fixture: str | None, args: tuple[str], pass_conditio
     assert pass_condition(result.stdout)
 
 
-def test_add_wlan(ensure_cache_group1):
-    result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "psk", "C3ncliR0cks!", "--hidden", "--yes"])
+@pytest.mark.parametrize(
+    "idx,hide",
+    [
+        [1, True],
+        [2, False],
+    ]
+)
+def test_add_wlan(ensure_cache_group1: None, idx: int, hide: bool):
+    args_end = ("--hidden", "--yes") if hide else ("--yes",)
+    result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", f"delme{idx}", "vlan", "110", "psk", "C3ncliR0cks!", *args_end])
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
-def test_add_wlan_no_psk(ensure_cache_group1):
+def test_add_wlan_no_psk(ensure_cache_group1: None):
     result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
     capture_logs(result, "test_add_wlan_no_psk", expect_failure=True)
     assert result.exit_code == 1

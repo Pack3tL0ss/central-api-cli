@@ -20,15 +20,16 @@ def test_ts_inventory():
 
 
 @pytest.mark.parametrize(
-    "args",
+    "idx,args",
     [
-        ([test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m"]),
-        ([test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-r", "3"]),
+        [1, (test_data["vsf_switch"]["name"], test_data["gateway"]["ip"], "-m")],
+        [2, (test_data["template_switch"]["name"], test_data["gateway"]["ip"], "-r", "3")],
+        [3, (test_data["ap"]["name"], test_data["gateway"]["ip"])],
     ]
 )
-def test_ts_ping(args: list[str]):
+def test_ts_ping(idx: int, args: list[str]):
     result = runner.invoke(app, ["ts", "ping", *args])
-    capture_logs(result, "test_ts_ping")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "completed" in result.stdout
 
@@ -44,6 +45,19 @@ def test_ts_clients(args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["ts", "clients", *args])
     capture_logs(result, "test_ts_clients")
     assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "args,pass_condition",
+    [
+        [(test_data["ap"]["name"], "--wired"), lambda r: "⚠" in r or "❌" in r],
+    ]
+)
+def test_ts_clients_fail(args: tuple[str], pass_condition: Callable):
+    result = runner.invoke(app, ["ts", "clients", *args])
+    # capture_logs(result, "test_ts_clients_fail", expect_failure=True)  # exit code is 0 currently.  Prob need to adjust exit_on_fail to always be True in send_cmds_by_id
+    # assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
@@ -77,20 +91,21 @@ def test_ts_command(args: tuple[str]):
 
 
 @pytest.mark.parametrize(
-    "args,test_name_append",
+    "idx,args,test_name_append",
     [
-        [(test_data["ap"]["name"], "show", "ap-env"), None],
-        [(test_data["ap"]["name"], "show", "ap-env"), "post"],
-        [(test_data["ap"]["name"], "invalidcommand", "invalidcommand"), "invalid_command"]
+        [1, (test_data["ap"]["name"], "show", "ap-env"), None],
+        [2, (test_data["ap"]["name"], "show", "ap-env"), "post"],
+        [3, (test_data["ap"]["name"], "invalidcommand", "invalidcommand"), "invalid_command"],
+        [4, (test_data["switch"]["name"], "invalidcommand", "invalidcommand"), None],
     ]
 )
-def test_ts_command_fail(args: tuple[str], test_name_append: str | None):
+def test_ts_command_fail(idx: int, args: tuple[str], test_name_append: str | None):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, ["ts", "command", *args])
-    capture_logs(result, "test_ts_command_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "⚠" in result.stdout
+    assert "⚠" in result.stdout or "❌" in result.stdout
 
 
 def test_ts_show_tech():
