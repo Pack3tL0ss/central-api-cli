@@ -196,8 +196,8 @@ def group(
         _arch = "SD_WAN_Gateway"
         allowed_types = ["sdwan"]
         if gw_role and gw_role != "vpnc":
-            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring Gateway Role: [red]{gw_role}[/].  As the group is configured for [cyan]--sdwan[/], Gateway role [bright_green]vpnc[/] is implied.")
-        gw_role = "vpnc"
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring Gateway Role: [red]{gw_role.value}[/].  As the group is configured for [cyan]--sdwan[/], Gateway role [bright_green]vpnc[/] is implied.")
+        gw_role = GatewayRole.vpnc
 
     # -- // Error on combinations that are not allowed by API \\ --
     if any([ap, sw, cx, gw]) and sdwan:
@@ -236,40 +236,40 @@ def group(
 
     econsole.print(f"{_msg}")
 
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.configuration.create_group,
-            group,
-            wired_tg=wired_tg,
-            wlan_tg=wlan_tg,
-            allowed_types=allowed_types,
-            aos10=aos10,
-            microbranch=microbranch,
-            gw_role=gw_role,
-            monitor_only_sw=mon_only_sw,
-            monitor_only_cx=mon_only_cx,
-            cnx=cnx
-        )
-        if not resp.ok:  # pragma: no cover
-            log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        # prep data for cache
-        data={
-            'name': group,
-            "allowed_types": allowed_types,
-            "gw_role": gw_role,
-            'aos10': aos10,
-            "microbranch": None if not aos10 else bool(microbranch),
-            'wlan_tg': wlan_tg,
-            'wired_tg': wired_tg,
-            'monitor_only_sw': mon_only_sw,
-            'monitor_only_cx': mon_only_cx,
-            'cnx': cnx
-        }
-        api.session.request(
-            common.cache.update_group_db,
-            data=data
-        )
+    render.confirm(yes)
+    resp = api.session.request(
+        api.configuration.create_group,
+        group,
+        wired_tg=wired_tg,
+        wlan_tg=wlan_tg,
+        allowed_types=allowed_types,
+        aos10=aos10,
+        microbranch=microbranch,
+        gw_role=gw_role,
+        monitor_only_sw=mon_only_sw,
+        monitor_only_cx=mon_only_cx,
+        cnx=cnx
+    )
+    if not resp.ok:  # pragma: no cover
+        log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # prep data for cache
+    data={
+        'name': group,
+        "allowed_types": allowed_types,
+        "gw_role": gw_role,
+        'aos10': aos10,
+        "microbranch": None if not aos10 else bool(microbranch),
+        'wlan_tg': wlan_tg,
+        'wired_tg': wired_tg,
+        'monitor_only_sw': mon_only_sw,
+        'monitor_only_cx': mon_only_cx,
+        'cnx': cnx
+    }
+    api.session.request(
+        common.cache.update_group_db,
+        data=data
+    )
 
 
 # TODO autocompletion
@@ -669,8 +669,8 @@ def guest(
         cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
         _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
     except Exception as e:  # pragma: no cover
-        log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
-        render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
+        log.exception(f"{repr(e)} attempting to update Guest cache after adding guest {name}.")
+        render.econsole.print(f"[red]:warning:[/]  Exception ({(repr(e))}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
 
 @app.command()
