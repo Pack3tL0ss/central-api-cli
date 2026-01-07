@@ -533,3 +533,4 @@ def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Cal
 def test_constants_unused():
     assert "cx" in lib_to_api.valid_str
     assert "cx" in lib_to_api.valid
+    assert arg_to_what("client", cmd="notexist") == "clients"

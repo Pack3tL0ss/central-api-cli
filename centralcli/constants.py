@@ -830,6 +830,7 @@ class ArgToWhat:
     def __call__(self, key: ShowArgs | str, default: str = None, cmd: str = "show") -> str:
         if cmd != "show" and hasattr(self, f"_init_{cmd}"):
             getattr(self, f"_init_{cmd}")()
+        # defaults to show init if cmd is not defined.
 
         if isinstance(key, Enum):
             key = key.value
