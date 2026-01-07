@@ -96,12 +96,12 @@ def template(
     render.econsole.print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
     render.econsole.print(f"    Model: [cyan]{kwargs['model']}[/]")
     render.econsole.print(f"    Version: [cyan]{kwargs['version']}[/]")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        # will exit above if call failed.
-        cache_template.data["template_hash"] = api.session.request(common.get_file_hash, file=template, string=payload)
-        _ = api.session.request(common.cache.update_template_db, data=cache_template.data)
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # will exit above if call failed.
+    cache_template.data["template_hash"] = api.session.request(common.get_file_hash, file=template, string=payload)
+    _ = api.session.request(common.cache.update_template_db, data=cache_template.data)
 
 
 @app.command()
@@ -317,6 +317,8 @@ def config_(
     elif do_ap or (device and device.generic_type == "ap"):
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.swack_id  # cache is populated with serial for swack_id for aos_10 so this works for both aos8 and aos10
+    else:  # pragma: no cover
+        ...
 
     render.console.rule("Configuration to be sent")
     render.console.print(output, emoji=False)
@@ -325,13 +327,13 @@ def config_(
         render.console.print(f"\nUpdating Swarm associted with {group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     else:
         render.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
-    if render.confirm(yes):
-        if use_caas:
-            resp = api.session.request(caasapi.send_commands, node_iden, cli_cmds)
-            render.display_results(resp, cleaner=cleaner.parse_caas_response)
-        else:
-            resp = api.session.request(api.configuration.replace_ap_config, node_iden, cli_cmds)
-            render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    if use_caas:
+        resp = api.session.request(caasapi.send_commands, node_iden, cli_cmds)
+        render.display_results(resp, cleaner=cleaner.parse_caas_response)
+    else:
+        resp = api.session.request(api.configuration.replace_ap_config, node_iden, cli_cmds)
+        render.display_results(resp, tablefmt="action")
 
 
 # FIXME typer is not handling list[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
@@ -591,9 +593,9 @@ def webhook(
     updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'{_pfx}{url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
     conf_msg = f"{conf_msg}\n{updates}"
     render.console.print(conf_msg, overflow="ellipsis")
-    if render.confirm(yes):
-        resp = api.session.request(api.central.update_webhook, wid, name, urls)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.central.update_webhook, wid, name, urls)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -823,11 +825,11 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
 
     render.econsole.print(_msg)
-    if render.confirm(yes):
-        resp = api.session.request(api.guest.update_guest, **payload)
-        password = None
-        payload = None
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.guest.update_guest, **payload)
+    password = None
+    payload = None
+    render.display_results(resp, tablefmt="action")
 
 
 @app.callback()

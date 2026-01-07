@@ -328,7 +328,7 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "_,fixture,args",
+        "idx,fixture,args",
         [
             [1, "ensure_dev_cache_test_ap", ("device", test_data["ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "10.7.1.0-beta_91138")],
             [2, "ensure_dev_cache_test_ap", ("device", test_data["test_devices"]["ap"]["serial"], "10.7.1.0-10.7.1.0-beta_91138")],
@@ -338,19 +338,20 @@ if config.dev.mock_tests:
             [6, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-beta_91138", "--in", "10m")],
             [7, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-10.7.1.0-beta_91138")],
             [8, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.2.2_94048")],
-            [9, None, ("group", test_data["upgrade_group"], "--dev-type", "ap")],
+            [9, None, ("group", test_data["upgrade_group"], "--dev-type", "ap",)],
             [10, None, ("group", test_data["template_switch"]["group"], "--dev-type", "sw", "16.11.0027", "--model", "2930F")],
             [11, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688")],
             [12, None, ("swarm", test_data["aos8_ap"]["name"],)],
-            [13, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-8.13.1.0-beta_93688", "--in", "1h")],
-            [14, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688", "--at", at_str)],
+            [13, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-beta_93688")],
+            [14, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-8.13.1.0-beta_93688", "--in", "1h")],
+            [15, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688", "--at", at_str)],
         ]
     )
-    def test_upgrade(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    def test_upgrade(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
         result = runner.invoke(app, ["upgrade",  *args, "-y"])
-        capture_logs(result, "test_upgrade_ap")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
@@ -499,9 +500,17 @@ if config.dev.mock_tests:
         assert "400" in result.stdout
 
 
-    def test_rename_site(ensure_cache_site4: None):
-        result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40", "--yes"])
-        capture_logs(result, "test_rename_site")
+    @pytest.mark.parametrize(
+        "idx,fixture,args",
+        [
+            [1, "ensure_cache_site3", ("cencli_test_site3", "cencli_test_site30")],
+            [2, "ensure_cache_site4", ("cencli_test_site4", "cencli_test_site40")],
+        ]
+    )
+    def test_rename_site(idx: int, fixture: Callable, args: tuple[str], request: pytest.FixtureRequest):
+        request.getfixturevalue(fixture)
+        result = runner.invoke(app, ["rename", "site",  *args, "--yes"])
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "address" in result.stdout
 

@@ -364,9 +364,10 @@ if config.dev.mock_tests:
         [
             [1, "ensure_cache_group_cloned", ("--gw", "--sw"), None],
             [2, "ensure_cache_group_cloned", ("--sw", "--mo-sw", "--cx", "--mo-cx"), None],
-            [3, "ensure_cache_group_cloned", ("--wlan-tg", "--cx", "--wired-tg"), None],  # Not sure you can actually update a non TG to a TG
-            [4, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--gw", "--gw-role", "vpnc"), "cx_only"],
-            [5, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--mb"), "cx_only"],
+            [3, "ensure_cache_group_cloned", ("--cx", "--wired-tg"), None],
+            [4, "ensure_cache_group_cloned", ("--wlan-tg",), None],  # TESTME Not sure you can actually update a non TG to a TG
+            [5, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--gw", "--gw-role", "vpnc"), "cx_only"],
+            [6, "ensure_cache_group_cloned_cx_only", ("--ap", "--aos10", "--mb"), "cx_only"],
         ]
     )
     def test_update_group(_: int, fixture: str, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
@@ -451,6 +452,8 @@ if config.dev.mock_tests:
                 "Gallatin,",
                 "TN",
                 "37066",
+                "--new-name",
+                "cencli_test_site40",
                 "-Y"
             ]
         )

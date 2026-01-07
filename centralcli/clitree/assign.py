@@ -120,10 +120,10 @@ def label_(
         if devs:
             reqs += [br(api.central.assign_label_to_devices, label.id, serials=[dev.serial for dev in devs], device_type=dev_type)]
 
-    if render.confirm(yes):
-        resp = api.session.batch_request(reqs)
-        render.display_results(resp, tablefmt="action")
-        # We don't cache device label assignments
+    render.confirm(yes)
+    resp = api.session.batch_request(reqs)
+    render.display_results(resp, tablefmt="action")
+    # We don't cache device label assignments
 
 
 @app.callback()

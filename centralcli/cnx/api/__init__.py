@@ -23,7 +23,7 @@ class GreenLakeAPI:
 
     @session.setter
     def session(self, session: Session) -> None:
-        self._session = session
+        self._session = session  # pragma: no cover  We don't use this currently
 
     @cached_property
     def devices(self) -> GreenLakeDevicesAPI:
