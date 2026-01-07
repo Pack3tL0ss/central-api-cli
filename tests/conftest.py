@@ -121,7 +121,6 @@ def cleanup_import_files():
                 file.unlink()
 
 
-
 def setup():
     if config.dev.mock_tests:
         yield do_nothing()
