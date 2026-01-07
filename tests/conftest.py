@@ -115,7 +115,11 @@ def do_nothing():
 def cleanup_import_files():
     for file in test_files:
         if file.exists():
-            file.unlink()
+            if file.is_dir():
+                file.rmdir()  # must be empty
+            else:
+                file.unlink()
+
 
 
 def setup():
@@ -344,6 +348,18 @@ def ensure_hook_proxy_started():  # pragma: no cover
         assert "Started" in result.stdout
 
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_cache():
+    cache_file = config.cache_dir / "db.mocked.json"
+    cache_file_bak = config.cache_dir / "db.mocked.json.bak"
+    cache_file_bak.write_text(cache_file.read_text())
+    cache_file.unlink()
+    yield
+
+    cache_file.write_text(cache_file_bak.read_text())
+    cache_file_bak.unlink()
 
 
 @pytest.fixture(scope="function")

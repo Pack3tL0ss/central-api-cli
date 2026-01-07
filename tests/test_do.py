@@ -1,6 +1,7 @@
 from typing import Callable
 
 import pytest
+import sys
 from typer.testing import CliRunner
 
 from centralcli import common, utils
@@ -8,7 +9,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, config, test_data, at_str
-from ._test_data import test_device_file, test_j2_file
+from ._test_data import test_device_file, test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file
 
 runner = CliRunner()
 
@@ -550,6 +551,23 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, ("--dir", str(test_gen_bssid_file.parent),), lambda r: "," in r],  # do --dir first else out files are included in dir run
+            [2, ("--file", str(test_gen_bssid_xlsx_file), "--out", f"{str(test_gen_bssid_xlsx_file.parent)}/delme.csv"), lambda r: "," in r],
+            [3, ("--file", str(test_gen_bssid_file)), lambda r: "," in r],
+            [4, (str(test_gen_bssid_file),), lambda r: "," in r],
+            [5, ("685134C6D46B",), lambda r: "radio" in r],
+        ]
+    )
+    def test_generate_bssids(idx: int, args: list[str], pass_condition: Callable):
+        result = runner.invoke(app, ["generate", "bssids", *args])
+        capture_logs(result, f"{env.current_test}{idx}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
         "fixture,args",
         [
             ["ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
@@ -567,6 +585,23 @@ if config.dev.mock_tests:
         capture_logs(result, "test_unarchive")
         assert result.exit_code == 0
         assert "succeeded" in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "idx,args,pass_condition",
+        [
+            [1, ("show", "gateways"), lambda r: "Populating" in r and "Cache" in r],
+            [2, ("show", "--help"), lambda r: "Usage" in r],
+            [3, ("show", "last"), lambda r: "Previous Output" in r],
+        ]
+    )
+    def test_no_cache_and_do_load_pycentral(ensure_no_cache, idx: int, args: tuple[str], pass_condition: Callable):
+        sys.argv = ["cencli", *args]
+        result = runner.invoke(app, args)
+        capture_logs(result, f"{env.current_test}{idx}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
 
 else:  # pragma: no cover  Coverage shows untested branch without this
     ...

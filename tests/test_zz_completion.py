@@ -93,8 +93,7 @@ def test_site_completion_empty_string(incomplete: str = ""):
     ]
 )
 def test_template_completion(idx: int, fixtures: str | list[str] | None, complete_func: Callable, incomplete: str, request: pytest.FixtureRequest, args: tuple[str]):
-    if fixtures:
-        [request.getfixturevalue(f) for f in utils.listify(fixtures)]
+    [request.getfixturevalue(f) for f in utils.listify(fixtures)]
     result = [c for c in complete_func(incomplete, args)]
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])

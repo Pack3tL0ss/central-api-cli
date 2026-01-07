@@ -265,6 +265,16 @@ def _create_not_exist_device_file(file: Path, none_exists: bool = False) -> Path
     out_file.write_text(json.dumps(dev_data, indent=4))
     return out_file
 
+def _create_bssid_dir_and_files(xlsx: bool = False) -> Path:
+    file = config.cache_dir / "test_gen_bssid" / f"test_runner_gen_bssids{'' if not xlsx else '_xlsx'}.{'csv' if not xlsx else 'xlsx'}"
+    seed_file = Path(test_data["batch"][f"generate_bssids{'' if not xlsx else '_xlsx'}"])
+    file.parent.mkdir(exist_ok=True)
+    if xlsx:
+        file.write_bytes(seed_file.read_bytes())
+    else:
+        file.write_text(seed_file.read_text())
+
+    return file
 
 test_data: dict[str, Any] = get_test_data()
 test_outfile: Path = config.cache_dir / "test_runner_outfile"
@@ -310,6 +320,11 @@ test_banner_file_j2 = _create_banner_file()
 test_banner_file = _create_banner_file(template=False)
 test_banner_devices_file = _create_banner_update_import_devices(test_data["test_devices"]["ap"])
 test_banner_groups_file = _create_banner_update_import_groups()
+test_gen_bssid_file = _create_bssid_dir_and_files()
+test_gen_bssid_xlsx_file = _create_bssid_dir_and_files(xlsx=True)
+test_gen_bssid_xlsx_interim_file = test_gen_bssid_xlsx_file.parent / f"{test_gen_bssid_xlsx_file.stem}.csv"
+test_gen_bssid_xlsx_out_file = test_gen_bssid_xlsx_file.parent / "delme.csv"  # we specify --out for this test
+test_gen_bssid_file_out = test_gen_bssid_file.parent / f"{test_gen_bssid_file.stem}_out.csv"  # this is deleted
 # Persistent files, not deleted
 test_ap_ui_group_template = Path(test_data["template"]["ap_ui_group"]["template_file"])
 test_ap_ui_group_variables = Path(test_data["template"]["ap_ui_group"]["variable_file"])
@@ -353,4 +368,10 @@ test_files = [
     test_banner_file,
     test_banner_devices_file,
     test_banner_groups_file,
+    test_gen_bssid_file,
+    test_gen_bssid_file_out,
+    test_gen_bssid_xlsx_file,
+    test_gen_bssid_xlsx_interim_file,
+    test_gen_bssid_xlsx_out_file,
+    test_gen_bssid_file.parent,
 ]

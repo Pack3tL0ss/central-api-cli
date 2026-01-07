@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 from centralcli import utils, common, api_clients
 from centralcli.cache import api
 from centralcli.cli import app
-from centralcli.constants import ShowArgs, arg_to_what
+from centralcli.constants import ShowArgs, arg_to_what, lib_to_api
 from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
 from click.exceptions import Exit
@@ -527,3 +527,9 @@ def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Cal
     else:  # pragma: no cover
         resp = api_clients.glp.session.request(func, **kwargs)
         assert pass_condition(resp)
+
+
+# Test properties that are not currently used, but we want to keep them for future use.
+def test_constants_unused():
+    assert "cx" in lib_to_api.valid_str
+    assert "cx" in lib_to_api.valid
