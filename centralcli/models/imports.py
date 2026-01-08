@@ -207,9 +207,9 @@ class ImportSubDevice(_ImportSubDevice):
             return False
         return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
-    async def _get_inv_object(self) -> CacheInvDevice | None:
+    def _get_inv_object(self) -> CacheInvDevice | None:
         inv_dev = cache.InvDB.search(cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
-        if inv_dev is None and cache.responses.inv is None:
+        if not inv_dev and cache.responses.inv is None:
             return cache.get_inv_identifier(self.serial, exit_on_fail=False)
         self._inv_fetched = True
         self._inv_object = None if inv_dev is None else CacheInvDevice(inv_dev[0])
@@ -218,7 +218,7 @@ class ImportSubDevice(_ImportSubDevice):
     @property
     def inv(self) -> CacheInvDevice | None:
         if not self._inv_fetched:
-            self._inv_object = asyncio.run(self._get_inv_object())
+            self._inv_object = self._get_inv_object()
         return self._inv_object
 
     @property
@@ -337,18 +337,16 @@ class ImportSubDevices(RootModel):
     def get(self, serial: str, default: Any = None) -> ImportSubDevice | Any:
         return self.by_serial.get(serial, default)
 
-    async def get_inv_objects(self) -> list[CacheInvDevice | None]:
-        # tasks = [asyncio.create_task(lambda: dev.inv) for dev in self.root]
-        tasks = [asyncio.create_task(dev._get_inv_object()) for dev in self.root]
-        # return [await t for t in tasks]
-        return await asyncio.gather(*tasks)
+    def get_inv_objects(self) -> list[CacheInvDevice | None]:
+        return [dev._get_inv_object() for dev in self.root]
+
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
         subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
         start = time.perf_counter()
         with Spinner(f"Gathering [green]GreenLake[/] device_ids from cache for [cyan]{len(self)}[/] devices found in import") as spinner:
-            inv_devs = asyncio.run(self.get_inv_objects())  # TODO if import has id field spot check a few to see that the id matches up with the serial in the cache, then assume all id fields are good... no need to lookup all of them
+            inv_devs = self.get_inv_objects()  # TODO if import has id field spot check a few to see that the id matches up with the serial in the cache, then assume all id fields are good... no need to lookup all of them
         duration = round(time.perf_counter() - start, 3)
         spinner.succeed(f"[cyan]{len(self)}[/] device_ids fetched in {duration}s.  Avg: {round(duration / len(self), 3)}")
 
