@@ -1441,13 +1441,13 @@ def test_show_firmware_list_invalid(args: list[str]):
 
 
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
-        ["ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "No compliance set" in r],
-        [None, ("cx", test_data["switch"]["group"], "--raw"), None],
+        [1, "ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "No compliance set" in r],
+        [2, None, ("cx",), None],
     ]
 )
-def test_show_firmware_compliance(fixture: str | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
+def test_show_firmware_compliance(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, [
@@ -1457,7 +1457,7 @@ def test_show_firmware_compliance(fixture: str | None, args: tuple[str], pass_co
             *args
         ]
     )
-    capture_logs(result, "test_show_firmware_compliance")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     if pass_condition:
         assert pass_condition(result.stdout)

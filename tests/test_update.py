@@ -441,7 +441,9 @@ if config.dev.mock_tests:
         assert "[OK]" in result.stdout
 
 
-    def test_update_site(ensure_cache_site4):
+    @pytest.mark.parametrize("idx", [1,2])
+    def test_update_site(ensure_cache_site4, idx: int):
+        args = ["--new-name", "cencli_test_site40", "-Y"] if idx == 1 else ["-Y"]
         result = runner.invoke(
             app,
             [
@@ -452,12 +454,10 @@ if config.dev.mock_tests:
                 "Gallatin,",
                 "TN",
                 "37066",
-                "--new-name",
-                "cencli_test_site40",
-                "-Y"
+                *args
             ]
         )
-        capture_logs(result, "test_update_site")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "API" in result.stdout
 
