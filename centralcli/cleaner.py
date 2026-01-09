@@ -1727,10 +1727,6 @@ def cloudauth_upload_status(data: list[dict[str, Any]] | dict[str, Any]) -> dict
         log.error(f"Attempt to normalize cloudauth upload status response through model failed.  {repr(e)}", caption=True)
         log.exception(e)
 
-    if "durationNanos" in data:
-        data["duration_secs"] = round(data["durationNanos"] / 1_000_000_000, 2)
-        del data["durationNanos"]
-
     return data
 
 def cloudauth_get_namedmpsk(data: list[dict[str, Any]], verbosity: int = 0,) -> list[dict[str, Any]]:
