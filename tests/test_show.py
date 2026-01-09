@@ -82,20 +82,22 @@ def test_show_archived():
 
 
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition,expect_failure",
+    "idx,fixture,args,pass_condition,expect_failure",
     [
-        [None, (), lambda r: "All" in r, False],
-        [None, (test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "ignored" in r, False],  # -S --dev --group flags are ignored
-        [None, ("-S", "--dev", test_data["aos8_ap"]["name"]), lambda r: "API" in r, False],  # aos8
-        [None, ("-S", "--dev", test_data["ap"]["name"]), lambda r: "AOS10" in r, False],  # test with aos10, swarm is only valid for AOS8...
-        [None, ("--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r, False],  # --group flag is ignored
-        [None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
-        ["ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
-        [None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
-        [None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
+        [1, None, (), lambda r: "All" in r, False],
+        [2, None, (test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "ignored" in r, False],  # -S --dev --group flags are ignored
+        [3, None, (test_data["client"]["wireless"]["mac"],), lambda r: "TX" in r, False],
+        [4, None, ("-S", "--dev", test_data["aos8_ap"]["name"]), lambda r: "API" in r, False],  # aos8
+        [5, None, ("--dev", test_data["aos8_ap"]["name"]), lambda r: "TX" in r, False],  # aos8
+        [6, None, ("-S", "--dev", test_data["ap"]["name"]), lambda r: "AOS10" in r, False],  # test with aos10, swarm is only valid for AOS8...
+        [7, None, ("--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r, False],  # --group flag is ignored
+        [8, None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
+        [9, "ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
+        [10, None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
+        [11, None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
     ]
 )
-def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
+def test_show_bandwidth_client(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["show", "bandwidth", "client", *args],)
@@ -109,21 +111,35 @@ def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condi
     [
         [1, ("switch", test_data["switch"]["mac"]), lambda r: "TX" in r],
         [2, ("switch", test_data["switch"]["mac"], "--uplink"), lambda r: "TX" in r],
-        [3, ("switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]), lambda r: "TX" in r],
-        [4, ("ap", test_data["ap"]["name"]), lambda r: "TX" in r],
-        [5, ("ap", "--ssid", "ignored"), lambda r: "--ssid" in r and "TX" in r],
-        [6, ("ap", "--band", "5"), lambda r: "--band" in r and "TX" in r],
-        [7, ("ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r and "TX" in r],
-        [8, ("ap", test_data["aos8_ap"]["name"], "--swarm"), lambda r: "TX" in r],
-        [9, ("uplink", test_data["gateway"]["name"]), lambda r: "TX" in r],
-        [10, ("uplink", test_data["gateway"]["name"], "--yaml"), lambda r: "TX" in r],
-        [11, ("uplink", test_data["switch"]["name"]), lambda r: "TX" in r],
+        [3, ("switch", test_data["switch"]["mac"], "--uplink", "--yaml"), lambda r: "API" in r],
+        [4, ("switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]), lambda r: "TX" in r],
+        [5, ("ap", test_data["ap"]["name"]), lambda r: "TX" in r],
+        [6, ("ap", "--ssid", "ignored"), lambda r: "--ssid" in r and "TX" in r],
+        [7, ("ap", "--band", "5"), lambda r: "--band" in r and "TX" in r],
+        [8, ("ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r and "TX" in r],
+        [9, ("ap", test_data["aos8_ap"]["name"], "--swarm"), lambda r: "TX" in r],
+        [10, ("uplink", test_data["gateway"]["name"]), lambda r: "TX" in r],
+        [11, ("uplink", test_data["gateway"]["name"], "--yaml"), lambda r: "TX" in r],
+        [12, ("uplink", test_data["switch"]["name"]), lambda r: "TX" in r],
     ]
 )
 def test_show_bandwidth(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "bandwidth", *args],)
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("switch", test_data["switch"]["mac"]), lambda r: "API" in r],
+    ]
+)
+def test_show_bandwidth_fail(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "bandwidth", *args],)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
@@ -790,6 +806,27 @@ def test_show_ospf(args: list[str], pass_condition: Callable):
     assert pass_condition(result.stdout)
 
 
+@pytest.mark.parametrize(
+    "idx,args",
+    [
+        [1, ("database", test_data["gateway"]["name"],)],
+        [2, ("interfaces", test_data["gateway"]["name"])],
+        [3, ("neighbors", test_data["gateway"]["name"])],
+        [4, ("area", test_data["gateway"]["name"])],
+    ]
+)
+def test_show_ospf_fail(idx: int, args: tuple[str]):
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            *args
+        ]
+    )
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Response" in result.stdout
+
+
 def test_show_overlay_routes_advertised():
     result = runner.invoke(app, [
             "show",
@@ -1348,8 +1385,10 @@ def test_show_notifications():
         [2, (test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
         [3, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
         [4, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [5, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
-        [6, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [5, (), False, None, None],
+        [6, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
+        [7, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [8, (test_data["ap"]["name"], test_data["aos8_ap"]["name"],), True, "fail", lambda r: "⚠" in r],  # partial failure
     ]
 )
 def test_show_firmware_swarm(idx: int, args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
@@ -1443,8 +1482,8 @@ def test_show_firmware_list_invalid(args: list[str]):
 @pytest.mark.parametrize(
     "idx,fixture,args,pass_condition",
     [
-        [1, "ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "No compliance set" in r],
-        [2, None, ("cx",), None],
+        [1, "ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "API" in r],
+        [2, None, ("cx",), lambda r: "No compliance set" in r],
     ]
 )
 def test_show_firmware_compliance(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
@@ -1652,15 +1691,17 @@ def test_show_uplinks():
     assert result.exit_code == 0
     assert "uplink" in result.stdout.lower()
 
-
-def test_show_cloud_auth_upload_mac():
+@pytest.mark.parametrize("mac", [True, False])
+def test_show_cloud_auth_upload(mac: bool):
+    args = [] if mac else ["mpsk"]  # default is mac
     result = runner.invoke(app, [
             "show",
             "cloud-auth",
             "upload",
-        ]  # default is mac
+            *args
+        ]
     )
-    capture_logs(result, "test_show_cloud_auth_upload_mac")
+    capture_logs(result, f"{env.current_test}:{'mac' if mac else 'mpsk'}")
     assert result.exit_code == 0
     assert "200" in result.stdout
 

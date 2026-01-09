@@ -30,31 +30,11 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,pass_condition,test_name_append",
+        "idx,fixture,args,pass_condition,test_name_append",
         [
-            [
-                "ensure_dev_cache_test_ap",
-                (
-                    test_data["mesh_ap"]["serial"],
-                    "-a",
-                    test_data["mesh_ap"]["altitude"] - 0.1
-                ),
-                None,
-                None
-            ],
-            [
-                "ensure_dev_cache_test_ap",
-                (
-                    test_data["mesh_ap"]["serial"],
-                    "-a",
-                    test_data["mesh_ap"]["altitude"]
-                ),
-                None,
-                "no_gps_in_config",
-            ],
-            [
-                "ensure_dev_cache_test_ap",
-                (
+            [1, None, (test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"] - 0.1), None, None],
+            [2, None, (test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"]), None, "no_gps_in_config",],
+            [3, "ensure_dev_cache_test_ap", (
                     test_data["test_devices"]["ap"]["serial"],
                     "--ip",
                     "10.0.31.6",
@@ -66,82 +46,21 @@ if config.dev.mock_tests:
                     "10.0.30.51,10.0.30.52",
                     "--domain",
                     "consolepi.com"
-                ),
-                None,
-                None
+                ), None, None
             ],
-            [
-                "ensure_dev_cache_test_ap",
-                (
-                    test_data["test_devices"]["ap"]["serial"],
-                    "-u",
-                    "31",
-                    "-R"
-                ),
-                None,
-                None
-            ],
-            [
-                "ensure_dev_cache_test_ap",
-                (
-                    test_data["mesh_ap"]["serial"],
-                    test_data["test_devices"]["ap"]["serial"],
-                    "-w",
-                    "narrow",
-                ),
-                lambda r: "skipped" in r,
-                None
-            ],
-            [
-                [
-                    "ensure_dev_cache_test_ap",
-                    "ensure_dev_cache_test_flex_dual_ap"
-                ],
-                (
-                    "cencli-test-flex-dual-ap",
-                    test_data["test_devices"]["ap"]["serial"],
-                    "-e",
-                    "2.4",
-                ),
-                lambda r: "skipped" in r,
-                None
-            ],
-            [
-                "ensure_dev_cache_test_flex_dual_ap",
-                (
-                    "cencli-test-flex-dual-ap",
-                    "-e",
-                    "5",
-                ),
-                None,
-                None
-            ],
-            [
-                "ensure_dev_cache_test_flex_dual_ap",
-                (
-                    "cencli-test-flex-dual-ap",
-                    "-e",
-                    "6",
-                ),
-                None,
-                None
-            ],
-            [
-                "ensure_dev_cache_test_dyn_ant_ap",
-                (
-                    "cencli-test-dyn-ant-ap",
-                    "-w",
-                    "wide",
-                ),
-                None,
-                None
-            ],
+            [4, "ensure_dev_cache_test_ap", (test_data["test_devices"]["ap"]["serial"], "-u", "31", "-R"), None, None],
+            [5, "ensure_dev_cache_test_ap", (test_data["mesh_ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "-w", "narrow",), lambda r: "skipped" in r, None],
+            [6, ["ensure_dev_cache_test_ap", "ensure_dev_cache_test_flex_dual_ap"], ("cencli-test-flex-dual-ap", test_data["test_devices"]["ap"]["serial"], "-e", "2.4",), lambda r: "skipped" in r, None],
+            [7, "ensure_dev_cache_test_flex_dual_ap", ("cencli-test-flex-dual-ap", "-e", "5",), None, None],
+            [8, "ensure_dev_cache_test_flex_dual_ap", ("cencli-test-flex-dual-ap", "-e", "6",), None, None],
+            [9, "ensure_dev_cache_test_dyn_ant_ap", ("cencli-test-dyn-ant-ap", "-w", "wide",), None, None],
         ]
     )
-    def test_update_ap(fixture: str | list[str] | None, args: tuple[str], pass_condition: Callable | None, test_name_append: str | None, request: pytest.FixtureRequest):
+    def test_update_ap(idx: int, fixture: str | list[str] | None, args: tuple[str], pass_condition: Callable | None, test_name_append: str | None, request: pytest.FixtureRequest):
         if test_name_append:
             env.current_test = f"{env.current_test}_{test_name_append}"
-        [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
         result = runner.invoke(app, ["update",  "ap", *args, "-y"])
         capture_logs(result, env.current_test)
         assert result.exit_code == 0

@@ -229,8 +229,8 @@ def configs(
 
     print(f"Minimum of {req_cnt} additional API calls will be performed to fetch requested configs.")
     print(f"Files will be exported to {outdir}")
-    if outdir.exists():
-        print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
+    if outdir.exists():  # pragma: no cover
+        render.econsole.print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
     render.confirm(yes)
 
     exit_code = 0

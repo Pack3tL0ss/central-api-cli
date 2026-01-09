@@ -161,7 +161,7 @@ class TestResponses:
                         if re.fullmatch(pattern, key):
                             matched_val = per_map[pattern]
                             break
-                    except re.error:
+                    except re.error:  # pragma: no cover
                         # ignore invalid regex patterns
                         continue
 
@@ -198,7 +198,7 @@ class TestResponses:
                     if re.fullmatch(pattern, key):
                         matched_res = val
                         break
-                except re.error:
+                except re.error:  # pragma: no cover
                     continue
 
         # If not found in ok_responses, try failed_responses for the method
@@ -206,7 +206,7 @@ class TestResponses:
             failed_map = self.responses.get("failed_responses", {}).get(method, {})
             if key in failed_map:
                 matched_res = failed_map[key]
-            else:
+            else:  # pragma: no cover
                 for pattern, val in failed_map.items():
                     try:
                         if re.fullmatch(pattern, key):

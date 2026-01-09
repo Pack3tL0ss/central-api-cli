@@ -220,6 +220,8 @@ def client(
         title = f'{title} for Client: {client.name}|{client.ip}|{client.mac}|{client.connected_name}'
         if client.site:
             title = f'{title}|s:{client.site}'
+        else:  # pragma: no cover
+            ...
         if swarm_or_stack:
             log.warning(f"[cyan]-S[/]|[cyan]--swarm[/]|[cyan]--stack[/] was ignored as client was specified.  Output is for client {client.name}|{client.mac}", caption=True)
         if dev:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import pytest
+from typing import Callable
 from typer.testing import CliRunner
 
+from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
 
@@ -53,24 +55,28 @@ def test_export_redsky_bssids_too_many_filters():
 
 
 @pytest.mark.parametrize(
-    "_,args,expect",
+    "idx,fixture,args,expect",
     [
-        [1, (), None],
-        [2, ("-G", "-R", "--show"), "ignoring"], # -R invalid w/ -G will display warning
-        [3, ("--switch",), None],
-        [4, ("--switch", "-s"), None],
-        [5, ("--gw", "-s", "--group", test_data["gateway"]["group"]), None],
-        [6, ("--ap", "-s", "--group", test_data["ap"]["group"]), None],
-        [7, ("--match", test_data["ap"]["group"][0:-2]), None],
-        [8, ("--ap", "--env"), None],
-        [9, ("--ap", "--env", "-s"), None],
-        [10, ("--cx", "--group", test_data["template_switch"]["group"], "-V"), None],  # variables
-        [11, ("--cx", "--group", test_data["template_switch"]["group"], "-V", "--show"), None],  # variables
+        [1, None, (), None],
+        [2, None, ("-G", "-R", "--show"), "ignoring"], # -R invalid w/ -G will display warning
+        [3, None, ("--switch",), None],
+        [4, None, ("--switch", "-s"), None],
+        [5, None, ("--gw", "-s", "--group", test_data["gateway"]["group"]), None],
+        [6, None, ("--ap", "-s", "--group", test_data["ap"]["group"]), None],
+        [7, None, ("--match", test_data["ap"]["group"][0:-2]), None],
+        [8, None, ("--ap", "--env"), None],
+        [9, None, ("--ap", "--env", "-s"), None],
+        [10, None, ("--cx", "--group", test_data["template_switch"]["group"], "-V"), None],  # variables
+        [11, None, ("--cx", "--group", test_data["template_switch"]["group"], "-V", "--show"), None],  # variables
+        [12, ["ensure_cache_group2", "ensure_dev_cache_test_ap"], ("--ap", "--group", "cencli_test_group2"), None],
+        [13, ["ensure_cache_group_cloned", "ensure_dev_cache_batch_devices"], ("--gw", "--group", "cencli_test_cloned"), None],
     ]
 )
-def test_export_configs(_: int, args: tuple[str], expect: str | None):
+def test_export_configs(idx: int, fixture: Callable, args: tuple[str], expect: str | None, request: pytest.FixtureRequest):
+    if fixture:
+        [request.getfixturevalue(f) for f in utils.listify(fixture)]
     result = runner.invoke(app, ["export", "configs", *args, "-Y"])
-    capture_logs(result, "test_export_configs")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     if expect:
         assert expect in result.stdout

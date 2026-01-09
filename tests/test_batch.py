@@ -241,9 +241,12 @@ def test_batch_rename_aps(ensure_dev_cache_no_last_rename_ap):
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
 
 
-@pytest.mark.parametrize("what", ["aps", "devices"])
+@pytest.mark.parametrize("what", ["aps", "devices", "ap-banner"])
 def test_batch_update_aps(what: str):
-    result = runner.invoke(app, ["batch", "update",  what, f'{str(test_update_aps_file)}', "-Y"])
+    if what != "ap-banner":
+        result = runner.invoke(app, ["batch", "update",  what, f'{str(test_update_aps_file)}', "-Y"])
+    else:
+        result = runner.invoke(app, ["batch", "update",  "aps", f'{str(test_update_aps_file)}', "--banner-file", str(test_banner_file_j2), "-Y"])
     capture_logs(result, "test_batch_update_aps")
     assert result.exit_code == 0
     assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
