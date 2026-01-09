@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union, Callable
 
 import typer
 import yaml
@@ -906,6 +906,19 @@ def _update_captions(caption: List[str] | str, resp: Response | List[Response] =
 
     return caption, rl_str
 
+
+def _clean_output(data: list[dict] | list[str] | dict | None, cleaner: Callable, **cleaner_kwargs) -> list[dict] | list[str] | dict | None:
+    with Spinner("Cleaning Output..."):
+        _start = time.perf_counter()
+        try:
+            data = cleaner(data, **cleaner_kwargs)
+        except Exception as e:  # pragma: no cover
+            log.error(f"Error cleaning output with {cleaner.__name__}... {repr(e)}", caption=True, log=True)
+        _duration = time.perf_counter() - _start
+        log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
+        return data
+
+
 def _display_results(
     data: Union[List[dict], List[str], dict, None] = None,
     tablefmt: str = "rich",
@@ -931,12 +944,7 @@ def _display_results(
     data = utils.listify(data)
 
     if cleaner and not raw_out:
-        with Spinner("Cleaning Output..."):
-            _start = time.perf_counter()
-            data = cleaner(data, **cleaner_kwargs)
-            data = utils.listify(data)
-            _duration = time.perf_counter() - _start
-            log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
+        data = _clean_output(data, cleaner, **cleaner_kwargs)
 
     data, caption = _sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
@@ -1111,6 +1119,8 @@ def display_results(
                     # and formatted contents of any payload. example below
                     # status code: 201
                     # Success
+                    if r.ok and cleaner:
+                        r.output = _clean_output(r.output, cleaner, **cleaner_kwargs)
                     console.print(r, emoji=False)
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit

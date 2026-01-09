@@ -75,8 +75,6 @@ def upload(
     """
     resp = api.session.request(api.cloudauth.get_upload_status, upload_type=what.value)
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="action")
-    if resp.ok:
-        resp.output = cleaner.cloudauth_upload_status(resp.output)
 
     render.display_results(
         resp,
@@ -87,7 +85,7 @@ def upload(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        exit_on_fail=True
+        cleaner=cleaner.cloudauth_upload_status
     )
 
 
