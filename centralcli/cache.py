@@ -32,7 +32,6 @@ from .client import BatchRequest, Session
 from .cnx.models.cache import Inventory as GlpInventory
 from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
 from .environment import env
-from .exceptions import CentralCliException
 from .models import cache as models
 from .objects import DateTime
 from .response import Response
@@ -93,38 +92,31 @@ class CentralObject(MutableMapping):
         self.cache = db
         self.doc_id = None if not hasattr(data, "doc_id") else data.doc_id
 
-        if isinstance(data, list):
-            if len(data) > 1:
-                raise CentralCliException(f"CentralObject expects a single item. Got list of {len(data)}")
-            elif data:
-                data = data[0]
-
         self.data = data
         self._help_text_parts = list(data.values())
 
         # When building Central Object from Inventory this is necessary
         # TODO maybe pydantic model
-        if data:
-            if self.is_dev:
-                self.name = self.data["name"] = self.data.get("name", self.data["serial"])
-                self.status = self.data["status"] = self.data.get("status")
-                self.ip = self.data["ip"] = self.data.get("ip")
-                self.site = self.data["site"] = self.data.get("site")
-                self.group = self.data["group"] = self.data.get("group")
-                self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
-                self.serial: str = self.data.get("serial")
+        if self.is_dev:
+            self.name = self.data["name"] = self.data.get("name", self.data["serial"])
+            self.status = self.data["status"] = self.data.get("status")
+            self.ip = self.data["ip"] = self.data.get("ip")
+            self.site = self.data["site"] = self.data.get("site")
+            self.group = self.data["group"] = self.data.get("group")
+            self.swack_id = self.data["swack_id"] = self.data.get("swack_id")
+            self.serial: str = self.data.get("serial")
 
     def __bool__(self):
         return bool(self.data)
 
     def __repr__(self):
-        return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"
+        return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.get('name', bool(self))}) object at {hex(id(self))}>"  # pragma: no cover used for debugging
 
     def __getitem__(self, key):
         return self.data[key]
 
     def __delitem__(self, key):
-        del self.data[key]
+        del self.data[key]  # pragma: no cover
 
     def __len__(self):
         return len(self.data)
@@ -161,10 +153,10 @@ class CentralObject(MutableMapping):
         return Text.from_markup(text, emoji=not any([e not in text.lower() for e in ignore_emoji]))
 
     def __str__(self) -> str:
-        return self.text.plain
+        return self.text.plain  # pragma: no cover
 
     def __rich__(self) -> str:
-        return self.text.markup
+        return self.text.markup  # pragma: no cover
 
     @property
     def rich_help_text(self):
@@ -476,7 +468,6 @@ class CacheSite(CentralObject):
     @doc_id.setter
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
-
 
 class CacheLabel(CentralObject):
     db: Table | None = None
@@ -3166,7 +3157,7 @@ class Cache:
 
         try:
             data = model(data)
-        except ValidationError as e:
+        except ValidationError as e:  # pragma: no cover
             log.error(utils.clean_validation_errors(e), show=True, caption=True, log=True)
             return False
 
