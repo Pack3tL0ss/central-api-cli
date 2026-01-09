@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import tablib
 import typer
-from pydantic import RootModel, ValidationError
+from pydantic import ValidationError
 from rich.markup import escape
 
 from centralcli import cleaner, common, log, render, utils
