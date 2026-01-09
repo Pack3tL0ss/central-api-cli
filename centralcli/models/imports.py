@@ -64,7 +64,8 @@ class ImportSites(RootModel):
             if _country.isdigit():  # Data from large customer had country as '1' for some sites
                 _country = ""
 
-            if not _country and data.get("state") and data["state"].upper() in [kk.upper() for k, v in state_abbrev_to_pretty.items() for kk in [k, v]]:
+            state = data.get("state") or data.get("site_address", {}).get("state")  # we accept a flat or nested format for the import
+            if not _country and state and state.upper() in [kk.upper() for k, v in state_abbrev_to_pretty.items() for kk in [k, v]]:
                 return "United States"
             if _country.upper() in ["USA", "US"]:
                 return "United States"
