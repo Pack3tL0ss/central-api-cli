@@ -45,7 +45,7 @@ CloudAuthTimeWindow = Literal["3h", "1d", "1w", "1M", "3M"]
 ClientType = Literal["wired", "wireless"]
 JSON_TYPE = Union[List, Dict, str]
 
-class CacheSiteDict(TypedDict):
+class CacheSiteDict(TypedDict):  # pragma: no cover used for typing for CacheSite payload
     name: str
     id: int
     address: Optional[str]
