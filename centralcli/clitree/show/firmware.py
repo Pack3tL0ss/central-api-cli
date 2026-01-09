@@ -153,6 +153,7 @@ def swarm(
         fold_cols="swarm id",
         cleaner=cleaner.get_swarm_firmware_details
     )
+    common.exit(code=1 if failed else 0)
 
 
 @app.command()
