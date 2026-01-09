@@ -81,7 +81,7 @@ def subscription(
 
     _msg = f"[red]Unassign{'ing' if yes else ''}[/] current subscription"
 
-    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
+    devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r, retry_dev=False) for r in devices]  # TODO assign has exit_on_fail=False... test to see impact add coverage for partial failure (some devs not found in inv or dev cache)
     res_ids = [d.id for d in devs]
 
     _msg = f"{_msg} from device:" if len(res_ids) == 1 else f"{_msg} from the following {len(res_ids)} devices:"
