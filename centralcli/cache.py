@@ -1352,8 +1352,12 @@ class Cache:
         return [CacheSub(sub) for sub in sorted(self.SubDB.all(), key=lambda s: (s["expired"], s["name"]))]
 
     @property
-    def subscriptions_by_id(self) -> Dict[str, Document]:
+    def subscriptions_by_id(self) -> Dict[str, CacheSub]:
         return {s["id"]: s for s in self.subscriptions}
+
+    @property
+    def subscriptions_by_key(self) -> Dict[str, CacheSub]:
+        return {s["key"]: s for s in self.subscriptions}
 
     @property
     def sites(self) -> list:

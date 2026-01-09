@@ -87,10 +87,40 @@ def subscription(
 
     _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
     _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
+
     render.econsole.print(_msg)
     render.confirm(yes)
     resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=sub.id)
     render.display_results(resp, tablefmt="action")
+
+    # UPDATE CACHE
+    try:
+        already_subscribed = len([dev for dev in devs if dev.subscription_key == sub.key])
+        cache_update_data = [{**dict(dev), "services": sub.name, "subscription_expires": sub.end_date, "subscription_key": sub.key} for dev in devs]
+        glp_api.session.request(common.cache.update_inv_db, cache_update_data)
+    except Exception as e:  # pragma: no cover
+        already_subscribed = 0
+        log.exception(
+            f"{repr(e)} while trying to update inventory cache after subscription assignment(s)\n"
+            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show inventory[/]  Will refresh the inventory cache.",
+            show=True
+        )
+    try:
+        # API will return success even if the sub was already subscribed to the device.  So we evaluate cache and only subtract # of devs that were not already associated with the subscription
+        # There is still potential for the cache to have an inaccurate available count if the cache was outdated, but unlikely and not a critical cache field anyway
+        reduce_by = len(devs) - already_subscribed
+        if reduce_by:
+            sub_update_data = {**common.cache.subscriptions_by_key, sub.key: {**dict(sub), "available": sub.available - reduce_by}}
+            glp_api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
+        else:  # pragma: no cover
+            ...
+    except Exception as e:  # pragma: no cover
+        log.exception(
+            f"{repr(e)} while trying to update subscription cache (increase available qty after sub(s) unassigned)\n"
+            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show subsciptions[/]  Will refresh the subscription cache.",
+            show=True
+        )
+
 
 
 @app.command(name="label")

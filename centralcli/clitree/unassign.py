@@ -2,15 +2,12 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-from datetime import datetime
-
 import typer
 
 from centralcli import api_clients, common, log, render, utils
-from centralcli.cache import CacheDevice, CacheLabel, CacheSub
+from centralcli.cache import CacheDevice, CacheLabel
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
-from centralcli.objects import DateTime
 
 app = typer.Typer()
 api = api_clients.classic
@@ -67,9 +64,7 @@ def license(
 
 @app.command(hidden=not glp_api)
 def subscription(
-    sub_name_or_id: str = typer.Argument(..., help="subscription id or key from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
     devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
-    end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -84,19 +79,47 @@ def subscription(
     if not glp_api:  # pragma: no cover
         common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
 
-    sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date)
-    _msg = f"Unassign{'ing' if yes else ''} [bright_green]{sub.name}[/bright_green]|[medium_spring_green]{sub.key}[/], end date: [sea_green2]{DateTime(sub.end_date, format='date-string')}[/], and [cyan]{sub.available}[/] available subscriptions"
+    _msg = f"[red]Unassign{'ing' if yes else ''}[/] current subscription"
 
     devs = [r if utils.is_resource_id(r) else common.cache.get_combined_inv_dev_identifier(r) for r in devices]
     res_ids = [d.id for d in devs]
 
     _msg = f"{_msg} from device:" if len(res_ids) == 1 else f"{_msg} from the following {len(res_ids)} devices:"
     _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
+    _msg += f"\n[dark_orange3]:warning:[/]  [italic][red bold blink]This will result in {'devices' if len(res_ids) > 1 else 'the device'} disconnecting from[/] [dark_orange3]Aruba Central[/][/italic][bright_red]:bangbang:[/]  [dark_orange3]:warning:[/]"
+
     render.econsole.print(_msg)
     render.confirm(yes)
     resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=None)
     render.display_results(resp, tablefmt="action")
-    # CACHE update available subs in sub cache
+
+    # UPDATE CACHE
+    # CACHE # TODO Need batch assign and batch unassign to also get cache update.  Likely refactor to send this (and assign) to common batch_[un]assign_subscriptions (with cache update) or break below out to common sub update funcs in clicommon
+    try:
+        cache_update_data = [{**dict(dev), "services": None, "subscription_expires": None, "subscription_key": None} for dev in devs]
+        glp_api.session.request(common.cache.update_inv_db, cache_update_data)
+    except Exception as e:  # pragma: no cover
+        log.exception(
+            f"{repr(e)} while trying to update inventory cache after subscription unassignment(s)",
+            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show inventory[/]  Will refresh the inventory cache.",
+            show=True
+        )
+
+    try:
+        sub_keys = [d.subscription_key for d in devs if d.subscription_key is not None]
+        if sub_keys:
+            unique_sub_keys = utils.unique(sub_keys)
+            cache_subs = common.cache.subscriptions_by_key
+            sub_update_data = {**common.cache.subscriptions_by_key, **{k: {**dict(cache_subs[k]), "available": cache_subs[k].available + sub_keys.count(k)} for k in unique_sub_keys}}
+            glp_api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
+        else:  # pragma: no cover
+            ...
+    except Exception as e:  # pragma: no cover
+        log.exception(
+            f"{repr(e)} while trying to update subscription cache (increase available qty after sub(s) unassigned)"
+            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show subsciptions[/]  Will refresh the subscription cache.",
+            show=True
+        )
 
 
 @app.command()
