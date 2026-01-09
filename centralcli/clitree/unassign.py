@@ -38,10 +38,10 @@ def license(
         if len(devices) > 1:
             render.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
         render.econsole.print(_msg)
-        if render.confirm(yes):
-            resp = api.session.request(api.platform.disable_auto_subscribe, services=license.name)
-            render.display_results(resp, tablefmt="action")
-            return
+        render.confirm(yes)
+        resp = api.session.request(api.platform.disable_auto_subscribe, services=license.name)
+        render.display_results(resp, tablefmt="action")
+        return
 
     devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev, include_inventory=True) for dev in devices]
 
@@ -54,15 +54,15 @@ def license(
         _msg = f"{_msg} {dev.summary_text}"
     render.console.print(_msg, emoji=False)
 
-    if render.confirm(yes):
-        resp = api.session.request(api.platform.unassign_licenses, [d.serial for d in devices], services=license.name)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits if call failed to avoid cache update
-        inv_devs = [{**d, "services": None} for d in devices]
-        cache_resp = common.cache.InvDB.update_multiple([(dev, common.cache.Q.serial == dev["serial"]) for dev in inv_devs])
-        if len(inv_devs) != len(cache_resp):
-            log.warning(
-                f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
-                )
+    render.confirm(yes)
+    resp = api.session.request(api.platform.unassign_licenses, [d.serial for d in devices], services=license.name)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits if call failed to avoid cache update
+    inv_devs = [{**d, "services": None} for d in devices]
+    cache_resp = common.cache.InvDB.update_multiple([(dev, common.cache.Q.serial == dev["serial"]) for dev in inv_devs])
+    if len(inv_devs) != len(cache_resp):
+        log.warning(
+            f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
+        )
 
 
 @app.command(hidden=not glp_api)

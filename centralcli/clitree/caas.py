@@ -137,8 +137,8 @@ def import_vlan(
         f"\n    [magenta]args[/]: {', '.join(args)}\n    [magenta]kwargs[/]: {', '.join([f'{k}=[deep_sky_blue1]{v}[/]' for k, v in kwargs.items()])}"
     )
     render.econsole.print(_msg)
-    if render.confirm(yes):
-        add_vlan(*args, **kwargs)
+    render.confirm(yes)
+    add_vlan(*args, **kwargs)
 
 
 
@@ -341,18 +341,18 @@ def send_cmds(
     console.print(f"Sending the following to [cyan]{action}[/]")
     _ = [console.print(f"    [cyan]{c}[/]") for c in commands]
 
-    if render.confirm(yes):
-        caasapi = caas.CaasAPI()
-        _reqs = [
-            BatchRequest(
-                caasapi.send_commands,
-                n.name if not n.is_dev else n.mac,
-                cli_cmds=commands
-            )
-            for n in utils.listify(nodes)
-        ]
-        batch_res = api.session.batch_request(_reqs)
-        render.display_results(batch_res, cleaner=cleaner.parse_caas_response)
+    render.confirm(yes)
+    caasapi = caas.CaasAPI()
+    _reqs = [
+        BatchRequest(
+            caasapi.send_commands,
+            n.name if not n.is_dev else n.mac,
+            cli_cmds=commands
+        )
+        for n in utils.listify(nodes)
+    ]
+    batch_res = api.session.batch_request(_reqs)
+    render.display_results(batch_res, cleaner=cleaner.parse_caas_response)
 
 @app.callback()
 def callback():

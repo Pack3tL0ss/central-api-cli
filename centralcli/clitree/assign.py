@@ -53,9 +53,9 @@ def license(
         _msg = f"{_msg} [cyan]{dev}[/]"
 
     render.econsole.print(_msg)
-    if render.confirm(yes):
-        resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command(hidden=not glp_api)

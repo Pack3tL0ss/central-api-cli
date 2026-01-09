@@ -1641,12 +1641,12 @@ class CLICommon:
         if len(reqs) > 1 and not yes:
             render.econsole.print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-        if render.confirm(yes):
-            resp = api.session.batch_request(reqs)
-            render.display_results(resp, tablefmt="action")
-            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-            if doc_ids:
-                api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
+        render.confirm(yes)
+        resp = api.session.batch_request(reqs)
+        render.display_results(resp, tablefmt="action")
+        doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+        if doc_ids:
+            api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
 
     def batch_delete_labels(
             self,
@@ -1688,12 +1688,12 @@ class CLICommon:
         if len(reqs) > 1 and not yes:
             render.econsole.print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-        if render.confirm(yes):
-            resp = api.session.batch_request(reqs)
-            render.display_results(resp, tablefmt="action")
-            doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
-            if doc_ids:
-                api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
+        render.confirm(yes)
+        resp = api.session.batch_request(reqs)
+        render.display_results(resp, tablefmt="action")
+        doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
+        if doc_ids:
+            api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
 
     def show_archive_results(self, arch_resp: List[Response]) -> None:
         def summarize_arch_res(arch_resp: List[Response]) -> None:

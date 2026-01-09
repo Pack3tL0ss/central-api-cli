@@ -53,7 +53,7 @@ def batch_add_cloudauth(import_file: Path, upload_type: CloudAuthUploadTypes = "
     except ValidationError as e:
         common.exit(utils.clean_validation_errors(e))
 
-    data: RootModel = data.model_dump()
+    data = data.model_dump()
     # CACHE cache update after successful upload
 
     # We use a uniform set of logical field headers/spacing/case. Need to convert to the random 💩 used by Central
@@ -228,13 +228,8 @@ def macs(
         "\nUse [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
         "Use [cyan]cencli show cloud-auth registered-macs[/] to see all registered macs."
     )
-    if resp.ok:
-        try:
-            resp.output = cleaner.cloudauth_upload_status(resp.output)
-        except Exception as e:  # pragma: no cover
-            log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}", caption=True, log=True)
 
-    render.display_results(resp, tablefmt="action", title="Batch Add MACs (cloud-auth)", caption=caption)
+    render.display_results(resp, tablefmt="action", title="Batch Add MACs (cloud-auth)", caption=caption, cleaner=cleaner.cloudauth_upload_status)
 
 
 @app.command()
@@ -265,7 +260,7 @@ def mpsk(
         f"Use [cyan]cencli show mpsk named {ssid.name} -v[/] to determine the randomly generated MPSKs[/dim italic]"
     ]
 
-    render.display_results(resp, tablefmt="action", title="Batch Add MPSK", caption=caption)
+    render.display_results(resp, tablefmt="action", title="Batch Add MPSK", caption=caption, cleaner=cleaner.cloudauth_upload_status)
 
 @app.callback()
 def callback():
