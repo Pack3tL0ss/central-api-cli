@@ -944,7 +944,7 @@ def _display_results(
     data = utils.listify(data)
 
     if cleaner and not raw_out:
-        data = _clean_output(data, cleaner, **cleaner_kwargs)
+        data = utils.listify(_clean_output(data, cleaner, **cleaner_kwargs))
 
     data, caption = _sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
