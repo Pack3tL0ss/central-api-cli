@@ -261,7 +261,7 @@ from .classic.api import ClassicAPI
 from .cnx.api import CentralAPI, GreenLakeAPI
 
 class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url, silent: bool = False):
+    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url, silent: bool = True):
         self.classic_base_url = classic_base_url
         self.glp_base_url = glp_base_url
         self.cnx_base_url = cnx_base_url
