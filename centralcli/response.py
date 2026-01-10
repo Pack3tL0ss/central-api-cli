@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
 from functools import cached_property
 from typing import Any, Dict, List, Literal, Union
 
@@ -350,7 +349,7 @@ class Response:
             if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
                 r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
 
-        r = self._colorize_output(r)
+        r = self._colorize_output(r).rstrip()
 
         # sanitize sensitive data for demos
         if config.dev.sanitize and config.sanitize_file.is_file():
@@ -510,9 +509,14 @@ class Response:
         return self.status
 
 
-@dataclass
 class BatchResponse:
-    responses: list[Response]
+    _rl: RateLimit
+    _exit_code: int = 0
+
+    def __init__(self, responses: list[Response]):
+        self.responses = responses
+        BatchResponse._rl = self.last_rl
+        BatchResponse._exit_code = BatchResponse._exit_code or self.exit_code
 
     def __bool__(self):  # pragma: no cover
         return self.ok

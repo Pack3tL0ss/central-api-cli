@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import asyncio
+from dataclasses import dataclass
 import json
 from pathlib import Path
 from typing import Callable, List
@@ -101,17 +102,96 @@ def _process_template_requests(reqs_dict: dict[str, list[BatchRequest]], dev_typ
     return batch_resp
 
 
+def _process_variable_requests(outdir: Path, show: bool = False, pager: bool = False) -> BatchResponse:
+    variable_resp = api.session.request(api.configuration.get_variables)
+    if not variable_resp.ok:
+        log.error(f"Failed to retrieve variables... {variable_resp.error}", show=True)
+    else:
+        outfile = outdir / "variables.json"
+
+        if not show:
+            outdata = json.dumps(variable_resp.output, indent=2)
+            render.write_file(outfile, outdata)
+        else:
+            _config_header("[bold]Combined Variables file[reset]")
+            render.display_results(variable_resp, tablefmt="json", pager=pager, outfile=outfile)
+
+    return BatchResponse([variable_resp])
+
+def _process_ap_env_requests(aps: list[CacheDevice], reqs: list[BatchRequest], *, outdir: Path, show: bool = False, pager: bool = False) -> BatchResponse:
+        ap_env_res = BatchResponse(api.session.batch_request(reqs))
+
+        console = Console(force_terminal=False, emoji=False)
+        with console.capture() as cap:
+            for d, r in zip(aps, ap_env_res):
+                if not r.ok:
+                    log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
+                    continue
+                console.rule()
+                console.print(f"[bold]AP env for {d.rich_help_text}[reset]")
+                console.rule()
+                console.print("\n".join(r.output))
+
+        outfile = outdir / "ap_env.txt"
+        res = sorted([r for r in ap_env_res if r.ok], key=lambda r: r.rl)[0]
+        res.output = cap.get()
+
+        if not show:
+            render.write_file(outfile, res.output)
+        else:
+            render.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
+
+        return ap_env_res
+
+
 def _build_template_requests(dev_type: ExportDevType, group: CacheGroup | None = None, site: CacheSite | None = None, group_match: str | None = None) -> dict[str, BatchRequest]:
     return {
         f'{t["group"]}~|~{t["name"]}': BatchRequest(api.configuration.get_template, group=t["group"], template=t["name"])
-        for t in common.cache.templates if t["device_type"] == dev_type.value and (not group or t["group"] == group.name) and (not site or t["site"] == site.name) and (not group_match or group_match in t["group"])
+        # removed condition "and (not site or t["site"] == site.name)" templates don't have sites, would need to fetch all devs in the group the template is associated with that are in the site.
+        for t in common.cache.templates if t["device_type"] == dev_type.value and (not group or t["group"] == group.name) and (not group_match or group_match in t["group"])
     }
+
 
 def _build_group_config_requests(groups: list[str], func: Callable, group_match: str | None) -> list[BatchRequest]:
     if group_match:
         groups = [group for group in groups if group_match in group]
 
     return [BatchRequest(func, group) for group in groups]
+
+@dataclass
+class DeviceConfigRequests:
+    devs: list[CacheDevice]
+    config_reqs: list[BatchRequest]
+    env_reqs: list[BatchRequest]
+
+    def items(self) -> tuple[list[CacheDevice], list[BatchRequest], list[BatchRequest]]:
+        return self.devs, self.config_reqs, self.env_reqs
+
+
+def _build_device_config_requests(dev_type: ExportDevType, groups_with_type: list[str], ap_env: bool = False, group: CacheGroup = None, site: CacheSite = None, group_match: str | None = None) -> DeviceConfigRequests:
+        devs: List[CacheDevice] = [CacheDevice(d) for d in common.cache.devices if d["type"] == dev_type and d["group"] in groups_with_type and (not group or d["group"] == group.name) and (not site or d["site"] == site.name)]
+
+        dev_reqs = []
+        ap_env_reqs = []
+        if devs:
+            if dev_type == "ap":
+                func = api.configuration.get_ap_config
+                def args_getter(device: CacheDevice) -> tuple:
+                    return (device.swack_id,)
+            else:
+                caasapi = caas.CaasAPI()
+                func = caasapi.show_config
+                def args_getter(device: CacheDevice) -> tuple:
+                    return (device.group, device.mac)
+
+            if group_match:
+                devs = [dev for dev in devs if group_match in dev.group]
+            dev_reqs = [BatchRequest(func, *args_getter(d)) for d in devs]
+
+            if dev_type == "ap" and ap_env:
+                ap_env_reqs = [BatchRequest(api.configuration.get_per_ap_config, d.serial) for d in devs]
+
+        return DeviceConfigRequests(devs, dev_reqs, ap_env_reqs)
 
 
 @app.command()
@@ -125,7 +205,7 @@ def configs(
     do_variables: bool = typer.Option(None, "-V", "--variables", help="Export variables associated with devices in Template Groups.", show_default=False,),
     do_switch: bool = typer.Option(None, "--switch", help="Export both CX and AOS-SW templates. [dim italic](export not available for switch UI group config)[/]"),
     groups_only: bool = typer.Option(None,"-G",  "--groups-only", help="Export Group level configs only, not device level configs."),
-    ap_env: bool = typer.Option(False, "-e", "--env", help="Export AP environment settings.  All ap-env settings are exported to a single file. [italic dim]Valid for APs only[/]", show_default=False,),
+    ap_env: bool = typer.Option(False, "-e", "--env", help="Export AP environment settings.  All ap-env settings are exported to a single file. [italic dim]Valid for APs only, [red]ignored[/] if -G|--groups-only specified[/]", show_default=False,),
     show: bool = typer.Option(False, "-s", "--show", help=f"Display configs to terminal along with exporting to filesystem.  {common.help_block('Display only export progress')}"),
     outdir: Path = typer.Option(None, "-D", "--dir", help=f"Specify custom output dir.  {common.help_block(str(config.export_dir))}", show_default=False,),
     flat: bool = typer.Option(False, "-F", "--flat", help=f"place all configs in root of output directory {common.help_block('Configs are exported to subfolders GROUP/DEV_TYPE/')}", show_default=False,),
@@ -152,8 +232,6 @@ def configs(
 
     [red]:warning:[/]  This command can result in a lot of API calls.
     """
-    br = BatchRequest
-    console = Console(emoji=False)
     caasapi = caas.CaasAPI()
     api = ClassicAPI()
     gw_reqs, ap_reqs, ap_env_reqs, gw_grp_reqs, ap_grp_reqs, aps, gws, ap_groups, gw_groups, ap_template_reqs = [], [], [], [], [], [], [], [], [], []
@@ -170,51 +248,31 @@ def configs(
     outdir = outdir or config.export_dir
     outdir.mkdir(exist_ok=True)
 
-    template_db = True if any([do_cx, do_sw, do_switch]) else False
-
-    if groups_only and refresh:
-        log.warning("ignoring [cyan]-R[/]|[cyan]--refresh[/].  Device Cache refresh is not necessary when doing [cyan]-G[/]|[cyan]--groups-only[/] export.", show=True)
+    # build items included in pre-fetch cache refresh.  GroupDB is always refreshed.
+    template_db = True if any([do_ap, do_cx, do_sw]) else False
 
     dev_types = [] if not do_ap else ["ap"]
     if do_gw:
         dev_types += ["gw"]
     dev_types = dev_types or None
-    # We don't need to update switches we only support fetching templates which does not require device cache
 
+    # We don't need to update switches we only support fetching templates which does not require device cache
     _ = common.cache.check_fresh(dev_db=refresh and not groups_only, template_db=template_db, group_db=True, dev_type=dev_types)
 
     if do_ap:
         ap_groups = [group["name"] for group in common.cache.groups if "ap" in group["allowed_types"] and not group["wlan_tg"] and group.get("cnx") is not True and group["name"] != "default"]
+        if ap_groups:  # ap group level config requests
+            ap_grp_reqs = _build_group_config_requests(ap_groups, func=api.configuration.get_ap_config, group_match=group_match)
+        if not groups_only and ap_groups:  # ap device level config requests along with ap_env request
+            req_info = _build_device_config_requests(ExportDevType.ap, ap_groups, ap_env=ap_env, group=group, site=site, group_match=group_match)
+            aps, ap_reqs, ap_env_reqs = req_info.items()
     if do_gw:
         gw_groups = [group["name"] for group in common.cache.groups if "gw" in group["allowed_types"] and group.get("cnx") is not True and group["name"] != "default"]
-
-    # build device level ap/gw config requests
-    if not groups_only:
-        if do_gw:
-            gws: List[CacheDevice] = [CacheDevice(d) for d in common.cache.devices if d["type"] == "gw" and (not group or d["group"] == group.name) and (not site or d["site"] == site.name)]
-
-            if gws:
-                if group_match:
-                    gws = [gw for gw in gws if group_match in gw.group]
-                gw_reqs = [br(caasapi.show_config, d.group, d.mac) for d in gws]
-
-        if do_ap:
-            aps: List[CacheDevice] = [CacheDevice(d) for d in common.cache.devices if d["type"] == "ap" and (not group or d["group"] == group.name) and (not site or d["site"] == site.name) and d["group"] in ap_groups]
-
-            if aps:
-                if group_match:
-                    aps = [ap for ap in aps if group_match in ap.group]
-                ap_reqs = [br(api.configuration.get_ap_config, d.swack_id) for d in aps]
-
-                if ap_env:
-                    ap_env_reqs = [br(api.configuration.get_per_ap_config, d.serial) for d in aps]
-
-    # build group level ap/gw config requests
-    if gw_groups:
-        gw_grp_reqs = _build_group_config_requests(gw_groups, func=caasapi.show_config, group_match=group_match)
-
-    if ap_groups:
-        ap_grp_reqs = _build_group_config_requests(ap_groups, func=api.configuration.get_ap_config, group_match=group_match)
+        if gw_groups:  # gw group level config requests
+            gw_grp_reqs = _build_group_config_requests(gw_groups, func=caasapi.show_config, group_match=group_match)
+        if not groups_only and gw_groups:  # gw device level config requests
+            req_info = _build_device_config_requests(ExportDevType.gw, gw_groups, group=group, site=site, group_match=group_match)
+            gws, gw_reqs, _ = req_info.items()
 
     # build template requests
     ap_template_reqs = {} if not do_ap else _build_template_requests(ExportDevType.ap, group=group, site=site, group_match=group_match)
@@ -222,87 +280,45 @@ def configs(
     sw_template_reqs = {} if not do_cx else _build_template_requests(ExportDevType.sw, group=group, site=site, group_match=group_match)
 
     # below is faster than sum(map(len, [...]))
-    req_cnt = len(gw_reqs) + len(ap_reqs) + len(ap_env_reqs) + len(gw_grp_reqs) + len(ap_grp_reqs) + len(ap_template_reqs) + len(cx_template_reqs) + len(sw_template_reqs)
-    req_cnt = req_cnt if not do_variables else req_cnt + 1
+    req_cnt = len(gw_reqs) + len(ap_reqs) + len(ap_env_reqs) + len(gw_grp_reqs) + len(ap_grp_reqs) + len(ap_template_reqs) + len(cx_template_reqs) + len(sw_template_reqs) + int(bool(do_variables))
     if req_cnt == 0:
         common.exit("No exports based on provided filtering options.  Nothing to do")
 
     print(f"Minimum of {req_cnt} additional API calls will be performed to fetch requested configs.")
     print(f"Files will be exported to {outdir}")
     if outdir.exists():  # pragma: no cover
-        render.econsole.print("[red]:warning:[/]  Any existing configs for the same device will be overwritten")
+        render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{outdir.name}[/] already exists.  Any existing configs for the same device will be [red]overwritten[/]")
     render.confirm(yes)
 
-    exit_code = 0
     if gw_grp_reqs:
-        gw_grp_res = _process_group_config_requests(gw_groups, gw_grp_reqs, dev_type=ExportDevType.gw, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or gw_grp_res.exit_code
+        _process_group_config_requests(gw_groups, gw_grp_reqs, dev_type=ExportDevType.gw, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if ap_grp_reqs:
-        ap_grp_res = _process_group_config_requests(ap_groups, ap_grp_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or ap_grp_res.exit_code
+        _process_group_config_requests(ap_groups, ap_grp_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if gw_reqs:
-        gw_res = _process_dev_config_requests(gws, gw_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or gw_res.exit_code
+        _process_dev_config_requests(gws, gw_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if ap_reqs:
-        ap_res = _process_dev_config_requests(aps, ap_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or ap_res.exit_code
+        _process_dev_config_requests(aps, ap_reqs, outdir=outdir, flat=flat, show=show, pager=pager)
 
         if ap_env_reqs:
-            ap_env_res = api.session.batch_request(ap_env_reqs)
-
-            console = Console(force_terminal=False, emoji=False)
-            with console.capture() as cap:
-                for d, r in zip(aps, ap_env_res):
-                    if not r.ok:
-                        log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
-                        exit_code = 1
-                        continue
-                    console.rule()
-                    console.print(f"[bold]AP env for {d.rich_help_text}[reset]")
-                    console.rule()
-                    console.print("\n".join(r.output))
-
-            outfile = outdir / "ap_env.txt"
-            res = sorted([r for r in ap_env_res if r.ok], key=lambda r: r.rl)[0]
-            res.output = cap.get()
-
-            if not show:
-                render.write_file(outfile, res.output)
-            else:
-                render.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
+            _process_ap_env_requests(aps, ap_env_reqs, outdir=outdir, show=show, pager=pager)
 
     if ap_template_reqs:
-        ap_template_resp = _process_template_requests(ap_template_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or ap_template_resp.exit_code
+        _process_template_requests(ap_template_reqs, dev_type=ExportDevType.ap, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if cx_template_reqs:
-        cx_template_resp = _process_template_requests(cx_template_reqs, dev_type=ExportDevType.cx, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or cx_template_resp.exit_code
+        _process_template_requests(cx_template_reqs, dev_type=ExportDevType.cx, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if sw_template_reqs:
-        sw_template_resp = _process_template_requests(sw_template_reqs, dev_type=ExportDevType.sw, outdir=outdir, flat=flat, show=show, pager=pager)
-        exit_code = exit_code or sw_template_resp.exit_code
+        _process_template_requests(sw_template_reqs, dev_type=ExportDevType.sw, outdir=outdir, flat=flat, show=show, pager=pager)
 
     if do_variables:
-        variable_resp = api.session.request(api.configuration.get_variables)
-        if not variable_resp.ok:
-            log.error(f"Failed to retrieve variables... {variable_resp.error}", show=True)
-            exit_code = 1
-            # render.display_results(variable_resp, tablefmt="action", exit_on_fail=False)
-        else:
-            outfile = outdir / "variables.json"
+        _process_variable_requests(outdir=outdir, show=show, pager=pager)
 
-            if not show:
-                outdata = json.dumps(variable_resp.output, indent=2)
-                render.write_file(outfile, outdata)
-            else:
-                _config_header("[bold]Combined Variables file[reset]")
-                render.display_results(variable_resp, tablefmt="json", pager=pager, outfile=outfile)
-
-    common.exit(code=exit_code)
+    render.econsole.print("\n", BatchResponse._rl)
+    common.exit(code=BatchResponse._exit_code)
 
 class EvalLocationResponse:
     _responses: list[Response] = []
