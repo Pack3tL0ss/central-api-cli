@@ -433,9 +433,11 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_assign_subscription_by_key():
+    @pytest.mark.parametrize("idx,fixture", [[1, "ensure_assign_dev_no_sub"], [2, "ensure_assign_dev_sub"]])
+    def test_assign_subscription_by_key(idx: int, fixture: Callable, request: pytest.FixtureRequest):
+        request.getfixturevalue(fixture)
         result = runner.invoke(app, ["assign", "subscription", test_data["subscription"]["key"], test_data["subscription"]["assign_to_device"]["serial"], "-y"])
-        capture_logs(result, "test_assign_subscription_by_key")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "202" in result.stdout
 

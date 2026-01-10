@@ -1392,6 +1392,27 @@ def ensure_cache_template():
 
 
 @pytest.fixture(scope="function")
+def ensure_cache_ap_template():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "cencli_test_ap_template",
+            "device_type": "ap",
+            "group": "cencli_test_group2",
+            "model": "ALL",
+            "version": "ALL",
+            "template_hash": "ece4e8651b45dcfd82f4cc2ae1ccfb4c"  # need to validate hash based on template from mock response
+        }
+        if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
+            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data, truncate=False))
+    yield
+
+    if config.dev.mock_tests:
+        update_data = [d for d in cache.templates if d["name"] != cache_data["name"]]
+        assert asyncio.run(cache.update_db(cache.TemplateDB, update_data, truncate=True))
+
+
+
+@pytest.fixture(scope="function")
 def ensure_cache_template_by_name():
     if config.dev.mock_tests:
         cache_data = {
@@ -1428,3 +1449,20 @@ def ensure_cache_j2_var_csv():
     yield
 
     test_j2_file.unlink(missing_ok=True)
+
+@pytest.fixture(scope="function")
+def ensure_assign_dev_no_sub():
+    test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
+    if test_assign_dev.services is not None:  # pragma no cover
+        cache_update_data = {**dict(test_assign_dev), "services": None, "subscription_expires": None, "subscription_key": None}
+        asyncio.run(common.cache.update_inv_db(cache_update_data))
+    yield
+
+@pytest.fixture(scope="function")
+def ensure_assign_dev_sub():
+    test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
+    if test_assign_dev.services is None:  # pragma no cover
+        in_2_months = pendulum.now() + pendulum.duration(months=2)
+        cache_update_data = {**dict(test_assign_dev), "services": test_data["subscription"]["name"], "subscription_expires": in_2_months.int_timestamp, "subscription_key": test_data["subscription"]["key"]}
+        asyncio.run(common.cache.update_inv_db(cache_update_data))
+    yield

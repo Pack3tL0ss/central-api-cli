@@ -38,6 +38,7 @@ from ._test_data import (
     test_switch_var_file_flat,
     test_update_aps_file,
     test_verify_file,
+    test_switch_var_file_json,
 )
 
 runner = CliRunner()
@@ -211,6 +212,21 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
         assert pass_condition(result.stdout)
+
+
+
+    @pytest.mark.parametrize(
+        "idx,file,pass_condition",
+        [
+            [1, str(test_switch_var_file_json), lambda r: "200" in r],
+        ]
+    )
+    def test_batch_add_variables(idx: int, file: str, pass_condition: Callable):
+        result = runner.invoke(app, ["batch", "add",  "variables", file, "-Y"])
+        capture_logs(result, f"{env.current_test}{idx}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
 else:  # pragma: no cover
     ...
 

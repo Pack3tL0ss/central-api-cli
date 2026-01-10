@@ -112,8 +112,6 @@ def subscription(
         if reduce_by:
             sub_update_data = {**common.cache.subscriptions_by_key, sub.key: {**dict(sub), "available": sub.available - reduce_by}}
             glp_api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
-        else:  # pragma: no cover
-            ...
     except Exception as e:  # pragma: no cover
         log.exception(
             f"{repr(e)} while trying to update subscription cache (increase available qty after sub(s) unassigned)\n"

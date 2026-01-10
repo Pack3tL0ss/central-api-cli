@@ -207,9 +207,11 @@ def test_show_bssids(idx: int, args: tuple[str], pass_condition: Callable, expec
 # Output here will not be the same during mocked test run as it is outside of tests
 # API returns csv, the Response.output attribute is converted in cloudauth.get_registered_macs()
 # to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
-def test_show_cloud_auth_registered_macs():
-    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", "--sort", "mac"],)
-    capture_logs(result, "test_show_cloud_auth_registered_macs")
+@pytest.mark.parametrize("idx,sort_by", [[1, "mac"], [2, None]])
+def test_show_cloud_auth_registered_macs(idx: int, sort_by: str | None):
+    args = [] if not sort_by else ["--sort", sort_by]
+    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", *args],)
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "MAC" in result.stdout
 
@@ -556,7 +558,7 @@ def test_show_dhcp_pools_gw():
     [
         [1, (test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
         [2, ("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
-        [3, (test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
+        [3, (test_data["ap"]["name"], "-v"), lambda r: "status" in r and "API" in r],
         [4, (test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
         [5, ("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
         [6, ("--site", test_data["ap"]["site"], "--ap", "--up", "--down"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --up and --down both being used
@@ -1435,16 +1437,24 @@ def test_show_firmware_device(args: tuple[str], pass_condition: Callable | None,
     assert "API" in result.stdout
 
 
-def test_show_firmware_device_no_args():
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "--dev-type" in r],
+        [2, (test_data["ap"]["name"],), lambda r: "Response" in r],
+    ]
+)
+def test_show_firmware_device_fail(idx: int, args: tuple[str], pass_condition: Callable | None):
     result = runner.invoke(app, [
             "show",
             "firmware",
             "device",
+            *args
         ]
     )
-    capture_logs(result, "test_show_firmware_device_no_args", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "--dev-type" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
@@ -1730,20 +1740,20 @@ def test_show_cloud_auth_sessions_authentications(args: tuple[str], pass_conditi
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [(), lambda r: "412" in r],
+        [1, ("authentications",), lambda r: "412" in r],
+        [2, ("sessions",), lambda r: "Response" in r],
     ]
 )
-def test_show_cloud_auth_authentications_fail(args: tuple[str], pass_condition: Callable):
+def test_show_cloud_auth_sessions_authentications_fail(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "cloud-auth",
-            "authentications",
             *args
         ]
     )
-    capture_logs(result, "test_show_cloud_auth_authentications_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 

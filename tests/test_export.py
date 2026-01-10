@@ -64,7 +64,6 @@ def test_export_redsky_bssids_too_many_filters():
         [5, None, ("--gw", "-s", "--group", test_data["gateway"]["group"]), None],
         [6, None, ("--ap", "-s", "--group", test_data["ap"]["group"]), None],
         [7, None, ("--match", test_data["ap"]["group"][0:-2]), None],
-        [8, None, ("--ap", "--env"), None],
         [9, None, ("--ap", "--env", "-s"), None],
         [10, None, ("--cx", "--group", test_data["template_switch"]["group"], "-V"), None],  # variables
         [11, None, ("--cx", "--group", test_data["template_switch"]["group"], "-V", "--show"), None],  # variables
@@ -84,15 +83,20 @@ def test_export_configs(idx: int, fixture: Callable, args: tuple[str], expect: s
 
 
 @pytest.mark.parametrize(
-    "idx,args,test_name_append",
+    "idx,fixture,args,test_name_append",
     [
-        [1, ("--match", "XXYYNO_MATCH_ZZ"), None],
-        [2, ("--match", "VPNC", "--gw", "-G"), None],
-        [3, ("--ap", "--groups-only"), None],
-        [4, ("--gw", "--group", test_data["gateway"]["group"]), "one_gw"],
+        [1, None, ("--match", "XXYYNO_MATCH_ZZ"), None],
+        [2, None, ("--match", "VPNC", "--gw", "-G"), None],
+        [3, None, ("--ap", "--groups-only"), None],
+        [4, None, ("--gw", "--group", test_data["gateway"]["group"]), "one_gw"],
+        [5, None, ("--cx", "--gw", "--group", "bsmt-staging"), "template"],  # failure is template resp failure, but also no gws in this group to hit test branch
+        [6, None, ("--cx", "--group", "bsmt-staging", "-V"), "variables"],
+        [7, "ensure_cache_ap_template", ("--ap", "--env", "--flat"), "one_ap_env"],  # partial failure one of ap_envs, also handles ap_template branch of code
     ]
 )
-def test_export_configs_fail(idx: int, args: tuple[str], test_name_append: str | None):
+def test_export_configs_fail(idx: int, fixture: Callable, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):
+    if fixture:
+        [request.getfixturevalue(f) for f in utils.listify(fixture)]
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, ["export", "configs", *args, "-Y"])
