@@ -333,16 +333,16 @@ class Session():
 
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
             except ContentLengthError as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
             except Exception as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
                 _ += 1
 
-            fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
+            fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail} [red italic]{resp.error}[/]"
             self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
