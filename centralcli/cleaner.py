@@ -1361,10 +1361,9 @@ def get_portals(data: list[dict],) -> list[dict]:
     return data
 
 
-def get_portal_profile(data: list[dict[str, Any]]) -> dict[str, Any]:
-    # _display_output will listify the dict prior to sending it in as most outputs are list[dict]
-    data = utils.unlistify(data)
-    return {k: v for k, v in data.items() if k != "logo"}
+def get_portal_profile(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    # we strip the logo from the output which is a long image/png;base64 str
+    return [{k: v for k, v in p.items() if k != "logo"} for p in data]
 
 def get_ospf_neighbor(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[str, Any]]:
     data = utils.listify(data)
@@ -1457,7 +1456,7 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         "mux",
         "vsx_enabled",
     ]
-    strip_keys = ["port_number", "alignment", "oper_state"]
+    strip_keys = ["alignment", "oper_state"]
 
     verbosity_keys = {
         0: [
@@ -1503,28 +1502,28 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
                 iface["duplex_mode"] = "--"
                 iface["link_speed"] = "--"
 
-    # Append any additional keys to the end
+    # send all key/value pairs through formatters
     if verbosity == 0:
-        key_order = verbosity_keys[verbosity]
-        # send all key/value pairs through formatters
+        key_order = verbosity_keys[verbosity]  # Only include keys defined for verbosity level 0
         data = [
             dict(short_value(k, d[k],) for k in key_order if k in d) for d in data
         ]
+        data = utils.strip_no_value(data)
     else:
-        key_order = [*key_order, *data[-1].keys()]
-        # send all key/value pairs through formatters and convert list[dict] to dict where port_number is key
+        all_keys = list(set([k for iface in data for k in iface.keys()]))
+        _ = [key_order.append(k) for k in all_keys if k not in key_order]  # append any additional keys in payload to end of key_order
+        key_order = [k for k in key_order if k in all_keys]  # strip any keys that don't exist for any interfaces
+        key_field = "port number" if dev_type != "ap" else "name"
+        data = [dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data]
+        data = utils.strip_no_value(data, aggressive=verbosity==1)
         if by_interface is not False:
-            key_field = "port_number" if dev_type != "ap" else "name"
-            data = {
-                d[key_field] if not d[key_field].isdigit() else int(d[key_field]): dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
-            }
-        else:
-            strip_keys = [k for k in strip_keys if k != "port_number"]
-            data = [
-                dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data
-            ]
+            data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k != key_field} for d in data}
 
-    return utils.strip_no_value(data)
+    return data
+
+
+    # verbosity 0 will strip if all have no value for a field, 1 will strip any that lack a value as it's displayed vertically, 2+ will be vertical with all fields regardless of value
+    # return utils.strip_no_value(data, aggressive=verbosity==1)
 
 
 def get_switch_poe_details(data: list[dict[str, Any]], verbosity: int = 0, powered: bool = False, aos_sw: bool = False) -> list[dict[str, Any]]:
