@@ -330,7 +330,27 @@ class Utils:
             return data
 
     @staticmethod
-    def strip_no_value(data: list[dict] | dict[dict], aggressive: bool = False) -> list[dict] | dict[dict]:
+    def _strip_no_value_from_dicts(data: list[dict[str, Any]], aggressive: bool = False) -> list[dict[str, Any]]:
+        no_val_strings = ["Unknown", "NA", "None", "--", "-", ""]
+        if aggressive:
+            return [
+                {
+                    k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, bool) and not v)]
+                } for inner in data
+            ]
+
+        no_val: List[List[str]] = [
+            [k for k, v in inner.items() if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
+            for inner in data
+        ]
+        if no_val:
+            common_keys: set = set.intersection(*map(set, no_val))  # common keys that have no value
+            data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
+
+        return data
+
+
+    def strip_no_value(self, data: list[dict] | dict[dict], aggressive: bool = False) -> list[dict] | dict[dict]:
         """strip out any columns that have no value in any row
 
         Accepts either list of dicts, or a dict where the value for each key is a dict
@@ -343,43 +363,11 @@ class Utils:
         Returns:
             List[dict] | Dict[dict]: processed data
         """
-        no_val_strings = ["Unknown", "NA", "None", "--", ""]
         if isinstance(data, list):
-            if aggressive:
-                return [
-                    {
-                        k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, bool) and not v)]
-                    } for inner in data
-                ]
-
-            no_val: List[List[str]] = [
-                [k for k, v in inner.items() if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
-                for inner in data
-            ]
-            if no_val:
-                common_keys: set = set.intersection(*map(set, no_val))  # common keys that have no value
-                data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
-
+            data = self._strip_no_value_from_dicts(data, aggressive=aggressive)
         elif isinstance(data, dict) and all(isinstance(d, dict) for d in data.values()):
-            if aggressive:
-                return {k:
-                    {
-                        sub_k: sub_v for sub_k, sub_v in v.items() if k not in [k for k in v.keys() if (isinstance(sub_v, str) and sub_v in no_val_strings) or (not isinstance(sub_v, bool) and not sub_v)]
-                    }
-                    for k, v in data.items()
-                }
-            # TODO REFACTOR like above using idx can be problematic with unsorted data where keys may be in different order
-            no_val: List[List[int]] = [
-                [
-                    idx
-                    for idx, v in enumerate(data[id].values())
-                    if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
-                ]
-                for id in data
-            ]
-            if no_val:
-                common_keys: set = set.intersection(*map(set, no_val))
-                data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_keys} for id in data}
+            values = self._strip_no_value_from_dicts(list(data.values()), aggressive=aggressive)
+            data = {k: v for k, v in zip(data.keys(), values)}
         else:
             log.error(
                 f"utils.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is."
