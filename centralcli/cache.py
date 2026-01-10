@@ -2937,16 +2937,13 @@ class Cache:
         return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
 
 
-    async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, *, doc_ids: List[int] | int = None, dev_types: constants.GenericDeviceTypes | List[constants.GenericDeviceTypes] = None, truncate: bool = True,) -> bool:
+    async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, *, doc_ids: List[int] | int = None, truncate: bool = True,) -> bool:
         """Update Local Cache DB
 
         Args:
             db (Table): TinyDB Table object to be updated.
             data (List[Dict[str, Any]] | Dict[str, Any], optional): Data to be added to database. Defaults to None.
             doc_ids (List[int] | int, optional): doc_ids to be deleted from the DB. Defaults to None.
-            dev_types (Literal["ap", "gw", "cx", "sw", "switch"] | List["ap", "gw" ...], optional): List of dev_types the data represents as current for those types.
-                This will result in any devices of the specified types that do not exist in the provided data being removed from cache. Defaults to None.
-                Deprecated: dev_types is deprecated, ignored.
             truncate (bool, optional): Existing DB data will be discarded, and all data in DB will be replaced with provided. Defaults to True.
 
         Returns:
