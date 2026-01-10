@@ -467,7 +467,7 @@ def redsky_bssids(
         "[deep_sky_blue3]:information:[/]  As with all commands that return data, the command can be repeated without doing any API calls using [cyan]cencli show last[/]"
     ] if update is not False else ["[deep_sky_blue1]:information:[/]  [cyan]--no-update[/] :triangular_flag: used.  Only APs that exist in location cache will be included in output."]
 
-    if len(cache.sites) > 5:
+    if len(cache.sites) > 5:  # pragma: no cover
         render.econsole.print("\n".join(confirm_msg))
         render.confirm(yes)
 
