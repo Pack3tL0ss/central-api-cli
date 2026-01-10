@@ -20,6 +20,7 @@ runner = CliRunner()
         [2, None, ("--no-mask",)],
         [3, None, ("--no-update", "--yaml",)],
         [4, "ensure_cache_all_floor_plan", ("--no-update",)],
+        [5, "ensure_cache_all_floor_plan", ("--update",)],
     ]
 )
 def test_export_redsky_bssids(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
