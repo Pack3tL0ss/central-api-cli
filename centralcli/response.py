@@ -571,15 +571,20 @@ class CombinedResponse(Response):
         elapsed = 0
         raw = {}
         output = []
-        for idx, r in enumerate(_passed or _failed):  # if no requests passed we loop through _failed to retain output {"message": "error message..."}
-            this_output = r.output.copy()
+        output_type = None
+        res_idx = 0
+        for r in _passed or _failed:  # if no requests passed we loop through _failed to retain output {"message": "error message..."}
             this_raw = r.raw.copy()
-            if idx == 0:
-                output = this_output
+            raw[r.url.path] = this_raw
+
+            if not r.output:
+                continue  # skip responses that returned no output as output will always be an empty dict.  Where output with values is likely a list[dict]
+
+            this_output = r.output.copy()
+            if res_idx == 0:
                 output_type = type(r.output)
-                raw = {r.url.path: this_raw}
+                output = this_output
             else:
-                raw[r.url.path] = this_raw
                 if output_type is list:
                     output += this_output
                 elif output_type is dict:
@@ -588,6 +593,7 @@ class CombinedResponse(Response):
                     raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")  # pragma: no cover
             if r.elapsed:
                 elapsed += r.elapsed
+            res_idx += 1  # we don't use enumerate so we can skip combining output for devs that returned an empty payload
 
         # failed responses are added to end of raw output
         if _passed:
