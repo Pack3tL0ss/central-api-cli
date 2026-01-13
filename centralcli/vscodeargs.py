@@ -2,7 +2,7 @@ import sys
 from pathlib import Path
 
 # vscode v1.103.1 and may have started prior to that release... launches debug even if you hit Escape in promptString dialogue.
-if '${input:cliArgs}' in str(sys.argv):
+if r'${input:cliArgs}' in str(sys.argv) or r'${input:cliArgsHistory}' in str(sys.argv):
     sys.exit()
 
 debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
