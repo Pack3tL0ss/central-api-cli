@@ -549,13 +549,15 @@ class ConfigAPI:
         group: str,
         serials: str | List[str],
         *,
-        cx_retain_config: bool = True,  # TODO can we send this attribute even if it's not CX, will it ignore or error
+        cx_retain_config: bool = False,
     ) -> Response:
         """Move devices to a group.
 
         Args:
             group (str): Group Name to move device to.
             serials (str | List[str]): Serial numbers of devices to be added to group.
+            cx_retain_config (bool, optional): whether or not to retain the existing config on a CX switch (as device level override) during move.
+                defaults to False.
 
         Returns:
             Response: CentralAPI Response object
@@ -584,9 +586,9 @@ class ConfigAPI:
 
         # This method returns status 500 with msg that move is initiated on success.
         if not resp and resp.status == 500:
-            match_str = "group move has been initiated, please check audit trail for details"
-            if match_str in resp.output.get("description", ""):
-                resp._ok = True
+            if "group move has been initiated" in resp.output.get("description", ""):
+                resp.ok = True
+                resp.output["description"] = resp.output["description"].strip()  # dict value has a lot of unnecessary \n
 
         return resp
 
@@ -1175,34 +1177,36 @@ class ConfigAPI:
         """
         # API-FLAW API method, PUBLIC_CERT is not accepted
         url = "/configuration/v1/certificates"
-        valid_types = [
-            "SERVER_CERT",
-            "CA_CERT",
-            "CRL",
-            "INTERMEDIATE_CA",
-            "OCSP_RESPONDER_CERT",
-            "OCSP_SIGNER_CERT",
-            "PUBLIC_CERT"
-        ]
-        type_vars = [server_cert, ca_cert, crl, int_ca_cert, ocsp_resp_cert, ocsp_signer_cert, ssh_pub_key]
-        if type_vars.count(True) > 1:
+        cert_types = {
+            "SERVER_CERT": server_cert,
+            "CA_CERT": ca_cert,
+            "CRL": crl,
+            "INTERMEDIATE_CA": int_ca_cert,
+            "OCSP_RESPONDER_CERT": ocsp_resp_cert,
+            "OCSP_SIGNER_CERT": ocsp_signer_cert,
+            "PUBLIC_CERT": ssh_pub_key
+        }
+
+        if list(cert_types.values()).count(True) > 1:
             raise ValueError("Provided conflicting certificate types, only 1 should be set to True.")
-        elif all([not bool(var) for var in type_vars]):
+        if all([not bool(var) for var in cert_types.values()]):
             raise ValueError("No cert_type provided, one of the cert_types should be set to True")
 
         if cert_format and cert_format.upper() not in ["PEM", "DER", "PKCS12"]:
             raise ValueError(f"Invalid cert_format {cert_format}, valid values are 'PEM', 'DER', 'PKCS12'")
-        elif not cert_format and not cert_file:
+        if not cert_format and not cert_file:
             raise ValueError("cert_format is required when not providing certificate via file.")
 
         if not cert_data and not cert_file:
             raise ValueError("One of cert_file or cert_data should be provided")
-        elif cert_data and cert_file:
+        if cert_data and cert_file:
             raise ValueError("Only one of cert_file and cert_data should be provided")
 
-        for cert_type, var in zip(valid_types, type_vars):
+        for cert_type, var in cert_types.items():
             if var:
-                break
+                break  # sets cert_type to the one set to True
+            else:  # pragma: no cover
+                ...
 
         cert_bytes = None
         if cert_file:
@@ -1215,8 +1219,7 @@ class ConfigAPI:
                     cert_format = "PKCS12"
                 elif cert_file.suffix.lower() in [".pem", ".cer", "crt"]:
                     cert_format = "PEM"
-                else:
-                    # TODO determine format using cryptography lib
+                else:  # TODO determine format using cryptography lib
                     cert_format = "DER"
 
             if cert_format == "PEM":

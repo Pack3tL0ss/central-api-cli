@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Union, TYPE_CHECKING
 
 from aiohttp import ClientResponse
 from rich.console import Console
@@ -15,6 +15,9 @@ from centralcli.environment import env
 from centralcli.exceptions import CentralCliException
 
 from . import render
+
+if TYPE_CHECKING:
+    from collections.abc import KeysView
 
 
 class RateLimit():
@@ -267,16 +270,19 @@ class Response:
 
 
     def __bool__(self):
+        if self._ok is not None:
+            return self._ok
+
         if self._response:
             return self._response.ok
 
         if self.error and self.error != "OK":
-            return self._ok or False
+            return False
 
-        if self.output or isinstance(self.output, (list, dict)):
-            return self._ok or True
+        if self.output:
+            return True
 
-        raise CentralCliException("Unable to determine success status of Response")
+        raise CentralCliException("Unable to determine success status of Response")  # pragma: no cover
 
     @property
     def ok(self):
@@ -306,12 +312,9 @@ class Response:
 
         # indent single line output
         if isinstance(self.output, str) and "{\n" in self.output:
-            if "\n" not in self.output:
-                r = f"  {self.output}"
-            elif "{\n" in self.output:
-                r = "  {}".format(
-                    self.output.replace('\n  ', '\n').replace('\n', '\n  ')
-                )
+            r = "  {}".format(
+                self.output.replace('\n  ', '\n').replace('\n', '\n  ')
+            )
         elif not self.output:
             if self.status not in [201, 202]:
                 emoji = '\u2139' if self.ok else '\u26a0'
@@ -453,7 +456,7 @@ class Response:
         if isinstance(self.output, dict):
             return self.output.get(key, default)
 
-    def keys(self) -> list:
+    def keys(self) -> KeysView:
         if isinstance(self.output, dict):
             return self.output.keys()
         elif self.output and isinstance(self.output, (list, tuple)):
@@ -582,7 +585,7 @@ class CombinedResponse(Response):
                 elif output_type is dict:
                     output = {**output, **this_output}
                 else:
-                    raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")
+                    raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")  # pragma: no cover
             if r.elapsed:
                 elapsed += r.elapsed
 

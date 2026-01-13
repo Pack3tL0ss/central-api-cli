@@ -372,6 +372,8 @@ class Session():
                     self.auth.handle_expired_token()
                     self.spinner.succeed()
                 elif resp.status == 500:
+                    if url == "/configuration/v1/devices/move" and "group move has been initiated" in resp.output.get("description", ""):
+                        break  # API-FLAW move endpoint returns 500 to indicate success for gw move
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
                     # returns JSON: {'message': 'An unexpected error occurred'}
