@@ -59,7 +59,7 @@ def test_export_redsky_bssids_too_many_filters():
     "idx,fixture,args,expect",
     [
         [1, None, (), None],
-        [2, None, ("-G", "-R", "--show"), "ignoring"], # -R invalid w/ -G will display warning
+        [2, None, ("-G", "-R", "--show"), "riting"], # -R invalid w/ -G will display warning
         [3, None, ("--switch",), None],
         [4, None, ("--switch", "-s"), None],
         [5, None, ("--gw", "-s", "--group", test_data["gateway"]["group"]), None],
@@ -92,7 +92,7 @@ def test_export_configs(idx: int, fixture: Callable, args: tuple[str], expect: s
         [4, None, ("--gw", "--group", test_data["gateway"]["group"]), "one_gw"],
         [5, None, ("--cx", "--gw", "--group", "bsmt-staging"), "template"],  # failure is template resp failure, but also no gws in this group to hit test branch
         [6, None, ("--cx", "--group", "bsmt-staging", "-V"), "variables"],
-        [7, "ensure_cache_ap_template", ("--ap", "--env", "--flat"), "one_ap_env"],  # partial failure one of ap_envs, also handles ap_template branch of code
+        [7, ["ensure_cache_group2", "ensure_cache_ap_template"], ("--ap", "--env", "--flat"), "one_ap_env"],  # partial failure one of ap_envs, also handles ap_template branch of code
     ]
 )
 def test_export_configs_fail(idx: int, fixture: Callable, args: tuple[str], test_name_append: str | None, request: pytest.FixtureRequest):

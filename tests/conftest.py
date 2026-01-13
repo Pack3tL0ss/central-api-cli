@@ -1234,7 +1234,9 @@ def ensure_cache_all_floor_plan():
     yield
 
     if config.dev.mock_tests:
-        assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=doc_ids))
+        _doc_ids = [fp.doc_id for fp in cache.FloorPlanAPDB.all() if fp["serial"] in serials]
+        if _doc_ids:  # Need to re-check doc_ids... if --update is tested cache will be refreshed/truncated, doc_ids not guaranteed to be the same, devices may not be in mock response
+            assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=_doc_ids))
 
 
 def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"],):
@@ -1453,7 +1455,7 @@ def ensure_cache_j2_var_csv():
 @pytest.fixture(scope="function")
 def ensure_assign_dev_no_sub():
     test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
-    if test_assign_dev.services is not None:  # pragma no cover
+    if test_assign_dev.services is not None:  # pragma: no cover
         cache_update_data = {**dict(test_assign_dev), "services": None, "subscription_expires": None, "subscription_key": None}
         asyncio.run(common.cache.update_inv_db(cache_update_data))
     yield
@@ -1461,7 +1463,7 @@ def ensure_assign_dev_no_sub():
 @pytest.fixture(scope="function")
 def ensure_assign_dev_sub():
     test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
-    if test_assign_dev.services is None:  # pragma no cover
+    if test_assign_dev.services is None:  # pragma: no cover
         in_2_months = pendulum.now() + pendulum.duration(months=2)
         cache_update_data = {**dict(test_assign_dev), "services": test_data["subscription"]["name"], "subscription_expires": in_2_months.int_timestamp, "subscription_key": test_data["subscription"]["key"]}
         asyncio.run(common.cache.update_inv_db(cache_update_data))

@@ -1441,7 +1441,7 @@ def test_show_firmware_device(args: tuple[str], pass_condition: Callable | None,
     "idx,args,pass_condition",
     [
         [1, (), lambda r: "--dev-type" in r],
-        [2, (test_data["ap"]["name"],), lambda r: "Response" in r],
+        [2, (test_data["ap"]["name"], test_data["switch"]["name"]), lambda r: "Response" in r],
     ]
 )
 def test_show_firmware_device_fail(idx: int, args: tuple[str], pass_condition: Callable | None):
