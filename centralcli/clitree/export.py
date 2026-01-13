@@ -123,7 +123,7 @@ def _process_ap_env_requests(aps: list[CacheDevice], reqs: list[BatchRequest], *
 
         console = Console(force_terminal=False, emoji=False)
         with console.capture() as cap:
-            for d, r in zip(aps, ap_env_res):
+            for d, r in zip(aps, ap_env_res.responses):
                 if not r.ok:
                     log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
                     continue
@@ -133,7 +133,7 @@ def _process_ap_env_requests(aps: list[CacheDevice], reqs: list[BatchRequest], *
                 console.print("\n".join(r.output))
 
         outfile = outdir / "ap_env.txt"
-        res = sorted([r for r in ap_env_res if r.ok], key=lambda r: r.rl)[0]
+        res = ap_env_res.last
         res.output = cap.get()
 
         if not show:
@@ -159,7 +159,7 @@ def _build_group_config_requests(groups: list[str], func: Callable, group_match:
     return [BatchRequest(func, group) for group in groups]
 
 @dataclass
-class DeviceConfigRequests:
+class DeviceConfigRequests:  # pragma: no cover
     devs: list[CacheDevice]
     config_reqs: list[BatchRequest]
     env_reqs: list[BatchRequest]
@@ -263,6 +263,8 @@ def configs(
         ap_groups = [group["name"] for group in common.cache.groups if "ap" in group["allowed_types"] and not group["wlan_tg"] and group.get("cnx") is not True and group["name"] != "default"]
         if ap_groups:  # ap group level config requests
             ap_grp_reqs = _build_group_config_requests(ap_groups, func=api.configuration.get_ap_config, group_match=group_match)
+        else:  # pragma: no cover
+            ...
         if not groups_only and ap_groups:  # ap device level config requests along with ap_env request
             req_info = _build_device_config_requests(ExportDevType.ap, ap_groups, ap_env=ap_env, group=group, site=site, group_match=group_match)
             aps, ap_reqs, ap_env_reqs = req_info.items()
@@ -270,6 +272,8 @@ def configs(
         gw_groups = [group["name"] for group in common.cache.groups if "gw" in group["allowed_types"] and group.get("cnx") is not True and group["name"] != "default"]
         if gw_groups:  # gw group level config requests
             gw_grp_reqs = _build_group_config_requests(gw_groups, func=caasapi.show_config, group_match=group_match)
+        else:  # pragma: no cover
+            ...
         if not groups_only and gw_groups:  # gw device level config requests
             req_info = _build_device_config_requests(ExportDevType.gw, gw_groups, group=group, site=site, group_match=group_match)
             gws, gw_reqs, _ = req_info.items()
@@ -317,7 +321,7 @@ def configs(
     if do_variables:
         _process_variable_requests(outdir=outdir, show=show, pager=pager)
 
-    render.econsole.print("\n", BatchResponse._rl)
+    render.econsole.print("", BatchResponse._rl, sep="\n")
     common.exit(code=BatchResponse._exit_code)
 
 class EvalLocationResponse:
