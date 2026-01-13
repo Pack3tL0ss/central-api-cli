@@ -844,8 +844,6 @@ class ConfigAPI:
 
         return await self.session.get(url, params=params)
 
-    # FIXME # TODO # What the Absolute F?!  not able to send template as formdata properly with aiohttp
-    #       requests module works, but no luck after hours messing with form-data in aiohttp
     async def add_template(
         self,
         name: str,
@@ -906,7 +904,7 @@ class ConfigAPI:
         name: str,
         payload: str = None,
         template: Path | str | bytes = None,
-        device_type: constants.DeviceTypes = "ap",
+        device_type: constants.DeviceTypes = "ap",  # TODO add_template uses enum
         version: str = "ALL",
         model: str = "ALL",
     ) -> Response:
@@ -917,6 +915,7 @@ class ConfigAPI:
             name (str): Name of template.
             device_type (str, optional): Device type of the template.
                 Valid Values: ap, sw (ArubaOS-SW), cx (ArubaOS-CX), gw (controllers/gateways)
+                Defaults to "ap"
             version (str, optional): Firmware version property of template.
                 Example: ALL, 6.5.4 etc.  Defaults to "ALL".
             model (str, optional): Model property of template.
@@ -934,9 +933,7 @@ class ConfigAPI:
             Response: CentralAPI Response object
         """
         url = f"/configuration/v1/groups/{group}/templates"
-
-        if device_type:
-            device_type = constants.lib_to_api(device_type, "template")
+        device_type = constants.lib_to_api(device_type, "template")
 
         params = {
             'name': name,
