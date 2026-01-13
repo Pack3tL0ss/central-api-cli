@@ -120,6 +120,7 @@ class PlatformAPI:
         # site: int = None,
         part_num: str = None,
         license: str | List[str] = None,
+        subsciption: str | List[str] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Response | List[Response]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
@@ -133,7 +134,8 @@ class PlatformAPI:
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
             site (int, optional): -- Not implemented -- Site ID
             part_num (str, optional): Part Number is required for Central On Prem.
-            license (str|List(str), optional): The subscription license(s) to assign.
+            license (str|List(str), optional): Deprecated use subscription.
+            subscription (str|List(str), optional): The subscription/license to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
                 and optionally group, part_num, license,
 
@@ -142,6 +144,7 @@ class PlatformAPI:
         """
         url = "/platform/device_inventory/v1/devices"
         license_kwargs = []
+        subsciption = subsciption or license
         if not (serial and mac) and not device_list:
             raise ValueError("mac and serial or device_list is required")
         if device_list:
@@ -150,10 +153,11 @@ class PlatformAPI:
 
         device_list = device_list or []
         if serial or mac:
-            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "license": license}]
+            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "subscription": subsciption}]
 
         json_data = []
         for d in device_list:
+            d = {k if k not in constants.possible_sub_keys else "subscription": v for k, v in d.items()}
             mac = d.get("mac", d.get("mac_address"))
             if not mac:
                 raise ValueError(f"No Mac Address found for entry {d}")
@@ -183,11 +187,11 @@ class PlatformAPI:
         # TODO this needs to be tested
         _lic_kwargs = {}
         for d in device_list:
-            if "license" not in d or not d["license"]:
+            if "subscription" not in d or not d["subscription"]:
                 continue
 
-            d["license"] = utils.listify(d["license"])
-            _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
+            d["subscription"] = utils.listify(d["subscription"])
+            _key = f"{d['subscription'] if len(d['subscription']) == 1 else '|'.join(sorted(d['subscription']))}"
             _serial = d.get("serial", d.get("serial_num"))
             if not _serial:
                 raise ValueError(f"No serial found for device: {d}")
@@ -196,7 +200,7 @@ class PlatformAPI:
                 _lic_kwargs[_key]["serials"] += utils.listify(_serial)
             else:
                 _lic_kwargs[_key] = {
-                    "services": utils.listify(d["license"]),
+                    "services": utils.listify(d["subscription"]),
                     "serials": utils.listify(_serial)
                 }
         license_kwargs = list(_lic_kwargs.values())
@@ -213,6 +217,8 @@ class PlatformAPI:
                 config_api = ConfigAPI(self.session)
                 group_reqs = [br(config_api.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
                 reqs = [*reqs, *group_reqs]
+            else:  # pragma: no cover
+                ...
 
             # TODO You can add the device to a site after it's been pre-assigned (gateways only)
             # if to_site:
@@ -537,11 +543,8 @@ class PlatformAPI:
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
-        if isinstance(services, str):
-            services = [services]
-
         json_data = {
-            'services': services
+            'services': utils.listify(services)
         }
 
         return await self.session.post(url, json_data=json_data)
@@ -563,11 +566,8 @@ class PlatformAPI:
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
-        if isinstance(services, str):
-            services = [services]
-
         json_data = {
-            'services': services
+            'services': utils.listify(services)
         }
 
         return await self.session.delete(url, json_data=json_data)

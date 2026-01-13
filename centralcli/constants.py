@@ -23,6 +23,8 @@ ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
+_ = ["license", "services", "subscription"]
+possible_sub_keys = [*_, *map(str.upper, _)]
 
 
 CLUSTER_URLS = {
