@@ -609,7 +609,7 @@ def get_clients(
 
     data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in  ["csv", "rich", "table"]))
 
-    return data
+    return utils.unlistify(data)  # Needed otherwise can end up with [{}] when no clients connected vs {} which is expected when payload is empty
 
 
 def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
