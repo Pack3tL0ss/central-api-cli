@@ -3,33 +3,32 @@
 from __future__ import annotations
 
 import asyncio
+import binascii
+import string
 import sys
 import time
-import string
-import binascii
 import urllib
 from dataclasses import dataclass
 from datetime import datetime
+from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
-from functools import cached_property
 
 import pendulum
 import typer
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
+from rich.box import HORIZONTALS
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
-from rich.traceback import install
 from rich.table import Table
-from rich.box import HORIZONTALS
-from pydantic import BaseModel
+from rich.traceback import install
 
 from centralcli import config, log, render, utils
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction, MacFormat
+from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, flex_dual_models, possible_sub_keys
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
@@ -1069,33 +1068,32 @@ class CLICommon:
                 The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
         """
         _final_sub_key = "subscription"
-        sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
-        sub_key = None if not sub_key else sub_key[0]
+        data = [{k if k not in possible_sub_keys else _final_sub_key: v for k, v in dev.items()} for dev in data]
         warn = False
-        if not sub_key:
+        if not _final_sub_key:
             return data, warn
 
         already_warned = []
         for d in data:
-            if d.get(sub_key):
+            if d.get(_final_sub_key):
                 for idx in range(2):
                     try:
-                        sub = self.cache.get_sub_identifier(d[sub_key], best_match=True)
-                        d[sub_key] = sub.api_name
-                        if sub_key != _final_sub_key:
-                            del d[sub_key]
+                        sub = self.cache.get_sub_identifier(d[_final_sub_key], best_match=True)
+                        d[_final_sub_key] = sub.api_name
+                        if _final_sub_key != _final_sub_key:
+                            del d[_final_sub_key]
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
-                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
+                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d[_final_sub_key]}[/] [red]not found[/] in list of valid subscriptions.\n:arrows_clockwise: Refreshing subscription/license name cache.')
                             resp = api.session.request(self.cache.refresh_license_db)  # TOGLP
                             if not resp:
                                 render.display_results(resp, exit_on_fail=True)
                         else:
                             warn = True
-                            if d[sub_key] not in already_warned:
-                                already_warned += [d[sub_key]]
-                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] does not appear to be a valid license type.")
+                            if d[_final_sub_key] not in already_warned:
+                                already_warned += [d[_final_sub_key]]
+                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d[_final_sub_key]}[/] does not appear to be a valid subscription type.")
         return data, warn
 
     def validate_retain_config(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
@@ -1169,14 +1167,13 @@ class CLICommon:
         )
         data, warn = self.validate_license_type(data)
         data, warn = self.validate_retain_config(data)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
-        word = "Adding" if not warn and yes else "Add"
 
         confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
         confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
         file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
         render.console.print(f'{len(data)} Devices found in {file_str}')
         render.console.print(confirm_str.lstrip("\n"), emoji=False)
-        render.console.print(f'\n{word} {len(data)} devices found in {file_str}')
+        render.console.print(f'\nAdd{"ing" if not warn and yes else ""} {len(data)} devices found in {file_str}')
         if warn:
             msg = f":warning:  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}"
             render.econsole.print(msg)
