@@ -82,11 +82,11 @@ class GreenLakeDevicesAPI:
         header = {"Content-Type": "application/merge-patch+json"}
         device_ids = utils.listify(device_ids)
 
-        payload = {
-            "subscription": []
-        }
-        if remove_app:
-            payload["application"] = {"id": None}
+        # Subscription and other updates can't be in same API call.
+        if remove_app:  # removing app association also frees up subs
+            payload = {"application": {"id": None}, "region": None}
+        else:
+            payload = {"subscription": []}
 
         batch_reqs = []
         for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
