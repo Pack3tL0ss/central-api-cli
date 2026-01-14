@@ -187,7 +187,7 @@ class Response:
             if error:
                 self.error = error
                 self.output = output or error
-            elif output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
+            else:  # empty list or dict, when used as constructor still ok
                 self.error = error or "OK"
 
             self.url = URL(url)
@@ -279,10 +279,8 @@ class Response:
         if self.error and self.error != "OK":
             return False
 
-        if self.output:
-            return True
+        return True
 
-        raise CentralCliException("Unable to determine success status of Response")  # pragma: no cover
 
     @property
     def ok(self):
