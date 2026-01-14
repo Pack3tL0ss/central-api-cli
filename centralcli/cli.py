@@ -10,7 +10,7 @@ from rich.markup import escape
 from centralcli import cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade, generate
+from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade, generate, migrate
 from centralcli.clitree import dev as clidev
 from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
@@ -52,6 +52,7 @@ app.add_typer(check.app, name="check",)
 app.add_typer(cancel.app, name="cancel",)
 app.add_typer(convert.app, name="convert",)
 app.add_typer(generate.app, name="generate",)
+app.add_typer(migrate.app, name="migrate", hidden=True)
 app.add_typer(clidev.app, name="dev", hidden=True)
 
 
@@ -529,10 +530,13 @@ def archive(
 
     Just use cencli deleve device ... or cencli batch delete devices
     """
+    if config.glp.ok:
+        return common.batch_archive_unarchive_devices_glp([{"serial": d} for d in devices], yes=yes, operation="archive")
+
     _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
     serials = []
-    cache_devs: list[CacheDevice| CacheInvDevice] = [common.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    cache_devs = [common.cache.get_combined_inv_dev_identifier(dev, silent=True, retry_dev=False, exit_on_fail=False) for dev in devices]
     for dev_in, cache_dev in zip(devices, cache_devs):
         if cache_dev:
             _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
@@ -547,8 +551,11 @@ def archive(
     render.econsole.print(_msg, _emsg, sep="\n", emoji=False)
     render.confirm(yes)
     resp = api.session.request(api.platform.archive_devices, serials)
-    render.display_results(resp, tablefmt="action")
-    # CACHE update. for glp inv cache which stores archive status
+    if resp:
+        common._render_classic_archive_unarchive_result(resp, "archive")
+    else:
+        render.display_results(resp, tablefmt="action")
+    # CACHE verify impact of archive on classic cache and update accordingly.  Believe archived devices do not show up in inv cache.
 
 
 
@@ -565,6 +572,9 @@ def unarchive(
 
     Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
     """
+    if config.glp.ok:
+        return common.batch_archive_unarchive_devices_glp([{"serial": s} for s in serials], yes=True, operation="unarchive")
+
     _serials: list[CacheDevice | CacheInvDevice | str] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
     _msg = "[bright_green]Unarchive devices[/]:"
@@ -582,7 +592,10 @@ def unarchive(
     render.econsole.print(_msg, emoji=False)
 
     resp = api.session.request(api.platform.unarchive_devices, _serials)
-    render.display_results(resp, tablefmt="action")
+    if resp:
+        common._render_classic_archive_unarchive_result(resp, "unarchive")
+    else:
+        render.display_results(resp, tablefmt="action")
     # CACHE update. for glp inv cache which stores archive status
 
 

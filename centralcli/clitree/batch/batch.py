@@ -601,7 +601,7 @@ def glp_subscribe(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Assign Subscriptions to devices [bright_green](GreenLake)[/].
+    """Assign Subscriptions to devices ([green]GreenLake[/]).
 
     [cyan]--sub <subscription name|key|glp_id>[/] can be used to specify the subscription.  It will be applied to [bright_green]all[/] devices found in import [red italic](even if the device has a subsciption defined in the import)[/]
     [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
@@ -840,7 +840,7 @@ def archive(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Batch archive devices based on import data from file.
+    """Batch archive devices (in [green]GreenLake[/]) based on import data from file.
 
     This will archive the devices in GreenLake
     """
@@ -851,31 +851,14 @@ def archive(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch archive [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, "devices", text_ok=True)
-    serials = [x.get("serial") or x.get("serial_num") for x in data]
-
-    render.econsole.print(f"[red]Archiv{'e' if not yes else 'ing'}[/] the [bright_green]{len(serials)}[/] devices found in {import_file.name}")
-    render.confirm(yes)
-    res = api.session.request(api.platform.archive_devices, serials)
-    if res:
-        caption = res.output.get("message")
-        if res.get("succeeded_devices"):
-            title = "Devices successfully archived."
-            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-        if res.get("failed_devices"):
-            title = "These devices failed to archived."
-            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-    else:
-        render.display_results(res, tablefmt="action", exit_on_fail=True)
+    common.batch_archive_unarchive_devices(import_file, yes=yes, operation="archive")
 
 
 @app.command()
 def unarchive(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    yes: bool = common.options.yes,
+    yes: bool = common.options.get("yes", default=True, hidden=True),  # We allow -y but not necessary for unarchive
     debug: bool = common.options.debug,
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
@@ -892,22 +875,7 @@ def unarchive(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch unarchive [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, import_type="devices", text_ok=True)
-    serials = [dev["serial"] for dev in data]
-
-    res = api.session.request(api.platform.unarchive_devices, serials)
-    if res:
-        caption = res.output.get("message")
-        if res.get("succeeded_devices"):
-            title = "Devices successfully unarchived."
-            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-        if res.get("failed_devices"):
-            title = "These devices failed to unarchived."
-            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-    else:
-        render.display_results(res, tablefmt="action", exit_on_fail=True)
+    common.batch_archive_unarchive_devices(import_file, yes=yes, operation="unarchive")
 
 
 @app.callback()
