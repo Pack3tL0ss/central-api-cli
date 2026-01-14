@@ -120,7 +120,7 @@ class PlatformAPI:
         # site: int = None,
         part_num: str = None,
         license: str | List[str] = None,
-        subsciption: str | List[str] = None,
+        subscription: str | List[str] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Response | List[Response]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
@@ -144,7 +144,7 @@ class PlatformAPI:
         """
         url = "/platform/device_inventory/v1/devices"
         license_kwargs = []
-        subsciption = subsciption or license
+        subscription = subscription or license
         if not (serial and mac) and not device_list:
             raise ValueError("mac and serial or device_list is required")
         if device_list:
@@ -153,7 +153,7 @@ class PlatformAPI:
 
         device_list = device_list or []
         if serial or mac:
-            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "subscription": subsciption}]
+            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "subscription": subscription}]
 
         json_data = []
         for d in device_list:
@@ -166,6 +166,8 @@ class PlatformAPI:
                 if not mac:
                     raise ValueError(f"Mac Address {mac} appears to be invalid.")
             serial = d.get("serial", d.get("serial_num"))
+            if not serial:
+                raise ValueError(f"No Serial Number found for entry with MAC Address {mac}")
             _this_dict = {"mac": mac.cols, "serial": serial}
             part_num = d.get("part_num", d.get("partNumber"))
             if part_num:  # pragma: no cover CoP only.  CoP is not currently tested
