@@ -516,7 +516,7 @@ Accepts the following keys (include as header row for csv import):
 
 clibatch_add_labels = f"""[italic cyan]cencli batch add labels IMPORT_FILE[/]:
 
-For {utils.color(['csv', 'json'], color_str='cyan')}, & [cyan]yaml[/] formats, labels should be under a 'labels' key/header.
+For {utils.color(['yaml', 'json'], color_str='cyan')}, & [cyan]csv[/] formats, labels should be under a 'labels' key/header.
 The 'labels' key/header is optional if import file is a simple text file.
 
 -------------- [cyan]yaml[/] --------------------
@@ -548,6 +548,7 @@ example3
 """
 
 clibatch_delete_labels = clibatch_add_labels.replace('batch add labels', 'batch delete labels')
+clibatch_migrate_devs_by_site = clibatch_add_labels.replace('batch add labels IMPORT_FILE', 'migrate IMPORT_FILE --import-sites...').replace("labels", "sites")
 
 # -- // ADD GROUPS \\ --
 data = """
@@ -833,6 +834,8 @@ class ImportExamples:
         self.add_variables = clibatch_update_variables.replace("update variables", "add variables")
         self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
         self.assign_subscriptions = clibatch_assign_subscriptions
+        self.migrate_devs_by_site = clibatch_migrate_devs_by_site
+        self.migrate_devices = clibatch_add_devices.replace("batch add devices", "migrate")
 
     def __getattr__(self, key: str):
         if key != "__iter__" and key not in self.__dict__.keys():  # pragma: no cover

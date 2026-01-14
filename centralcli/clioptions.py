@@ -15,7 +15,7 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file", "dest_workspace"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
@@ -41,6 +41,13 @@ class CLIArgs:
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.portal: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cache.portal_completion, show_default=False,)
         self.portals: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal_many, autocompletion=cache.portal_completion, show_default=False,)
+        self.dest_workspace: ArgumentInfo = typer.Argument(
+            None,
+            envvar=env_var.dest_workspace,
+            help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] Destination WorkSpace for migration operations",
+            autocompletion=cache.workspace_completion,
+            show_default=False,
+        )
         self.version: ArgumentInfo = typer.Argument(
             None,
             help=f"Firmware Version [dim]{escape('[default: recommended version]')}",

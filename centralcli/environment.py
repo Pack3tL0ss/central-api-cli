@@ -2,9 +2,10 @@ from os import environ
 
 
 class EnvVar:
-    def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG"):
+    def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG", dest_workspace: str = "CENCLI_DEST_WORKSPACE"):
         self.workspace = workspace
         self.debug = debug
+        self.dest_workspace = dest_workspace
 
 env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
@@ -15,6 +16,7 @@ class Env:
 
     def __init__(self):
         self.workspace: str = environ.get(env_var.workspace) or environ.get(classic_env_var.workspace)
+        self.dest_workspace = environ.get(env_var.dest_workspace)
 
     @property
     def debug(self) -> bool:
