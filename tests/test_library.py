@@ -295,8 +295,8 @@ def test_remove_label_from_devices_fail():
         {"device_list": [{"mac": "invalid"}]},  # device_list invalid mac
         {
             "device_list": [
-                {"serial": "US1234567", "mac": "aa:bb:cc:dd:ee:ff", "license": "advanced_ap"},  # missing serial
-                {"mac": "aa:bb:cc:dd:ee:f1", "license": "advanced_ap"},
+                {"serial": "US1234567", "mac": "aa:bb:cc:dd:ee:ff", "license": "advanced_ap"},
+                {"mac": "aa:bb:cc:dd:ee:f1", "subscription": "advanced_ap"},  # missing serial
             ]
         },
     ],
