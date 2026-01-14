@@ -482,14 +482,15 @@ class Session():
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
-        json_data = utils.strip_none(json_data)
-        if json_data:  # strip second nested dict if all keys = NoneType
-            y = json_data.copy()
-            for k in y:
-                if isinstance(y, dict) and isinstance(y[k], dict):
-                    y[k] = utils.strip_none(y[k])
-                    if not y[k]:
-                        del json_data[k]
+        if self.base_url != config.glp.base_url:  # glp endpoints often need to send None/null (remove subs, remove central app)
+            json_data = utils.strip_none(json_data)
+            if json_data:  # strip second nested dict if all keys = NoneType
+                y = json_data.copy()
+                for k in y:
+                    if isinstance(y, dict) and isinstance(y[k], dict):
+                        y[k] = utils.strip_none(y[k])
+                        if not y[k]:
+                            del json_data[k]
 
         # Output pagination loop
         paged_output = None
@@ -767,7 +768,7 @@ class Session():
                 return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
 
             m_resp: List[Response] = utils.listify(resp)
-            chunked_calls = utils.chunker(api_calls[1:], max_calls_per_chunk)
+            chunked_calls: list[BatchRequest] = utils.chunker(api_calls[1:], max_calls_per_chunk)
 
         # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
         # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk
