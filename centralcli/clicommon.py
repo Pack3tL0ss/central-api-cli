@@ -1248,6 +1248,8 @@ class CLICommon:
 
     def batch_archive_unarchive_devices(self, import_file: Path, yes: bool = None, operation: Literal["archive", "unarchive"] = "archive"):
         data = self._get_import_file(import_file, "devices", text_ok=True)
+        data = [{k if not k.lower().startswith("serial") else "serial": v for k, v in dev.items()} for dev in data]  # TODO pydantic validator in models.imports
+        self.verify_required_fields(data, required=["serial"])
 
         if config.glp.ok:
             return self.batch_archive_unarchive_devices_glp(data, yes=yes, operation=operation)
@@ -1256,13 +1258,11 @@ class CLICommon:
 
 
     def batch_archive_unarchive_devices_glp(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
-        data = [{k if not k.lower().startswith("serial") else "serial": v for k, v in dev.items()} for dev in data]  # TODO pydantic validator in models.imports
-        self.verify_required_fields(data, required=["serial"])
         devs = [self.cache.get_inv_identifier(d["serial"]) for d in data]
 
         archive = operation == "archive"
-        _word = "device" if len(devs) > 1 else f"[bright_green]{len(devs)}[/] devices"
-        render.econsole.print(f"[red]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}")
+        _word = "device" if len(devs) == 1 else f"[bright_green]{len(devs)}[/] devices"
+        render.econsole.print(f"[{'red' if archive else 'green'}]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}")
         render.confirm(yes if yes is not None else operation == "unarchive")  # No confirmation necessary for unarchive
         api = api_clients.glp
         res = api.session.request(api.devices.update_devices, [d.id for d in devs], archive=archive)
@@ -1281,18 +1281,20 @@ class CLICommon:
             res = api.session.request(api.platform.unarchive_devices, serials)
 
         if res:
-            caption = res.output.get("message")
-            if res.get("succeeded_devices"):
-                title = f"Devices successfully {operation}d."
-                data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-                render.display_results(data=data, title=title, caption=caption)
-            if res.get("failed_devices"):
-                title = f"These devices failed to {operation}d."
-                data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-                render.display_results(data=data, title=title, caption=caption)
+            self._render_classic_archive_unarchive_result(res)
         else:
             render.display_results(res, tablefmt="action", exit_on_fail=True)
 
+    def _render_classic_archive_unarchive_result(self, res: Response, operation: Literal["archive", "unarchive"]) -> None:
+        caption = res.output.get("message")
+        if res.get("succeeded_devices"):
+            title = f"Devices successfully {operation}d."
+            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+            render.display_results(data=data, title=title, caption=caption)
+        if res.get("failed_devices"):
+            title = f"These devices failed to {operation}d."
+            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+            render.display_results(data=data, title=title, caption=caption)
 
     class SiteMoves:
         def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
