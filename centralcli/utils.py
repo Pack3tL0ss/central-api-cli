@@ -28,6 +28,7 @@ from centralcli.typedefs import StrOrURL, StrEnum
 
 if TYPE_CHECKING:
     from .typedefs import PrimaryDeviceTypes
+    from centralcli.cache import CentralObject
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -332,15 +333,16 @@ class Utils:
     @staticmethod
     def _strip_no_value_from_dicts(data: list[dict[str, Any]], aggressive: bool = False) -> list[dict[str, Any]]:
         no_val_strings = ["Unknown", "NA", "None", "--", "-", ""]
+        no_strip_types = (bool, int) if not aggressive else (bool,)
         if aggressive:
             return [
                 {
-                    k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, bool) and not v)]
+                    k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, no_strip_types) and not v)]
                 } for inner in data
             ]
 
         no_val: List[List[str]] = [
-            [k for k, v in inner.items() if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
+            [k for k, v in inner.items() if (not isinstance(v, no_strip_types) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
             for inner in data
         ]
         if no_val:
@@ -379,7 +381,9 @@ class Utils:
     def color(
         text: str | bool | List[str],
         color_str: str = "bright_green",
+        *,
         pad_len: int = 0,
+        dim: bool = None,
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
@@ -398,6 +402,7 @@ class Utils:
                 color for each item in the list.
                 Default: bright_green
             pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
+            italic (bool, optional): Wheather to apply dim format to text.
             italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
             bold (bool, optional): Wheather to apply bold to text. Default None/False
@@ -409,25 +414,23 @@ class Utils:
             italic = True if italic is None else italic
             text = str(text)
 
-        def get_color_str(color: str):
-            if color == "random":
-                color = choice(list([c for c in ANSI_COLOR_NAMES.keys() if "black" not in c]))
+        def _get_color_str(_color: str):  # , _dim: bool = False, _italic: bool = False, _bold: bool = False, _blink: bool = False):
+            if _color == "random":
+                _color = choice(list([c for c in ANSI_COLOR_NAMES.keys() if "black" not in c and "red" not in c]))
 
-            if not any([italic, bold, blink]):
-                return color
-
-            _color = color if not italic else f"italic {color}"
-            _color = color if not bold else f"bold {color}"
-            _color = color if not blink else f"blink {color}"
+            _color = _color if not blink else f"blink {_color}"
+            _color = _color if not italic else f"italic {_color}"
+            _color = _color if not bold else f"bold {_color}"
+            _color = _color if not dim else f"dim {_color}"
 
             return _color
 
         if isinstance(text, str):
-            color = get_color_str(color_str)
+            color = _get_color_str(color_str)
             text = f"{' ' if pad_len else '':{pad_len or 1}}[{color}]{text}[/]"
             return text if not pad_len else text.lstrip()  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
         elif isinstance(text, (list, set)) and all([isinstance(x, str) for x in text]):
-            colors = [get_color_str(color_str) for _ in range(len(text))]
+            colors = [_get_color_str(color_str) for _ in range(len(text))]
             text = [f"{' ' if pad_len else '':{pad_len or 1}}[{c}]{t}[/]" for t, c in zip(text, colors)]
             text = text if pad_len else [t.lstrip() for t in text]  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
             return sep.join(text)
@@ -595,7 +598,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str, StrEnum], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
+    def summarize_list(items: List[str, StrEnum, CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -609,6 +612,7 @@ class Utils:
             fmt = ""
             item_sep = "...".rjust(pad + 3)
 
+        items = [item if not hasattr(item, "summary_text") else getattr(item, "summary_text") for item in items]
         enum_attr = "value" if not use_enum_name else "name"
         items = [item if not hasattr(item, enum_attr) else getattr(item, enum_attr) for item in items]
         items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
