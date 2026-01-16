@@ -112,56 +112,8 @@ def groups(
     render.display_results(resp, tablefmt="action")
 
 
-@app.command("_devices" if config.glp.ok else "devices", hidden=config.glp.ok)
-def classic_devices(
-    import_file: Path = common.arguments.import_file,
-    ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub[/]", show_default=False,),
-    cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
-    unsubscribed: bool = typer.Option(False, "--no-sub", help="Disassociate from the Aruba Central Service in GLP all devices that have no subscription assigned"),
-    show_example: bool = common.options.show_example,
-    yes: bool = common.options.yes,
-    debug: bool = common.options.debug,
-    debugv: bool = common.options.debugv,
-    default: bool = common.options.default,
-    workspace: str = common.options.workspace,
-) -> None:
-    """Batch delete devices based on data from import file or delete all devices that lack a subscription.
-
-    Use [cyan]cencli batch delete devices --example[/] to see example import file formats.
-
-    [cyan]cencli batch delete devices <IMPORT_FILE>[/]
-
-    Delete devices will remove any subscriptions/licenses from the device and disassociate the device with the Aruba Central app in GreenLake.  It will then remove the device from the monitoring views, along with the historical data for the device.
-
-    Note: devices can only be removed from monitoring views if they are in a down state.  This command will delay/wait for any Up devices to go Down after the subscriptions/assignment to Central is removed, but it can also be ran again.  It will pick up where it left off, skipping any steps that have already been performed.
-    """
-    if show_example:
-        render.console.print(examples.delete_devices)
-        return
-
-    usage_msg = "cencli batch delete devices [OPTIONS] [IMPORT_FILE]"
-
-    if import_file:
-        if unsubscribed:
-            common.exit(render._batch_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/] or [cyan]--no-sub[/] [red]not both[/]"))
-        if dev_type:
-            common.exit("[cyan]--dev-type[/] option is currently only valid in combination with [cyan]--no-sub[/].")
-        data = common._get_import_file(import_file, import_type="devices",)
-    elif unsubscribed:
-        resp = common.cache.get_devices_with_inventory(device_type=dev_type)
-        if not resp:
-            render.display_results(resp, exit_on_fail=True)
-        data = [d for d in resp.output if d["subscription_key"] is None]
-    else:
-        common.exit(render._batch_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/], [cyan]--no-sub[/] or [cyan]--example[/]"))
-
-    resp = common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
-    render.display_results(resp, tablefmt="action")
-
-
-@app.command("_devices" if not config.glp.ok else "devices", hidden=not config.glp.ok)
-def glp_devices(
+@app.command()
+def devices(
     import_file: Path = common.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
     dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub[/]", show_default=False,),
@@ -192,7 +144,6 @@ def glp_devices(
 
     usage_msg = "cencli batch delete devices [OPTIONS] [IMPORT_FILE]"
 
-    del_func = common.batch_delete_devices
     if import_file:
         if unsubscribed:
             common.exit(render._batch_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/] or [cyan]--no-sub[/] [red]not both[/]"))
@@ -208,11 +159,10 @@ def glp_devices(
         resp = common.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=no_refresh)
         cache_site = common.cache.get_site_identifier(site)
         data = [d for d in resp.output if (d.get("site") or "") == cache_site.name]
-        del_func = common.glp_batch_delete_devices
     else:
         common.exit(render._batch_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/], [cyan]--no-sub[/] or [cyan]--example[/]"))
 
-    resp = del_func(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+    resp = common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
     render.display_results(resp, tablefmt="action")
 
 
