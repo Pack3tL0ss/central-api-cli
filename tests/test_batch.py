@@ -299,6 +299,20 @@ if config.dev.mock_tests:
         assert "202" in result.stdout
 
 
+    @pytest.mark.parametrize(
+        "idx,glp_ok,args,pass_condition",
+        [
+            [1, False, ("--no-sub", "--dev-type", "gw"), lambda r: "Devices updated" in r],
+            [2, True, ("--no-sub", "--dev-type", "gw"), lambda r: "code: 202" in r],
+        ]
+    )
+    def test_batch_delete_devices(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["batch", "delete", "devices", *args, "-Y"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
 else:  # pragma: no cover
     ...
 
@@ -334,13 +348,6 @@ def test_batch_verify():
     capture_logs(result, "test_batch_verify")
     assert result.exit_code == 0
     assert "validation" in result.stdout
-
-
-def test_batch_delete_devices_no_sub_gws():
-    result = runner.invoke(app, ["batch", "delete", "devices", "--no-sub", "--dev-type", "gw", "-Y"])
-    capture_logs(result, "test_batch_delete_devices_no_sub_gws")
-    assert result.exit_code == 0
-    assert "Devices updated" in result.stdout
 
 
 @pytest.mark.parametrize(

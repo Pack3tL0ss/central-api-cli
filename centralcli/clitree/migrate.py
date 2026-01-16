@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# pragma: exclude file
 from __future__ import annotations
 
 import typer

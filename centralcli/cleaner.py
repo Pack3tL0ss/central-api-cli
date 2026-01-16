@@ -707,7 +707,6 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
     return data
 
 class FilterRows:
-
     def __init__(self, version: str = None, group: str = None, site: str = None, status: Literal["Up", "Down"] = None, label: str = None, public_ip: str = None):
         filters = {
             "version": version,

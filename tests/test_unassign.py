@@ -60,7 +60,7 @@ if config.dev.mock_tests:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
         cmd = f"{'' if glp_ok else '_'}subscription"
         result = runner.invoke(app, ["unassign", cmd, *args, "-y"])
-        capture_logs(result, f"{env.current_test}{idx}")
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
         assert result.exit_code == 0
         assert "code: 20" in result.stdout  # glp 202 / classic 200
 
