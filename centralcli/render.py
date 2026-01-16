@@ -913,7 +913,7 @@ def _clean_output(data: list[dict] | list[str] | dict | None, cleaner: Callable,
         try:
             data = cleaner(data, **cleaner_kwargs)
         except Exception as e:  # pragma: no cover
-            log.error(f"Error cleaning output with {cleaner.__name__}... {repr(e)}", caption=True, log=True)
+            log.error(f"Error cleaning output with {cleaner.__name__}... {repr(e)}", show=True, log=True)
         _duration = time.perf_counter() - _start
         log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
         return data
