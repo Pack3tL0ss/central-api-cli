@@ -271,7 +271,7 @@ class APIClients:  # TODO play with cached property vs setting in init to see ho
     def classic(self):
         return ClassicAPI(self.classic_base_url, silent=self.silent)
 
-    @cached_property
+    @property  # This is not cached so we can toggle using config._mock()
     def glp(self):
         return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url, silent=self.silent)
 

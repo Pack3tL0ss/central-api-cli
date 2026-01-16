@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, KeysView, Optional
+from typing import Any, ClassVar, Dict, KeysView, Optional
 
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, ValidationError, field_validator, model_validator
 
@@ -34,13 +34,39 @@ def _ensure_base_urls(data: dict) -> Dict[str, Any]:
 
 # CNX New Central
 class Glp(BaseModel):
+    _client_id: ClassVar = None
+    _client_secret: ClassVar = None
     client_id: Optional[str] = None
     client_secret: Optional[str] = None
     base_url: Optional[str] = default.glp_base_url
 
+    @field_validator("client_id", mode="before")
+    @classmethod
+    def _ensure_cls_client_id(cls, v: str) -> str:
+        if v:
+            cls._client_id = v
+        return v
+
+    @field_validator("client_secret", mode="before")
+    @classmethod
+    def _ensure_cls_client_secret(cls, v: str) -> str:
+        if v:
+            cls._client_secret = v
+        return v
+
     @property
     def ok(self) -> bool:
         return True if self.client_id and self.client_secret else False
+
+    @ok.setter
+    def ok(self, value: bool):  # used to mock force tests to use classic API
+        if value:
+            self.client_id = Glp._client_id
+            self.client_secret = Glp._client_secret
+        else:
+            Glp._client_id = self.client_id
+            Glp._client_secret = self.client_secret
+            self.client_id = self.client_secret = None
 
     @property
     def token_info(self) -> Dict[str, Dict[str, str]]:

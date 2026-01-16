@@ -8,9 +8,10 @@ from typer.testing import CliRunner
 
 from centralcli import cache, utils
 from centralcli.cli import api, app
+from centralcli.client import Session
 from centralcli.environment import env
 
-from . import capture_logs, clean_mac, config, test_data, end_2_days_ago, now_str, start_180_days_ago
+from . import capture_logs, clean_mac, config, end_2_days_ago, now_str, start_180_days_ago, test_data
 
 runner = CliRunner()
 
@@ -303,39 +304,42 @@ def test_show_insights_too_many_filters():
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition,test_name_append",
+    "idx,args,pass_condition,test_name_append",
     [
         [1, ("--key", "EC5C0481E85EB4DB79"), lambda r: "mac" in r, None],
         [2, ("--sub",), lambda r: "mac" in r, None],
         [3, ("--no-sub",), lambda r: "mac" in r, None],
-        [4, (), lambda r: "fetch subscription details failed" in r, "failed_sub_call"],
-        [5, ("-v",), lambda r: "mac" in r, None],
+        [4, ("-v",), lambda r: "mac" in r, None],
     ]
 )
-def test_show_inventory(_: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    if test_name_append:  # pragma: no cover
-        env.current_test = f"{env.current_test}_{test_name_append}"
-    result = runner.invoke(app, ["show", "inventory", *args],)
-    capture_logs(result, "test_show_inventory")
-    assert result.exit_code == 0
-    assert pass_condition(result.stdout)
+def test_show_inventory(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    for i in range(2):
+        config._mock(bool(i))
+        if test_name_append and i == 0:  # pragma: no cover
+            env.current_test = f"{env.current_test}_{test_name_append}"
+        result = runner.invoke(app, ["show", "inventory", *args],)
+        capture_logs(result, f"{env.current_test}{idx}-{'classic' if not i else 'glp'}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition,test_name_append",
+    "idx,args,pass_condition,test_name_append",
     [
         [1, (), lambda r: "500" in r, None],
+        [2, (), lambda r: "fetch subscription details failed" in r, "sub_call"],
     ]
 )
-def test_show_inventory_fail(_: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    if test_name_append:  # pragma: no cover
-        env.current_test = f"{env.current_test}_{test_name_append}"
-    else:  # pragma: no cover
-        ...
-    result = runner.invoke(app, ["show", "inventory", *args],)
-    capture_logs(result, "test_show_inventory_fail", expect_failure=True)
-    assert result.exit_code == 1
-    assert pass_condition(result.stdout)
+def test_show_inventory_fail(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    for i in range(2):
+        config._mock(bool(i))
+        if test_name_append and i == 0:  # pragma: no cover
+            env.current_test = f"{env.current_test}_{test_name_append}"
+        result = runner.invoke(app, ["show", "inventory", *args],)
+        capture_logs(result, f"{env.current_test}{idx}-{'classic' if not i else 'glp'}", expect_failure=True)
+        assert result.exit_code == 1
+        assert pass_condition(result.stdout)
+        Session.requests_clear()
 
 
 @pytest.mark.parametrize(

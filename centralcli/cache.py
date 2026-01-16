@@ -38,7 +38,6 @@ from .response import Response
 
 
 api = api_clients.classic
-glp_api = api_clients.glp
 
 if TYPE_CHECKING:
     from tinydb.table import Document, Table
@@ -150,7 +149,7 @@ class CentralObject(MutableMapping):
                 f"[{_get_color(idx, p)}]{p}[/]" for idx, p in enumerate(parts)
             ]
         )
-        return Text.from_markup(text, emoji=not any([e not in text.lower() for e in ignore_emoji]))
+        return Text.from_markup(text, emoji=not text.count(":") >= 5 and not any([e in text.lower() for e in ignore_emoji]))
 
     def __str__(self) -> str:
         return self.text.plain  # pragma: no cover
@@ -3128,6 +3127,7 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
+        glp_api = api_clients.glp
         if not glp_api:  # We only started caching subscription data with glp addition, classic does not cache subscriptions
             return await api.platform.get_subscriptions(sub_type=sub_type, device_type=dev_type)  # pragma: no cover
 
@@ -3208,7 +3208,7 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
-        if glp_api:
+        if api_clients.glp:
             return await self.refresh_inv_db_glp(dev_type=dev_type)
         return await self.refresh_inv_db_classic(dev_type=dev_type)  # pragma: no cover
 
@@ -3230,6 +3230,7 @@ class Cache:
             Response: CentralAPI Response object
         """
         br = BatchRequest
+        glp_api = api_clients.glp
         batch_resp = await glp_api.session._batch_request(
             [
                 br(glp_api.devices.get_glp_devices),
@@ -3316,7 +3317,7 @@ class Cache:
 
         if not sub_resp.ok:
             log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
-            combined = [{**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()]
+            combined = {serial: {**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()}
         else:
             raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
             dev_subs = list(set(raw_devs_by_serial.values()))

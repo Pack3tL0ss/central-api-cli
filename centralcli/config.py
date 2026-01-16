@@ -252,6 +252,7 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
 
 class Config:
     example_link = EXAMPLE_LINK
+    glp_client = None
 
     def __init__(self, base_dir: Path = None):
         #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
@@ -469,6 +470,10 @@ class Config:
             return self.data.get(key, default)
 
         return default
+
+    def _mock(self, glp_ok: bool = False) -> None:  # used for testing to force commands to use classic API endpoints
+        self.is_old_cfg = not glp_ok
+        self.glp.ok = glp_ok
 
     def get_last_workspace(self) -> tuple[str | None, float | None, bool | None]:
         """Gathers contents of last_workspace returns tuple with values.

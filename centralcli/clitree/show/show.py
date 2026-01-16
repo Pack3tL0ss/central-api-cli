@@ -802,6 +802,7 @@ def inventory(
         sub=sub,
         key=key
     )
+    common.exit(code=0 if common.cache.responses.sub else 1)
 
 
 # TODO break into seperate command group if we can still all show subscription without an arg to default to details
