@@ -222,6 +222,9 @@ sys.argv, raw_out = _get_value_from_argv("--raw", is_flag=True)
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
     config.dev.capture_raw = True
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
+if "--no-glp" in sys.argv:
+    config._mock()
+    sys.argv.pop(sys.argv.index("--no-glp"))
 if "--test" in sys.argv:
     config.dev.capture_raw = True
     sys.argv, env.current_test = _get_value_from_argv("--test")
