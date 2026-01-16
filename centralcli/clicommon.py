@@ -1081,12 +1081,13 @@ class CLICommon:
                         if not config.glp.ok:  # No sub cache pre glp support
                             if d[_final_sub_key].replace("-", "_") not in self.cache.license_names:
                                 raise ValueError()
-                            break
+                            else:
+                                d[_final_sub_key] = d[_final_sub_key].replace("-", "_")
+                                break
 
                         sub = self.cache.get_sub_identifier(d[_final_sub_key], best_match=True)
                         d[_final_sub_key] = sub.api_name
-                        if _final_sub_key != _final_sub_key:
-                            del d[_final_sub_key]
+
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
@@ -1877,7 +1878,7 @@ class CLICommon:
         )
 
         render.confirm(yes)
-        return api.session.request(api.devices.remove_devices, device_ids=[d["id"] for d in data])
+        return api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
 
 
     def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
