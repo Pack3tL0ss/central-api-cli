@@ -834,7 +834,6 @@ class ImportExamples:
         self.update_variables = clibatch_update_variables
         self.add_variables = clibatch_update_variables.replace("update variables", "add variables")
         self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
-        # self.assign_subscriptions = clibatch_assign_subscriptions
         self.migrate_devs_by_site = clibatch_migrate_devs_by_site
         self.migrate_devices = clibatch_add_devices.replace("batch add devices", "migrate")
 

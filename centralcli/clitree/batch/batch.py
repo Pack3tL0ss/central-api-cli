@@ -604,7 +604,7 @@ def glp_subscribe(
     [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
     """
     if show_example:
-        render.console.print(examples.assign_subscriptions, emoji=True)
+        render.console.print(examples.subscribe, emoji=True)
         return
 
     if not import_file:
@@ -618,7 +618,7 @@ def glp_subscribe(
     render.display_results(resp, tablefmt="action")
 
 
-@app.command()
+@app.command()  #TOGLP  Need GLP version
 def unsubscribe(
     import_file: Path = common.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
