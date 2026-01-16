@@ -6,7 +6,6 @@ from typer.testing import CliRunner
 from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
-from centralcli.exceptions import InvalidConfigException
 
 from . import capture_logs, config, log
 from ._test_data import (
@@ -36,9 +35,9 @@ from ._test_data import (
     test_sub_file_test_ap,
     test_sub_file_yaml,
     test_switch_var_file_flat,
+    test_switch_var_file_json,
     test_update_aps_file,
     test_verify_file,
-    test_switch_var_file_json,
 )
 
 runner = CliRunner()
@@ -149,43 +148,26 @@ def test_batch_add_fail(_: int, args: tuple[str]):
 
 if config.dev.mock_tests:
     @pytest.mark.parametrize(
-        "ensure_cache_subscription", [982], indirect=True
+        "idx,fixture,glp_ok,args,exit_code,pass_condition",
+        [
+            [1, None, False, (str(test_sub_file_yaml),), 1, lambda r: "⚠" in r and "Valid" in r],
+            [2, None, True, (str(test_sub_file_yaml), "--tags", "testtag1", "=", "testval1,", "testtag2=testval2"), 0, lambda r: r.count("code: 202") == 2],  # glp w tags
+            [3, None, True, (str(test_sub_file_csv),), 0, lambda r: r.count("code: 202") >= 2],
+            [4, "ensure_inv_cache_add_do_del_ap", True, (str(test_sub_file_test_ap), "--sub", "advanced-ap"), 0, lambda r: "code: 202" in r],
+        ]
     )
-    def test_batch_subscribe_with_tags_yaml(ensure_cache_subscription):
-        for i in range(2):  # test classic API and glp API
-            config._mock(bool(i))
-            result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_yaml)}', "--tags", "testtag1", "=", "testval1,", "testtag2=testval2", "--debug", "-d", "-Y"])
-            if config.is_old_cfg:
-                assert isinstance(result.exception, InvalidConfigException)
-            else:
-                capture_logs(result, "test_batch_subscribe_with_tags_yaml")
-                assert result.exit_code == 0
-                assert result.stdout.count("code: 202") == 2
+    def test_batch_subscribe(idx: int, fixture: str, glp_ok: bool, args: tuple[str], exit_code: int, pass_condition: Callable, request: pytest.FixtureRequest):
+        if idx == 0:
+            request.getfixturevalue("ensure_cache_subscription")
+        if fixture:
+            request.getfixturevalue(fixture)
+        config._mock(glp_ok)
+        cmd = f"{'_' if not glp_ok else ''}subscribe"
+        result = runner.invoke(app, ["batch", cmd, *args, "-Y"])
+        capture_logs(result, f"{env.current_test}{idx}-{'glp' if glp_ok else 'classic'}", expect_failure=bool(exit_code))
+        assert result.exit_code == exit_code
+        assert pass_condition(result.stdout)
 
-
-    @pytest.mark.parametrize(
-        "ensure_cache_subscription", [981], indirect=True
-    )
-    def test_batch_subscribe_csv(ensure_cache_subscription):
-        result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_csv)}', "-d", "-Y"])
-        if config.is_old_cfg:
-            assert isinstance(result.exception, InvalidConfigException)  # pragma: no cover
-        else:
-            capture_logs(result, "test_batch_subscribe_csv")
-            assert result.exit_code == 0
-            assert result.stdout.count("code: 202") >= 2
-
-    @pytest.mark.parametrize(
-        "ensure_cache_subscription", [980], indirect=True
-    )
-    def test_batch_subscribe_w_sub(ensure_cache_subscription, ensure_inv_cache_add_do_del_ap):
-        result = runner.invoke(app, ["batch", "subscribe", f'{str(test_sub_file_test_ap)}', "--sub", "advanced-ap", "-Y"])
-        if config.is_old_cfg:
-            assert isinstance(result.exception, InvalidConfigException)  # pragma: no cover
-        else:
-            capture_logs(result, "test_batch_subscribe_w_sub")
-            assert result.exit_code == 0
-            assert "code: 202" in result.stdout
 
     @pytest.mark.parametrize(
         "idx,args,pass_condition",

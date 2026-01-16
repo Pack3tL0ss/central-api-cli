@@ -625,13 +625,14 @@ This is a placeholder
 TODO add deploy example
 """
 
+# TODO REMOVE
 # -- // CLASSIC SUBSCRIBE DEVICES \\ --
 data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_subscribe = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
+clibatch_subscribe_deprecated_delme = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]license[/] [italic](both are required)[/]
@@ -705,7 +706,7 @@ CN12345678,foundation_switch_6300
 CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_assign_subscriptions = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
+clibatch_subscribe = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]subscription[/] [italic](both are required)[/]
@@ -833,7 +834,7 @@ class ImportExamples:
         self.update_variables = clibatch_update_variables
         self.add_variables = clibatch_update_variables.replace("update variables", "add variables")
         self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
-        self.assign_subscriptions = clibatch_assign_subscriptions
+        # self.assign_subscriptions = clibatch_assign_subscriptions
         self.migrate_devs_by_site = clibatch_migrate_devs_by_site
         self.migrate_devices = clibatch_add_devices.replace("batch add devices", "migrate")
 

@@ -741,7 +741,7 @@ class CLICommon:
 
         devices = []
         for sub, dev in data.items():
-            if not utils.is_resource_id(sub):
+            if not utils.is_resource_id(sub) and config.glp.ok:  # No sub cache pre glp support  classic API expects sub name
                 sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
                 sub = sub_obj.id
             inv_devs = [self.cache.get_combined_inv_dev_identifier(d) for d in utils.listify(dev)]
@@ -2045,7 +2045,7 @@ class CLICommon:
 
         glp_api = GreenLakeAPI()
         if sub_required and not subscription:
-            self.verify_required_fields(data, "subscription", exit_on_fail=True)
+            self.verify_required_fields(data, ["subscription"], exit_on_fail=True)
 
         try:
             _data = ImportDevices(self.cache, data)

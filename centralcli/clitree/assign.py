@@ -4,22 +4,17 @@ from datetime import datetime
 
 import typer
 
-from centralcli import api_clients, common, log, render, utils
+from centralcli import api_clients, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheLabel, CacheSub
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
 from centralcli.objects import DateTime
 
-
-api = api_clients.classic
-glp_api = api_clients.glp
-
 app = typer.Typer()
 
 
-# CACHE update cache for device after successful assignment
-@app.command(deprecated=True, hidden=glp_api is not None)
-def license(
+@app.command("subscription" if not config.glp.ok else "_subscription", hidden=config.glp.ok)
+def classic_subscription(
     license: common.cache.LicenseTypes = typer.Argument(..., show_default=False),  # type: ignore
     devices: list[str] = common.arguments.devices,
     yes: bool = common.options.yes,
@@ -29,9 +24,6 @@ def license(
 ) -> None:  # pragma: no cover
     """Assign (or reassign) Licenses to devices by serial number(s).
 
-    :warning:  This command is deprecated, and will be replaced by [cyan]assign subscription[/] which is available now if Greenlake (glp)
-    details are provided in the config.
-
     If multiple valid subscriptions of a given type exist.  The subscription with the longest term remaining will be assigned.
 
     [deep_sky_blue1]:information:[/]  Device must already be added to Central (GreenLake inventory).  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
@@ -39,27 +31,23 @@ def license(
 
     [deep_sky_blue1]:information:[/]  Use [cyan]cencli enable[/]|[cyan]disable auto-sub[/] to enable/disable auto subscription.
     """
+    api = api_clients.classic
     _msg = f"Assign [bright_green]{license.value}[/bright_green] to"
     try:
         _serial_nums = [s if utils.is_serial(s) else common.cache.get_dev_identifier(s).serial for s in devices]
     except Exception:
         _serial_nums = devices
-
-    if len(_serial_nums) > 1:
-        _dev_msg = '\n    '.join([f'[cyan]{dev}[/]' for dev in _serial_nums])
-        _msg = f"{_msg}:\n    {_dev_msg}"
-    else:
-        dev = _serial_nums[0]
-        _msg = f"{_msg} [cyan]{dev}[/]"
+    _msg = f"{_msg} {utils.summarize_list(_serial_nums)}"
 
     render.econsole.print(_msg)
     render.confirm(yes)
     resp = api.session.request(api.platform.assign_licenses, _serial_nums, services=license.name)
     render.display_results(resp, tablefmt="action")
+    # CACHE update cache for device after successful assignment
 
 
-@app.command(hidden=not glp_api)
-def subscription(
+@app.command("subscription" if config.glp.ok else "_subscription", hidden=not config.glp.ok)
+def glp_subscription(
     sub_name_or_id: str = typer.Argument(..., help="subscription id or key from [cyan]cencli show subscriptions[/] output, or the subscription name [dim italic](i.e.: advanced-ap)[/]", autocompletion=common.cache.sub_completion, show_default=False),  # type: ignore
     devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
     end_date: datetime = common.options.get("end", help=f"Select subscription with this expiration date [dim italic](24 hour format, Time not required, will select subscription that expires on the date provided)[/] {common.help_block('The subscription with the most time remaining will be selected')}",),
@@ -73,7 +61,8 @@ def subscription(
     Device must exist in [green]GreenLake[/] inventory.  Use '[cyan]cencli show inventory[/]' to see devices that have been added.
     Use '--sub' option with '[cyan]cencli add device ...[/]' to add device and assign subscription in one command.
     """
-    if not glp_api:  # pragma: no cover
+    api = api_clients.glp
+    if not api:  # pragma: no cover
         common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")
 
     sub: CacheSub = common.cache.get_sub_identifier(sub_name_or_id, end_date=end_date, best_match=True)  # TODO add qty param and return list of sub objects if best sub object can not satisfy the qty necessary
@@ -90,14 +79,14 @@ def subscription(
 
     render.econsole.print(_msg)
     render.confirm(yes)
-    resp = glp_api.session.request(glp_api.devices.update_devices, res_ids, subscription_ids=sub.id)
+    resp = api.session.request(api.devices.update_devices, res_ids, subscription_ids=sub.id)
     render.display_results(resp, tablefmt="action")
 
     # UPDATE CACHE
     try:
         already_subscribed = len([dev for dev in devs if dev.subscription_key == sub.key])
         cache_update_data = [{**dict(dev), "services": sub.name, "subscription_expires": sub.end_date, "subscription_key": sub.key} for dev in devs]
-        glp_api.session.request(common.cache.update_inv_db, cache_update_data)
+        api.session.request(common.cache.update_inv_db, cache_update_data)
     except Exception as e:  # pragma: no cover
         already_subscribed = 0
         log.exception(
@@ -111,7 +100,7 @@ def subscription(
         reduce_by = len(devs) - already_subscribed
         if reduce_by:
             sub_update_data = {**common.cache.subscriptions_by_key, sub.key: {**dict(sub), "available": sub.available - reduce_by}}
-            glp_api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
+            api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
     except Exception as e:  # pragma: no cover
         log.exception(
             f"{repr(e)} while trying to update subscription cache (increase available qty after sub(s) unassigned)\n"
@@ -130,12 +119,13 @@ def label_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    "Assign label to device(s)"
+    """Assign label to device(s)"""
+    api = api_clients.classic
     label: CacheLabel = common.cache.get_label_identifier(label)
     devices: list[CacheDevice] = [common.cache.get_dev_identifier(dev) for dev in devices]
 
     _msg = f"Assign [bright_green]{label.name}[/bright_green] to"
-    _msg = f"{_msg} {utils.summarize_list([dev.summary_text for dev in devices], color=None)}"
+    _msg = f"{_msg} {utils.summarize_list(devices, color=None)}"
     render.econsole.print(_msg, emoji=False)
 
     aps = [dev for dev in devices if dev.generic_type == "ap"]

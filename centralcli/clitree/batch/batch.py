@@ -10,10 +10,10 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render, utils, config, cache
+from centralcli import cache, cleaner, common, config, log, render, utils
 from centralcli.cache import CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.constants import BatchRenameArgs, iden_meta
+from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys
 from centralcli.response import Response
 
 from . import add, delete, examples, update
@@ -518,14 +518,10 @@ def deploy(
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
 def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[dict], list[dict], list[BatchRequest]]:  # pragma: no cover non GLP API
-    if "'license': " in str(devices):                                       # v1 config import file
-        devices = [{k if k != "license" else "services": v for k, v in d.items()} for d in devices]
-    elif "'subscription': " in str(devices):                                # v2 config import file we moved most to "subscription" for consistency but allo either.
-        devices = devices = [{k if k != "subscription" else "services": v for k, v in d.items()} for d in devices]   # classic API response returns "services": list[str] always with 1 service in the list
-
-    subs = set([d["services"] for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
-    ignored = [d for d in devices if not d.get("services")]
-    devices = [d for d in devices if d.get("services")]  # filter any devs that currently do not have subscription
+    devices = [{k if k not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in devices]
+    subs = set([d["subscription"] for d in devices if d.get("subscription")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    ignored = [d for d in devices if not d.get("subscription")]
+    devices = [d for d in devices if d.get("subscription")]  # filter any devs that currently do not have subscription
 
     if ignored:
         log.warning(f"Ignored {len(ignored)} devices, no desired subscription provided", caption=True)
@@ -539,11 +535,11 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     devs_by_sub = {s: [] for s in subs}
     try:
         for d in devices:
-            devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
+            devs_by_sub[d["subscription"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
     except KeyError as e:
         common.exit(f"Malformed import data, or required field is missing. {repr(e)}")
 
-    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses  # TOGLP
+    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses
     requests = [
         BatchRequest(func, serials=chunk, services=sub) for sub in devs_by_sub for chunk in utils.chunker(devs_by_sub[sub], 50)
     ]  # Both Assign and unassign allow a max of 50 serials per call
@@ -574,7 +570,7 @@ def classic_subscribe(
     elif not import_file:
         common.exit(render._batch_invalid_msg("cencli batch subscribe [OPTIONS] [IMPORT_FILE]"))
 
-    devices = common._get_import_file(import_file, "devices")
+    devices = common._get_import_file(import_file, "devices", subscriptions=True)
     devices, ignored, sub_reqs = _build_sub_requests(devices)
 
     render.display_results(data=devices, title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
@@ -583,6 +579,7 @@ def classic_subscribe(
     render.confirm(yes)
     resp = api.session.batch_request(sub_reqs)
     render.display_results(resp, tablefmt="action")
+    # CACHE
 
 
 @app.command("subscribe" if config.glp.ok else "_subscribe", hidden=not config.glp.ok)

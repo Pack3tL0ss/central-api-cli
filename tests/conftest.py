@@ -877,8 +877,7 @@ def ensure_dev_cache_test_vsx_switch():
 
 # Ensures subscription has 0 available for certain tests
 @pytest.fixture(scope="function")
-def ensure_cache_subscription(request: pytest.FixtureRequest):
-    avail = 0 if not hasattr(request, "param") else request.param
+def ensure_cache_subscription():
     if config.dev.mock_tests:
         test_sub = {
             "id": "7658e672-2af5-5646-aa37-406af19c6d41",
@@ -896,10 +895,37 @@ def ensure_cache_subscription(request: pytest.FixtureRequest):
             "valid": True
         }
         if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
-            update_data = {**test_sub, "available": avail}
+            assert asyncio.run(cache.update_db(cache.SubDB, data=test_sub, truncate=False))
+        else:  # pragma: no cover
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": test_sub["available"]}]
+            assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_subscription_none_available():
+    if config.dev.mock_tests:
+        # available 982 below as we restore this after the test
+        test_sub = {
+            "id": "7658e672-2af5-5646-aa37-406af19c6d41",
+            "name": "advanced-ap",
+            "type": "AP",
+            "key": "ENCYHFWQLJNQCWDU",
+            "qty": 1000,
+            "available": 982,
+            "is_eval": True,
+            "sku": "Q9Y63-EVALS",
+            "start_date": 1611532800,
+            "end_date": 1924905600,
+            "started": True,
+            "expired": False,
+            "valid": True
+        }
+        if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
+            update_data = {**test_sub, "available": 0}
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=False))
         else:  # pragma: no cover
-            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": avail}]
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": 0}]
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
     yield
 
