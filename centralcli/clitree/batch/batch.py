@@ -589,7 +589,7 @@ def classic_subscribe(
 def glp_subscribe(
     import_file: Path = common.arguments.import_file,
     _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
-    tags: list[str] = typer.Option(None, "-t", "--tags", help="Tags to be assigned to [bright_green]all[/] imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]"),
+    tags: list[str] = common.options.tags,
     sub: str = common.options.get(
         "subscription",
         help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
@@ -617,7 +617,7 @@ def glp_subscribe(
     tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
 
     data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
-    resp = common.batch_assign_subscriptions(data, tags=tag_dict, subscription=sub, yes=yes)
+    resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
 
 
@@ -858,7 +858,7 @@ def archive(
 def unarchive(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    yes: bool = common.options.get("yes", default=True, hidden=True),  # We allow -y but not necessary for unarchive
+    yes: bool = typer.Option(True, hidden=True),  # We allow -y but not necessary for unarchive
     debug: bool = common.options.debug,
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
