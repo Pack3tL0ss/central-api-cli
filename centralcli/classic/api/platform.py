@@ -234,7 +234,7 @@ class PlatformAPI:
 
             return await self.session._batch_request(reqs, continue_on_fail=True)
         else:
-            return await self.session.post(url, json_data=json_data)
+            return [await self.session.post(url, json_data=json_data)]
 
     async def cop_delete_device_from_inventory(
         self,
