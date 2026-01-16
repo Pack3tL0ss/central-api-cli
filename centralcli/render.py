@@ -1155,7 +1155,7 @@ def display_results(
                 )
 
         if exit_on_fail and not all([r.ok for r in resp]):
-            sys.exit(1)
+            raise typer.Exit(1)
 
     elif data:
         _display_results(
