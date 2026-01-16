@@ -751,7 +751,6 @@ class ArgToWhat:
 
     def _init_unassign(self):
         self.subscription = self.subscriptions = "subscription"
-        self.license = self.licenses = "license"  # TODO # DEPRECATED need to add unassign subscription and hide license if config.glp.ok
         self.label = self.labels = "label"
 
     def _init_cancel(self):
