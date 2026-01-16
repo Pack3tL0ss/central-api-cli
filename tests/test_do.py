@@ -21,23 +21,6 @@ def test_add_device_missing_mac():
     assert "required" in result.stdout
 
 
-def test_archive(ensure_inv_cache_test_ap: None):
-    result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "99-not-a-serial", "USD8H1R1KG", "--yes"])
-    capture_logs(result, "test_archive")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-    assert "⚠" in result.stdout  # "99-not-a-serial" is skipped as it's not a serial number and is not found in inventory/cache
-
-
-def test_archive_multi(ensure_cache_batch_devices: None):
-    devices = common._get_import_file(test_device_file, import_type="devices")
-    serials = [dev["serial"] for dev in devices[::-1]][0:2]
-    result = runner.invoke(app, ["archive", *serials, "-y"])
-    capture_logs(result, "test_archive_multi")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-
-
 @pytest.mark.parametrize(
     "idx,args",
     [
@@ -580,24 +563,52 @@ if config.dev.mock_tests:
         assert pass_condition(result.stdout)
 
 
+    @pytest.mark.parametrize("glp_ok", [False, True])
+    def test_archive(ensure_inv_cache_test_ap, glp_ok: bool):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "99-:CD:not-a:cd:-serial", "USD8H1R1KG", "--yes"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        assert result.exit_code == 0
+        assert "succeeded" or "Accepted" in result.stdout
+        assert "⚠" in result.stdout  # "99-not-a-serial" is skipped as it's not a serial number and is not found in inventory/cache
+        assert "💿" not in result.stdout
+
+
+    @pytest.mark.parametrize("glp_ok", [False, True])
+    def test_archive_multi(ensure_inv_cache_batch_devices, glp_ok: bool):
+        config._mock(glp_ok)
+        devices = common._get_import_file(test_device_file, import_type="devices")
+        serials = [dev["serial"] for dev in devices[::-1]][0:2]
+        result = runner.invoke(app, ["archive", *serials, "-y"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        assert result.exit_code == 0
+        assert "succeeded" or "Accepted" in result.stdout
+        assert "💿" not in result.stdout
+
+
     @pytest.mark.parametrize(
-        "fixture,args",
+        "idx,glp_ok,fixture,args",
         [
-            ["ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
-            ["ensure_cache_batch_devices", ("from_import",)],
-            [None, ("US18CEN103", "US18CEN112")],  # this passes as it reuses real response, but these serials don't exist in cache.
+            [1, False, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
+            [2, True, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
+            [3, False, "ensure_inv_cache_batch_devices", ("from_import",)],
+            [4, True, "ensure_inv_cache_batch_devices", ("from_import",)],
+            [5, False, "ensure_inv_cache_fake_archived_devs", ("US18CEN103", "US18CEN112")],
+            [6, True, "ensure_inv_cache_fake_archived_devs", ("US18CEN103", "US18CEN112")],
         ]
     )
-    def test_unarchive(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
-        if fixture:
+    def test_unarchive(idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:  # pragma: no cover
             request.getfixturevalue(fixture)
         if "from_import" in args:
             devices = common._get_import_file(test_device_file, import_type="devices")
             args = [dev["serial"] for dev in devices[::-1]][0:2]
+        config._mock(glp_ok)
         result = runner.invoke(app, ["unarchive", *args])
-        capture_logs(result, "test_unarchive")
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
         assert result.exit_code == 0
-        assert "succeeded" in result.stdout
+        assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
+        assert "🆎" not in result.stdout
 
 
     @pytest.mark.parametrize(

@@ -379,6 +379,19 @@ def ensure_inv_cache_batch_devices():
                 "archived": False
             },
             {
+                "id": "6702ffe6-0770-518a-9e42-188d715a9c7b",
+                "serial": "CNFHJ0TPF7",
+                "mac": "38:17:c3:c6:e0:38",
+                "type": "ap",
+                "model": "315",
+                "sku": "JW813A",
+                "subscription": "advanced-ap",
+                "subscription_key": "ENCYHFWQLJNQCWDU",
+                "subscription_expires": 1924905600,
+                "assigned": True,
+                "archived": False
+            },
+            {
                 "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
                 "serial": "CNKJKV309D",
                 "mac": "D0:D3:E0:CD:08:24",
@@ -403,10 +416,36 @@ def ensure_inv_cache_batch_devices():
                 "subscription_expires": 1860052515,
                 "assigned": True,
                 "archived": False
+            },
+            {
+                "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
+                "serial": "CN29FP403H",
+                "mac": "80:C1:6E:CD:32:40",
+                "type": "sw",
+                "model": "2530-12G",
+                "sku": "J9773A",
+                "services": "foundation-switch-6100",
+                "subscription_key": "AZFG8CVMXQB23NNQ",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
+                "serial": "SG90KN00N5",
+                "mac": "88:3a:30:9a:cc:40",
+                "type": "cx",
+                "model": "'6300'",
+                "sku": "JL661A",
+                "services": "advanced-switch-6300",
+                "subscription_key": "E4F587FF6F6F848289",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
             }
         ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        if not cache_devs == devices:
             assert asyncio.run(cache.update_inv_db(data=devices))
     yield
 
@@ -1290,27 +1329,64 @@ def ensure_cache_group_cloned_cx_only():
 @pytest.fixture(scope="function")
 def ensure_inv_cache_add_do_del_ap():
     if config.dev.mock_tests:
-        devices = [
+        cache_device = {
+            "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+            "serial": "CN63HH906Z",
+            "mac": "F0:5C:19:CE:7A:86",
+            "type": "ap",
+            "model": "IAP-205-US",
+            "sku": "JL185A",
+            "services": "foundation-ap",
+            "subscription_key": "ADURDXCTOYTUXKJE",
+            "subscription_expires": 1788715367,
+            "assigned": True,
+            "archived": False
+        }
+        assert asyncio.run(cache.update_inv_db(data=cache_device))
+    yield
+
+    # if cache.inventory_by_serial.get(cache_device["serial"]):
+    #     assert asyncio.run(cache.update_inv_db(cache.inventory_by_serial[cache_device["serial"]].doc_id, remove=True))
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_fake_archived_devs():
+    if config.dev.mock_tests:
+        cache_devices = [
             {
-                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
-                "serial": "CN63HH906Z",
-                "mac": "F0:5C:19:CE:7A:86",
+                "id": "a1b233cc-5545-1234-abcb-6551acaabbcc",
+                "serial": "US18CEN103",
+                "mac": "F0:5C:19:AB:CD:EF",
                 "type": "ap",
                 "model": "IAP-205-US",
                 "sku": "JL185A",
-                "services": "foundation-ap",
-                "subscription_key": "ADURDXCTOYTUXKJE",
-                "subscription_expires": 1788715367,
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
                 "assigned": True,
-                "archived": False
+                "archived": True
+            },
+            {
+                "id": "a1b233cc-5545-1234-abcb-6551acccbbaa",
+                "serial": "US18CEN112",
+                "mac": "F0:5C:19:12:34:56",
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": True
             }
         ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
-            assert asyncio.run(cache.update_inv_db(data=devices))
+        assert asyncio.run(cache.update_inv_db(data=cache_devices))
     yield
 
+    doc_ids = [cache.inventory_by_serial[d["serial"]].doc_id for d in cache_devices]
+    assert asyncio.run(cache.update_inv_db(doc_ids, remove=True))
 
+# OK TO REMOVE AFTER VERIFICATION
 @pytest.fixture(scope="function")
 def ensure_cache_batch_devices():
     if config.dev.mock_tests:

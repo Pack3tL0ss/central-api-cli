@@ -35,7 +35,7 @@ if config.dev.mock_tests:
         assert "successfully" in result.stdout
 
 
-    def test_batch_del_devices(ensure_cache_batch_devices):
+    def test_batch_del_devices(ensure_inv_cache_batch_devices):
         result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_device_file)}', "-Y"])
         capture_logs(result, "test_batch_del_devices")
         assert result.exit_code == 0
