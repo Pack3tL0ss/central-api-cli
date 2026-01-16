@@ -1302,7 +1302,7 @@ class CLICommon:
             data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
             render.display_results(data=data, title=title, caption=caption)
         if res.get("failed_devices"):
-            title = f"These devices failed to {operation}d."
+            title = f"These devices failed to {operation}."
             data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
             render.display_results(data=data, title=title, caption=caption)
 
