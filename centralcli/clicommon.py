@@ -1078,6 +1078,11 @@ class CLICommon:
             if d.get(_final_sub_key):
                 for idx in range(2):
                     try:
+                        if not config.glp.ok:  # No sub cache pre glp support
+                            if d[_final_sub_key].replace("-", "_") not in self.cache.license_names:
+                                raise ValueError()
+                            break
+
                         sub = self.cache.get_sub_identifier(d[_final_sub_key], best_match=True)
                         d[_final_sub_key] = sub.api_name
                         if _final_sub_key != _final_sub_key:
@@ -1851,16 +1856,22 @@ class CLICommon:
 
         return doc_ids
 
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+        if config.glp.ok:
+            return self.glp_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)  # Note glp delete flow only deletes from GLP inventory not ui
+        return self.classic_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+
 
     def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         if any([ui_only, cop_inv_only]):
-            return self.batch_delete_devices(data=data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+            return self.classic_batch_delete_devices(data=data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+
         api = api_clients.glp
         devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], retry_dev=False) for d in data]
         word = "device" if len(devs) == 1 else f"{len(devs)} devices"
+        render.econsole.print(f"Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
         render.econsole.print(
-            f"Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}"
-            "\n\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
+            "\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
             "\nUse [cyan]cencli batch archive devices ...[/] to archive devices, that's the closest thing possible to really deleting them."
             "\n[italic]Archive also removes the association with Aruba Central, and clears any subscription assignments."
         )
@@ -1868,8 +1879,8 @@ class CLICommon:
         render.confirm(yes)
         return api.session.request(api.devices.remove_devices, device_ids=[d["id"] for d in data])
 
-    # TOGLP
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+
+    def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 
@@ -1948,7 +1959,7 @@ class CLICommon:
             self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
 
         sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
-        confirm_msg += [f"\n[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
+        confirm_msg += [f"[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
         if ui_only:
             confirmation_devs = utils.summarize_list([c.summary_text for c in cache_mon_devs if c.status.lower() == 'down'], max=40, color=None)
             if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
@@ -1962,8 +1973,8 @@ class CLICommon:
             else:
                 confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
-            confirmation_list = valid_serials if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
-            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
+            confirmation_list = valid_serials if force or cop_inv_only else cache_found_devs
+            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan').lstrip("\n")]
 
         if _total_reqs > 1:
             confirm_msg += [f"\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."]
