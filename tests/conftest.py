@@ -1386,17 +1386,6 @@ def ensure_inv_cache_fake_archived_devs():
     doc_ids = [cache.inventory_by_serial[d["serial"]].doc_id for d in cache_devices]
     assert asyncio.run(cache.update_inv_db(doc_ids, remove=True))
 
-# OK TO REMOVE AFTER VERIFICATION
-@pytest.fixture(scope="function")
-def ensure_cache_batch_devices():
-    if config.dev.mock_tests:
-        devices = common._get_import_file(test_device_file, import_type="devices")
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
-            resp = common.batch_add_devices(data=devices, yes=True)
-            assert any([r.ok for r in resp])
-    yield
-
 
 @pytest.fixture(scope="function")
 def ensure_cache_batch_del_groups():
