@@ -39,7 +39,7 @@ from .client import BatchRequest, Session
 from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
-from .models.imports import ImportSubDevices
+from .models.imports import ImportDevices
 from .response import Response
 from .ws_client import follow_logs
 
@@ -1182,11 +1182,12 @@ class CLICommon:
         warn = warn if not env.is_pytest else False  # bypass confirmation for test runs
         render.confirm(yes=not warn and yes)
         resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
-        # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+
         _data = None if not all([r.ok for r in resp]) else data
+        passed = [r for r in resp if r.ok]
         update_func = self.cache.refresh_inv_db
         kwargs = {}
-        if _data:
+        if _data:  # if any failures occured don't pass data into update_inv_db.
             try:
                 _data = Inventory(_data).cache_dump()
                 kwargs = {"data": _data}
@@ -1195,14 +1196,15 @@ class CLICommon:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
                 _data = None
 
-        cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
-        with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
-            time.sleep(3)
-            spin.update('Performing full device cache update after device edition.')
-            time.sleep(2)
+        if passed:  # Update inv then dev db as long as any adds passed
+            cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
+            with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
+                time.sleep(3)
+                spin.update('Performing full device cache update after device edition.')
+                time.sleep(2)
 
-        # always perform full dev_db update as we don't know the other fields.
-        cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
+            # always perform full dev_db update as we don't know the other fields.
+            cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
 
         return resp or Response(error="No Devices were added")
 
@@ -1258,11 +1260,19 @@ class CLICommon:
 
 
     def batch_archive_unarchive_devices_glp(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
-        devs = [self.cache.get_inv_identifier(d["serial"]) for d in data]
+        devs = []
+        for d in data:
+            dev = self.cache.get_inv_identifier(d["serial"], exit_on_fail=False, silent=True)
+            if not dev:
+                render.econsole.print(f"[dark_orange3]\u26a0[/]  [red]Skipping[/] [cyan]{d['serial']}[/].  Not found in [green]GreenLake[/] Inventory", emoji=False)
+            else:
+                devs += [dev]
+        if not devs:
+            self.exit("No devices found to process")
 
         archive = operation == "archive"
         _word = "device" if len(devs) == 1 else f"[bright_green]{len(devs)}[/] devices"
-        render.econsole.print(f"[{'red' if archive else 'green'}]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}")
+        render.econsole.print(f"[{'red' if archive else 'green'}]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}", emoji=False)
         render.confirm(yes if yes is not None else operation == "unarchive")  # No confirmation necessary for unarchive
         api = api_clients.glp
         res = api.session.request(api.devices.update_devices, [d.id for d in devs], archive=archive)
@@ -1281,7 +1291,7 @@ class CLICommon:
             res = api.session.request(api.platform.unarchive_devices, serials)
 
         if res:
-            self._render_classic_archive_unarchive_result(res)
+            self._render_classic_archive_unarchive_result(res, operation=operation)
         else:
             render.display_results(res, tablefmt="action", exit_on_fail=True)
 
@@ -1995,63 +2005,96 @@ class CLICommon:
         if inv_doc_ids:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
-    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, tags: dict[str, str] = None, subscription: str = None, yes: bool = False,) -> List[Response]:
-        # tags = None if not tags else {k: v if v.lower() not in ["none", "null"] else None for k, v in tags.items()}
+    @dataclass
+    class TagReqInfo:
+        requests: list[BatchRequest]
+        confirm_msgs: list[str]
+
+    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> TagReqInfo:
+        api = api_clients.glp
+        tags = tags or {}
+        ret_dict = {}
+        hash_to_tags = {}
+        confirm_msg = []
+        batch_reqs = []
+        for dev in devices:
+            if not dev.exists:
+                continue
+            this_tags = dev.tags or {}
+            combined_tags = {**tags, **this_tags}
+            if combined_tags:
+                tag_hash = hash(str(combined_tags))
+                ret_dict = utils.update_dict(ret_dict, tag_hash, [dev.glp_id])
+                if tag_hash not in hash_to_tags:
+                    hash_to_tags[tag_hash] = combined_tags
+
+        _empty_str = "''"
+        for tag_hash, ids in ret_dict.items():
+            _tags: dict = hash_to_tags[tag_hash]
+            _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v or _empty_str}' for k, v in _tags.items()])
+            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(ids)}[/] [bright_green]devices[/bright_green]:\n{_tag_msg}"]
+            batch_reqs += [BatchRequest(api.devices.update_devices, device_ids=ids, tags=_tags)]
+
+        return self.TagReqInfo(batch_reqs, confirm_msg)
+
+    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False) -> list[Response]:
+        data = [{k if k not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
         if subscription:
-            sub_keys = ["subscription", "license", "services"]
-            sub_key = [k for k in sub_keys if k.lower() in map(str.lower, data[0].keys())] or "subscription"
             _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
-            data = [{**{k: v for k, v in inner.items() if k != sub_key}, "subscription": _sub.id} for inner in data]
+            data = [{**inner, "subscription": _sub.id} for inner in data]
 
         glp_api = GreenLakeAPI()
+        if sub_required and not subscription:
+            self.verify_required_fields(data, "subscription", exit_on_fail=True)
+
         try:
-            _data = ImportSubDevices(self.cache, data)
+            _data = ImportDevices(self.cache, data)
         except ValidationError as e:
             self.exit(utils.clean_validation_errors(e))
 
         devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
-        confirm_msg = []
-        batch_reqs = []
+        confirm_msg = [""]
+        sub_reqs = []
         for sub_id, res in devs_by_sub_id.items():
             if not res.devices:
                 continue
 
             csub: CacheSub = res.cache_sub
-            # confirm_msg += [res.get_confirm_msg()]
-            confirm_msg += [f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
+            confirm_msg += [f"[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
                 confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
-            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id, tags=tags)]
+            sub_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
 
-        if tags:
-            _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in tags.items()])
-            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(_data)}[/] [bright_green]devices [dim italic]from import[/][/bright_green]:\n{_tag_msg}"]
+        if sub_reqs and not self.cache.responses.sub:
+            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
-        if _data.has_tags:
-            for _tags, _ids in _data.ids_by_tags():
-                _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in _tags.items()])
-                confirm_msg += [f"\n[bright_green]The following {'additional ' if tags else ''}tags will be assigned to[/] [cyan]{len(_ids)}[/] [bright_green]devices [dim italic]based on data defined in import[/][/bright_green]:\n{_tag_msg}"]
-                batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=_ids, tags=_tags)]
+        tag_reqs = []
+        if tags or _data.has_tags:
+            tag_req_info = self._build_tag_reqs(_data, tags=tags)
+            confirm_msg += tag_req_info.confirm_msgs
+            tag_reqs = tag_req_info.requests
 
         if _data.not_assigned_devs:
             confirm_msg += [
-                "\n[dark_orange3]\u26a0[/]  Some devices have been skipped as they don't exist or are not associated with Aruba Central app in [green]GreenLake[/]",
+                "\n[dark_orange3]\u26a0[/]  Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
                 _data.warning_skip_not_assigned,
-                "\n[deep_sky_blue1]\u2139[/]  Use [cyan]cencli batch add devices ...[/] to add devices to Aruba Central."
+                "\n[deep_sky_blue1]\u2139[/]  [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/]"
             ]  # \u26a0 == :warning:, \u2139 = :information:
 
-        if not self.cache.responses.sub:
-            confirm_msg += ["\n[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
+        batch_reqs = [*sub_reqs, *tag_reqs]
+        if batch_reqs:
+            confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
         render.econsole.print("\n".join(confirm_msg), emoji=False)
+
         if not batch_reqs:
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
+
         render.confirm(yes) # aborts here if they don't confirm
         batch_res = glp_api.session.batch_request(batch_reqs)
 
         return batch_res
-
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
         altitude_by_serial, ap_env_by_serial, batch_reqs, requires_reboot = {}, {}, [], {}
@@ -2169,7 +2212,7 @@ class CLICommon:
         if req_info.skipped:
             _cnt = len(req_info.skipped)
             render.econsole.print(f"\nThe following {_cnt} APs were skipped as no updates applied to those models:")
-            if _cnt > 12:
+            if _cnt > 12:  # pragma: no cover
                 render.econsole.print(f"    [dim italic]Summary showing 12 of the {_cnt} skipped devices.")
             render.econsole.print(req_info.skipped_summary)
 
@@ -2193,7 +2236,7 @@ class CLICommon:
         self.exit(code=0 if all([r.ok for r in [*batch_resp, *reboot_resp]]) else 1)
 
     @staticmethod
-    def get_banner_from_user() -> Path:
+    def get_banner_from_user() -> Path:  # pragma: no cover requires tty
         banner_text = utils.get_multiline_input("[bright_green]Paste desired banner text into terminal[/]...")
         print()  # move cursor past ^D line
         temp_file = config.cache_dir / ("banner" if "{{" not in banner_text else "banner.j2")

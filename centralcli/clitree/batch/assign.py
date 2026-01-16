@@ -45,7 +45,7 @@ def subscriptions(
     tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
 
     data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
-    resp = common.batch_assign_subscriptions(data, tags=tag_dict, subscription=sub, yes=yes)
+    resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
 
 

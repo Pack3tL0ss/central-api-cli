@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from centralcli import common, render
+from centralcli import common, render, config, utils
 from centralcli.constants import APIAction
 
 from . import examples
@@ -49,31 +49,51 @@ def aps(
     common.batch_update_aps(data, yes=yes, reboot=reboot)
 
 
-# TODO this is intended to be a GLP update
-@app.command(hidden=True)
+@app.command(hidden=not config.glp.ok)
 def devices(
     import_file: Path = common.arguments.import_file,
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = common.options.tags,
+    sub: str = common.options.get(
+        "subscription",
+        help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
+        autocompletion=common.cache.sub_completion,
+    ),
     show_example: bool = common.options.show_example,
-    reboot: bool = typer.Option(False, "--reboot", "-R", help="Automatically reboot device if IP or VLAN is changed [dim italic]Reboot is required for changes to take effect when IP or VLAN settings are changed[/]"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Update devices in GreenLake
+    """Update devices in [green]GreenLake[/]
+
+    updates can be provided via command line :triangular_flag: or in the import_file
+
+    Command Line flags (--tags, --archive, --sub) will be applied to all devices found in the import.
+    [cyan]--tags[/] is cumulative.  Meaning any tags found in the import are created along with tags specified on the command line.
+    [italic]if the same tag is provided, the tag in the import wins.[/]
+
+    All other :triangular_flag: provided on the command line will override any value found in the import for that device.
+    [italic]i.e. --sub advanced-ap would override anything found in an optional "subscription" field in the import file.
 
     Use [cyan]--example[/] to see expected import file format and required fields.
     """
+    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
+    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
     if show_example:
-        render.console.print(examples.update_devices)
+        render.console.print(
+            f"{utils.color(['csv', 'yaml', 'json'], color_str='cyan')} with the following fields [red]serial[/], {utils.color(['tags', 'subscription'], color_str='cyan')}\n"
+            "    [italic][red]red[/] fields are required. All others are optional.[/]"
+        )
         return
 
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch update devices [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, "devices")
-    common.batch_update_aps(data, yes=yes, reboot=reboot)
+    data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
+    resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, yes=yes)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
