@@ -513,8 +513,7 @@ def ensure_dev_cache_batch_devices():
 @pytest.fixture(scope="function")
 def ensure_inv_cache_test_ap():
     if config.dev.mock_tests:
-        devices = [
-            {
+        cache_data = {
                 "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
                 "serial": test_data["test_devices"]["ap"]["serial"],
                 "mac": test_data["test_devices"]["ap"]["mac"],
@@ -526,11 +525,9 @@ def ensure_inv_cache_test_ap():
                 "subscription_expires": 1788715367,
                 "assigned": True,
                 "archived": False
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:  # pragma: no cover
-            assert asyncio.run(cache.update_inv_db(data=devices))
+        }
+        if not cache.inventory_by_serial.get(cache_data["serial"]) or not dict(cache.inventory_by_serial[cache_data["serial"]]) == cache_data:  # pragma: no cover
+            assert asyncio.run(cache.update_inv_db(data=[cache_data]))
     yield
 
 
@@ -1559,3 +1556,9 @@ def ensure_assign_dev_sub():
         cache_update_data = {**dict(test_assign_dev), "services": test_data["subscription"]["name"], "subscription_expires": in_2_months.int_timestamp, "subscription_key": test_data["subscription"]["key"]}
         asyncio.run(common.cache.update_inv_db(cache_update_data))
     yield
+
+
+@pytest.fixture(scope="function")
+def ensure_old_config():
+    yield config._mock()
+    return config._mock(glp_ok=True)

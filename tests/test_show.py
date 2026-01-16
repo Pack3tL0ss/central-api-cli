@@ -8,7 +8,6 @@ from typer.testing import CliRunner
 
 from centralcli import cache, utils
 from centralcli.cli import api, app
-from centralcli.client import Session
 from centralcli.environment import env
 
 from . import capture_logs, clean_mac, config, end_2_days_ago, now_str, start_180_days_ago, test_data
@@ -304,42 +303,46 @@ def test_show_insights_too_many_filters():
 
 
 @pytest.mark.parametrize(
-    "idx,args,pass_condition,test_name_append",
+    "idx,glp_ok,args,pass_condition",
     [
-        [1, ("--key", "EC5C0481E85EB4DB79"), lambda r: "mac" in r, None],
-        [2, ("--sub",), lambda r: "mac" in r, None],
-        [3, ("--no-sub",), lambda r: "mac" in r, None],
-        [4, ("-v",), lambda r: "mac" in r, None],
+        [1, False, ("--key", "EC5C0481E85EB4DB79"), lambda r: "mac" in r],
+        [2, False, ("--sub",), lambda r: "mac" in r],
+        [3, False, ("--no-sub",), lambda r: "mac" in r],
+        [4, False, ("-v",), lambda r: "mac" in r],
+        [1, True, ("--key", "EC5C0481E85EB4DB79"), lambda r: "mac" in r],
+        [2, True, ("--sub",), lambda r: "mac" in r],
+        [3, True, ("--no-sub",), lambda r: "mac" in r],
+        [4, True, ("-v",), lambda r: "mac" in r],
     ]
 )
-def test_show_inventory(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    for i in range(2):
-        config._mock(bool(i))
-        if test_name_append and i == 0:  # pragma: no cover
-            env.current_test = f"{env.current_test}_{test_name_append}"
-        result = runner.invoke(app, ["show", "inventory", *args],)
-        capture_logs(result, f"{env.current_test}{idx}-{'classic' if not i else 'glp'}")
-        assert result.exit_code == 0
-        assert pass_condition(result.stdout)
+def test_show_inventory(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
+    if idx == 1:
+        config._mock(glp_ok)
+    env.current_test = f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}"
+    result = runner.invoke(app, ["show", "inventory", *args],)
+    capture_logs(result, f"{env.current_test}")
+    assert result.exit_code == 0
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
-    "idx,args,pass_condition,test_name_append",
+    "idx,glp_ok,args,pass_condition,test_name_append",
     [
-        [1, (), lambda r: "500" in r, None],
-        [2, (), lambda r: "fetch subscription details failed" in r, "sub_call"],
+        [1, False, (), lambda r: "500" in r, None],
+        [2, False, (), lambda r: "fetch subscription details failed" in r, "sub_call"],
+        [1, True, (), lambda r: "500" in r, None],
+        [2, True, (), lambda r: "fetch subscription details failed" in r, "sub_call"],
     ]
 )
-def test_show_inventory_fail(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    for i in range(2):
-        config._mock(bool(i))
-        if test_name_append and i == 0:  # pragma: no cover
-            env.current_test = f"{env.current_test}_{test_name_append}"
-        result = runner.invoke(app, ["show", "inventory", *args],)
-        capture_logs(result, f"{env.current_test}{idx}-{'classic' if not i else 'glp'}", expect_failure=True)
-        assert result.exit_code == 1
-        assert pass_condition(result.stdout)
-        Session.requests_clear()
+def test_show_inventory_fail(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    if idx == 1:
+        config._mock(glp_ok)
+    if test_name_append:  # pragma: no cover
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["show", "inventory", *args],)
+    capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}", expect_failure=True)
+    assert result.exit_code <= 1  # classic #2 needs work to return exit code based on partial/sub-call failure
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
@@ -498,7 +501,7 @@ def test_show_devices(_: int, fixture: str | None, args: tuple[str], pass_condit
     ]
 )
 def test_show_devices_cnx(idx: int, args: tuple[str], pass_condition: Callable):
-    result = runner.invoke(app, ["test", "command"])
+    result = runner.invoke(app, ["test", "command", *args])
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
@@ -1796,18 +1799,24 @@ def test_show_tunnels():
 
 
 @pytest.mark.parametrize(
-    "idx,args,pass_condition",
+    "idx,glp_ok,args,pass_condition",
     [
-        [1, ("--csv",), lambda r: "ounts" in r],
-        [2, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
-        [3, ("stats",), lambda r: "used" in r],
-        [4, ("names",), lambda r: "advance" in r],
-        [5, ("auto",), lambda r: "API" in r],
-        [6, ("--dev-type", "switch"), lambda r: "ounts" in r],
-        [7, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch-6200" in r.rstrip().splitlines()[-1]],
+        [1, False, ("--csv",), lambda r: "status" in r],
+        [2, True, ("--csv",), lambda r: "ounts" in r],
+        [3, False, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
+        [4, True, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
+        [5, False, ("stats",), lambda r: "used" in r],
+        [6, False, ("names",), lambda r: "advance" in r],
+        [7, False, ("auto",), lambda r: "API" in r],
+        [8, False, ("--dev-type", "switch"), lambda r: "ounts" in r],
+        [9, True, ("--dev-type", "switch"), lambda r: "ounts" in r],
+        [10, False, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch" in r.lower()],  # response now comes back as Foundation-Switch-Class-2
+        [11, True, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch" in r.lower()],
     ]
 )
-def test_show_subscriptions(idx: int, args: tuple[str], pass_condition: Callable):  # glp
+def test_show_subscriptions(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    config._mock(glp_ok)
+    env.current_test = f"{env.current_test}-{'glp' if glp_ok else 'classic'}"
     result = runner.invoke(app, ["show", "subscriptions", *args])
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0

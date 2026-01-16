@@ -48,18 +48,21 @@ def test_unassign_label_multi(ensure_cache_label1):
 
 if config.dev.mock_tests:
     @pytest.mark.parametrize(
-        "idx,fixture,args",
+        "idx,glp_ok,fixture,args",
         [
-            [1, ["ensure_inv_cache_test_ap"], (test_data["test_devices"]["ap"]["serial"],)],
+            [1, False, ["ensure_inv_cache_test_ap"], ("foundation-ap", test_data["test_devices"]["ap"]["serial"],)],
+            [2, True, ["ensure_inv_cache_test_ap"], (test_data["test_devices"]["ap"]["serial"],)],
         ]
     )
-    def test_unassign(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    def test_unassign(idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        config._mock(glp_ok)
         if fixture:  # pragma: no cover
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        result = runner.invoke(app, ["unassign", "subscription", *args, "-y"])
+        cmd = f"{'' if glp_ok else '_'}subscription"
+        result = runner.invoke(app, ["unassign", cmd, *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
-        assert "202" in result.stdout
+        assert "code: 20" in result.stdout  # glp 202 / classic 200
 
 else:  # pragma: no cover
     ...

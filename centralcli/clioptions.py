@@ -20,7 +20,7 @@ OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
     "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band", "banner", "banner_file",
-    "tags",
+    "tags", "with_inv"
 ]
 
 class CLIArgs:
@@ -201,6 +201,7 @@ class CLIOptions:
         self.tags: OptionInfo = typer.Option(None, "-t", "--tags", help="Tags to be assigned to [bright_green]all[/] imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]")
         self.banner_file: OptionInfo = typer.Option(None, "--banner-file", help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
         self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
+        self.with_inv: OptionInfo = typer.Option(False, "-I", "--inv", help="Include device details from [green]GreenLake[/] Inventory", show_default=False,)
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,
@@ -217,7 +218,7 @@ class CLIOptions:
             None,
             "-V",
             "--version",
-            help="Filter by version (fuzzy match).  Prepend [cyan]-[/] to show devices not matching the version. [dim italic]i.e. -10.7.2.1[/]",
+            help="Filter by version (fuzzy match).  Prepend [green1]-[/] to show devices not matching the version. [dim italic green1]i.e. -10.7.2.1[/]",
             show_default=False
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)

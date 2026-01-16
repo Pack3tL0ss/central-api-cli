@@ -104,7 +104,7 @@ app.add_typer(bandwidth.app, name="bandwidth")
 
 
 api = api_clients.classic
-glp_api = api_clients.glp
+
 
 class Counts:
     def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
@@ -165,7 +165,8 @@ def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
     up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
     return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
 
-def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, verbosity: int = 0) -> str:
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, has_filters: bool = False) -> str:
+    # has_filters only applies to devices w/ inventory details it squelches the not on devs lacking a name
     inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
@@ -221,7 +222,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
     caption = f"[reset]{'Counts' if not status else f'{status.capitalize()} Devices'}: {_cnt_str}"
-    if inventory and not inventory_only:
+    if inventory and not inventory_only and not has_filters:
         caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
@@ -266,10 +267,10 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
 # TODO expand params into available kwargs
-def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, has_filters: bool = False):
     if include_inventory:
         resp = common.cache.get_devices_with_inventory(status=status)
-        caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
+        caption = _build_device_caption(resp, inventory=True, has_filters=has_filters)
     else:
         if common.cache.responses.dev:  # pragma: no cover
             log.error("DEV NOTE: _get_details_for_all_devices.  common.cache.responses.dev already has value.", show=True, caption=True, log=True)
@@ -375,6 +376,7 @@ def show_devices(
     }
 
     params = {k: v for k, v in params.items() if v is not None}
+    filter_params = {k: v for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"]}
     if dev_type is None:
         dev_type = None if devices else "all"
     elif dev_type != "all":
@@ -387,19 +389,23 @@ def show_devices(
         default_tablefmt = "yaml"
         resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
     elif dev_type == "all":  # cencli show all | cencli show devices
-        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
+        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, has_filters=bool(filter_params))
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
             _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
             resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
-        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, has_filters=bool(filter_params))
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
+
+    # Build title
     title_sfx = [
-        f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
-    ] if not include_inventory else ["including Devices from Inventory"]
+        f"{k}: {v}" for k, v in filter_params.items()
+    ]
+    if include_inventory:
+        title_sfx += ["including Devices from Inventory" if not filter_params else "including Inventory details"]
     title = "Device Details" if not dev_type else f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}".rstrip()
 
     # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
@@ -424,7 +430,8 @@ def show_devices(
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
         output_format=tablefmt,
-        version=version
+        version=version,
+        filter_params=filter_params,
     )
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
@@ -457,7 +464,7 @@ def all_(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.with_inv,
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -506,7 +513,7 @@ def devices(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.with_inv,
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -547,7 +554,7 @@ def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
     dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {common.help_block('--group', help_type='requires')}[/]"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {common.help_block('--site', help_type='requires')}", show_default=False,),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.get("with_inv", help="Include aps in Inventory that have yet to connect"),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
@@ -660,7 +667,7 @@ def gateways_(
     up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.get("with_inv", help="Include gateways in Inventory that have yet to connect"),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -692,11 +699,10 @@ def stacks(
     switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_switch_completion, show_default=False,),
     group: str = common.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
-    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    verbose: int = common.options.verbose,
+    verbose: int = common.options.get("verbose", hidden=True),
     sort_by: SortStackOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -780,8 +786,8 @@ def inventory(
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    _api = glp_api or api
-    if key and dev_type == "all":
+    _api = api_clients.glp or api
+    if key and config.glp.ok and dev_type == "all":  # sub cache added with glp support
         sub: CacheSub = cache.get_sub_identifier(key)
         key = sub.key
         dev_type = ShowInventoryArgs(sub.type)
@@ -802,15 +808,15 @@ def inventory(
         sub=sub,
         key=key
     )
-    common.exit(code=0 if common.cache.responses.sub else 1)
+    common.exit(code=0 if (not config.glp.ok or common.cache.responses.sub) else 1)
 
 
-# TODO break into seperate command group if we can still all show subscription without an arg to default to details
+# TODO break into seperate command group if we can still all show subscription without an arg to default to details see show wids
 @app.command()
 def subscriptions(
     what: SubscriptionArgs = typer.Argument(SubscriptionArgs.details),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
-    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", autocompletion=cache.sub_completion, show_default=False),
+    sub_name: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license name,  [dim italic]i.e. advanced-ap[/]", autocompletion=cache.sub_completion, show_default=False),
     sort_by: SortSubscriptionOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -832,35 +838,35 @@ def subscriptions(
     set_width_cols = None
     _cleaner_kwargs = {}
     caption = None
-    _api = glp_api or api
+    _api = api_clients.glp or api
     if what == "details":
-        resp = _api.session.request(cache.refresh_sub_db, sub_type=service, dev_type=dev_type)
-        title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
+        resp = _api.session.request(cache.refresh_sub_db, sub_type=sub_name, dev_type=dev_type)
+        title = "Subscription Details ([green]GreenLake[/])"
         if resp.ok:
             _cleaner = cleaner.get_subscriptions
             set_width_cols = {"name": {"min": 39}}
             if sort_by:
                 _cleaner_kwargs["default_sort"] = False
-            if not glp_api:  # pragma: no cover
+            if not config.glp.ok:
                 try:
                     _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
                     _ok_cnt = len(resp.output) - _expired_cnt
                     caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
-                except Exception as e:
-                    log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
-                    caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
+                except Exception as e:  # pragma: no cover
+                    log.exception(f"{repr(e)} occured while gathering counts from get_subscriptions response\n{e}")
+                    caption = f"{repr(e)} occured while gathering counts from get_subscriptions response"
 
-    elif what == "auto":
-        resp = api.session.request(api.platform.get_auto_subscribe)
+    elif what == "auto":  # Classic API Only  # TOGLP
+        resp = _api.session.request(_api.platform.get_auto_subscribe)
         if resp and "services" in resp.output:
             _auto_subs = [s for s in resp.output["services"] if s != "dm"]
             resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
         title = "Services with auto-subscribe enabled"
-    elif what == "stats":
-        resp = api.session.request(api.platform.get_subscription_stats)
+    elif what == "stats":  # Classic API Only  # TOGLP
+        resp = _api.session.request(_api.platform.get_subscription_stats)
         title = "Subscription Stats"
     elif what == "names":
-        resp = api.session.request(common.cache.refresh_license_db)
+        resp = _api.session.request(common.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         set_width_cols = {"name": {"min": 39}}
 
