@@ -3073,17 +3073,31 @@ class Cache:
             CombinedResponse: CombinedResponse object.
         """
         dev_type = None if not dev_type or dev_type == "all" else utils.listify(dev_type)
+        # API only allows one of the filters below, if more are provided we send call with one and filter in the cleaner
+        filter_params = {}
+        exclusive_filter_params = {
+            "swarm_id": swarm_id, "label": label, "cluster_id": cluster_id, "site": site, "group": group,
+        }
+        if len({k: v for k, v in exclusive_filter_params.items() if v}) > 1:
+            for k, v in exclusive_filter_params.items():
+                if v:
+                    filter_params = {k: v}
+                    break
+
+        filter_params = filter_params or exclusive_filter_params
+
         resp: List[Response] | CombinedResponse = await api.monitoring.get_all_devices(
             dev_types=dev_type,
-            group=group,
-            site=site,
-            label=label,
+            # group=group,
+            # site=site,
+            # label=label,
             serial=serial,
             mac=mac,
             model=model,
             stack_id=stack_id,
-            swarm_id=swarm_id,
-            cluster_id=cluster_id,
+            # swarm_id=swarm_id,
+            # cluster_id=cluster_id,
+            **filter_params,
             public_ip_address=public_ip_address,
             status=status,
             show_resource_details=show_resource_details,

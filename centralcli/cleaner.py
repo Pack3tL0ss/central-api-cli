@@ -707,25 +707,40 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
     return data
 
 class FilterRows:
-    _version: str = None
 
-    def __init__(self, version: str = None):
-        self._version = version
-
-    @classmethod
-    def set_filters(cls, version: str = None):  # TODO look for design pattern for this.  Could take tuples (key: str, filter: str, fuzzy: bool, inverse: bool)
-        cls._version = version
+    def __init__(self, version: str = None, group: str = None, site: str = None, status: Literal["Up", "Down"] = None, label: str = None, public_ip: str = None):
+        filters = {
+            "version": version,
+            "group": group,
+            "site": site,
+            "status": status,
+            "label": label,
+            "public ip": public_ip
+        }
+        self.filters = {k: v for k, v in filters.items() if v}
 
     def __call__(self, data: dict[str, Any]) -> bool:
-        if self._version is None:
+        """Determine if data matches filter
+        Returns:
+            bool: True if data matches any filters False if not
+        """
+        if not self.filters:
             return True
-        if self._version.startswith("-"):
-            return True if self._version.lstrip("-") not in data["firmware_version"] else False
-        else:
-            return True if self._version in data["firmware_version"] else False
+
+        matches = []
+        for field, wanted in self.filters.items():
+            if field not in data:
+                matches += [False]
+            elif wanted.startswith("-"):
+                matches += [True if wanted.lstrip("-") not in (data[field] or "") else False]
+            else:
+                matches += [True if wanted in (data[field] or "") else False]
+        return all(matches)
 
 
-def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int = 0, output_format: TableFormat = None, version: str = None) -> list[dict] | dict:
+
+
+def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int = 0, output_format: TableFormat = None, version: str = None, filter_params: dict[str, str] = None) -> list[dict] | dict:
     """Clean device output from Central API (Monitoring)
 
     Args:
@@ -774,16 +789,18 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
             _ = verbosity_keys[0].pop(verbosity_keys[0].index("client_count"))
 
     data = sort_result_keys(data)
-    filter_rows = FilterRows(version=version)
 
     data = [
         {k: v for k, v in inner.items() if k in verbosity_keys.get(verbosity, all_keys)}
         for inner in data
-        if filter_rows(inner)
     ]
 
     _short_key["subscription_key"] = "subscription key"
     data = simple_kv_formatter(data)
+
+    if filter_params or version:
+        filter_rows = FilterRows(version=version, **filter_params)
+        data = [dev for dev in data if filter_rows(dev)]
 
     # strip any cols that have no value across all rows,
     # strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical)
