@@ -41,23 +41,16 @@ def classic_subscription(
     devices: list[CacheInvMonDevice] = [common.cache.get_combined_inv_dev_identifier(dev, retry_dev=False) for dev in devices]
     word = "device" if len(devices) == 1 else f"{len(devices)} devices"
     _msg = f"Unassign [bright_green]{subscription.value}[/bright_green] from {word}:\n    {utils.summarize_list(devices, color=None).lstrip()}"
-    # if len(devices) > 1:
-    #     _dev_msg = '\n    '.join([dev.summary_text for dev in devices])
-    #     _msg = f"{_msg}:\n    {_dev_msg}"
-    # else:
-    #     dev = devices[0]
-    #     _msg = f"{_msg} {dev.summary_text}"
-    render.console.print(_msg, emoji=False)
 
+    render.console.print(_msg, emoji=False)
     render.confirm(yes)
     resp = api.session.request(api.platform.unassign_licenses, [d.serial for d in devices], services=subscription.name)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits if call failed to avoid cache update
+
+    # cache updates
     inv_devs = [{**d, "services": None} for d in devices]
-    cache_resp = common.cache.InvDB.update_multiple([(dev, common.cache.Q.serial == dev["serial"]) for dev in inv_devs])
-    if len(inv_devs) != len(cache_resp):
-        log.warning(
-            f'Inventory cache update may have failed.  Expected {len(inv_devs)} records to be updated, cache update resulted in {len(cache_resp)} records being updated'
-        )
+    api.session.request(common.cache.update_inv_db, inv_devs)
+
 
 
 @app.command("subscription" if config.glp.ok else "_subscription", hidden=not config.glp.ok)
