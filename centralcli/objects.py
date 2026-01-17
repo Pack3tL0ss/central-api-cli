@@ -44,7 +44,7 @@ class DateTime():
         return bool(self.ts and self.ts > 0)
 
     def __len__(self) -> int:
-        return len(self.ts)
+        return len(str(self.ts))
 
     def __lt__(self, other) -> bool:
         return True if self.ts is None else bool(self.ts < other)
@@ -85,7 +85,7 @@ class DateTime():
 
     @property
     def is_expired(self) -> bool:
-        return self.ts >= pendulum.now(tz="UTC").timestamp()
+        return self.ts <= pendulum.now(tz="UTC").timestamp()
 
     @property
     def expiration(self) -> str:
@@ -200,12 +200,6 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Jan 08 7:59:00 PM' or 'Jan 08 07:59:00 PM' if pad_hour=True
         """
-        if isinstance(self.ts, str):
-            try:
-                self.ts = float(self.ts)
-            except TypeError:
-                return self.ts
-
         return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
