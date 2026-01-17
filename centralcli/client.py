@@ -105,7 +105,7 @@ class Session():
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
         self.running_spinners: List[str] = []
-        self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and "greenlake" in self.base_url)
+        self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and ("greenlake" in self.base_url or ".api.central." in self.base_url))
 
     @cached_property
     def auth(self):
@@ -333,13 +333,13 @@ class Session():
 
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
+                resp = Response(error=repr(e), url=_url.path_qs)
             except ContentLengthError as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
+                resp = Response(error=repr(e), url=_url.path_qs)
             except Exception as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=repr(e), url=_url.path_qs)
+                resp = Response(error=repr(e), url=_url.path_qs)
                 _ += 1
 
             fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail} [red italic]{resp.error}[/]"
