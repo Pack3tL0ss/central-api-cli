@@ -69,7 +69,7 @@ class MyLogger:
             format=fmtStr,
             datefmt=dateStr,
             handlers=[
-                RotatingFileHandler(self.log_file.absolute(),  maxBytes=250000, backupCount=5,),
+                RotatingFileHandler(self.log_file.absolute(),  maxBytes=900_000, backupCount=5,),
             ],
         )
         return logging.getLogger(self.log_file.stem)
