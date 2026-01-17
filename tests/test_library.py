@@ -14,7 +14,7 @@ import pytest
 from click.exceptions import Exit
 from typer.testing import CliRunner
 
-from centralcli import api_clients, cache, cleaner, common, utils
+from centralcli import api_clients, cache, cleaner, common, utils, log
 from centralcli.objects import DateTime
 from centralcli.cache import api
 from centralcli.cli import app
@@ -306,7 +306,8 @@ def test_add_devices_fail(kwargs: dict[str, str | bool]):
     except ValueError:
         ...  # Test Passes
     else:  # pragma: no cover
-        raise AssertionError(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}\n{resp}")
+        log.inspect(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs = }", resp)
+        raise AssertionError(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}\n{resp = }")
 
 
 @pytest.mark.parametrize(

@@ -5,8 +5,9 @@ from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import sleep
-from typing import Any
+from typing import Any, Literal
 
+from rich import inspect as _inspect
 from rich.console import Console
 
 from . import env, utils
@@ -31,6 +32,7 @@ PYCENTRAL_SILENT_EXIT = [
     "Central Login Step3 failed with error"
 ]
 
+LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET", "critical", "error", "warning", "info", "debug", "notset"]
 
 class MyLogger:
     def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None):
@@ -172,6 +174,15 @@ class MyLogger:
         if caption:
             msgs = [line for m in msgs for line in str(m).splitlines()]
             self._caption = [*self._caption, *[f"{warning_emoji if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
+
+    def inspect(self, msgs: str | list[str], obj: object, *, level: LogLevel = "error", title: bool = None, show: bool = False):
+        self.log_print(msgs, level=level)
+        console = Console(record=True, emoji=False)
+        obj = utils.unlistify(obj)
+        console.begin_capture()
+        _inspect(obj, console=console, title=title, methods=True)
+        res = console.end_capture()
+        self.log_print(f"inspection of {repr(obj)}\n{res}", level=level, show=show)
 
     @property
     def level_name(self) -> str | int:  # pragma: no cover
