@@ -153,6 +153,9 @@ class PlatformAPI:
         if serial or mac:
             device_list += [{"serial": serial, "mac": mac, "group": group, "part_num": part_num, "subscription": subscription}]
 
+        if not device_list:
+            raise ValueError("Missing Required Arguments: serial and mac are required.")
+
         json_data = []  # could simplify by creating pydantic model for validation and decorating the function
         for d in device_list:
             d = {k if k not in constants.possible_sub_keys else "subscription": v for k, v in d.items()}
