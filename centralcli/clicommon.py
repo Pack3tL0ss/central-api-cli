@@ -1881,6 +1881,8 @@ class CLICommon:
         return api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
 
 
+
+
     def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
@@ -2008,14 +2010,13 @@ class CLICommon:
         if cop_del_reqs:  # pragma: no cover  Currently do not test CoP
             batch_resp += api.session.batch_request(cop_del_reqs)
 
-        if batch_resp:
-            render.display_results(batch_resp, tablefmt="action")
-
         # Cache Updates
         if mon_doc_ids:
             api.session.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
         if inv_doc_ids:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+
+        return batch_resp
 
     @dataclass
     class TagReqInfo:
