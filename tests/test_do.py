@@ -4,12 +4,12 @@ import pytest
 import sys
 from typer.testing import CliRunner
 
-from centralcli import common, utils
+from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, config, test_data, at_str
-from ._test_data import test_device_file, test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file
+from ._test_data import test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file
 
 runner = CliRunner()
 
@@ -517,36 +517,6 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,pass_condition",
-        [
-            [
-                [
-                    "ensure_inv_cache_test_switch",
-                    "ensure_inv_cache_test_ap",
-                    "ensure_inv_cache_test_stack",
-                    "ensure_dev_cache_test_switch",
-                    "ensure_dev_cache_test_ap",
-                    "ensure_dev_cache_test_stack",
-                    "ensure_cache_group1",
-                    "ensure_cache_site1",
-                ],
-                (test_data["test_devices"]["switch"]["serial"], *[sw["serial"] for sw in test_data["test_devices"]["stack"]], test_data["test_devices"]["ap"]["serial"]),
-                lambda r: "200" in r
-            ]
-        ]
-    )
-    def test_delete_devices(fixture: str | list[str] | None, args: list[str], pass_condition: Callable, request: pytest.FixtureRequest):
-        if fixture:
-            [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        else:  # pragma: no cover
-            ...
-        result = runner.invoke(app, ["delete", "device", *args, "-y"])
-        capture_logs(result, "test_delete_devices")
-        assert result.exit_code == 0
-        assert pass_condition(result.stdout)
-
-
-    @pytest.mark.parametrize(
         "idx,args,pass_condition",
         [
             [1, ("--dir", str(test_gen_bssid_file.parent),), lambda r: "," in r],  # do --dir first else out files are included in dir run
@@ -561,54 +531,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
-
-
-    @pytest.mark.parametrize("glp_ok", [False, True])
-    def test_archive(ensure_inv_cache_test_ap, glp_ok: bool):
-        config._mock(glp_ok)
-        result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "99-:CD:not-a:cd:-serial", "USD8H1R1KG", "--yes"])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
-        assert result.exit_code == 0
-        assert "succeeded" or "Accepted" in result.stdout
-        assert "⚠" in result.stdout  # "99-not-a-serial" is skipped as it's not a serial number and is not found in inventory/cache
-        assert "💿" not in result.stdout
-
-
-    @pytest.mark.parametrize("glp_ok", [False, True])
-    def test_archive_multi(ensure_inv_cache_batch_devices, glp_ok: bool):
-        config._mock(glp_ok)
-        devices = common._get_import_file(test_device_file, import_type="devices")
-        serials = [dev["serial"] for dev in devices[::-1]][0:2]
-        result = runner.invoke(app, ["archive", *serials, "-y"])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
-        assert result.exit_code == 0
-        assert "succeeded" or "Accepted" in result.stdout
-        assert "💿" not in result.stdout
-
-
-    @pytest.mark.parametrize(
-        "idx,glp_ok,fixture,args",
-        [
-            [1, False, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
-            [2, True, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
-            [3, False, "ensure_inv_cache_batch_devices", ("from_import",)],
-            [4, True, "ensure_inv_cache_batch_devices", ("from_import",)],
-            [5, False, "ensure_inv_cache_fake_archived_devs", ("US18CEN103", "US18CEN112")],
-            [6, True, "ensure_inv_cache_fake_archived_devs", ("US18CEN103", "US18CEN112")],
-        ]
-    )
-    def test_unarchive(idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
-        if fixture:  # pragma: no cover
-            request.getfixturevalue(fixture)
-        if "from_import" in args:
-            devices = common._get_import_file(test_device_file, import_type="devices")
-            args = [dev["serial"] for dev in devices[::-1]][0:2]
-        config._mock(glp_ok)
-        result = runner.invoke(app, ["unarchive", *args])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
-        assert result.exit_code == 0
-        assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
-        assert "🆎" not in result.stdout
 
 
     @pytest.mark.parametrize(

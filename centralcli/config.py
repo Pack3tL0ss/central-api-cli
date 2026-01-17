@@ -473,7 +473,10 @@ class Config:
 
     def _mock(self, glp_ok: bool = False) -> None:  # used for testing to force commands to use classic API endpoints
         self.is_old_cfg = not glp_ok
-        self.glp.ok = glp_ok
+        if glp_ok:
+            self.set_attributes()  # HACK not sure why this was necessary.
+        else:
+            self.glp.ok = glp_ok
 
     def get_last_workspace(self) -> tuple[str | None, float | None, bool | None]:
         """Gathers contents of last_workspace returns tuple with values.

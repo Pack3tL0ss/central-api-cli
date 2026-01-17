@@ -450,6 +450,108 @@ def ensure_inv_cache_batch_devices():
     yield
 
 
+@pytest.fixture(scope="function")
+def ensure_inv_cache_batch_sub_devices():
+    if config.dev.mock_tests:
+        devices = [
+            {
+                "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
+                "serial": "CN29FP403H",
+                "mac": "80:C1:6E:CD:32:40",
+                "type": "sw",
+                "model": "2530-12G",
+                "sku": "J9773A",
+                "services": "foundation-switch-6100",
+                "subscription_key": "AZFG8CVMXQB23NNQ",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "88e21965-d335-5d40-94de-29d76dbf42b9",
+                "serial": "CN80FP53YW",
+                "mac": "80:30:E0:60:D5:C0",
+                "type": "sw",
+                "model": "2530",
+                "sku": "J9774A",
+                "services": "foundation-switch-6100",
+                "subscription_key": "AZFG8CVMXQB23NNQ",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "5a3c4c8a-5756-5302-a036-2f04180b0dcf",
+                "serial": "CN36FP500Q",
+                "mac": "80:C1:6E:CE:F2:00",
+                "type": "sw",
+                "model": "2530",
+                "sku": "J9774A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": "CN63HH906Z",
+                "mac": "F0:5C:19:CE:7A:86",
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "85c46b1b-695d-564b-92a8-a6d36dae4bc0",
+                "serial": "CN71HKZ1CL",
+                "mac": "F4:03:43:07:57:20",
+                "type": "sw",
+                "model": "2930F",
+                "sku": "JL258A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
+                "serial": "SG90KN00N5",
+                "mac": "88:3a:30:9a:cc:40",
+                "type": "cx",
+                "model": "'6300'",
+                "sku": "JL661A",
+                "services": "advanced-switch-6300",
+                "subscription_key": "E4F587FF6F6F848289",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "adf55d3d-6f97-5cf4-8990-3e72e3d2671a",
+                "serial": "SG06KMY1S1",
+                "mac": "64:E8:81:B8:0C:80",
+                "type": "cx",
+                "model": "6300",
+                "sku": "JL659A",
+                "services": "advanced-switch-6300",
+                "subscription_key": "E4F587FF6F6F848289",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+        ]
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        if not cache_devs == devices:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
 # we only want one of them to show as online
 @pytest.fixture(scope="function")
 def ensure_dev_cache_batch_devices():
@@ -1561,4 +1663,4 @@ def ensure_assign_dev_sub():
 @pytest.fixture(scope="function")
 def ensure_old_config():
     yield config._mock()
-    return config._mock(glp_ok=True)
+    return config._mock(True)

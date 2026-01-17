@@ -371,7 +371,7 @@ def test_sub_completion(fixture: str | None, incomplete: str, pass_condition: Ca
         (19, None, cache.get_guest_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
         (20, "ensure_cache_guest1", cache.get_guest_identifier, "+16155551212", {}, lambda r: "6155551212" in r.phone, None),
         (21, "ensure_cache_guest1", cache.get_guest_identifier, "+16155551212", {"portal_id": "6f534424-855a-4cbe-a6e7-6c561f5c1b4e"}, None, Exit),
-        (22, None, cache.get_client_identifier, "no-match_no-match", {}, None, Exit),
+        (22, None, cache.get_client_identifier, "no-match_no-match", {"exit_on_fail": True}, None, Exit),
         (23, None, cache.get_client_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
         (24, "ensure_cache_template", cache.get_template_identifier, "cencli_test_template", {"group": test_data["template_switch"]["group"]}, None, Exit),
         (25, None, cache.get_template_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),

@@ -32,14 +32,14 @@ if config.dev.mock_tests:
         result = runner.invoke(app, ["delete",  "device", "CN63HH906Z", "-Y"])
         capture_logs(result, "test_del_device")
         assert result.exit_code == 0
-        assert "successfully" in result.stdout
+        assert "202" in result.stdout
 
 
     def test_batch_del_devices(ensure_inv_cache_batch_devices):
         result = runner.invoke(app, ["batch", "delete",  "devices", f'{str(test_device_file)}', "-Y"])
         capture_logs(result, "test_batch_del_devices")
         assert result.exit_code == 0
-        assert "devices updated" in result.stdout.lower()
+        assert "code: 202" in result.stdout.lower()
 
 
     def test_batch_del_devices_invalid():

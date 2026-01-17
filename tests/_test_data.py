@@ -288,6 +288,7 @@ test_invalid_device_file_csv: Path = setup_batch_import_file(test_data=test_data
 test_device_file_txt: Path = setup_batch_import_file(test_data=test_data, import_type="devices:txt")
 test_group_file: Path = setup_batch_import_file(test_data=test_data, import_type="groups_by_name")
 test_sub_file_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:yaml")
+test_sub_file_classic_yaml: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions_classic:yaml")
 test_sub_file_csv: Path = setup_batch_import_file(test_data=test_data, import_type="subscriptions:csv")
 test_sub_file_test_ap: Path = _create_test_ap_import_file(test_data=test_data["test_devices"]["ap"])
 test_rename_aps_file: Path = setup_batch_import_file(test_data=test_data, import_type="rename_aps")
@@ -340,6 +341,7 @@ test_files = [
     test_group_file,
     test_sub_file_csv,
     test_sub_file_yaml,
+    test_sub_file_classic_yaml,
     test_sub_file_test_ap,
     test_rename_aps_file,
     test_verify_file,
