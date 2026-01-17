@@ -431,13 +431,14 @@ def test_show_gateway_by_name():
         [5, None, ("aps", "--site", test_data["ap"]["site"]), lambda r: "API" in r],
         [6, None, ("aps", "--inv"), lambda r: "Counts" in r],
         [7, None, ("aps", "--debug", "--table"), lambda r: "site" in r and "status" in r],
-        [8, None, ("devices", "all", "--up"), lambda r: "API" in r],
-        [9, None, ("gateways", "--down", "--table"), lambda r: "name" in r and "API" in r],
-        [10, None, ("switches", "--inv"), lambda r: "Counts" in r],
-        [11, None, ("switches", "--up", "--sort", "ip"), lambda r: "API" in r],
-        [12, None, ("switches", "--group", test_data["switch"]["group"]), lambda r: "API" in r],
-        [13, None, ("switches", test_data["switch"]["name"], "--debug"), lambda r: "site" in r and "status" in r],
-        [14, None, ("switches", test_data["switch"]["name"], "--inv"), lambda r: "site" in r and "status" in r],
+        [8, None, ("aps", "-V", "-8.1"), lambda r: "site" in r and "status" in r],
+        [9, None, ("devices", "all", "--up"), lambda r: "API" in r],
+        [10, None, ("gateways", "--down", "--table"), lambda r: "name" in r and "API" in r],
+        [11, None, ("switches", "--inv"), lambda r: "Counts" in r],
+        [12, None, ("switches", "--up", "--sort", "ip"), lambda r: "API" in r],
+        [13, None, ("switches", "--group", test_data["switch"]["group"]), lambda r: "API" in r],
+        [14, None, ("switches", test_data["switch"]["name"], "--debug"), lambda r: "site" in r and "status" in r],
+        [15, None, ("switches", test_data["switch"]["name"], "--inv"), lambda r: "site" in r and "status" in r],
 
     ]
 )
@@ -948,7 +949,7 @@ def test_show_audit_logs_invalid(args: list[str]):
     assert "⚠" in result.stdout
 
 
-@pytest.mark.parametrize("args", [("-n", "5"), ("-vv",)])
+@pytest.mark.parametrize("args", [("-n", "5"), ("-vv",), ("-v",)])
 def test_show_audit_acp_logs(args: tuple[str]):
     result = runner.invoke(app, ["show", "audit", "acp-logs", *args],)
     capture_logs(result, "test_show_audit_acp_logs")
@@ -1225,6 +1226,7 @@ def test_show_config_sw_ui():
         [1, (test_data["switch"]["ip"], "-p"),],
         [2, (test_data["switch"]["ip"], "1/1/6"),],
         [3, (test_data["template_switch"]["serial"],)],
+        [4, (test_data["template_switch"]["serial"], "-v")],
     ]
 )
 def test_show_poe(idx: int, args: tuple[str]):

@@ -12,8 +12,14 @@ from centralcli.constants import iden_meta
 app = typer.Typer()
 api = api_clients.classic
 
+sub_help = """Unssign Licenses from devices by serial number(s).
 
-@app.command("subscription" if not config.glp.ok else "_subscription", hidden=config.glp.ok)
+    :warning:  Removing a subscription from a device will eventually cause it to disconnect from Aruba Central.
+    :information: It is not necessary to unassign the existing subscription if the goal is to assign a different subscription.
+    This can be done in one step using [cyan]assign subscription[/] or [cyan]batch assign subscriptions[/]
+"""
+
+@app.command("subscription" if not config.glp.ok else "_subscription", hidden=config.glp.ok, help=sub_help)
 def classic_subscription(
     subscription: common.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
     devices: list[str] = typer.Argument(..., help="device serial numbers or 'auto' to disable auto-subscribe.", metavar=f"{iden_meta.dev_many} or 'auto'", autocompletion=common.cache.dev_completion, show_default=False),
@@ -22,22 +28,6 @@ def classic_subscription(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Unssign Licenses from devices by serial number(s) or disable auto-subscribe for the license type.
-
-    :warning:  This command is deprecated, and will be replaced by [cyan]unassign subscription[/] which is available now if Greenlake (glp)
-    details are provided in the config.
-    """
-    do_auto = True if "auto" in [s.lower() for s in devices] else False
-    if do_auto:
-        _msg = f"Disable Auto-assignment of [bright_green]{subscription.value}[/bright_green] to applicable devices."
-        if len(devices) > 1:
-            render.econsole.print('[cyan]auto[/] keyword provided remaining entries will be [bright_red]ignored[/]')
-        render.econsole.print(_msg)
-        render.confirm(yes)
-        resp = api.session.request(api.platform.disable_auto_subscribe, services=subscription.name)
-        render.display_results(resp, tablefmt="action")
-        return
-
     devices: list[CacheInvMonDevice] = [common.cache.get_combined_inv_dev_identifier(dev, retry_dev=False) for dev in devices]
     word = "device" if len(devices) == 1 else f"{len(devices)} devices"
     _msg = f"Unassign [bright_green]{subscription.value}[/bright_green] from {word}:\n    {utils.summarize_list(devices, color=None).lstrip()}"
@@ -53,7 +43,7 @@ def classic_subscription(
 
 
 
-@app.command("subscription" if config.glp.ok else "_subscription", hidden=not config.glp.ok)
+@app.command("subscription" if config.glp.ok else "_subscription", hidden=not config.glp.ok, help=sub_help)
 def glp_subscription(
     devices: list[str] = common.arguments.get("devices", help="device serial numbers [dim italic](can use name/ip/mac if device has connected to Central)[/]"),
     yes: bool = common.options.yes,
@@ -61,12 +51,6 @@ def glp_subscription(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Unassign subscription from device(s) by serial number(s).
-
-    :warning:  Removing a subscription from a device will eventually cause it to disconnect from Aruba Central.
-    :information: It is not necessary to unassign the existing subscription if the goal is to assign a different subscription.
-    This can be done in one step using [cyan]assign subscription[/] or [cyan]batch assign subscriptions[/]
-    """
     glp_api = api_clients.glp
     if not glp_api:  # pragma: no cover
         common.exit("This command uses [green]GreenLake[/] API endpoint, The configuration does not appear to have the details required.")

@@ -512,7 +512,7 @@ def stop(
     else:
         common.exit("WebHook Proxy is not running.", code=0)
 
-@app.command(short_help="Archive devices", hidden=False)
+@app.command()
 def archive(
     devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion),
     yes: bool = common.options.yes,
@@ -520,16 +520,7 @@ def archive(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
-
-    cencli archive <devices>, followed by cencli unarchive <devices> removes any subscriptions
-    and the devices assignment to the Aruba Central App in GreenLake.
-
-    Archive removes the GreenLake assignment, but the device can't be added to a different account
-    until it's unarchived.
-
-    Just use cencli deleve device ... or cencli batch delete devices
-    """
+    """Archive devices ([green]GreenLake[/])."""
     if config.glp.ok:
         return common.batch_archive_unarchive_devices_glp([{"serial": d} for d in devices], yes=yes, operation="archive")
 
@@ -570,28 +561,20 @@ def unarchive(
 
     Remove previously archived devices from archive.
 
-    Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
+    Specify device by serial.
+    :information:  [italic]If [green]GreenLake[/] is not configured in the config archived devices will not be in Inventory.  So device argument must be serial numbers.
     """
     if config.glp.ok:
         return common.batch_archive_unarchive_devices_glp([{"serial": s} for s in serials], yes=True, operation="unarchive")
 
     _serials: list[CacheDevice | CacheInvDevice | str] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
-    _msg = "[bright_green]Unarchive devices[/]:"
-    if _serials and any([isinstance(d, CentralObject) for d in _serials]):
-        if len(_serials) > 1:
-            _dev_msg = '\n    '.join([dev if not isinstance(dev, CentralObject) else dev.rich_help_text for dev in _serials])
-            _msg = f"{_msg}\n    {_dev_msg}\n"
-        else:
-            dev = _serials[0]
-            _msg = f"{_msg} {dev if not isinstance(dev, CentralObject) else dev.rich_help_text}"
-        _serials: list[str] = [d if not isinstance(d, CentralObject) else d.serial for d in _serials]
-    else:
-        _dev_msg = '\n    '.join(_serials)
-        _msg = f"{_msg}\n    {_dev_msg}\n"
+    word = "device" if len(_serials) == 1 else f"{len(_serials)} devices"
+    _msg_devs = utils.summarize_list(_serials).lstrip('\n')
+    _msg = f"[bright_green]Unarchiving {word}[/]:\n{_msg_devs}\n"
     render.econsole.print(_msg, emoji=False)
 
-    resp = api.session.request(api.platform.unarchive_devices, _serials)
+    resp = api.session.request(api.platform.unarchive_devices, [d if not isinstance(d, CentralObject) else d.serial for d in _serials])
     if resp:
         common._render_classic_archive_unarchive_result(resp, "unarchive")
     else:

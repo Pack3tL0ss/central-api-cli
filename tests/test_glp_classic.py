@@ -110,7 +110,7 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize("glp_ok", [False, True])
-    def test_batch_unarchive_devices(glp_ok: bool):
+    def test_batch_unarchive(glp_ok: bool):
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
         capture_logs(result, "test_batch_unarchive_device")
@@ -119,7 +119,7 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize("glp_ok", [False, True])
-    def test_batch_unarchive_devices_fail(glp_ok: bool):
+    def test_batch_unarchive_fail(glp_ok: bool):
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
         capture_logs(result, "test_batch_unarchive_device_fail", expect_failure=True)
@@ -164,6 +164,7 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
+
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_archive(ensure_inv_cache_test_ap, glp_ok: bool):
         config._mock(glp_ok)
@@ -187,6 +188,16 @@ if config.dev.mock_tests:
         assert "💿" not in result.stdout
 
 
+    @pytest.mark.parametrize("glp_ok", [False, True])
+    def test_archive_fail(ensure_inv_cache_test_ap, glp_ok: bool):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "USD8H1R1KG", "--yes"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        assert result.exit_code == 1
+        assert "Response" in result.stdout
+        assert "💿" not in result.stdout
+
+
     @pytest.mark.parametrize(
         "idx,glp_ok,fixture,args",
         [
@@ -206,9 +217,27 @@ if config.dev.mock_tests:
             args = [dev["serial"] for dev in devices[::-1]][0:2]
         config._mock(glp_ok)
         result = runner.invoke(app, ["unarchive", *args])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
         assert result.exit_code == 0
         assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
+        assert "🆎" not in result.stdout
+
+
+    @pytest.mark.parametrize(
+        "idx,glp_ok,fixture,args",
+        [
+            [1, False, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
+            [2, True, "ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
+        ]
+    )
+    def test_unarchive_fail(idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+        if fixture:  # pragma: no cover
+            request.getfixturevalue(fixture)
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["unarchive", *args])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}", expect_failure=True)
+        assert result.exit_code == 1
+        assert "Response" in result.stdout
         assert "🆎" not in result.stdout
 
 
@@ -303,6 +332,7 @@ if config.dev.mock_tests:
     )
     def test_unassign(idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
         if not glp_ok:
+            fixture = fixture or []
             fixture += ["ensure_old_config"]
         else:
             from centralcli.config import Config

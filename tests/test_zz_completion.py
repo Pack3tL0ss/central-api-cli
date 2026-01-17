@@ -385,7 +385,7 @@ def test_get_identifier_funcs(idx: int, fixture: str | None, iden_func: Callable
             result = iden_func(query_str, **kwargs)
         except exception:
             ...
-        else:
+        else:  # pragma: no cover
             log.error(f"test_get_identifier_funcs-{idx} was expected to raise {exception}, but did not.")
             console = Console(record=True, emoji=False)
             console.begin_capture()

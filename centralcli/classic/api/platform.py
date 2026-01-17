@@ -145,17 +145,15 @@ class PlatformAPI:
         url = "/platform/device_inventory/v1/devices"
         license_kwargs = []
         subscription = subscription or license
-        if not (serial and mac) and not device_list:
-            raise ValueError("mac and serial or device_list is required")
         if device_list:
             if not isinstance(device_list, list) or not (isinstance(device_list, list) and all(isinstance(d, dict) for d in device_list)):
                 raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
 
         device_list = device_list or []
         if serial or mac:
-            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "subscription": subscription}]
+            device_list += [{"serial": serial, "mac": mac, "group": group, "part_num": part_num, "subscription": subscription}]
 
-        json_data = []
+        json_data = []  # could simplify by creating pydantic model for validation and decorating the function
         for d in device_list:
             d = {k if k not in constants.possible_sub_keys else "subscription": v for k, v in d.items()}
             mac = d.get("mac", d.get("mac_address"))
@@ -194,16 +192,13 @@ class PlatformAPI:
 
             d["subscription"] = utils.listify(d["subscription"])
             _key = f"{d['subscription'] if len(d['subscription']) == 1 else '|'.join(sorted(d['subscription']))}"
-            _serial = d.get("serial", d.get("serial_num"))
-            if not _serial:
-                raise ValueError(f"No serial found for device: {d}")
 
             if _key in _lic_kwargs:
-                _lic_kwargs[_key]["serials"] += utils.listify(_serial)
+                _lic_kwargs[_key]["serials"] += [d["serial"]]
             else:
                 _lic_kwargs[_key] = {
                     "services": utils.listify(d["subscription"]),
-                    "serials": utils.listify(_serial)
+                    "serials": utils.listify(d["serial"])
                 }
         license_kwargs = list(_lic_kwargs.values())
 
