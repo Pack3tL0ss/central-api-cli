@@ -961,7 +961,7 @@ def test_show_audit_acp_logs(args: tuple[str]):
         [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
         [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
         [5, ("1", "--past", "30m"), lambda r: "299" in r],
-        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],
+        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],  # need 2 tests by mac and by other iden to hit all branches
         [7, ("-a", "--client", test_data["client"]["wireless"]["name"]), lambda r: "200" in r],
         [8, ("self",), lambda r: "INFO" in r],
         [9, ("pytest",), lambda r: "INFO" in r],
