@@ -18,6 +18,7 @@ class GreenLakeDevicesAPI:
             self,
             sort_by: str | list[str] = None,
             reverse: bool = None,
+            archived: bool = None,
             offset: int = 0,
             limit: int = 2000
         ) -> Response:
@@ -36,6 +37,13 @@ class GreenLakeDevicesAPI:
             "offset": offset,
             "limit": limit
         }
+        bool_filters = {
+            "archived": archived,
+        }
+
+        filter_str = " and ".join([f"{k} eq {str(v).lower()}" for k, v in bool_filters.items() if v is not None])
+        if filter_str:
+            params["filter"] = filter_str
 
         if sort_by:
             sort_by = ",".join(utils.listify(sort_by))
@@ -44,6 +52,7 @@ class GreenLakeDevicesAPI:
             params["sort"] = sort_by
 
         return await self.session.get(url, params=params)
+
 
     async def update_devices(
             self,

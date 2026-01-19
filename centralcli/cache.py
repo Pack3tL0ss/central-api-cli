@@ -3210,6 +3210,7 @@ class Cache:
     async def refresh_inv_db(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,
+            archived: bool = None,
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
 
@@ -3218,17 +3219,23 @@ class Cache:
         Args:
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
+            archived (bool, optional): filter by devices that are archived/unarchived.
+                Defaults to None: All devices
 
         Returns:
             Response: CentralAPI Response object
         """
         if api_clients.glp:
-            return await self.refresh_inv_db_glp(dev_type=dev_type)
+            return await self.refresh_inv_db_glp(dev_type=dev_type, archived=archived)
+
+        if archived is not None:
+            raise ValueError("archived argument is only valid for classic API, not GLP")
         return await self.refresh_inv_db_classic(dev_type=dev_type)  # pragma: no cover
 
     async def refresh_inv_db_glp(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,  # dev_type is effectively ignored for glp/cnx
+            archived: bool = None,
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
 
@@ -3239,6 +3246,8 @@ class Cache:
         Args:
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
+            archived (bool, optional): filter by devices that are archived/unarchived.
+                Defaults to None: All devices
 
         Returns:
             Response: CentralAPI Response object
@@ -3247,14 +3256,14 @@ class Cache:
         glp_api = api_clients.glp
         batch_resp = await glp_api.session._batch_request(
             [
-                br(glp_api.devices.get_glp_devices),
+                br(glp_api.devices.get_glp_devices, archived=archived),
                 br(glp_api.subscriptions.get_subscriptions),
                 # br(self.refresh_sub_db)  # sub_db is updated here
             ]
         )
         if not any([r.ok for r in batch_resp]):
             log.error("Unable to perform Inv cache update due to API call failure", show=True)
-            return batch_resp
+            return batch_resp[0]  # will abort if first call fails
 
         inv_resp, sub_resp = batch_resp  # if first call failed above it doesn't get this far.
 
@@ -3285,7 +3294,7 @@ class Cache:
 
         # -- CACHE UPDATES --
         self.responses.inv = resp
-        if dev_type is None or dev_type == "all":
+        if (dev_type is None or dev_type == "all") and archived is None:
             _ = await self.update_db(self.InvDB, data=inv_model.cache_dump(), truncate=True)
         else:
             self.responses.device_type = dev_type

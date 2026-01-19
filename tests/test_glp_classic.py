@@ -57,6 +57,24 @@ if config.dev.mock_tests:
         assert pass_condition(result.stdout)
 
 
+    @pytest.mark.parametrize("glp_ok", [False, True])
+    def test_show_archived(glp_ok: bool):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["show", "archived"],)
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        assert result.exit_code == 0
+        assert "counts" in result.stdout.lower()
+
+
+    @pytest.mark.parametrize("glp_ok", [False, True])
+    def test_show_archived_fail(glp_ok: bool):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["show", "archived"],)
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
+        assert result.exit_code == 1
+        assert "Response" in result.stdout
+
+
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
         [

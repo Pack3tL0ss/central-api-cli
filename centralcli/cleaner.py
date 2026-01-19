@@ -37,7 +37,7 @@ def _short_connection(value: str) -> str:
 
 
 def _serial_to_name(sernum: str | None) -> str | None:
-    if sernum is None:  #  show audit logs ... have seen "target" of None
+    if sernum is None:  #  pragma: no cover  show audit logs ... have seen "target" of None
         return sernum
     # TODO circular import if placed at top review import logic
     from centralcli import cache
@@ -71,8 +71,8 @@ def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | list[LibAllDevTy
 
 
 def _extract_names_from_id_name_dict(id_name: dict) -> str:
-    if isinstance(id_name, dict) and "id" in id_name and "name" in id_name:
-        names = [x.get("name", "Error") for x in id_name]
+    if isinstance(id_name, dict) and "id" in id_name and "name" in id_name:  # pragma: no cover
+        names = [x["name"] or "null" for x in id_name]
         return ", ".join(names)
     else:
         return id_name
@@ -404,7 +404,7 @@ def get_archived_devices(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     # if all platform_customer_id are the same the calling func adds it to the caption.
     plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in data]))
-    if len(plat_cust_id) > 1:
+    if len(plat_cust_id) > 1:  # pragma: no cover
         key_order.insert(6, "platform_customer_id")
 
     data = simple_kv_formatter(data=data, key_order=key_order)
@@ -1273,7 +1273,7 @@ def get_device_inventory(data: list[dict], sub: bool = None, key: str = None) ->
 
     _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
     data = simple_kv_formatter(data, key_order=field_order, emoji_bools=True)
-    data = sorted(utils.strip_no_value(data), key=lambda i: (i["services"] or "", i["model"]))
+    data = sorted(utils.strip_no_value(data), key=lambda i: (i.get("services") or "", i["model"]))
 
     if key is not None:
         data = [{k: v for k, v in d.items()} for d in data if(d["subscription key"] or "") == key]
@@ -1911,7 +1911,7 @@ def show_radios(data: list[dict[str, str | int]], band: RadioBandOptions | None 
     #         for r in bssids if (band is None or pretty_band[radio["index"]].removesuffix("Ghz") == band) and (ssid is None or r["essid"] == ssid)
     # ]
     if band:
-        data = [r for r in data if r["band"].startswith(band.value)]
+        data = [r for r in data if r["band"].startswith(band)]
 
     return data
 
@@ -2012,9 +2012,6 @@ def show_ai_insights(data: list[dict[str, str | bool | int]], severity: InsightS
     return simple_kv_formatter(data, key_order=field_order, strip_null=True, emoji_bools=True, show_false=False)
 
 def get_dirty_diff(data: list[dict[str, str]],) -> list[dict[str, str]]:
-    if not data:
-        return data
-
     return [{"ap": f"{item.get('name', 'err-no-name-field')} [dim]({item.get('id', 'err-no-id-field')})[/]", "dirty diff": item["dirty_diff"]} for item in data]
 
 def get_denylist_clients(data: dict[str, str | list[str]]) -> list[dict[str, str]]:

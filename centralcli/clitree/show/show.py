@@ -2109,17 +2109,17 @@ def config_(
     elif do_ap or (device and device.generic_type == "ap"):
         func = api.configuration.get_ap_config
         if device:
-            if device.generic_type == "ap":
-                args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
-                if ap_env:
-                    func = api.configuration.get_per_ap_config
-                    args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
-                elif not device.is_aos10:
-                    render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
-            else:
+            if device.generic_type != "ap":
                 common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+
+            args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
+            if ap_env:
+                func = api.configuration.get_per_ap_config
+                args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
+            elif not device.is_aos10:
+                render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.
     else:
-        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")
+        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")  # pragma: no cover
 
     if not device:
         args = [group.name]
@@ -2146,7 +2146,7 @@ def token(
     tokens: dict[str, str] = api.session.auth.getToken()
     if tokens:
         if common.workspace != "default":
-            print(f"Account: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
+            print(f"WorkSpace: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
         print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
 
 
@@ -2502,6 +2502,7 @@ def clients(
         kwargs["network"] = ssid
         if "Wired Clients" in title:
             log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
+            del kwargs["network"]
         else:
             title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
 
@@ -2606,10 +2607,8 @@ def tunnels(
     resp = api.session.request(api.monitoring.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
     if resp:
-        if resp.output.get("total"):
-            caption = f'Tunnel Count: {resp.output["total"]}'
-        if resp.output.get("tunnels"):
-            resp.output = resp.output["tunnels"]
+        caption = f'Tunnel Count: {resp.output.get("total", "?")}'
+        resp.output = resp.output["tunnels"]
 
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
@@ -3082,10 +3081,12 @@ def hook_proxy(
             if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
                 for flag in p.cmdline()[::-1]:
                     if flag.startswith("-"):
-                        continue
+                        continue  # pragma: no cover
                     elif flag.isdigit():
                         port = flag
                         break
+                    else:  # pragma: no cover
+                        ...
                 return p.pid, port
 
     if what == "logs":
@@ -3117,15 +3118,25 @@ def archived(
     workspace: str = common.options.workspace,
 ) -> None:
     """Show archived devices"""
-    # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
-    resp = api.session.request(api.platform.get_archived_devices)
-    if resp.raw and "devices" in resp.raw:
-        plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
-        caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
-
+    _cleaner = None
+    caption = None
+    if config.glp.ok:
+        api = api_clients.glp
+        resp = api.session.request(common.cache.refresh_inv_db, archived=True)
+        if resp:
+            resp.output = utils.strip_no_value(resp.output)  # removes subscription fields
+            _cleaner = cleaner.get_device_inventory
+    else:
+        api = api_clients.classic
+        resp = api.session.request(api.platform.get_archived_devices)  # TOGLP For now sticking with this call as it would be faster in large environments vs
+        _cleaner = cleaner.get_archived_devices
+        if resp.raw and "devices" in resp.raw:
+            plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
+            caption = f"Counts: {len(resp)} Archived devices."
+            caption = f"{caption} Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else caption  #  Should not happen but if it does the cleaner keeps the item in the dicts
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
+    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner)
 
 
 # TODO verbosity 1 to cleaner
