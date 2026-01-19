@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 import pendulum
+from pydantic import BaseModel
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
 
@@ -154,9 +155,10 @@ class DateTime():
                 if word.startswith("minute"):
                     minute = value
                 elif word.startswith("second"):
-                    if minute:
-                        if minute > 30:
-                            words = words.replace(f"{minute}m", f"{minute + 1}m")
+                    if minute and minute > 30:
+                        words = words.replace(f"{minute}m", f"{minute + 1}m")
+                    else:  # pragma: no cover
+                        ...
                     continue
             words = f'{words} {value}{list(word)[0]}'
 
@@ -215,15 +217,13 @@ class DateTime():
 class Encoder(JSONEncoder):
     """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
-    def default(self, obj):
+    def default(self, obj: DateTime | Path | BaseModel):
         if isinstance(obj, DateTime) or isinstance(obj, Path):
             return str(obj)
-        elif hasattr(obj, "as_dict"):
-            return obj.as_dict
         elif hasattr(obj, "model_dump"):
             return obj.model_dump()
         else:
-            return obj
+            return obj    # pragma: no cover
 
 class ShowInterfaceFilters:
     def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):

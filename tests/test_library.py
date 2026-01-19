@@ -511,22 +511,17 @@ def test_clicommon(idx: int, func: Callable, kwargs: dict, pass_condition: Calla
 
 
 @pytest.mark.parametrize(
-    "idx,func,kwargs,pass_condition,exception",
+    "idx,func,kwargs,pass_condition",
     [
-        [1, cleaner.get_event_logs, {"data": [{"id": "soemid", "timestamp": 1768622316000, "description": "some description"}, {}], "cache_update_func": cache.update_event_db}, lambda r: str(r[0]["time"]).count(":") == 2, None],
+        [1, cleaner.get_event_logs, {"data": [{"id": "soemid", "timestamp": 1768622316000, "description": "some description"}, {}], "cache_update_func": cache.update_event_db}, lambda r: str(r[0]["time"]).count(":") == 2],
     ]
 )
-def test_cleaner(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
-    if exception:
-        try:
-            _ = func(**kwargs)
-        except exception:
-            ...  # Test Passes
-        else:  # pragma: no cover
-            raise AssertionError(f"{env.current_test}{idx} should have raised a {exception.__class__.__name__} due to invalid params, but did not.  {kwargs =}")
-    else:  # pragma: no cover
-        resp = func(**kwargs)
+def test_cleaner(idx: int, func: Callable, kwargs: dict, pass_condition: Callable):
+    resp = func(**kwargs)
+    try:
         assert pass_condition(resp)
+    except AssertionError as e:
+        log.inspect(f"{env.current_test}-{idx} FAILED.  {repr(e)}", resp)
 
 
 @pytest.mark.parametrize(

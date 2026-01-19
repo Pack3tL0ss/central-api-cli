@@ -56,6 +56,7 @@ def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml: No
     assert "Too many matches" in result.stdout
 
 
+# TODO need test and response for gw move to hit 500 response branch in configuration.move_devices_to_group
 def test_move_pre_provision(ensure_cache_group1: None, ensure_inv_cache_test_ap: None):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")

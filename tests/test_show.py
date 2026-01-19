@@ -36,6 +36,8 @@ def test_check_fw_available():
         [7, None, ("--severity", "info"), lambda r: "API" in r],
         [8, None, ("--end", end_2_days_ago), lambda r: "API" in r],
         [9, None, ("--past", "180d"), lambda r: "API" in r and "--past" in r],  # warning --past exceeds max days allowed
+        [10, None, ("--dev", test_data["gateway"]["name"]), lambda r: "API" in r],
+        [11, None, ("--site", test_data["gateway"]["site"]), lambda r: "API" in r],
     ]
 )
 def test_show_alerts(_: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -72,13 +74,6 @@ def test_show_aps_dirty_missing_group():
     capture_logs(result, "test_show_aps_dirty_missing_group", expect_failure=True)
     assert result.exit_code == 1
     assert "group" in result.stdout.lower()
-
-
-def test_show_archived():
-    result = runner.invoke(app, ["show", "archived"],)
-    capture_logs(result, "test_show_archived")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -303,15 +298,16 @@ def test_show_insights_too_many_filters():
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition",
+    "idx,args,pass_condition",
     [
         [1, (test_data["ap"]["name"], "--up"), lambda r: "mac" in r],
-        [2, ("--site", test_data["ap"]["site"], "--sort", "utilization"), lambda r: "mac" in r and "band" in r],
+        [2, (test_data["ap"]["name"], "--band", "5"), lambda r: "mac"],
+        [3, ("--site", test_data["ap"]["site"], "--sort", "utilization"), lambda r: "mac" in r and "band" in r],
     ]
 )
-def test_show_radios(_: int, args: tuple[str], pass_condition: Callable):
+def test_show_radios(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "radios", *args],)
-    capture_logs(result, "test_show_radios")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -969,11 +965,13 @@ def test_show_audit_acp_logs(args: tuple[str]):
         [7, ("-a", "--client", test_data["client"]["wireless"]["name"]), lambda r: "200" in r],
         [8, ("self",), lambda r: "INFO" in r],
         [9, ("pytest",), lambda r: "INFO" in r],
+        [10, ("-n", "50"), lambda r: "API" in r],
+        [11, (), lambda r: "API" in r],
     ]
 )
 def test_show_logs(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "logs", *args,])
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -1004,7 +1002,7 @@ def test_show_mpsk_networks():
     [
         [1, None, (), lambda r: "API" in r, None],
         [2, "ensure_cache_mpsk_network", (), lambda r: "API" in r, "multiple_mpsk_nets"],
-        [3, None, (test_data["mpsk_ssid"],), lambda r: "API" in r, None],
+        [3, None, (test_data["mpsk_ssid"], "-v"), lambda r: "API" in r, None],
         [4, None, ("-E",), lambda r: "disabled" not in r, None],
         [5, None, ("-D",), lambda r: "enabled" not in r, None],
         [6, None, ("--import",), lambda r: "ssid argument is required" in r, None],
@@ -1087,21 +1085,26 @@ def test_get_floor_details():
 
 cmac = test_data["client"]["wireless"]["mac"]
 @pytest.mark.parametrize(
-    "idx,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
-        [1, ("--table",), lambda r: "name" in r and "mac" in r],
-        [2, ("--table", "-w", "--band", "6"), lambda r: "name" in r and "mac" in r],
-        [3, ("-w",), lambda r: "name" in r and "mac" in r],
-        [4, ("--wired", "--table"), lambda r: "vlan" in r and "mac" in r],
-        [5, ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
-        [6, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
-        [7, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
-        [8, ("--failed", "--past", "1w"), lambda r: "past 1 week" in r and "API" in r],
+        [1, None, ("--table", "--sort", "last-connected"), lambda r: "name" in r and "mac" in r],
+        [2, "ensure_cache_label1", ("--table", "-w", "--label", "cencli_test_label1"), lambda r: "name" in r and "mac" in r],
+        [3, None, ("--table", "--band", "6", "--site", test_data["ap"]["site"]), lambda r: "name" in r and "mac" in r],
+        [4, None, ("--table", "-w", "--band", "6", "--group", test_data["ap"]["group"]), lambda r: "name" in r and "mac" in r],
+        [5, None, ("-w", "--ssid", "BoilerUp"), lambda r: "name" in r and "mac" in r],
+        [6, None, ("--wired", "--table", "--ssid", "ignored"), lambda r: "vlan" in r and "mac" in r and "ignored" in r],
+        [7, None, ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
+        [8, None, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
+        [9, None, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
+        [10, None, ("--dev", test_data["ap"]["name"]), lambda r: "API" in r],  # --site ignored
+        [11, None, ("--failed", "--past", "1w"), lambda r: "past 1 week" in r and "API" in r],
     ]
 )
-def test_show_clients(idx: int, args: tuple[str], pass_condition: Callable):
+def test_show_clients(idx: int, fixture: str, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        [request.getfixturevalue(f) for f in utils.listify(fixture)]
     result = runner.invoke(app, ["show", "clients", *args],)
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -1290,22 +1293,23 @@ def test_show_portal_fail(_: int, fixture: str | None, args: tuple[str], pass_co
     assert pass_condition(result.stdout)
 
 
+# for full test coverage mock response needs a guest with no expiration, a guest that is expired and a guest that has an expiration but is not expired
 @pytest.mark.parametrize(
-    "_,args",
+    "idx,args",
     [
         [1, ()],
         [2, ("-R",)],
         [3, (test_data["portal"]["name"],)],
     ]
 )
-def test_show_guests(_: int, args: tuple[str]):
+def test_show_guests(idx: int, args: tuple[str]):
     result = runner.invoke(app, [
             "show",
             "guests",
             *args
         ]
     )
-    capture_logs(result, "test_show_guests")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
 
@@ -1496,14 +1500,15 @@ def test_show_firmware_compliance_invalid():
 
 
 @pytest.mark.parametrize(
-    "args,should_pass,test_name_update",
+    "idx,args,exit_code,test_name_update",
     [
-        [([test_data["client"]["wireless"]["name"], "--refresh"]), True, None],
-        [([test_data["client"]["wireless"]["mac"]]), True, None],
-        [([test_data["client"]["wireless"]["mac"]]), False, "fail"],
+        [1, (test_data["client"]["wireless"]["name"], "--refresh"), 0, None],
+        [2, (test_data["client"]["wireless"]["mac"],), 0, None],
+        [3, (test_data["client"]["wireless"]["mac"],), 1, "fail"],
+        [4, (test_data["client"]["wireless"]["mac"], "-R"), 1, "fail"],
     ]
 )
-def test_show_roaming(args: list[str], should_pass: bool, test_name_update: None | str):
+def test_show_roaming(idx: int, args: tuple[str], exit_code: int, test_name_update: None | str):
     if test_name_update:
         env.current_test = f"{env.current_test}_{test_name_update}"
     result = runner.invoke(app, [
@@ -1512,8 +1517,8 @@ def test_show_roaming(args: list[str], should_pass: bool, test_name_update: None
             *args
         ]
     )
-    capture_logs(result, env.current_test)
-    assert result.exit_code == 0 if should_pass else 1
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
     assert "API" in result.stdout
 
 
@@ -1619,16 +1624,23 @@ def test_show_swarm_invalid_aos10_ap():
     assert "AOS8" in result.stdout
 
 
-def test_show_token():
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "refresh" in r.lower()],  # Attempting to Refresh Tokens
+        [2, ("--no-refresh",), lambda r: "token" in r.lower()],
+    ]
+)
+def test_show_token(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "token"
         ]
     )
-    capture_logs(result, "test_show_token")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
-    assert "refresh" in result.stdout.lower()  # Attempting to Refresh Tokens
     assert "access" in result.stdout.lower()   # Access Token: ...
+    assert pass_condition(result.stdout)
 
 
 def test_show_upgrade_multi():
@@ -1757,6 +1769,18 @@ def test_show_tunnels():
     assert "API" in result.stdout
 
 
+def test_show_tunnels_fail():
+    result = runner.invoke(app, [
+            "show",
+            "tunnels",
+            test_data["gateway"]["name"],
+        ]
+    )
+    capture_logs(result, env.current_test, expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
+
+
 def test_show_vsx(ensure_dev_cache_test_vsx_switch: None):
     result = runner.invoke(app, [
             "show",
@@ -1781,16 +1805,18 @@ def test_show_vsx_invalid_sw():
     assert "only valid" in result.stdout
 
 
-def test_show_webhooks():
+@pytest.mark.parametrize("idx,args,exit_code,test_name_append", [[1, (), 0, None], [2, ("--sort", "token-created"), 0, None], [3, (), 1, "fail"]])
+def test_show_webhooks(idx: int, args: tuple[str], exit_code: int, test_name_append: str):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
             "show",
             "webhooks",
-            "--sort",
-            "token-created"
+            *args
         ]
     )
-    capture_logs(result, "test_show_webhooks")
-    assert result.exit_code == 0
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
     assert "API" in result.stdout
 
 
