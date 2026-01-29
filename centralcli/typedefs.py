@@ -61,6 +61,9 @@ class UnsetType:
     def __repr__(self):
         return "UNSET"  # pragma: no cover
 
+    def __bool__(self):
+        return False
+
 UNSET = UnsetType()
 
 # These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
