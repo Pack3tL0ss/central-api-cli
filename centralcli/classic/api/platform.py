@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal
 
@@ -208,6 +209,7 @@ class PlatformAPI:
         # Perform API call(s) to Central API GW
         if to_group or license_kwargs:
             # Add devices to central.  1 API call for 1 or many devices.
+            group_reqs, lic_reqs = [], []
             br = BatchRequest
             reqs = [
                 br(self.session.post, url, json_data=json_data),
@@ -216,7 +218,6 @@ class PlatformAPI:
             if to_group:
                 config_api = ConfigAPI(self.session)
                 group_reqs = [br(config_api.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
-                reqs = [*reqs, *group_reqs]
             else:  # pragma: no cover
                 ...
 
@@ -228,9 +229,12 @@ class PlatformAPI:
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
                 lic_reqs = [br(self.assign_licenses, **kwargs) for kwargs in license_kwargs]
-                reqs = [*reqs, *lic_reqs]
 
-            return await self.session._batch_request(reqs, continue_on_fail=True)
+            # We need to sleep for some time allowing time for devices to populate in GLP inventroy prior to issuing pre-provision or sub commands
+            # otherwise it's a race condition and API can error with devices not found...
+            reqs = [*reqs, br(asyncio.sleep, 5), *group_reqs, *lic_reqs]
+
+            return utils.strip_none(await self.session._batch_request(reqs, continue_on_fail=True))  # strip the sleep response (None)
         else:
             return [await self.session.post(url, json_data=json_data)]
 
