@@ -1083,6 +1083,10 @@ def display_results(
                 if isinstance(title, list) and len(title) == len(resp):
                     print(title[idx])
                 else:
+                    if title and tablefmt == "action" and idx == 0:
+                        _title = Text.from_markup(f"[dodger_blue2]{title}[/]")
+                        _lines = f"[{'green' if r.ok else 'red'}]{'─' * len(_title)}[/]"
+                        console.print(_lines, _title, _lines, justify="left", sep="\n")
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
                     print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
@@ -1124,11 +1128,14 @@ def display_results(
                     console.print(r, emoji=False)
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
-                if rl_str and idx + 1 == len(resp):  # FIXME caption does not print if there is no rl str with this logic
+                if idx + 1 == len(resp):
+                    rl_str = rl_str or ""
+                    # renove all left padding from caption, better for most action outputs.  Will be reformmated below for other scenarios
+                    caption = "".join(map(str.lstrip, caption.splitlines(keepends=True)))
                     if caption.replace(rl_str, "").lstrip():
                         _caption = f"\n{caption.replace(rl_str, '').rstrip()}" if r.output else f'  {unstyle(caption.replace(rl_str, "")).strip()}'
                         if not r.output:  # Formats any caption directly under Empty Response msg
-                            _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[grey42 italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
+                            _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[dim italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
                         econsole.print(_caption, end="")
                     econsole.print(f"\n{rl_str}")
 
