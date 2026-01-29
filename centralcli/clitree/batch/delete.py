@@ -116,11 +116,11 @@ def groups(
 def devices(
     import_file: Path = common.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub[/]", show_default=False,),
+    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub or --site[/]", show_default=False,),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     unsubscribed: bool = typer.Option(False, "--no-sub", help="Disassociate from the Aruba Central Service in GLP all devices that have no subscription assigned"),
     site: str = common.options.get("site", help="Delete all devices from a given site."),
-    no_refresh: bool = typer.Option(False, "--no-refresh", help="Don't refresh the cache prior to collecting devices to delete.  [dim italic]Applies to --no-sub and --site options[/]"),
+    no_refresh: bool = common.options.get("no_refresh", help="Don't refresh the cache prior to collecting devices to delete.  [dim italic]Applies to --no-sub and --site options[/]"),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
