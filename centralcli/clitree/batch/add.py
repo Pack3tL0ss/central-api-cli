@@ -131,7 +131,14 @@ def groups(
 def devices(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    # TODO need subscription_id
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = common.options.get("tags", hidden=not common.cache.config.glp.ok),
+    sub: str = common.options.get(
+        "subscription",
+        help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
+        autocompletion=common.cache.sub_completion,
+        hidden=not common.cache.config.glp.ok
+    ),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -148,7 +155,10 @@ def devices(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch add devices [OPTIONS] [IMPORT_FILE]"))
 
-    resp = common.batch_add_devices(import_file, yes=yes)
+    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
+    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+
+    resp = common.batch_add_devices(import_file, tags=tag_dict, subscription=sub, yes=yes)
     if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:  # pragma: no cover # TOGLP will add to tests once adjusted to use GLP
         log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True, log=True)
         log.info(f"Use [cyan]cencli batch verify devices {import_file}[/] to check status of license assignment.", caption=True)

@@ -787,7 +787,8 @@ class Session():
         m_resp = utils.listify(m_resp, flatten=True)
         m_resp = utils.strip_none(m_resp)
 
-        log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
+        if len(api_calls) > 1:
+            log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 

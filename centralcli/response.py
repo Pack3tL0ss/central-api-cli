@@ -319,6 +319,17 @@ class Response:
                 summary["output"] = self.output
         return summary
 
+    @property
+    def is_already_claimed(self) -> bool:
+        """property used for glp async ops responses to determine if the failure was due to it already being claimed
+
+        During a device add tags won't be processed if the device already exists
+
+        Returns:
+            bool: indicating if the response has devices that failed due to them being already claimed/in GLP
+        """
+        return True if "HPE_GL_ERROR_PRECONDITION_FAILED" in str(self.output) and "already claimed" in str(self.output) else False
+
 
     def __repr__(self):  # pragma: no cover
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"

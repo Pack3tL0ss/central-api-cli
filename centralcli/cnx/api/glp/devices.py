@@ -128,11 +128,11 @@ class GreenLakeDevicesAPI:
     async def add_devices(
             self,
             devices: GLPDevice | list[GLPDevice],
-            tags: dict[str, str] | None = None,
-            location_id: str | None = None,
             application_id: str | None = UNSET,
             region: str | None = None,
+            tags: dict[str, str] | None = None,
             subscription_ids: list[str] | str | None = UNSET,
+            location_id: str | None = None,
             cache: Cache = None,
         ) -> list[Response]:  # pragma: no cover  still use classic for now
         url = "/devices/v2beta1/devices"

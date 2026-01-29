@@ -94,7 +94,9 @@ def device(
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=common.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    subscription: List[common.cache.LicenseTypes] = common.options.subscription,  # type: ignore
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = common.options.get("tags", hidden=not common.cache.config.glp.ok),
+    subscription: common.cache.LicenseTypes = common.options.subscription,  # type: ignore
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -112,16 +114,19 @@ def device(
     kwd_vars = [kw1, kw2, kw3]
     vals = [serial, mac, group]
     kwargs = {
-        "mac": None,
         "serial": None,
+        "mac": None,
         "group": None,
         # "site": None,
-        "subscription": subscription
+        "subscription": None,
     }
 
     for name, value in zip(kwd_vars, vals):
         if name is not None:
-            kwargs[name if not hasattr(name, "value") else name.value] = value
+            if name.startswith("="):  # HACK so --tags can take a list[str]
+                _tags = [*(_tags or []), "=", *([] if len(name) == 1 else [name.lstrip("=")]), *([] if value is None else [value])]
+            else:
+                kwargs[name if not hasattr(name, "value") else name.value] = value
 
     kwargs["group"] = kwargs["group"] or _group
 
@@ -129,24 +134,30 @@ def device(
     if not kwargs["mac"] or not kwargs["serial"]:
         common.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
+    tag_dict = None if not tags else common.parse_var_value_list([*tags, *(_tags or [])], error_name="tags")
+    kwargs["tags"] = tag_dict
+
     _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if kwargs["group"]:
         _group: CacheGroup = common.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
-    if kwargs["subscription"]:
-        _lic_msg = [lic.value for lic in kwargs["subscription"]]
-        _lic_msg = _lic_msg if len(kwargs["subscription"]) > 1 else _lic_msg[0]
+    if subscription:
         _msg += [
-            f"\n  Assign Subscription{'s' if len(kwargs['subscription']) > 1 else ''}: [bright_green]{_lic_msg}[/bright_green]"
+            f"\n  Assign Subscription: [bright_green]{subscription.value}[/bright_green]"
         ]
-        kwargs["subscription"] = [lic.replace("-", "_") for lic in kwargs["subscription"]]
+        kwargs["subscription"] = subscription.replace("-", "_")
 
-    render.econsole.print("".join(_msg), emoji=False)
-    render.confirm(yes)
-    resp = api.session.request(api.platform.add_devices, **kwargs)  # TOGLP
-    render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, subscription=subscription)
+    if config.glp.ok:
+        kwargs = {**kwargs, "application_id": common.cache.my_service.id, "region": common.cache.my_service.region}
+        resp = common.batch_add_devices(data=[kwargs], yes=yes)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    else:
+        render.econsole.print("".join(_msg), emoji=False)
+        render.confirm(yes)
+        resp = api.session.request(api.platform.add_devices, **kwargs)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, subscription=subscription)
 
 @app.command()
 def group(

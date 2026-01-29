@@ -379,11 +379,15 @@ class Utils:
         return data
 
     @staticmethod
-    def format_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
+    def all_keys(data: list[dict[str, Any]]) -> list[str]:
         all_keys = []
         for d in data:
             [all_keys.append(k) for k in d.keys() if k not in all_keys]
+        return all_keys
+
+    def format_table(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
+        all_keys = self.all_keys(data)
         return [{k: d.get(k) for k in all_keys} for d in data]
 
     @staticmethod
@@ -611,7 +615,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str, StrEnum, CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
+    def summarize_list(items: List[str, StrEnum | CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -641,6 +645,21 @@ class Utils:
             confirm_str = sep.join(items)
 
         return confirm_str
+
+    def summarize_data(self, data: list[dict[str, str | int | bool]], max: int = 12, pad: int = 2, sep: str = '\n') -> str:
+        """Given a list of dicts with undetermined keys/fields, return a string summarizing those values.
+
+        Args:
+            data (list[dict[str, str | int | bool]]): The data to be summarized.
+            pad (int, optional): Amount of padding to prepend to each line.
+
+        Returns:
+            str: summary of each dict, 1 line per dict.
+        """
+        out_list = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, (bool, int))]) for d in data]
+        # out = self.summarize_list(list(map(lambda line: f"{' ':<{pad}}{line}\n", out_list)), max=max, pad=pad, sep=sep)
+        out = self.summarize_list(out_list, max=max, pad=pad, sep=sep)
+        return out
 
     @staticmethod
     def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:

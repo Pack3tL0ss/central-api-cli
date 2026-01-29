@@ -29,7 +29,7 @@ from rich.traceback import install
 from centralcli import config, log, render, utils
 from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, flex_dual_models, possible_sub_keys
+from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, flex_dual_models
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
@@ -745,7 +745,7 @@ class CLICommon:
             if not utils.is_resource_id(sub) and config.glp.ok:  # No sub cache pre glp support  classic API expects sub name
                 sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
                 sub = sub_obj.id
-            inv_devs = [self.cache.get_combined_inv_dev_identifier(d) for d in utils.listify(dev)]
+            inv_devs = [self.cache.get_combined_inv_dev_identifier(d, retry_dev=False) for d in utils.listify(dev)]
             devices += [{"serial": d.serial, "subscription": sub} for d in inv_devs]
 
         return devices
@@ -757,7 +757,7 @@ class CLICommon:
                 data = config.get_file_data(import_file, text_ok=text_ok)
             except Exception as e:
                 log.exception(e)
-                self.exit(repr(e))
+                self.exit(f"{repr(e)} while attempting to import data from {import_file}")
 
         if not data:
             self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -1060,49 +1060,46 @@ class CLICommon:
 
         return resp
 
-    def validate_license_type(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+    def validate_subscription(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
         """validate device add import data for valid subscription name.
 
         Args:
             data (List[Dict[str, Any]]): The data from the import
+            subscription (str, optional): A subscription identifier to apply to add devices in the data, overriding anything found within.
 
         Returns:
             Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
-                The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
+                The data is the same as what was provided, with the key changed to "subscription" ('services' or 'license' will be converted if found)
         """
-        _final_sub_key = "subscription"
-        data = [{k if k not in possible_sub_keys else _final_sub_key: v for k, v in dev.items()} for dev in data]
+        data = utils.normalize_device_sub_field(data)
         warn = False
-        if not _final_sub_key:
-            return data, warn
-
         already_warned = []
-        for d in data:
-            if d.get(_final_sub_key):
+        for row, d in enumerate(data, start=1):
+            if d.get("subscription"):
                 for idx in range(2):
                     try:
                         if not config.glp.ok:  # No sub cache pre glp support
-                            if d[_final_sub_key].replace("-", "_") not in self.cache.license_names:
-                                raise ValueError()
+                            if d['subscription'].replace("-", "_") not in self.cache.license_names:
+                                raise ValueError()  # caught below
                             else:
-                                d[_final_sub_key] = d[_final_sub_key].replace("-", "_")
+                                d['subscription'] = d['subscription'].replace("-", "_")
                                 break
 
-                        sub = self.cache.get_sub_identifier(d[_final_sub_key], best_match=True)
-                        d[_final_sub_key] = sub.api_name
+                        sub = self.cache.get_sub_identifier(d['subscription'], best_match=True)
+                        d['subscription'] = sub.api_name
 
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
-                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d[_final_sub_key]}[/] [red]not found[/] in list of valid subscriptions.\n:arrows_clockwise: Refreshing subscription/license name cache.')
+                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["subscription"]}[/] [red]not found[/] in list of valid subscriptions.\n:arrows_clockwise: Refreshing subscription/license name cache.')
                             resp = api.session.request(self.cache.refresh_license_db)  # TOGLP
                             if not resp:
                                 render.display_results(resp, exit_on_fail=True)
                         else:
                             warn = True
-                            if d[_final_sub_key] not in already_warned:
-                                already_warned += [d[_final_sub_key]]
-                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d[_final_sub_key]}[/] does not appear to be a valid subscription type.")
+                            if d['subscription'] not in already_warned:
+                                already_warned += [d['subscription']]
+                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d['subscription']}[/] (item/row {row}) does not appear to be a valid subscription type.")
         return data, warn
 
     def validate_retain_config(self, data: List[Dict[str, Any]], migrate: bool = True) -> tuple[list[dict[str, Any]], bool]:
@@ -1197,18 +1194,25 @@ class CLICommon:
 
         return resp or Response(error="No Devices were added")
 
-    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, api: ClassicAPI = api_clients.classic) -> List[Response]:
         glp_api = api_clients.glp
-        data = utils.normalize_device_sub_field(data)
+        import_devs = self._prep_glp_add_update_data(data, subscription=subscription)
+        data = import_devs.model_dump()
 
         # gather subscription ids for each subscription in import which can be name/key/sub_id
-        _subs = set([d["subscription"] for d in data if d.get("subscription")])
+        _subs = set([d["subscription"] for d in data if d.get("subscription")])  # sub field already normalized at this point.
         if _subs:
             _sub_to_id = {}
             [utils.update_dict(_sub_to_id, sub, sub if utils.is_resource_id(sub) else self.cache.get_sub_identifier(sub, best_match=True).id) for sub in _subs]
             data = [{k: v if k != "subscription" else utils.unlistify(_sub_to_id[v]) for k, v in dev.items()} for dev in data]
 
-        resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
+        resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, tags=tags, subscription_ids=subscription, cache=self.cache)
+        # We send tags when devices are initially added, but if they fail because the device is already in GreenLake tags are not processed
+        # So we need to send them in the update
+        tag_resp = []
+        if any([r.is_already_claimed for r in resp]) and (tags or import_devs.has_tags):
+            tag_req_info = self._build_tag_reqs(import_devs, tags=tags)
+            tag_resp = glp_api.session.batch_request(tag_req_info.requests)
 
         # pre-provision devices to groups / classic API
         to_group, group_resp = {}, []
@@ -1217,37 +1221,50 @@ class CLICommon:
             group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
             group_resp = api.session.batch_request(group_reqs)
 
-        return [*resp, *group_resp]
+        return [*resp, *tag_resp, *group_resp]
 
 
-    # TOGLP
-    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: bool = False, *, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: bool = False, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-        data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices")
+        data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
         if not data:
             self.exit("No data/import file")
 
         _reqd_cols = ["serial", "mac"]
         self.verify_required_fields(
-            data, required=_reqd_cols, optional=['group', 'subscription'], example_text='cencli batch add devices --show-example'
+            data, required=_reqd_cols, optional=['group', 'subscription', 'tags'], example_text='cencli batch add devices --show-example'
         )
-        data, warn = self.validate_license_type(data)
+        data, warn = self.validate_subscription(data)
         data, warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
+        all_keys = utils.all_keys(data)
 
-        confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
-        confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
-        file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
-        render.console.print(f'{len(data)} Devices found in {file_str}')
-        render.console.print(confirm_str.lstrip("\n"), emoji=False)
-        render.console.print(f'\nAdd{"ing" if not warn and yes else ""} {len(data)} devices found in {file_str}')
+        file_str = f"{'provided devices' if len(data) > 1 else 'device'}:" if not import_file else f"devices found in [cyan]{import_file.name}[/]:"
+        file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
+        render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}')
+        render.console.print(f'   {utils.summarize_data(data, pad=3).lstrip()}\n', emoji=False)
+        if subscription or "subscription" in all_keys:
+            render.console.print('[dim italic]Devices with a subscription specified will be assigned to the specified subscription.[/]')
+        if tags or "tags" in all_keys:
+            render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/]')
+        if "group" in all_keys:
+            render.econsole.print('[dim italic]Devices with a group specified will be pre-provisioned to the group[/]')
+        if "site" in all_keys:
+            render.econsole.print('[dark_orange3]:warning:[/]  [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
+
+        if "group" in all_keys:
+            render.econsole.print(
+                '\n[dark_orange3]:warning:[/]  [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
+                '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
+                '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
+            )
         if warn and not migrate:
-            render.econsole.print(f":warning:  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
 
         warn = warn if not env.is_pytest else False  # bypass confirmation for test runs
         render.confirm(yes=(not warn or migrate) and yes)
         if config.glp.ok:
-            return self.batch_add_devices_glp(data, api=api)
-        else:  # still using classic API for now as it includes support for subscription and group pre-assignment
+            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, api=api)
+        else:
             return self.batch_add_devices_classic(data, api=api)
 
     # TODO this has not been tested validated at all
@@ -2092,13 +2109,12 @@ class CLICommon:
 
         return self.TagReqInfo(batch_reqs, confirm_msg)
 
-    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False) -> list[Response]:
-        data = [{k if k not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
+    def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False) -> ImportDevices:
+        data = utils.normalize_device_sub_field(data)
         if subscription:
             _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
             data = [{**inner, "subscription": _sub.id} for inner in data]
 
-        glp_api = GreenLakeAPI()
         if sub_required and not subscription:
             self.verify_required_fields(data, ["subscription"], exit_on_fail=True)
 
@@ -2107,6 +2123,11 @@ class CLICommon:
         except ValidationError as e:
             self.exit(utils.clean_validation_errors(e))
 
+        return _data
+
+    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False) -> list[Response]:
+        _data = self._prep_glp_add_update_data(data, subscription=subscription, sub_required=sub_required)
+        glp_api = GreenLakeAPI()
         devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
         confirm_msg = [""]
         sub_reqs = []

@@ -164,9 +164,11 @@ class BySubId():
 class _ImportDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
+    mac: str = Field(alias=AliasChoices("mac", "mac_address", "Mac Address", "macAddress", "MAC"))
     tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAG", "TAGS"))
     archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE"))
     subscription: Optional[str] = Field(None, alias=AliasChoices(*possible_sub_keys))
+    group: Optional[str] = Field(None, alias=AliasChoices("group", "group_name"))
 
     @field_validator("subscription")
     @classmethod

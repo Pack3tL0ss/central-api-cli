@@ -79,8 +79,6 @@ def devices(
 
     Use [cyan]--example[/] to see expected import file format and required fields.
     """
-    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
     if show_example:
         render.console.print(
             f"{utils.color(['csv', 'yaml', 'json'], color_str='cyan')} with the following fields [red]serial[/], {utils.color(['tags', 'subscription'], color_str='cyan')}\n"
@@ -90,6 +88,9 @@ def devices(
 
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch update devices [OPTIONS] [IMPORT_FILE]"))
+
+    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
+    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
 
     data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
     resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, yes=yes)
