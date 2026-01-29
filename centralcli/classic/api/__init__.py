@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from centralcli.classic.api.visualrf import VisualRFAPI
 
-from ... import config
+from ... import config as cfg
 from ...client import Session
 from .aiops import AiOpsAPI
 from .central import CentralAPI
@@ -25,12 +25,14 @@ from .troubleshooting import TroubleShootingAPI
 
 if TYPE_CHECKING:  # pragma: no cover
     from aiohttp.client import ClientSession
+    from ...config import Config
 
     from ...typedefs import StrOrURL
 
 class ClassicAPI:
-    def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):
-        self._session = Session(base_url=base_url or config.classic.base_url, aio_session=aio_session, silent=silent)
+    def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
+        self.config = config or cfg
+        self._session = Session(base_url=base_url or config.classic.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config)
 
     @property
     def session(self) -> Session:

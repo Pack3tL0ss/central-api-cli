@@ -18,6 +18,7 @@ from rich.prompt import Confirm, Prompt
 from tablib.exceptions import UnsupportedFormat
 
 from .constants import CLUSTER_URLS
+from .utils import ToBool
 from .environment import env
 from .models.config import ConfigData
 from .typedefs import JSON_TYPE
@@ -254,7 +255,7 @@ class Config:
     example_link = EXAMPLE_LINK
     glp_client = None
 
-    def __init__(self, base_dir: Path = None):
+    def __init__(self, base_dir: Path = None, *, workspace: str = None):
         #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
         self.is_completion = env.is_completion
         self.valid_suffix = VALID_EXT
@@ -316,7 +317,7 @@ class Config:
         self.forget: int | None = self.data.get("forget_ws_after", self.data.get("forget_account_after"))
         self.default_workspace = "default"  # if they still use old `central_info` it is transformed to `default` in ConfigData model
         self.last_workspace, self.last_cmd_ts, self.last_workspace_msg_shown, self.last_workspace_expired = self.get_last_workspace()
-        self._workspace = self.get_workspace_from_args()
+        self._workspace = workspace or self.get_workspace_from_args()
         self.set_attributes()
         self.snow = None  # snow proxy is deprecated
 
@@ -385,6 +386,10 @@ class Config:
     @property
     def workspaces(self) -> dict[str, Any]:
         return self.data.get("workspaces", {})
+
+    @property
+    def cluster(self) -> str:
+        return self.workspace_object.cluster
 
     @property
     def is_cop(self):
@@ -549,6 +554,7 @@ class Config:
                                 print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
                                 sys.exit(1)
                         import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)
+                        import_data = [{k: v if str(v).lower() not in ["true", "false"] else ToBool(v).value for k, v in inner.items()} for inner in import_data]
                         if not model:
                             return import_data
                     elif text_ok:

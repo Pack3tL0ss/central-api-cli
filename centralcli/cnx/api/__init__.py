@@ -4,8 +4,10 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 from .glp.devices import GreenLakeDevicesAPI
 from .glp.subscriptions import GreenLakeSubscriptionsAPI
+from .glp.service_managers import GreenLakeServiceManagerAPI
 from ...client import Session
-from ... import config
+from ... import config as cfg
+from ...config import Config
 from .central.monitoring import MonitoringAPI
 
 
@@ -14,8 +16,9 @@ if TYPE_CHECKING:
     from aiohttp.client import ClientSession
 
 class GreenLakeAPI:
-    def __init__(self, base_url: StrOrURL = None, aio_session: ClientSession = None, silent: bool = True):
-        self._session = Session(base_url=base_url or config.glp.base_url, aio_session=aio_session, silent=silent, cnx=True)
+    def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
+        self.config = config or cfg
+        self._session = Session(base_url=base_url or config.glp.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config, cnx=True)
 
     @property
     def session(self) -> Session:
@@ -33,9 +36,14 @@ class GreenLakeAPI:
     def subscriptions(self) -> GreenLakeSubscriptionsAPI:
         return GreenLakeSubscriptionsAPI(self.session)
 
+    @cached_property
+    def service_managers(self) -> GreenLakeServiceManagerAPI:
+        return GreenLakeServiceManagerAPI(self.session)
+
 class CentralAPI:
-    def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):
-        self._session = Session(base_url=base_url or config.cnx.base_url, aio_session=aio_session, silent=silent, cnx=True)
+    def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
+        self.config = config or cfg
+        self._session = Session(base_url=base_url or self.config.cnx.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config, cnx=True)
 
     @property
     def session(self) -> Session:
