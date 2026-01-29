@@ -74,7 +74,7 @@ def ensure_config(func):
     return wrapper
 
 
-CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
+CacheTable = Literal["dev", "inv", "sub", "site", "group", "template", "label", "license", "svc", "client", "log", "event", "hook_config", "hook_data", "mpsk_network", "mpsk", "portal", "cert"]
 
 
 class CentralObject(MutableMapping):
@@ -82,10 +82,10 @@ class CentralObject(MutableMapping):
 
     def __init__(
         self,
-        db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub"],
+        db: Literal["dev", "inv", "site", "template", "group", "label", "mpsk_network", "mpsk", "portal", "cert", "sub", "svc"],
         data: Document | dict[str, Any] | list[Document | dict[str, Any]],
     ):
-        self.is_dev, self.is_inv, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub = False, False, False, False, False, False, False, False, False, False, False
+        self.is_dev, self.is_inv, self.is_template, self.is_group, self.is_site, self.is_label, self.is_mpsk, self.is_mpsk_network, self.is_portal, self.is_cert, self.is_sub, self.is_svc = False, False, False, False, False, False, False, False, False, False, False, False
         data: dict | list[dict] = None if not data else data
         setattr(self, f"is_{db}", True)
         self.cache = db
@@ -896,6 +896,40 @@ class CacheSub(CentralObject, Text):
         return self.valid
 
 
+class CacheService(CentralObject, Text):
+    db: Table | None = None
+
+    def __init__(self, data: Document | dict[str, Any]) -> None:
+        super().__init__("app", data)
+        self.id: str = data["id"]
+        self.name: str = data["name"]
+        self.region: str = data["region"]
+        self._help_text_parts = [self.name, self.region, self.id]
+
+    @classmethod
+    def set_db(cls, db: Table):
+        cls.db: Table = db
+
+    @property
+    def doc_id(self) -> int:
+        if self._doc_id:
+            return self._doc_id
+
+        Q = Query()
+        match: List[Document] = self.db.search(Q.id == self.id)
+        if match and len(match) == 1:
+            self._doc_id = match[0].doc_id
+
+        return self._doc_id
+
+    @doc_id.setter
+    def doc_id(self, doc_id: int | None):
+        self._doc_id = doc_id
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.cache}|{self.name}|{self.id}|{self.region} object at {hex(id(self))}>"
+
+
 class CacheBuilding(CentralObject, Text):
     db: Table | None = None
 
@@ -1015,10 +1049,12 @@ class CacheResponses:
         mpsk: Response = None,
         portal: Response = None,
         license: Response = None,
+        service: Response = None,
         client: Response = None,
         guest: Response = None,
         cert: Response = None,
         device_type: List[constants.LibAllDevTypes] | constants.LibAllDevTypes = None,
+        serial_numbers: str | list[str] = None,
     ) -> None:
         self._dev = dev
         self._inv = inv
@@ -1031,11 +1067,13 @@ class CacheResponses:
         self._mpsk = mpsk
         self._portal = portal
         self._license = license
+        self._service = service
         self._client = client
         self._guest = guest
         self._cert = cert
         self._device_type = utils.listify(device_type)
-        self._res_list = [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._client, self._guest, self._cert]
+        self._serial_numbers = utils.listify(serial_numbers)
+        self._res_list = [self._dev, self._inv, self._site, self._template, self._group, self._label, self._mpsk_network, self._mpsk, self._portal, self._license, self._service, self._client, self._guest, self._cert]
 
     def update_rl(self, resp: Response | CombinedResponse | None) -> Response | CombinedResponse | None:
         """Returns provided Response object with the RateLimit info from the most recent API call."""
@@ -1136,6 +1174,14 @@ class CacheResponses:
         self._license = resp
 
     @property
+    def service(self) -> Response | None:
+        return self.update_rl(self._service)
+
+    @service.setter
+    def service(self, resp: Response):
+        self._service = resp
+
+    @property
     def client(self) -> Response | None:
         return self.update_rl(self._client)
 
@@ -1167,6 +1213,14 @@ class CacheResponses:
     def device_type(self, device_type: constants.LibAllDevTypes | List[constants.LibAllDevTypes]):
         self._device_type = utils.listify(device_type)
 
+    @property
+    def serial_numbers(self) -> list[str] | None:
+        return self._serial_numbers
+
+    @serial_numbers.setter
+    def serial_numbers(self, serial_numbers: str | list[str]):
+        self._serial_numbers = utils.listify(serial_numbers)
+
     def clear(self) -> None:
         """Clears response cache.  Used for pytest runs."""
         self._dev = None
@@ -1180,10 +1234,13 @@ class CacheResponses:
         self._mpsk = None
         self._portal = None
         self._license = None
+        self._service = None
         self._client = None
         self._guest = None
         self._cert = None
         self._device_type = None
+        self._serial_numbers = None
+
 
 def _handle_multi_word_incomplete(incomplete: str) -> tuple[str, str]:
     if incomplete.startswith("'"):
@@ -1237,15 +1294,18 @@ class Cache:
             self.CertDB: Table = self.DevDB.table("certs")  # Only updated when show certs is ran or as needed
             self.FloorPlanAPDB: Table = self.DevDB.table("floor_plan_aps")
             self.BuildingDB: Table = self.DevDB.table("floor_plan_buildings")
+            self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.ClientDB, self.LicenseDB]
             if config.glp.ok:
                 self.SubDB: Table = self.DevDB.table("subscriptions")
-            self._tables: List[Table] = [self.DevDB, self.InvDB, self.SiteDB, self.GroupDB, self.TemplateDB, self.LabelDB, self.LicenseDB, self.ClientDB]
+                self.SvcDB: Table = self.DevDB.table("services")
+                # self.DevDB.drop_table("applications")
+                self._tables += [self.SubDB, self.SvcDB]
             self.Q: Query = Query()
 
 
     def __call__(self, refresh=False) -> list[Response]:
         if refresh:
-            return self.check_fresh(refresh)
+            return self.check_fresh(refresh=refresh)
 
     def __iter__(self) -> Iterator[Tuple[str, List[Document]]]:
         yield from self.all_tables
@@ -1391,6 +1451,21 @@ class Cache:
             return [lic["name"] for lic in self.LicenseDB.all()]
         else:
             return [lic.value for lic in constants.LicenseTypes]
+
+    @property
+    def services(self) -> list[CacheService]:
+        if not self.SvcDB:
+            asyncio.run(self.refresh_svc_db())
+        return [CacheService(app) for app in self.SvcDB.all()]
+
+    @property
+    def services_by_name(self) -> dict[str, CacheService]:
+        return {svc.name: svc for svc in self.services}
+
+    @property
+    def my_service(self) -> CacheService:
+        key = "public" if self.config.cluster != "internal" else "internal"
+        return self.services_by_name[key]
 
     @property
     def LicenseTypes(self) -> constants.LicenseTypes:
@@ -1575,7 +1650,16 @@ class Cache:
             log.error(f'{db_str} update response: {response}{elapsed_msg}')
             return False
 
-    def get_devices_with_inventory(self, no_refresh: bool = False, inv_db: bool = None, dev_db: bool = None, device_type: constants.GenericDeviceTypes = None, status: constants.DeviceStatus = None,) -> List[Response] | Response:
+    def get_devices_with_inventory(
+        self,
+        no_refresh: bool = False,
+        inv_db: bool = None,
+        dev_db: bool = None,
+        device_type: constants.GenericDeviceTypes = None,
+        assigned: bool = None,
+        archived: bool = None,
+        status: constants.DeviceStatus = None,
+    ) -> List[Response] | Response:
         """Returns List of Response objects with data from Inventory and Monitoring
 
         Args:
@@ -1597,7 +1681,7 @@ class Cache:
                             data from Inventory and Monitoring combined.
         """
         if not no_refresh:
-            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=device_type)
+            res = self.check_fresh(dev_db=dev_db or self.responses.dev is None, inv_db=inv_db or self.responses.inv is None, dev_type=device_type, assigned=assigned, archived=archived)
         else:
             res = [self.responses.dev or Response()]
 
@@ -2290,7 +2374,8 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents device completion for cencli show config self/cencli
-        if ctx.command_path == "cencli show config" and ctx.params.get("group_dev", "") in ["cencli", "self"]:
+        command_paths = ["cencli show config", "cencli update config"]
+        if ctx.command_path in command_paths and ctx.params.get("group_dev", "") in ["cencli", "self"]:
             return
 
         yield from self.dev_ap_completion(incomplete, args=args)
@@ -3210,6 +3295,8 @@ class Cache:
     async def refresh_inv_db(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,
+            serial_numbers: str | list[str] | None = None,
+            assigned: bool = None,
             archived: bool = None,
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
@@ -3219,6 +3306,8 @@ class Cache:
         Args:
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
+            assigned (bool, optional): filter by devices that are assigned/lack assignment to a service (Aruba Central).
+                Defaults to None: No filter by assignment.
             archived (bool, optional): filter by devices that are archived/unarchived.
                 Defaults to None: All devices
 
@@ -3226,7 +3315,7 @@ class Cache:
             Response: CentralAPI Response object
         """
         if api_clients.glp:
-            return await self.refresh_inv_db_glp(dev_type=dev_type, archived=archived)
+            return await self.refresh_inv_db_glp(dev_type=dev_type, serial_numbers=serial_numbers, assigned=assigned, archived=archived)
 
         if archived is not None:
             raise ValueError("archived argument is only valid for classic API, not GLP")
@@ -3234,7 +3323,9 @@ class Cache:
 
     async def refresh_inv_db_glp(
             self,
-            dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,  # dev_type is effectively ignored for glp/cnx
+            dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,  # dev_type is filtered after the API call for glp/cnx
+            serial_numbers: str | list[str] | None = None,
+            assigned: bool = None,  # classic endpoint only returns assigned, this only applies to GLP
             archived: bool = None,
     ) -> Response:
         """Get devices from device inventory, and Update device Cache with results.
@@ -3246,6 +3337,8 @@ class Cache:
         Args:
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
+            assigned (bool, optional): filter by devices that are assigned/lack assignment to a service (Aruba Central).
+                Applies to GLP only.  Defaults to None: No filter by assignment.
             archived (bool, optional): filter by devices that are archived/unarchived.
                 Defaults to None: All devices
 
@@ -3256,14 +3349,13 @@ class Cache:
         glp_api = api_clients.glp
         batch_resp = await glp_api.session._batch_request(
             [
-                br(glp_api.devices.get_glp_devices, archived=archived),
+                br(glp_api.devices.get_devices, serial_numbers=serial_numbers, assigned=assigned, archived=archived),
                 br(glp_api.subscriptions.get_subscriptions),
-                # br(self.refresh_sub_db)  # sub_db is updated here
             ]
         )
         if not any([r.ok for r in batch_resp]):
             log.error("Unable to perform Inv cache update due to API call failure", show=True)
-            return batch_resp[0]  # will abort if first call fails
+            return batch_resp[0]  # will abort in _batch_request if first call fails
 
         inv_resp, sub_resp = batch_resp  # if first call failed above it doesn't get this far.
 
@@ -3293,11 +3385,14 @@ class Cache:
             resp.caption = inv_data.counts
 
         # -- CACHE UPDATES --
-        self.responses.inv = resp
-        if (dev_type is None or dev_type == "all") and archived is None:
+        if archived is None:
+            self.responses.inv = resp
+            self.responses.device_type = dev_type
+            self.responses.serial_numbers = serial_numbers
+
+        if (dev_type is None or dev_type == "all") and not archived and not serial_numbers:
             _ = await self.update_db(self.InvDB, data=inv_model.cache_dump(), truncate=True)
         else:
-            self.responses.device_type = dev_type
             _ = await self._add_update_devices(inv_model.cache_dump(), "inv")
 
         if sub_data:
@@ -3446,6 +3541,28 @@ class Cache:
             resp.output = [{"name": k} for k in resp.output.keys() if self.is_central_license(k)]
             self.responses.license = resp
             _ = await self.update_db(self.LicenseDB, data=resp.output, truncate=True)
+        return resp
+
+    async def refresh_svc_db(self) -> Response:
+        """Update Service DB (Aruba Central Application IDs from service catalog)
+
+        Svc DB stores the Application IDs for Aruba Central based on what is
+        provisioned in the workspace.
+
+        Returns:
+            Response: CentralAPI Response Object
+        """
+        resp = await api_clients.glp.service_managers.get_my_services()
+        if resp.ok:
+            self.responses.service = resp
+            cache_data = [
+                {
+                    "name": "internal" if svc["serviceOffer"]["name"].lower().endswith("internal") else "public",
+                    "id": svc["serviceManagerProvision"]["serviceManager"]["id"],
+                    "region": svc["serviceManagerProvision"]["region"]
+                } for svc in resp.output[0]["provisions"] if "networking central" in svc["serviceOffer"]["name"].lower()
+            ]
+            _ = await self.update_db(self.SvcDB, data=cache_data, truncate=True)
         return resp
 
     async def refresh_template_db(self) -> Response:
@@ -3770,7 +3887,11 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
-        dev_type: constants.AllDevTypes = None
+        app_db: bool = False,
+        dev_type: constants.AllDevTypes = None,
+        assigned: bool = None,
+        archived: bool = None,
+        serial_numbers: list[str] | None = None,
         ):
         update_funcs = []
         db_res: CombinedResponse | List[Response] = []
@@ -3789,9 +3910,12 @@ class Cache:
             update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.refresh_license_db]
+        if app_db and config.glp.ok:
+            update_funcs += [self.refresh_svc_db]  # app db only updated when full refresh is done as the app ids should not change
+        inv_update_kwargs = {} if not config.glp.ok or not serial_numbers else {"serial_numbers": serial_numbers, "assigned": assigned, "archived": archived}
 
         if update_funcs:
-            kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type": dev_type} for f in update_funcs]
+            kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type": dev_type} if f.__name__ != "refresh_inv_db" else {"dev_type": dev_type, **inv_update_kwargs} for f in update_funcs]
             db_res += [await update_funcs[0](**kwarg_list[0])]
             if isinstance(db_res[0], list):  # needed as refresh_dev_db (if no dev_types provided) may return a CombinedResponse, but can also return a list of Responses if all failed meaning the above creates a List[list]
                 db_res = utils.unlistify(db_res)
@@ -3820,22 +3944,19 @@ class Cache:
                     db_res = [*db_res, *dev_res]
                 else:
                     db_res += [dev_res]
+                remaining_cache_updates = [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
+                if config.glp.ok:
+                    remaining_cache_updates += [self.refresh_svc_db]
                 if db_res[-1]:
-                    batch_reqs = [
-                        BatchRequest(req)
-                        for req in [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
-                    ]
-                    db_res = [
-                        *db_res,
-                        *await api.session._batch_request(batch_reqs)
-                    ]
+                    batch_reqs = [BatchRequest(req) for req in remaining_cache_updates]
+                    db_res = [*db_res, *await api.session._batch_request(batch_reqs)]
 
         return db_res
 
     def check_fresh(
         self,
-        refresh: bool = False,
         *,
+        refresh: bool = False,
         site_db: bool = False,
         dev_db: bool = False,
         inv_db: bool = False,
@@ -3843,7 +3964,11 @@ class Cache:
         group_db: bool = False,
         label_db: bool = False,
         license_db: bool = False,
-        dev_type: constants.GenericDeviceTypes = None
+        app_db: bool = False,
+        dev_type: constants.GenericDeviceTypes = None,
+        assigned: bool = None,
+        archived: bool = None,
+        serial_numbers: list[str] | None = None,
     ) -> List[Response]:
         db_res = None
         db_map = {
@@ -3853,7 +3978,8 @@ class Cache:
             "site_db": site_db,
             "template_db": template_db,
             "label_db": label_db,
-            "license_db": license_db
+            "license_db": license_db,
+            "app_db": app_db,
         }
         update_count = list(db_map.values()).count(True)
         update_count += 0 if not inv_db else 1  # inv_db includes update for sub_db
@@ -3866,7 +3992,7 @@ class Cache:
             print(f"[cyan]-- {_word} {updating_db} Cache --[/cyan]", end="")
 
             start = time.perf_counter()
-            db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type))
+            db_res = asyncio.run(self._check_fresh(**db_map, dev_type=dev_type, assigned=assigned, archived=archived, serial_numbers=serial_numbers))
             elapsed = round(time.perf_counter() - start, 2)
             failed = [r for r in db_res if not r.ok]
             log.info(f"Cache Refreshed {update_count if update_count != len(db_map) else 'all'} table{'s' if update_count > 1 else ''} in {elapsed}s")
@@ -4019,6 +4145,13 @@ class Cache:
         if not match:
             econsole.print(f"[dark_orange3]:warning:[/]  [bright_red]Unable to find a matching identifier[/] for [cyan]{qry_str}[/], tried: [cyan]{qry_funcs}[/]")
             raise typer.Exit(1)
+
+    @overload
+    def get_dev_identifier(
+        query_str: str,
+        dev_type: constants.LibAllDevTypes | list[constants.LibAllDevTypes] | None,
+        include_inventory: bool,
+    ) -> CacheDevice | CacheInvDevice: ...  # pragma: no cover
 
     @overload
     def get_dev_identifier(
@@ -4376,6 +4509,8 @@ class Cache:
     def get_inv_identifier(
         self,
         query_str: str | Iterable[str],
+        *,
+        serial_numbers: tuple[str] | None = None,
         dev_type: constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes] = None,
         retry: bool = True,
         completion: bool = False,
@@ -4387,10 +4522,9 @@ class Cache:
         This method will serach for a match in the Inventory DB (GreenLake Inventory), then if no match is found,
         it will search DeviceDB (Central Monitoring/UI), which would provide the serial # to then search the Inventory DB
 
-
-
         Args:
             query_str (str | Iterable[str]): The query string or Iterable of strings to attempt to match.  Iterable will be joined with ' ' to form a single string with spaces.
+            serial_numbers (tuple[str], optional): A full list of all serials that are expected to be looked up.  This is used to do an efficient cache refresh only involving the serials of interest. Defaults to None.
             dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Iterable["ap", "cx", "sw", "switch", "gw"]], optional): Limit matches to specific device type. Defaults to None (all device types).
             retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
             completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
@@ -4483,7 +4617,7 @@ class Cache:
                             _match = self.InvDB.search(query == fuzz_match)
 
                 econsole.print(":arrows_clockwise: Updating Inventory Cache.")
-                self.check_fresh(refresh=True, inv_db=True, dev_type=dev_type )
+                self.check_fresh(refresh=True, inv_db=True, dev_type=dev_type, serial_numbers=serial_numbers)
 
             if match:
                 match = [CacheInvDevice(dev) for dev in match]
@@ -4518,6 +4652,8 @@ class Cache:
     def get_combined_inv_dev_identifier(
         self,
         query_str: str | Iterable[str],
+        *,
+        serial_numbers: tuple[str] = None,
         dev_type: constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes] = None,
         retry_inv: bool = True,
         retry_dev: bool = True,
@@ -4527,7 +4663,26 @@ class Cache:
         exit_on_inv_fail: bool = None,
         exit_on_dev_fail: bool = None,
     ) -> CacheInvMonDevice | list[CacheInvMonDevice]:
-        """Searches both Inv Cache and Dev (Monitoring Cache) and returns a CacheInvMonDevice with attributes from both."""
+        """Searches both Inv Cache and Dev (Monitoring Cache) and returns a CacheInvMonDevice with attributes from both.
+
+        Args:
+            query_str (str | Iterable[str]): The query string to use to lookup device details. typically serial,mac,ip,hostname.
+            serial_numbers (tuple[str], optional): A full list of all serials that are expected to be looked up.  This is used to do an efficient cache refresh only involving the serials of interest. Defaults to None.
+            dev_type (constants.LibAllDevTypes | Iterable[constants.LibAllDevTypes], optional): Device Type of the device being looked up. Defaults to None.
+            retry_inv (bool, optional): Determines if an API call is performed to update inventory cache if no match is found. Defaults to True.
+            retry_dev (bool, optional): Determines if an API call is performed to update devcice/monitoring cache if no match is found. Defaults to True.
+            completion (bool, optional): Indicates lookup is being done for shell completion (implies silent=True, retry=False, exit_on_fail=False). Defaults to False.
+            silent (bool, optional): Impacts if messaging is displayed to stderr on failure to match, and when refresh is triggerred. Defaults to False.
+            exit_on_fail (bool, optional): Exit if no match is found (inv or dev). Defaults to None, Effectively True if no exit_on args are bool.
+            exit_on_inv_fail (bool, optional): Exit if no match is found in Inventory Cache. Defaults to None.
+            exit_on_dev_fail (bool, optional): Exit if no match is found in Device/Monitoring Cache. Defaults to None.
+
+        Raises:
+            ValueError: Raised if exit_on_fail conflicts with exit_on_inv_fail or exit_on_dev_fail.  exit_on_fail implies both exit_on_inv_fail and exit_on_dev_fail, i.e. exit_on_fail=True w/ exit_on_inv_fail=False is a conflict.
+
+        Returns:
+            CacheInvMonDevice | list[CacheInvMonDevice]: Will normally return CacheInvMonDevice if a match is found.  list[CacheInvMonDevice] if completion=True (all matches), can return None or have None in the returned list if exit_on_fail=False
+        """
         exit_vars = [exit_on_inv_fail, exit_on_dev_fail]
         if exit_on_fail is not None:
             if any([item is not exit_on_fail for item in exit_vars if item is not None]):
@@ -4537,7 +4692,7 @@ class Cache:
             exit_on_inv_fail = exit_on_dev_fail = True
 
         for idx in range(0, 2):
-            inv_dev = self.get_inv_identifier(query_str, dev_type=dev_type, retry=retry_inv, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_inv_fail)
+            inv_dev = self.get_inv_identifier(query_str, serial_numbers=serial_numbers, dev_type=dev_type, retry=retry_inv, completion=completion, silent=True if idx == 0 else silent, exit_on_fail=False if idx == 0 else exit_on_inv_fail)
             if not inv_dev:
                 mon_dev: CacheDevice | None = self.get_dev_identifier(query_str, dev_type=dev_type, retry=retry_dev, completion=completion, silent=True, exit_on_fail=exit_on_dev_fail)
                 if mon_dev:
@@ -5433,7 +5588,7 @@ class Cache:
 
 
 class CacheAttributes:
-    def __init__(self, name: Literal["dev", "site", "template", "group", "label", "portal", "mpsk", "mpsk_network"], db: Table, cache_update_func: Callable) -> None:
+    def __init__(self, name: Literal["dev", "site", "template", "group", "label", "portal", "mpsk", "mpsk_network", "sub"], db: Table, cache_update_func: Callable) -> None:
         self.name = name
         self.db = db
         self.cache_update_func = cache_update_func

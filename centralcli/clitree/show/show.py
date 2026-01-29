@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
 
 from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
 from centralcli.caas import CaasAPI
-from centralcli.cache import CacheDevice, CentralObject
+from centralcli.cache import CacheDevice, CacheInvDevice, CentralObject
 from centralcli.client import BatchRequest
 from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
@@ -267,9 +267,9 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
 # TODO expand params into available kwargs
-def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, has_filters: bool = False):
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, assigned: bool = None, archived: bool = None, has_filters: bool = False):
     if include_inventory:
-        resp = common.cache.get_devices_with_inventory(status=status)
+        resp = common.cache.get_devices_with_inventory(assigned=assigned, archived=archived, status=status)
         caption = _build_device_caption(resp, inventory=True, has_filters=has_filters)
     else:
         if common.cache.responses.dev:  # pragma: no cover
@@ -290,7 +290,7 @@ def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[Cac
 
 
 def _get_details_for_specific_devices(
-        devices: List[CentralObject],
+        devices: list[str],
         dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
         do_table: bool = False
@@ -298,20 +298,19 @@ def _get_details_for_specific_devices(
         caption = None
 
         # Build requests
-        br = BatchRequest
-        devs = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [br(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+        reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
         batch_res = api.session.batch_request(reqs)
         if include_inventory:  # Combine results with inventory results
-            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
             for r, dev in zip(batch_res, devs):
                 if r.ok:
                     r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
                 else:
-                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.reason}", caption=True)
+                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
 
         _update_cache_for_specific_devices(batch_res, devs)
 
@@ -333,6 +332,8 @@ def _get_details_for_specific_devices(
 def show_devices(
     devices: str | Iterable[str] = None,
     dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+    assigned: bool = None,
+    archived: bool = None,
     include_inventory: bool = False,
     verbosity: int = 0,
     outfile: Path = None,
@@ -393,7 +394,7 @@ def show_devices(
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type, assigned=assigned, archived=archived)
             resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
         caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, has_filters=bool(filter_params))
@@ -757,6 +758,7 @@ def inventory(
         show_default=False,
     ),
     key: str = typer.Option(None, help="Show all devices assigned to a specific subscription [dim](key)[/]", autocompletion=cache.sub_completion),
+    assigned: bool = typer.Option(None, help=f"Show devices Assigned to a service (Aruba Central) or devices lacking an assignment.  {common.help_block('show all')}", show_default=False, hidden=not config.glp.ok),
     verbose: int = common.options.verbose,
     sort_by: SortInventoryOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -779,10 +781,10 @@ def inventory(
         verbose -= 1
 
         show_devices(
-            dev_type=dev_type, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, assigned=assigned, archived=archived, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )
-        common.exit(code=0 if all([r.ok for r in api.session.requests if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
+        common.exit(code=0 if all([r.ok for r in [*api.session.requests, *api.session.glp_requests] if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -792,7 +794,10 @@ def inventory(
         key = sub.key
         dev_type = ShowInventoryArgs(sub.type)
 
-    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+    if assigned is not None:
+        word = "with" if assigned else "[red]lacking[/]"
+        title = f"{title} {word} service assignment"
+    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type, assigned=assigned)
 
     render.display_results(
         resp,
@@ -2020,7 +2025,6 @@ def config_(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
-        show_default=False,
     ),
     device: str = typer.Argument(
         None,
