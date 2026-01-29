@@ -2254,8 +2254,12 @@ def wlans(
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if (site or label) and any([group, swarm, verbose]):
         common.exit("Invalid combination of options.  [cyan]--site[/] & [cyan]--label[/] can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/]")
-    if len([p for p in {site, label, group, swarm} if p]) > 1:
+
+    filter_names = [k for k, v in {"site": site, "label": label, "group": group, "swarm": swarm}.items() if v]
+    if len(filter_names) > 1:
         common.exit("Invalid combination of options.  You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] options.")
+    if filter_names and name:
+        log.warning(f"WLAN Name is ignored if filtering flags are provided (--{filter_names[0]}) ...  [cyan]{name}[/] was ignored.", caption=True)
 
     if group:
         _group: CacheGroup = common.cache.get_group_identifier(group, dev_type="ap")
@@ -2286,7 +2290,9 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO # FIXME specifying WLAN name ... is ignored if verbose
+    # TODO # FIXME specifying WLAN name ... is ignored if verbose or --group is provided (assume others)
+    # should be able to use same call currently used, for the filters below, then pull the SSID requested from that data and flip to verbose output
+    # to show all the fields.
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
