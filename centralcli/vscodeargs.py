@@ -28,11 +28,11 @@ def vscode_arg_handler():
                     if " ~/" in vsc_args:
                         vsc_args = vsc_args.replace(" ~/", f" {Path.home()}/")
 
-                    if any([ext in vsc_args for ext in [".yaml", ".csv", ".json", ".j2"]]) and batch_dir.is_dir():
+                    if any([ext in vsc_args for ext in [".yaml", ".csv", ".json", ".j2", "txt"]]) and batch_dir.is_dir():
                         out = []
                         for arg in vsc_args.split():
                             updated = False
-                            if "." in arg and arg.split(".")[-1] in ["yaml", "csv", "json", "j2"] and not Path(arg).exists():
+                            if "." in arg and arg.split(".")[-1] in ["yaml", "csv", "json", "j2", "txt"] and not Path(arg).exists():
                                 batch_file = Path.joinpath(batch_dir, arg)
                                 if batch_file.exists():
                                     out += [str(batch_file)]
