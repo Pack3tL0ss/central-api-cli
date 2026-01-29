@@ -47,9 +47,10 @@ def token(
             if len(verified_workspace_list) != len(workspace_list):
                 console.print(f"Performing token refresh for {len(verified_workspace_list)} of {len(workspace_list)} provided workspaces.")
 
-            workspace_list = [config.default_workspace,  *verified_workspace_list]
+            workspace_list = verified_workspace_list
         else:
-            workspace_list = [config.default_workspace,  *config.defined_workspaces]
+            workspace_list = config.defined_workspaces
+        workspace_list = workspace_list if config.default_workspace in workspace_list else [config.default_workspace, *workspace_list]
 
         async def refresh_multi(workspaces: list[str]):
             success_list = await asyncio.gather(*[
