@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import json
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING
 
 from aiohttp import ClientResponse
+import pendulum
 from rich.console import Console
 from yarl import URL
 
 from centralcli import config, log, utils
 from centralcli.environment import env
 from centralcli.exceptions import CentralCliException
+from centralcli.objects import DateTime
 
 from . import render
 
@@ -290,6 +292,34 @@ class Response:
     def ok(self, ok: bool):
         self._ok = ok
 
+    @property
+    def headers(self) -> Mapping:
+        if self._response is not None:
+            return self._response.headers
+        return {}
+
+    @property
+    def async_status_url(self) -> str | None:
+        if self._response is not None:
+            return self._response.headers.get("Location")
+
+    @property
+    def summary(self) -> dict[str, int | str | list | dict]:
+        summary = {
+            "method": self.method,
+            "url": self.url.path_qs,
+            "status code": f"{self.status}:{self.error}",
+        }
+        if self.output:
+            if isinstance(self.output, dict) and self.output.get("sourceResourceUri", "") == "AsyncOperationResource":
+                async_resp_fields = ["status", "startedAt", "endedAt", "result"]
+                output = {k.removesuffix("At"): self.output[k] if not k.endswith("At") else DateTime(pendulum.parse(self.output[k]).timestamp(), "mdyt") for k in async_resp_fields if k in self.output}
+                summary = {**summary, **output}
+            else:
+                summary["output"] = self.output
+        return summary
+
+
     def __repr__(self):  # pragma: no cover
         return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
 
@@ -356,7 +386,7 @@ class Response:
         if config.dev.sanitize and config.sanitize_file.is_file():
             r = render.Output().sanitize_strings(r)
 
-        return f"{status_code}{r}"
+        return f"{status_code}{r.rstrip()}\n"
 
     def _colorize_output(self, output: str) -> str:
         re_word = {
@@ -365,13 +395,18 @@ class Response:
             "[red][red]": "[red]",
             "[/][/]": "[/]",
             "[/]fully": "fully",
-            "[/]_": "_"
+            "[/]_": "_",
+            "[red]failed[/]Devices": "[red]failedDevices[/]",
+            "succeeded[/]Devices": "succeededDevices[/]",
+            "HPE_GL_ERROR_PRECONDITION_[red]FAILED[/]": "[red]HPE_GL_ERROR_PRECONDITION_FAILED[/]",
+            "async_operation_response": "[italic dark_olive_green2]async_operation_response[/]",
         }
         green_words = [
             "success_list",
             "succeeded_devices",
             "successfully",
             "success",
+            "SUCCEEDED",
         ]
         red_words = [
             "failed_list",
