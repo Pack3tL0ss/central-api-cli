@@ -552,6 +552,7 @@ class CacheArgs(str, Enum):
     groups = "groups"
     labels = "labels"
     licenses = "licenses"
+    services = "services"
     logs = "logs"
     events = "events"
     hook_config = "hook_config"
