@@ -527,7 +527,7 @@ def test_cleaner(idx: int, func: Callable, kwargs: dict, pass_condition: Callabl
 @pytest.mark.parametrize(
     "idx,func,kwargs,pass_condition,exception",
     [
-        [1, api_clients.glp.devices.get_glp_devices, {"sort_by": "archived", "reverse": True}, lambda r: r.ok, None],
+        [1, api_clients.glp.devices.get_devices, {"sort_by": "archived", "reverse": True}, lambda r: r.ok, None],
     ]
 )
 def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
