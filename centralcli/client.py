@@ -18,7 +18,8 @@ from rich.console import Console
 from rich.markup import escape
 from yarl import URL
 
-from . import cleaner, config, log, utils
+from . import cleaner, config as cfg, log, utils
+from .config import Config
 from .cnx.base import NewCentralBase
 from .constants import STRIP_KEYS, lib_to_api
 from .exceptions import InvalidConfigException
@@ -83,21 +84,24 @@ class BatchRequest:
 
 class Session():
     requests: list[LoggedRequests] = []
+    glp_requests: list[LoggedRequests] = []
 
     def __init__(
         self,
         base_url: StrOrURL = None,
         *,
         workspace_name: str = None,
+        config: Config = None,
         aio_session: ClientSession = None,
         silent: bool = True,
         cnx: bool = None
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
         self.base_url = None if not base_url else base_url.rstrip('/')
-        self.workspace_name = workspace_name  # only used for refresh of tokens in multiple workspaces
+        self.config = config or cfg if workspace_name is None else Config(workspace=workspace_name)
+        self.workspace_name = workspace_name or self.config.workspace # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
-        self.ssl = config.ssl_verify
+        self.ssl = self.config.ssl_verify
         self.req_cnt = 0
         self.throttle: int = 0
         self.spinner = Spinner("Collecting Data...")
@@ -114,13 +118,16 @@ class Session():
     @classmethod
     def requests_clear(cls):
         cls.requests = []  # used by pytest
+        cls.glp_requests = []
 
     @classmethod
-    def requests_append(cls, requests: LoggedRequests | list[LoggedRequests]):
-        cls.requests += utils.listify(requests)
+    def requests_append(cls, requests: LoggedRequests | list[LoggedRequests], is_cnx: bool = False):
+        if not is_cnx:
+            cls.requests += utils.listify(requests)
+        else:
+            cls.glp_requests +=  utils.listify(requests)
 
-    @staticmethod
-    def get_glp_conn_from_file() -> NewCentralBase:
+    def get_glp_conn_from_file(self) -> NewCentralBase:
         """Creates an instance of NewCentralBase based on config file.
 
         Refer to documentation for correct format of config file.
@@ -132,10 +139,10 @@ class Session():
         Raises:
             InvalidConfigException: If config is not valid.
         """
-        if not config.glp.ok:
-            raise InvalidConfigException(f"{config.file}... Invalid or missing config items for New Central functionality.")
+        if not self.config.glp.ok:
+            raise InvalidConfigException(f"{self.config.file}... Invalid or missing config items for New Central functionality.")
 
-        conn = NewCentralBase(config.glp.token_info)
+        conn = NewCentralBase(self.config.glp.token_info)
 
         return conn
 
@@ -151,13 +158,13 @@ class Session():
         """
         central_info = None
         if workspace_name:
-            central_info = config.workspaces.get(workspace_name, {}).get("classic")
+            central_info = self.config.workspaces.get(workspace_name, {}).get("classic")
 
         # fallback if workspace provided does not exist to prevent issues with autocomplete
-        central_info = central_info or config.central_info
+        central_info = central_info or self.config.central_info
 
-        conn = ArubaCentralBase(central_info, token_store=config.token_store, logger=log, ssl_verify=config.ssl_verify)
-        token_cache = Path(tokenLocalStoreUtil(config.token_store, central_info["customer_id"], central_info["client_id"]))
+        conn = ArubaCentralBase(central_info, token_store=self.config.token_store, logger=log, ssl_verify=self.config.ssl_verify)
+        token_cache = Path(tokenLocalStoreUtil(self.config.token_store, central_info["customer_id"], central_info["client_id"]))
 
         # always create token cache if it doesn't exist and always use it first
         # unless config has been modified more recently, if so,  any tokens in the config will be tried first.
@@ -165,7 +172,7 @@ class Session():
         if token_cache.is_file():
             cache_token = conn.loadToken()
             if cache_token:
-                if token_cache.stat().st_mtime > config.file.stat().st_mtime:
+                if token_cache.stat().st_mtime > self.config.file.stat().st_mtime:
                     conn.central_info["retry_token"] = conn.central_info["token"]
                     conn.central_info["token"] = cache_token
                 else:
@@ -219,7 +226,7 @@ class Session():
             if "retry" in spin_txt:
                 return spin_txt
             elif "DEFAULT_SPIN_TXT" in spin_txt:
-                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=config.debug)
+                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=self.config.debug)
 
 
             self.running_spinners = [*self.running_spinners, spin_txt]
@@ -237,8 +244,6 @@ class Session():
         return spin_txt if not self.running_spinners else self.running_spinners[0]
 
     async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:  # pragma: no cover
-        if not config.debugv:
-            return
         call_data = {
             "method": method,
             "url": url if self.base_url is None else f"{self.base_url}{url}",
@@ -259,7 +264,7 @@ class Session():
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
-        if config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
+        if self.config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
             end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
@@ -282,9 +287,9 @@ class Session():
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
             log.debug(
-                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
+                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if not self.requests and not self.is_cnx else ""}'  # token msg only displayed on first call if not cnx
             )
-            if config.debugv:
+            if self.config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
 
             headers = self.headers if not headers else {**self.headers, **headers}
@@ -315,7 +320,7 @@ class Session():
                         **kwargs
                     )
                     elapsed = time.perf_counter() - _start
-                    self.requests_append(req_log.update(resp))
+                    self.requests_append(req_log.update(resp), is_cnx=self.is_cnx)
 
                     try:
                         output = await resp.json()
@@ -349,28 +354,13 @@ class Session():
                 if self.running_spinners:
                     self.spinner.start(self._get_spin_text(), spinner="dots")
 
-                # TODO need GLP retry here
-                # status code: 401
-                # Access Forbidden
-                # Unformatted response from Aruba Central API GW
-                # {
-                #     'httpStatusCode': 401,
-                #     'errorCode': 'HPE_GL_ERROR_FORBIDDEN',
-                #     'message': 'JWT verification failed, JWT verification failed for claims: Signature has expired',
-                #     'debugId': 'hHtoh-ahwJ6IwMT6Qp3OyhDNBWUB8LpFnWeNH30NkWse-SzdjJ-swA=='
-                # }
-                if "invalid_token" in resp.output:
+                if resp.status == 401:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif "errorCode" in resp.raw and "HPE_GL_ERROR" in resp.raw["errorCode"] and "signature has expired" in resp.raw.get("message", "").lower():
                     spin_txt_retry =  "(retry after token refresh)"
                     if hasattr(self.auth, "handle_expired_token"):
                         self.auth.handle_expired_token()
-                elif resp.status == 401 and self.is_cnx:
-                    spin_txt_retry =  "(retry after token refresh)"
-                    self.spinner.start(f"Attempting to Refresh {'' if not self.is_cnx else '[green]GLP[/] '}Token")
-                    self.auth.handle_expired_token()
-                    self.spinner.succeed()
                 elif resp.status == 500:
                     if url == "/configuration/v1/devices/move" and "group move has been initiated" in resp.output.get("description", ""):
                         break  # API-FLAW move endpoint returns 500 to indicate success for gw move
@@ -476,13 +466,13 @@ class Session():
         offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
 
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
-        if params and params.get("limit") and config.dev.limit:
-            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.dev.limit}')
-            params["limit"] = config.dev.limit
+        if params and params.get("limit") and self.config.dev.limit:
+            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {self.config.dev.limit}')
+            params["limit"] = self.config.dev.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
-        if self.base_url != config.glp.base_url:  # glp endpoints often need to send None/null (remove subs, remove central app)
+        if self.base_url != self.config.glp.base_url:  # glp endpoints often need to send None/null (remove subs, remove central app)
             json_data = utils.strip_none(json_data)
             if json_data:  # strip second nested dict if all keys = NoneType
                 y = json_data.copy()
@@ -634,7 +624,7 @@ class Session():
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
-                self.requests_append(LoggedRequests("/oauth2/token", "POST", ok=bool(token)))
+                self.requests_append(LoggedRequests("/oauth2/token", "POST", ok=bool(token)), is_cnx=self.is_cnx)
                 self.req_cnt += 1
 
                 if token:
@@ -661,7 +651,7 @@ class Session():
         This method calls into _refresh_token which performs the API call.
 
         Args:
-            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+            token_data (dict | list[dict], optional): Dict or list of dicts, where each dict is a
                 pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
                 each pair in order.  Stops once a refresh is successful.  If no token_data is provided
                 it is collected from cache or config.
@@ -670,6 +660,12 @@ class Session():
         Returns:
             bool: Bool indicating success/failure.
         """
+        if self.is_cnx:
+            self.spinner.start(f"Attempting to Refresh {'' if not self.is_cnx else '[green]GLP[/] '}Token")
+            self.auth.handle_expired_token()
+            self.spinner.succeed()
+            return True  # Exits if it fails
+
         auth = self.auth
         if not token_data:
             token: dict | None = auth.central_info.get("token")
@@ -681,11 +677,11 @@ class Session():
         success = self._refresh_token(token_data, silent=silent)
         if success:
             return True
-        elif not silent:
+        elif silent:
+            return False
+        else:  # pragma: no cover requires tty
             token_data = self.get_token_from_user()
             return self._refresh_token(token_data)
-        else:
-            return False
 
     def get_token_from_user(self) -> dict:  # pragma: no cover  requires tty
         """Handle invalid or expired tokens
@@ -754,10 +750,10 @@ class Session():
         m_resp: List[Response] = []
         _tot_start = time.perf_counter()
         max_calls_per_chunk = MAX_CALLS_PER_CHUNK
-        if self.base_url == config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
+        if self.base_url == self.config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
             max_calls_per_chunk = 10
 
-        if self.requests: # a call has been made no need to verify first call (token refresh)
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests): # a call has been made no need to verify first call (token refresh)
             chunked_calls = utils.chunker(api_calls, max_calls_per_chunk)
         else:
             resp: Response = await api_calls[0].func(
