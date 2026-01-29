@@ -6,6 +6,7 @@ import binascii
 import json
 import logging
 import os
+import subprocess as sp
 import string
 import sys
 import urllib.parse
@@ -378,6 +379,14 @@ class Utils:
         return data
 
     @staticmethod
+    def format_table(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
+        all_keys = []
+        for d in data:
+            [all_keys.append(k) for k in d.keys() if k not in all_keys]
+        return [{k: d.get(k) for k in all_keys} for d in data]
+
+    @staticmethod
     def color(
         text: str | bool | List[str],
         color_str: str = "bright_green",
@@ -441,6 +450,10 @@ class Utils:
     def chunker(seq: Iterable, size: int):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
+    @staticmethod
+    def normalize_device_sub_field(data: list[dict[str,  str]]) -> list[dict[str, str]]:
+        possible_sub_keys = ["license", "services", "subscription"]
+        return [{k if k.lower() not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
 
     @staticmethod
     def generate_template(template_file: Path | str, var_file: Path | str | None = None, *, config_data: list | dict = None) -> str:
@@ -676,15 +689,28 @@ class Utils:
 
         return phone
 
-if __name__ == "__main__":
-    utils = Utils()
-    x = ["[dark_orange2]:warning:[/] This is a test.", "[bright_green]:recycle:[/]This is also a test"]
-    from centralcli import cache
-    from centralcli.cache import CacheDevice
-    cache_devs = [CacheDevice(d) for d in cache.devices]
-    y = [*x, *[d.rich_help_text for d in cache_devs]]
-    console = Console()
+    @staticmethod
+    def open_file_with_editor(filename: str | Path):  # pragma: no cover  requires tty
+        filename = filename if isinstance(filename, Path) else Path(filename)
+        if not filename.is_file():
+            Console(stderr=True).print(f"Unable to open {filename}.  Not found")
+            return
 
-    console.print(f"{utils.summarize_list(y, color=None, max=40, emoji=False)}")
+        args = []
+        if sys.platform.startswith("win"):
+            editor = "notepad.exe"
+        elif sys.platform == "darwin": # macOS
+            editor = "open"
+            args = ["-t"]  # '-t' for the default text editor, '-e' opens with TextEdit
+        else: # Linux/Unix
+            # use EDITOR env var fallback to 'editor' (which typically links to nano or vim)
+            editor = os.environ.get('EDITOR', 'editor')
+
+        # Launch the editor process and wait for it to close
+        sp.Popen([editor, *args, str(filename)] + args).wait()
+
+
+
+if __name__ == "__main__":
     ...
 

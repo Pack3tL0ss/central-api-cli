@@ -252,7 +252,7 @@ def group(
     #CACHE Needs cache update
 
 
-config_help = f"""Update group or device level config (ap or gw).
+config_help = f"""Update group or device level config (ap or gw), or update cencli config.
 
 [cyan]cli_file[/] Can be raw CLI (no variables or conditional logic) or a jinja2 template.
 [italic][deep_sky_blue]:information:[/]  If the cli_file is a [medium_spring_green].j2[/] file the template will be converted based on variables in [cyan]var_file[/] prior to sending.[/italic]
@@ -263,7 +263,12 @@ If providing a jinja2 template, this command will automatically look for a [cyan
 """
 @app.command("config", help=config_help)
 def config_(
-    group_dev: str = common.arguments.get("group_dev", autocompletion=common.cache.group_dev_ap_gw_completion),
+    group_dev: str = common.arguments.get(
+        "group_dev",
+        metavar=iden_meta.group_dev_cencli,
+        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to update cencli configuration details.",
+        autocompletion=common.cache.group_dev_ap_gw_completion
+    ),
     cli_file: Path = typer.Argument(None, help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, show_default=False,),
     banner_file: Path = common.options.banner_file,
@@ -275,6 +280,10 @@ def config_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    if group_dev.lower() in ["cencli", "self"]:
+        utils.open_file_with_editor(config.file)
+        common.exit(code=0)
+
     is_tmp_file = False
     group_dev: CacheDevice | CacheGroup = common.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     if banner:  # pragma: no cover requires tty
