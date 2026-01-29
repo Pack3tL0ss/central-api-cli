@@ -131,6 +131,7 @@ def groups(
 def devices(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
+    # TODO need subscription_id
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
