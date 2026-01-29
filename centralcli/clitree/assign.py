@@ -75,9 +75,9 @@ def glp_subscription(
     res_ids = [d.id for d in devs]
 
     _msg = f"{_msg} to device:" if len(res_ids) == 1 else f"{_msg} to the following {len(res_ids)} devices:"
-    _msg = f"{_msg} {utils.summarize_list([d.summary_text for d in devs], max=12)}"
+    _msg = f"{_msg}\n    {utils.summarize_list([d.summary_text for d in devs], max=12).lstrip()}"
 
-    render.econsole.print(_msg)
+    render.econsole.print(_msg, emoji=False)
     render.confirm(yes)
     resp = api.session.request(api.devices.update_devices, res_ids, subscription_ids=sub.id)
     render.display_results(resp, tablefmt="action")

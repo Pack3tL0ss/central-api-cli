@@ -62,7 +62,7 @@ def bssids_from_xls(
     import tablib
     import importlib.util
     if importlib.util.find_spec("et_xmlfile") is None:
-        common.exit(f"Missing optional xlsx support.  re-install centralcli with optional dependency to add support for xlsx files. [cyan]uv tool install {escape('centralcli[xlsx]')}[/]\n[italic]No need to uninstall, just re-run as described to add support for xlsx[/]")
+        common.exit(f"Missing optional xlsx support.  re-install centralcli with optional dependency to add support for xlsx files. [cyan]uv tool install {escape('centralcli[xlsx]')}[/]\n[italic]No need to uninstall, just re-run as described to add support for xlsx[/]")  # pragma: no cover
 
     book = tablib.Databook()
     book.xlsx = file.read_bytes()  # type: ignore

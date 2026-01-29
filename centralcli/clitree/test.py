@@ -213,11 +213,6 @@ def command(
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     resp = api.session.request(api.monitoring.get_aps)  #  deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
     render.display_results(resp, tablefmt=tablefmt, outfile=outfile, pager=pager, sort_by=sort_by, reverse=reverse, output_by_key="deviceName")
-
-    # from centralcli import api_clients
-    # resp = api_clients.glp.session.request(api_clients.glp.devices.get_glp_devices, sort_by="archived", reverse=True)
-    # render.display_results(resp, tablefmt=tablefmt, outfile=outfile, pager=pager)
-
     ...
 
 

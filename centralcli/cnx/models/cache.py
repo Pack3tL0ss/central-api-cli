@@ -229,12 +229,14 @@ class InvCounts:
 
     @property
     def text(self) -> Text:
-        ret = f"[magenta]Inventory counts[/] Total: [cyan]{self.total}[/], "
+        ret = f"[turquoise2]Inventory counts[/] Total: [cyan]{self.total}[/], "
         for type_str in self._by_type_strs:
             attr = getattr(self, type_str)
             if attr > 0:
                 ret += f"[medium_spring_green]{type_str}[/]: [cyan]{attr}[/], "
-        ret += f"[green]Subscription Assigned[/]: [cyan]{self.subscribed}[/]"
+        ret = ret.rstrip(", ")
+        if self.subscribed:
+            ret += f", [green]Subscription Assigned[/]: [cyan]{self.subscribed}[/]"
         if self.no_subscription:
             ret += f", [yellow]No Subscription Assigned[/]: [cyan]{self.no_subscription}[/]"
         if self.assigned:
