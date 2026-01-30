@@ -27,7 +27,7 @@ from rich.progress import track
 from rich.table import Table
 from rich.traceback import install
 
-from centralcli import config, log, render, utils
+from centralcli import config, log, render, utils, emoji
 from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
 from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, flex_dual_models
