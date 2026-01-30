@@ -613,7 +613,7 @@ def glp_subscribe(
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
     tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
 
-    data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
+    data = common._get_import_file(import_file, import_type="devices", subscriptions=True, text_ok=bool(sub))
     resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
 
