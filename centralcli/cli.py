@@ -106,7 +106,7 @@ def move(
         show_default=False,
         help="Reset group membership.  (move to the defined default group)",
     ),
-    cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
+    cx_retain_config: bool = common.options.cx_retain_config,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,

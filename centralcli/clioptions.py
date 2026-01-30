@@ -20,7 +20,7 @@ OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
     "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band", "banner", "banner_file",
-    "tags", "with_inv", "no_refresh"
+    "tags", "with_inv", "no_refresh", "cx_retain_config",
 ]
 
 class CLIArgs:
@@ -203,6 +203,7 @@ class CLIOptions:
         self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
         self.with_inv: OptionInfo = typer.Option(False, "-I", "--inv", help="Include device details from [green]GreenLake[/] Inventory", show_default=False,)
         self.no_refresh: OptionInfo = typer.Option(False, "--no-refresh", help=f"Don't refresh the cache.  [dim]{'[default: Cache update is peformed prior to executing command]'}")
+        self.cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move")
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,
