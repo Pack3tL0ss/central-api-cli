@@ -1,9 +1,18 @@
+# future annotations does not work here, need to use Union to support py < 3.10
 import os
-from typing import Dict, List, Literal, Optional, Sequence, TypedDict, Union  # future annotations does not work here, need to use Union to support py < 3.10
+from functools import lru_cache
+from typing import Callable, Dict, List, Literal, Optional, ParamSpec, Sequence, TypedDict, TypeVar, Union
 
 from yarl import URL
 
 # We use Union as using | operator results in linter throwing "Variable not allowed in type annotation"
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+# The decorator is used as a type hint for the wrapper function
+def typed_lru_cache(func: Callable[P, T]) -> Callable[P, T]:
+    return lru_cache()(func) # Use lru_cache with arguments
 
 StrOrURL = Union[str, URL]
 StrPath = Union[str, os.PathLike[str]]

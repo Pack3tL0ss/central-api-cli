@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterator, KeysView, MutableMapping
 from copy import deepcopy
 from enum import Enum
-from functools import cached_property, lru_cache, wraps
+from functools import cached_property, wraps
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 
@@ -26,6 +26,7 @@ from yarl import URL
 
 from centralcli import config, constants, log, render, utils
 from centralcli.response import CombinedResponse
+from centralcli.typedefs import typed_lru_cache
 
 from . import api_clients
 from .client import BatchRequest, Session
@@ -1434,8 +1435,12 @@ class Cache:
         return [g["name"] for g in self.GroupDB.all()]
 
     @property
-    def ap_groups(self) -> list:
-        return [CacheGroup(g) for g in self.groups if "ap" in g["allowed_types"] and g["name"] != "default"]
+    def ap_groups(self) -> list[CacheGroup]:
+        return [CacheGroup(g) for g in self.groups if "ap" in g["allowed_types"] and g["name"]]
+
+    @property
+    def ap_ui_groups(self) -> list[CacheGroup]:
+        return [g for g in self.ap_groups if not g.wlan_tg]
 
     @property
     def labels(self) -> list:
@@ -4505,7 +4510,7 @@ class Cache:
             else:
                 return None
 
-    @lru_cache
+    @typed_lru_cache
     def get_inv_identifier(
         self,
         query_str: str | Iterable[str],
@@ -4648,7 +4653,7 @@ class Cache:
             else:
                 return None
 
-    @lru_cache
+    @typed_lru_cache
     def get_combined_inv_dev_identifier(
         self,
         query_str: str | Iterable[str],
@@ -5299,7 +5304,7 @@ class Cache:
         return match
 
     # TODO make this a wrapper for other specific get_portal_identifier.... calls
-    @lru_cache
+    @typed_lru_cache
     def get_name_id_identifier(
         self,
         cache_name: Literal["dev", "site", "sub", "template", "group", "label", "mpsk_network", "mpsk", "portal"],
@@ -5426,7 +5431,7 @@ class Cache:
                 f"Central API CLI Cache unable to gather {cache_name} data from provided identifier {query_str}", show=not silent
             )
 
-    @lru_cache
+    @typed_lru_cache
     def get_sub_identifier(
         self,
         query_str: str,
