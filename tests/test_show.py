@@ -1821,7 +1821,7 @@ def test_show_webhooks(idx: int, args: tuple[str], exit_code: int, test_name_app
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args",
+    "idx,fixture,args",
     [
         [1, None, ()],
         [2, None, ("-v",)],
@@ -1832,7 +1832,7 @@ def test_show_webhooks(idx: int, args: tuple[str], exit_code: int, test_name_app
         [7, "ensure_cache_label1", ("--label", "cencli_test_label1")],
     ]
 )
-def test_show_wlans(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+def test_show_wlans(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, [
@@ -1841,7 +1841,7 @@ def test_show_wlans(_: int, fixture: str | None, args: tuple[str], request: pyte
             *args
         ]
     )
-    capture_logs(result, "test_show_wlans")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert "API" in result.stdout
 

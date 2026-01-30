@@ -1733,7 +1733,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
     # override default which swaps in unicode checkmark/X (for rich output)
     if format in TABULAR_FORMATS:
         pretty_data = utils.format_table(pretty_data)
-    else:  # TODO csv is handled with render.output.normalize_for_csv, need to handle conversions for json/yaml is covered, then this can be removed
+    if format != "rich":  # TODO csv is handled with render.output.normalize_for_csv, need to handle conversions for json/yaml is covered, then this can be removed
         _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
     # if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
 
