@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import binascii
+from enum import Enum
 import string
 import sys
 import time
@@ -337,6 +338,10 @@ class PreConfig:
     dev_type: Literal["ap", "gw"]
     config: str
     request: BatchRequest
+
+class GLPAction(str, Enum):
+    ADD = "add"
+    UPDATE = "update"
 
 
 class CLICommon:
@@ -746,6 +751,7 @@ class CLICommon:
                 sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
                 sub = sub_obj.id
             inv_devs = [self.cache.get_combined_inv_dev_identifier(d, retry_dev=False) for d in utils.listify(dev)]
+            # devices += [{"serial": d.serial, "mac": d.mac, "subscription": sub} for d in inv_devs]
             devices += [{"serial": d.serial, "subscription": sub} for d in inv_devs]
 
         return devices
@@ -1079,10 +1085,10 @@ class CLICommon:
                 for idx in range(2):
                     try:
                         if not config.glp.ok:  # No sub cache pre glp support
-                            if d['subscription'].replace("-", "_") not in self.cache.license_names:
+                            if d['subscription'].lower().replace("-", "_") not in self.cache.license_names:
                                 raise ValueError()  # caught below
                             else:
-                                d['subscription'] = d['subscription'].replace("-", "_")
+                                d['subscription'] = d['subscription'].lower().replace("-", "_")
                                 break
 
                         sub = self.cache.get_sub_identifier(d['subscription'], best_match=True)
@@ -1132,16 +1138,17 @@ class CLICommon:
                 d["group"] = d["retain_config"] = None
 
         if warn_devs:
-            warn_devs_str = "\n".join(warn_devs)
+            warn_devs_str = "\n  ".join(warn_devs)
             if not migrate:
                 render.econsole.print(
-                    "[dark_orange3]\u26a0[/] [magenta]retain_config[/] is specified for some devices in import, along with a group to pre-provision the device to. "
-                    "[magenta]retain_config[/] is valid for [cyan]cencli batch move devices[/].  When initially adding a device [magenta]retain_config[/] is [red]not supported[/]. "
+                    "[dark_orange3]\u26a0[/]  Ignoring [cyan]group[/] for CX devices with [green]retain_config[/] specified.\n"
+                    "[green]retain_config[/] is specified for some devices in import, along with a group to pre-provision the device to. "
+                    "[green]retain_config[/] is valid for [cyan]cencli batch move devices[/].  When initially adding a device [green]retain_config[/] is [red]not supported[/]. "
                     "To retain the config, the device should [bold red]NOT[/] be pre-provisioned to a group. It should check-in to the unprovisioned group, then it can be "
-                    "moved to the desired group with the [magenta]retain_config[/] option (The same import file can be used for both).\n\n"
-                    f"[bright_green]As a result.  The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored. "
+                    "moved to the desired group with the [green]retain_config[/] option (The same import file can be used for both).\n\n"
+                    f"[bright_green]As a result. The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored. "
                     f"{'These devices' if len(warn_devs) > 1 else 'This device'} will [red]not[/] be pre-provisioned to a group.\n"
-                    f"{warn_devs_str}\n", emoji=False
+                    f"  {warn_devs_str}\n", emoji=False
                 )
             else:
                 render.econsole.print("\n[deep_sky_blue]:information:[/]  [magenta]Migration[/] Pre-provisioning CX devices to group will not be done to prevent configuration from being overriden.")
@@ -1196,7 +1203,7 @@ class CLICommon:
 
     def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, api: ClassicAPI = api_clients.classic) -> List[Response]:
         glp_api = api_clients.glp
-        import_devs = self._prep_glp_add_update_data(data, subscription=subscription)
+        import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)
         data = import_devs.model_dump()
 
         # gather subscription ids for each subscription in import which can be name/key/sub_id
@@ -1235,8 +1242,8 @@ class CLICommon:
             data, required=_reqd_cols, optional=['group', 'subscription', 'tags'], example_text='cencli batch add devices --show-example'
         )
         data, warn = self.validate_subscription(data)
-        data, warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
-        all_keys = utils.all_keys(data)
+        data, retain_warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
+        all_keys = utils.all_keys(data, with_value=True)
 
         file_str = f"{'provided devices' if len(data) > 1 else 'device'}:" if not import_file else f"devices found in [cyan]{import_file.name}[/]:"
         file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
@@ -1251,12 +1258,14 @@ class CLICommon:
         if "site" in all_keys:
             render.econsole.print('[dark_orange3]:warning:[/]  [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
 
-        if "group" in all_keys:
+        if "group" in all_keys and not retain_warn:
             render.econsole.print(
                 '\n[dark_orange3]:warning:[/]  [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
                 '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
                 '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
             )
+
+        warn = warn or retain_warn
         if warn and not migrate:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
 
@@ -2109,7 +2118,7 @@ class CLICommon:
 
         return self.TagReqInfo(batch_reqs, confirm_msg)
 
-    def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False) -> ImportDevices:
+    def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False, action: GLPAction = GLPAction.UPDATE) -> ImportDevices:
         data = utils.normalize_device_sub_field(data)
         if subscription:
             _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
@@ -2120,6 +2129,8 @@ class CLICommon:
 
         try:
             _data = ImportDevices(self.cache, data)
+            if action == GLPAction.ADD:
+                self.verify_required_fields(data, ["mac"], exit_on_fail=True)
         except ValidationError as e:
             self.exit(utils.clean_validation_errors(e))
 
