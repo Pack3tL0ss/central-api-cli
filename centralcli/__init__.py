@@ -32,7 +32,6 @@ from rich.traceback import install
 
 from .environment import env
 from .utils import Utils
-from .strings import emoji as emoji
 
 install(show_locals=True, suppress=[click])
 
