@@ -334,7 +334,8 @@ class Session():
                     except (json.decoder.JSONDecodeError, ContentTypeError):
                         output = raw_output = await resp.text()
 
-                    resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
+                    mock_key_append = utils.get_mock_append(method, json_data=json_data, headers=resp.headers)  # for testing w/ mock responses
+                    resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed, mock_key_append=mock_key_append)
 
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}]{e}')

@@ -30,6 +30,7 @@ from centralcli.typedefs import StrOrURL, StrEnum
 if TYPE_CHECKING:
     from .typedefs import PrimaryDeviceTypes
     from centralcli.cache import CentralObject
+    from multidict import CIMultiDictProxy
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -379,10 +380,14 @@ class Utils:
         return data
 
     @staticmethod
-    def all_keys(data: list[dict[str, Any]]) -> list[str]:
+    def all_keys(data: list[dict[str, Any]], with_value: bool = False) -> list[str]:
         all_keys = []
         for d in data:
-            [all_keys.append(k) for k in d.keys() if k not in all_keys]
+            if not with_value:
+                [all_keys.append(k) for k in d.keys() if k not in all_keys]
+            else:
+                [all_keys.append(k) for k, v in d.items() if (v or isinstance(v, (bool, int))) and k not in all_keys]
+
         return all_keys
 
     def format_table(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -660,6 +665,15 @@ class Utils:
         # out = self.summarize_list(list(map(lambda line: f"{' ':<{pad}}{line}\n", out_list)), max=max, pad=pad, sep=sep)
         out = self.summarize_list(out_list, max=max, pad=pad, sep=sep)
         return out
+
+    @staticmethod
+    def get_mock_append(method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"], json_data: Any, headers: CIMultiDictProxy[str] = None) -> str | None:
+        """mock_key is for testing w/ mock responses."""
+        mock_key_append = None
+        if method == "POST" and (headers is None or headers.get("Location")) and isinstance(json_data, dict):  # indicates this is a GLP device add, when called with no headers it's for a mock response lookup
+            mock_key_append = json_data and json_data.get("serialNumber", json_data.get("id"))
+            mock_key_append = mock_key_append and f":{mock_key_append}"
+        return mock_key_append
 
     @staticmethod
     def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:

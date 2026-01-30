@@ -125,7 +125,8 @@ class Response:
         status_code: int = None,
         elapsed: Union[int, float] = None,
         data_key: str = None,
-        caption: str | list[str] = None
+        caption: str | list[str] = None,
+        mock_key_append: str | None = None,
     ):
         """Response Constructor
 
@@ -147,6 +148,8 @@ class Response:
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
             data_key: (str, optional): The key where the actual data is held in the response, typically a list[dict].
             caption: (str | list[str], optional): Optional captions to be displayed with the response.
+            mock_key_append: (str, optional): Used for testing.  A portion of payload is passed into Response object for the sake
+                of uniquely identifying mock responses.  This value is appended to the key when the response is captured in the mock response file.
         """
         self.rl = RateLimit(response)
         self._response = response
@@ -157,6 +160,7 @@ class Response:
         self.elapsed = elapsed or 0
         self.data_key = data_key
         self.caption = caption
+        self.mock_key_append = mock_key_append  # used to create a more unique key in mock response file when using --capture-raw
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason or ("OK" if response.ok else "ERROR")  # visualrf does not send OK for reason when call is successful
@@ -176,7 +180,7 @@ class Response:
                 else:  # marker is not an int
                     _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{self.status}:{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
+            _log_msg = f"[{self.status} {self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 if isinstance(self.output, dict) and ("description" in self.output or "detail" in self.output):
@@ -222,27 +226,32 @@ class Response:
     def dump(self) -> str:  # pragma: no cover
         def _get_body(res):
             if hasattr(res, "_body"):
-                return self._response._body.decode("utf-8")
+                return res._body.decode("utf-8")
             return res.content.decode("utf-8")
 
         def combine_response(url: str, out: dict) -> dict | None:  # TODO add handler to create METHOD key in ok_responses/failed_responses if it doesn't exist.  i.e. failed_responses["DELETE"] currently KeyError if DELETE doesn't exist
             now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
-            if env.current_test:
-                key = f"{self.method}_{url}"
+            if env.current_test:  # Use of --test <test name> when using --capture-raw will capture and place under a specific test key
+                key = f"{self.method}_{url}{self.mock_key_append or ''}"
+                log.info(f"Prepped new MOCK for {env.current_test}[{key}]")
                 if env.current_test in now:
-                    if key in now[env.current_test]:
-                        now[env.current_test][key] += [out]
-                    else:
-                        now[env.current_test][key] = [out]
-                    return now
+                    return utils.update_dict(now[env.current_test], key, out)
+                    # if key in now[env.current_test]:
+                    #     now[env.current_test][key] += [out]
+                    # else:
+                    #     now[env.current_test][key] = [out]
+                    # return now
                 return {**now, **{env.current_test: {key: [out]}}}
 
-            key = url.replace("/", "_").lstrip("_")
+            key = f'{url.replace("/", "_").lstrip("_")}{self.mock_key_append or ""}'
             pkey = "ok_responses" if self.ok else "failed_responses"
             if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
-                log.warning(f"A ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
+                log.warning(
+                    f"A{'n' if self.ok else ''} ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True
+                )
                 return
 
+            log.info(f"Prepped new MOCK for {pkey}[{self.method}][{key}]")
             return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
@@ -252,8 +261,8 @@ class Response:
             "method": self.method,
             "status": self.status,
             "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
-            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-RateLimit")},
-            "body": '',
+            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-RateLimit") or k == "Location"},
+            # "body": '',
             "payload": {}
         }
 
@@ -261,11 +270,12 @@ class Response:
             if self.raw:
                 _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
                 out["payload"] = self.raw
-            elif self._response:
-                out["body"] = _get_body(self._response)
+            # elif self._response:
+            #     out["body"] = _get_body(self._response)
         except json.JSONDecodeError as e:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
-            out["body"] = _get_body(self._response)
+            # out["body"] = _get_body(self._response)
+            out["payload"] = _get_body(self._response)
 
         combined_out = combine_response(_url.path_qs, out)
         return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out, indent=2, sort_keys=False))
@@ -300,8 +310,7 @@ class Response:
 
     @property
     def async_status_url(self) -> str | None:
-        if self._response is not None:
-            return self._response.headers.get("Location")
+        return self.headers.get("Location")
 
     @property
     def summary(self) -> dict[str, int | str | list | dict]:

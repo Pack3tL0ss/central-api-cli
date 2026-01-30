@@ -116,6 +116,7 @@ def _build_response(
 
 class TestResponses:
     used_responses: list[int] = []
+    missing_mocks: list[str] = []
 
     def __init__(self):
         self.responses = self._get_responses_from_capture_file()
@@ -228,12 +229,13 @@ class TestResponses:
         #     f"{idx}:{k}" for idx, r in enumerate(responses, start=1) for k, v in r.items() if hash(str(v)) not in self.used_responses
         # ]  # start=1 to account for '[' at the top of the raw_capture file.  So idx is line # in raw_capture file.
 
-    def get_test_response(self, method: str, url: str, params: dict[str, Any] = None):  # url here is just the path portion
+    def get_test_response(self, method: str, url: str, params: dict[str, Any] = None, json_data: dict[str, Any] = None,):  # url here is just the path portion
         url: URL = URL(unquote_plus(url))  # url with mac would be 24%3A62%3Aab... without unquote_plus
         if params:
             params = utils.remove_time_params(params)
             url = url.with_query(params)
-        key = f"{method.upper()}_{url.path_qs}"
+        mock_key_append = utils.get_mock_append(method, json_data=json_data)  # for testing w/ mock responses
+        key = f"{method.upper()}_{url.path_qs}{mock_key_append or ''}"
 
         has_per_test_res, resp_candidates = self._get_candidates(key)
 
@@ -249,6 +251,8 @@ class TestResponses:
             return resp_candidates[-1]
 
         log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed (418) response.")  # pragma: no cover
+        if not method == "GET" and url.startswith("/configuration/v2/wlan/"):  # TODO verify what a GET_/configuration/v2/wlan/<GROUP>/<ssid> response looks like when the SSID is not found.
+            self.missing_mocks += [key]
         return {
             "url": url,
             "method": method,
@@ -260,5 +264,5 @@ class TestResponses:
 test_responses = TestResponses()
 
 @pytest.mark.asyncio
-async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, **kwargs):
-    return _build_response(**test_responses.get_test_response(method, url, params=params))
+async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, json: dict[str, Any] = None, **kwargs):
+    return _build_response(**test_responses.get_test_response(method, url, params=params, json_data=json))
