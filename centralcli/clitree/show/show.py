@@ -24,7 +24,7 @@ try:
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
-from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
+from centralcli import api_clients, caas, cache, cleaner, common, config, emoji, log, render, utils
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheDevice, CacheInvDevice, CentralObject
 from centralcli.client import BatchRequest
