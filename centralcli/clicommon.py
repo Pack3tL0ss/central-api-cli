@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import binascii
-from enum import Enum
 import string
 import sys
 import time
 import urllib
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
@@ -34,6 +34,7 @@ from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, f
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
+from centralcli.strings import emoji
 from centralcli.utils import ToBool
 
 from . import api_clients
@@ -1470,7 +1471,7 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            render.econsole.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [dim italic](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
                             _skip = True
 
                     # Determine if device is in inventory only determines use of pre-provision group vs move to group
@@ -1478,7 +1479,7 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            render.econsole.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                            render.econsole.print(f'{emoji.warn} {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
                             render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
                             render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
@@ -1525,12 +1526,12 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         elif now_site == to_site.name:
-                            render.econsole.print(f"[deep_sky_blue3]\u2139[/]  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
                     elif not has_connected:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            render.econsole.print(f"[deep_sky_blue3]\u2139[/]  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](Device must connect to Central before site can be assigned)[reset]", emoji=False)
                     elif idx != 0:
                         site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
