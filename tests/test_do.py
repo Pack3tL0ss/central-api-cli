@@ -9,7 +9,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, config, test_data, at_str
-from ._test_data import test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file
+from ._test_data import test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file, test_ap_ui_group_template, test_ap_ui_group_variables
 
 runner = CliRunner()
 
@@ -24,8 +24,8 @@ def test_add_device_missing_mac():
 @pytest.mark.parametrize(
     "idx,args",
     [
-        [1, (test_data["j2_template"],)],
-        [2, (test_data["j2_template"], test_data["j2_variables"])],
+        [1, (str(test_ap_ui_group_template),)],
+        [2, (str(test_ap_ui_group_template), str(test_ap_ui_group_variables))],
     ]
 )
 def test_convert_template(idx: int, args: tuple[str]):

@@ -7,7 +7,6 @@ So to test handling of invalid arguments to the library methods we need to test 
 """
 
 from enum import Enum
-from pathlib import Path
 from typing import Callable
 
 import pytest
@@ -23,7 +22,7 @@ from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
 
 from . import capture_logs, config, test_data
-from ._test_data import test_ap_ui_group_template, test_cert_file
+from ._test_data import test_ap_ui_group_template, test_cert_file, test_sw_template
 
 runner = CliRunner()
 
@@ -67,11 +66,16 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"group": "cencli_test_group2", "name": "cencli_test_template", "payload": Path(test_data["template"]["template_file"]).read_text(), "device_type": "sw"},
             {
                 "group": "cencli_test_group2",
                 "name": "cencli_test_template",
-                "payload": Path(test_data["template"]["template_file"]).read_text().encode("utf-8"),
+                "payload": test_sw_template.read_text(),
+                "device_type": "sw"
+            },
+            {
+                "group": "cencli_test_group2",
+                "name": "cencli_test_template",
+                "payload": test_sw_template.read_text().encode("utf-8"),
                 "device_type": "sw",
             },
         ],

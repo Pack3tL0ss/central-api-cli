@@ -9,7 +9,7 @@ from centralcli.environment import env
 from centralcli.exceptions import ConfigNotFoundException
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables, test_banner_file
+from ._test_data import gw_group_config_file, test_ap_ui_group_template, test_ap_ui_group_variables, test_banner_file, test_sw_template, test_switch_var_file_json
 
 runner = CliRunner()
 
@@ -176,9 +176,9 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "fixture,args",
         [
-            [None, ("cencli_test_template", test_data["template"]["template_file"],)],
-            ["ensure_cache_group2", ("cencli_test_template", "--group", "cencli_test_group2", test_data["template"]["template_file"])],
-            ["ensure_dev_cache_test_switch", ("cencli-test-sw", "--version", "16.11.0026", test_data["template"]["template_file"])],
+            [None, ("cencli_test_template", str(test_sw_template),)],
+            ["ensure_cache_group2", ("cencli_test_template", "--group", "cencli_test_group2", str(test_sw_template))],
+            ["ensure_dev_cache_test_switch", ("cencli-test-sw", "--version", "16.11.0026", str(test_sw_template))],
         ]
     )
     def test_update_template(ensure_cache_template, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
@@ -201,7 +201,7 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,args",
         [
-            [1, (test_data["switch"]["ip"], test_data["template"]["template_file"],)],
+            [1, (test_data["switch"]["ip"], str(test_sw_template),)],
         ]
     )
     def test_update_template_fail(idx: int, args: tuple[str]):
@@ -223,8 +223,8 @@ if config.dev.mock_tests:
         "idx,args,pass_condition",
         [
             [1, (test_data["test_devices"]["switch"]["serial"], "mac_auth_ports", "=", "5",), lambda r: "200" in r],
-            [2, (test_data["test_devices"]["switch"]["serial"], "dog=ziva", "--file", test_data["test_devices"]["switch"]["variable_file"],), lambda r: "200" in r],
-            [3, (test_data["test_devices"]["switch"]["serial"], "--file", test_data["test_devices"]["switch"]["variable_file"], "-R"), lambda r: "200" in r],
+            [2, (test_data["test_devices"]["switch"]["serial"], "dog=ziva", "--file", str(test_switch_var_file_json),), lambda r: "200" in r],
+            [3, (test_data["test_devices"]["switch"]["serial"], "--file", str(test_switch_var_file_json), "-R"), lambda r: "200" in r],
         ]
     )
     def test_update_variables(idx: int, args: tuple[str], pass_condition: Callable):
@@ -244,7 +244,7 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
         [
-            [1, (test_data["test_devices"]["switch"]["serial"], "dog", "=ziva", "--file", test_data["test_devices"]["switch"]["variable_file"],), lambda r: "⚠" in r],
+            [1, (test_data["test_devices"]["switch"]["serial"], "dog", "=ziva", "--file", str(test_switch_var_file_json),), lambda r: "⚠" in r],
             [2, (test_data["test_devices"]["switch"]["serial"],), lambda r: "⚠" in r],
         ]
     )

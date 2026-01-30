@@ -11,6 +11,7 @@ from centralcli.cli import api, app
 from centralcli.environment import env
 
 from . import capture_logs, clean_mac, config, end_2_days_ago, now_str, start_180_days_ago, test_data
+from ._test_data import gw_group_config_file
 
 runner = CliRunner()
 
@@ -1139,7 +1140,7 @@ def test_show_denylisted():
 @pytest.mark.parametrize(
     "_,fixture,args,pass_condition",
     [
-        [1, None, (test_data["gateway"]["group"], "--gw", "--out", f"{Path(__file__).parent.parent / 'config' / '.cache' / 'test_runner_gw_grp_config'}",), lambda r: "mgmt-user" in r and "!" in r],
+        [1, None, (test_data["gateway"]["group"], "--gw", "--out", str(gw_group_config_file),), lambda r: "mgmt-user" in r and "!" in r],
         [2, None, (test_data["gateway"]["group"], "--gw"), lambda r: "mgmt-user" in r],
         [3, None, (test_data["gateway"]["name"],), lambda r: "firewall" in r],
         [4, None, (test_data["ap"]["group"], "--ap"), lambda r: "rule any any" in r],

@@ -32,6 +32,7 @@ from ._test_data import (
     test_switch_var_file_json,
     test_update_aps_file,
     test_verify_file,
+    test_var_file,
 )
 
 runner = CliRunner()
@@ -204,8 +205,8 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,fixtures,args,pass_condition",
         [
-            [1, None, (test_data["batch"]["variable_file"],), lambda r: r.count("200") == 2],
-            [2, None, (test_data["batch"]["variable_file"], "-R"), lambda r: r.count("200") == 2],
+            [1, None, (str(test_var_file),), lambda r: r.count("200") == 2],
+            [2, None, (str(test_var_file), "-R"), lambda r: r.count("200") == 2],
         ]
     )
     def test_batch_update_variables(idx: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):

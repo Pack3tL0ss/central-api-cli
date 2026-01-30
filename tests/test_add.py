@@ -8,7 +8,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import cache, capture_logs, config, test_data
-from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json, test_cert_file_invalid_sfx
+from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json, test_cert_file_invalid_sfx, test_sw_template
 
 runner = CliRunner()
 
@@ -118,7 +118,7 @@ def test_add_site_by_geo():
 
 
 def test_add_template(ensure_cache_group2: None):
-    result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", test_data["template"]["template_file"], "--dev-type", "sw", "-Y"])
+    result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", str(test_sw_template), "--dev-type", "sw", "-Y"])
     capture_logs(result, "test_add_template")
     assert result.exit_code == 0
     assert "201" in result.stdout

@@ -14,6 +14,7 @@ T = TypeVar("T")
 def typed_lru_cache(func: Callable[P, T]) -> Callable[P, T]:
     return lru_cache()(func) # Use lru_cache with arguments
 
+StrOrPath = str | os.PathLike
 StrOrURL = Union[str, URL]
 StrPath = Union[str, os.PathLike[str]]
 Method = Literal['GET', 'POST', 'PUT', 'DELETE']
