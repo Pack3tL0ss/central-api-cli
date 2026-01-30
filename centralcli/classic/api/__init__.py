@@ -32,7 +32,7 @@ if TYPE_CHECKING:  # pragma: no cover
 class ClassicAPI:
     def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
         self.config = config or cfg
-        self._session = Session(base_url=base_url or config.classic.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config)
+        self._session = Session(base_url=base_url or self.config.classic.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config)
 
     @property
     def session(self) -> Session:
