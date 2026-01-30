@@ -134,9 +134,6 @@ def device(
     if not kwargs["mac"] or not kwargs["serial"]:
         common.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *(_tags or [])], error_name="tags")
-    kwargs["tags"] = tag_dict
-
     _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
     if kwargs["group"]:
         _group: CacheGroup = common.cache.get_group_identifier(kwargs["group"])
@@ -150,6 +147,8 @@ def device(
 
     if config.glp.ok:
         kwargs = {**kwargs, "application_id": common.cache.my_service.id, "region": common.cache.my_service.region}
+        tag_dict = None if not tags else common.parse_var_value_list([*tags, *(_tags or [])], error_name="tags")
+        kwargs["tags"] = tag_dict
         resp = common.batch_add_devices(data=[kwargs], yes=yes)
         render.display_results(resp, tablefmt="action", exit_on_fail=True)
     else:
