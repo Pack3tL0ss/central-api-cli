@@ -31,7 +31,7 @@ class GreenLakeDevicesAPI:
         All non 202 responses are returned as is.
 
         Args:
-            responses (list[Response]): list of Response objects.
+            responses (list[Response]): list of Response objects for the original calls requiring result of async operation.
 
         Returns:
             list[Response]: list of response objects.
@@ -190,7 +190,7 @@ class GreenLakeDevicesAPI:
             update_tasks = set()
             for sub in devs_by_sub:
                 update_tasks.add(asyncio.create_task(self.update_devices([new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]], subscription_ids=sub, application_id=application_id, region=region)))
-            update_responses = [r for r_list in asyncio.gather(*update_tasks) for r in r_list]
+            update_responses = [r for r_list in await asyncio.gather(*update_tasks) for r in r_list]
             return [*async_add_resp, *update_responses]
 
         device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
