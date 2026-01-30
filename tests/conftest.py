@@ -15,7 +15,7 @@ from centralcli.typedefs import PrimaryDeviceTypes
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
-from ._test_data import test_files, test_group_file
+from ._test_data import test_files, test_group_file, TEST_FILE_DIR
 
 runner = CliRunner()
 
@@ -1677,7 +1677,7 @@ def ensure_cache_template_by_name():
 
 @pytest.fixture(scope="function")
 def ensure_cache_j2_var_yaml():
-    test_j2_file = config.cache_dir / "test_runner_template.yaml"
+    test_j2_file = TEST_FILE_DIR / "test_runner_template.yaml"
     test_j2_file.write_text(
         "some_var: some_value\n"
     )
@@ -1688,7 +1688,7 @@ def ensure_cache_j2_var_yaml():
 
 @pytest.fixture(scope="function")
 def ensure_cache_j2_var_csv():
-    test_j2_file = config.cache_dir / "test_runner_template.csv"
+    test_j2_file = TEST_FILE_DIR / "test_runner_template.csv"
     test_j2_file.write_text(
         "some_var,\nsome_value,\n"
     )
