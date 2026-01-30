@@ -2304,10 +2304,10 @@ def wlans(
         render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
     elif verbose:
         _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
-        ap_groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
-        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
+        ap_group_names = [g.name for g in cache.ap_ui_groups]
+        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, g) for g in ap_group_names]
         batch_resp = api.session.batch_request(batch_req)
-        resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
+        resp = _combine_wlan_properties_responses(ap_group_names, batch_resp)
 
         group_by = "group" if not sort_by else None
         render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
