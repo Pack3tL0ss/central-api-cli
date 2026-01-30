@@ -22,6 +22,87 @@ runner = CliRunner()
 cache_bak_file = config.cache_file.parent / f"{config.cache_file.name}.pytest.bak"
 
 
+BATCH_DEVICES = [
+    {
+        "id": "19478ff1-4168-5c61-895c-bc7c11aec0bd",
+        "serial": "CNKDKSM0YH",
+        "mac": "20:4C:03:BA:20:6C",
+        "type": "ap",
+        "model": "AP-505H-US",
+        "sku": "R3V48A",
+        "services": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1788715367,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "6702ffe6-0770-518a-9e42-188d715a9c7b",
+        "serial": "CNFHJ0TPF7",
+        "mac": "38:17:c3:c6:e0:38",
+        "type": "ap",
+        "model": "315",
+        "sku": "JW813A",
+        "subscription": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1924905600,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
+        "serial": "CNKJKV309D",
+        "mac": "D0:D3:E0:CD:08:24",
+        "type": "ap",
+        "model": "AP-575-US",
+        "sku": "R4H18A",
+        "services": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1788715367,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "347bd5b1-e53e-50e9-8fac-1e80bba794a1",
+        "serial": "CNHPKLB01P",
+        "mac": "20:4C:03:81:E7:B2",
+        "type": "gw",
+        "model": "9004-US",
+        "sku": "R1B20A",
+        "services": "advance-70xx",
+        "subscription_key": "ARI76TMSFHXNJBJH",
+        "subscription_expires": 1860052515,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
+        "serial": "CN29FP403H",
+        "mac": "80:C1:6E:CD:32:40",
+        "type": "sw",
+        "model": "2530-12G",
+        "sku": "J9773A",
+        "services": "foundation-switch-6100",
+        "subscription_key": "AZFG8CVMXQB23NNQ",
+        "subscription_expires": 1924799400,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
+        "serial": "SG90KN00N5",
+        "mac": "88:3a:30:9a:cc:40",
+        "type": "cx",
+        "model": "'6300'",
+        "sku": "JL661A",
+        "services": "advanced-switch-6300",
+        "subscription_key": "E4F587FF6F6F848289",
+        "subscription_expires": 1924799400,
+        "assigned": True,
+        "archived": False
+    }
+]
+
 def pytest_configure(config):
     """
     Installs the rich traceback handler for all uncaught exceptions during pytest runs.
@@ -89,15 +170,31 @@ def _cleanup_test_labels():  # pragma: no cover
 
 @pytest.hookimpl()
 def pytest_sessionfinish(session: pytest.Session):
-    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:  # pragma: no cover
-        unused = "\n".join(test_responses.unused)
-        unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
-        log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests:  # pragma: no cover
         now = pendulum.now()
         ts = " ".join(now.to_day_datetime_string().split(", ")[1:])
-        unused_log_file.write_text(
-            f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
+
+        if test_responses.unused and session.testscollected > 900:
+            # Log unused mocks.  This is currently disable (always returns empty list)
+            unused = "\n".join(test_responses.unused)
+            unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
+            log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+            unused_log_file.write_text(
+                f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
+            )
+
+        if not test_responses.missing_mocks:
+            return
+
+        # Log missing mocks
+        missing_mocks_log_file = Path(config.log_dir / "pytest-missing-mocks.log")
+        missing = "\n".join(test_responses.missing_mocks)
+        log.warning(f"{len(test_responses.missing_mocks)} mock responses were missing.  See {missing_mocks_log_file} for details.")
+        missing_mocks_log_file.write_text(
+            f"The following {len(test_responses.missing)} mock responses were not used during this test run {ts}\n{missing}\n"
         )
+
+
 
 
 def cleanup_test_items():  # pragma: no cover
@@ -364,89 +461,27 @@ def ensure_no_cache():
 @pytest.fixture(scope="function")
 def ensure_inv_cache_batch_devices():
     if config.dev.mock_tests:
-        devices = [
-            {
-                "id": "19478ff1-4168-5c61-895c-bc7c11aec0bd",
-                "serial": "CNKDKSM0YH",
-                "mac": "20:4C:03:BA:20:6C",
-                "type": "ap",
-                "model": "AP-505H-US",
-                "sku": "R3V48A",
-                "services": "advanced-ap",
-                "subscription_key": "ENCYHFWQLJNQCWDU",
-                "subscription_expires": 1788715367,
-                "assigned": True,
-                "archived": False
-            },
-            {
-                "id": "6702ffe6-0770-518a-9e42-188d715a9c7b",
-                "serial": "CNFHJ0TPF7",
-                "mac": "38:17:c3:c6:e0:38",
-                "type": "ap",
-                "model": "315",
-                "sku": "JW813A",
-                "subscription": "advanced-ap",
-                "subscription_key": "ENCYHFWQLJNQCWDU",
-                "subscription_expires": 1924905600,
-                "assigned": True,
-                "archived": False
-            },
-            {
-                "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
-                "serial": "CNKJKV309D",
-                "mac": "D0:D3:E0:CD:08:24",
-                "type": "ap",
-                "model": "AP-575-US",
-                "sku": "R4H18A",
-                "services": "advanced-ap",
-                "subscription_key": "ENCYHFWQLJNQCWDU",
-                "subscription_expires": 1788715367,
-                "assigned": True,
-                "archived": False
-            },
-            {
-                "id": "347bd5b1-e53e-50e9-8fac-1e80bba794a1",
-                "serial": "CNHPKLB01P",
-                "mac": "20:4C:03:81:E7:B2",
-                "type": "gw",
-                "model": "9004-US",
-                "sku": "R1B20A",
-                "services": "advance-70xx",
-                "subscription_key": "ARI76TMSFHXNJBJH",
-                "subscription_expires": 1860052515,
-                "assigned": True,
-                "archived": False
-            },
-            {
-                "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
-                "serial": "CN29FP403H",
-                "mac": "80:C1:6E:CD:32:40",
-                "type": "sw",
-                "model": "2530-12G",
-                "sku": "J9773A",
-                "services": "foundation-switch-6100",
-                "subscription_key": "AZFG8CVMXQB23NNQ",
-                "subscription_expires": 1924799400,
-                "assigned": True,
-                "archived": False
-            },
-            {
-                "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
-                "serial": "SG90KN00N5",
-                "mac": "88:3a:30:9a:cc:40",
-                "type": "cx",
-                "model": "'6300'",
-                "sku": "JL661A",
-                "services": "advanced-switch-6300",
-                "subscription_key": "E4F587FF6F6F848289",
-                "subscription_expires": 1924799400,
-                "assigned": True,
-                "archived": False
-            }
-        ]
+        devices = BATCH_DEVICES
         cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
         if not cache_devs == devices:
             assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_inv_dev_cache_batch_devices():
+    if config.dev.mock_tests:
+        devices = BATCH_DEVICES
+        cache_inv_devs_by_serial = {
+            dev["serial"]: cache.inventory_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.inventory_by_serial
+        }
+        if cache_inv_devs_by_serial:  # pragma: no cover
+            assert asyncio.run(cache.update_inv_db(data=[d.doc_id for d in cache_inv_devs_by_serial.values()], remove=True))
+        cache_mon_devs_by_serial = {
+            dev["serial"]: cache.devices_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.devices_by_serial
+        }
+        if cache_mon_devs_by_serial:  # pragma: no cover
+            assert asyncio.run(cache.update_dev_db(data=[d.doc_id for d in cache_mon_devs_by_serial.values()], remove=True))
     yield
 
 
@@ -611,7 +646,6 @@ def ensure_dev_cache_batch_devices():
     return
 
 
-
 @pytest.fixture(scope="function")
 def ensure_inv_cache_test_ap():
     if config.dev.mock_tests:
@@ -630,6 +664,28 @@ def ensure_inv_cache_test_ap():
         }
         if not cache.inventory_by_serial.get(cache_data["serial"]) or not dict(cache.inventory_by_serial[cache_data["serial"]]) == cache_data:  # pragma: no cover
             assert asyncio.run(cache.update_inv_db(data=[cache_data]))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_inv_cache_test_ap():
+    if config.dev.mock_tests:
+        cache_data = {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": test_data["test_devices"]["ap"]["serial"],
+                "mac": test_data["test_devices"]["ap"]["mac"],
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+        }
+        cache_dev = cache.inventory_by_serial.get(cache_data["serial"])
+        if cache_dev:
+            assert asyncio.run(cache.update_inv_db(data=[cache_dev.doc_id], remove=True))
     yield
 
 
@@ -939,8 +995,7 @@ def ensure_cache_vsf_stack():
     if config.dev.mock_tests:
         missing = [d for d in cache_data if d["serial"] not in cache.devices_by_serial]
         if missing:
-            resp = common.batch_add_devices(data=missing, yes=True)
-            assert all([r.ok for r in resp])
+            assert asyncio.run(cache.update_dev_db(missing))
     yield
 
 

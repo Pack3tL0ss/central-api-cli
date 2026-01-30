@@ -268,46 +268,6 @@ def test_add_guest_invalid(args: tuple[str], pass_condition: Callable):
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args,pass_condition",
-    [
-        [
-            1,
-            "ensure_cache_group2",
-            (
-                "serial",
-                test_data["test_devices"]["ap"]["serial"],
-                "mac",
-                test_data["test_devices"]["ap"]["mac"],
-                "group",
-                test_data["test_devices"]["ap"]["group"],
-                "-s",
-                "foundation-ap"
-            ),
-            lambda r: "200" in r and "cache update ERROR" not in r
-        ],
-        [
-            2,
-            None,
-            (
-                "serial",
-                test_data["test_devices"]["ap"]["serial"],
-                "mac",
-                test_data["test_devices"]["ap"]["mac"],
-            ),
-            lambda r: "200" in r
-        ],
-    ]
-)
-def test_add_device(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
-    if fixture:
-        request.getfixturevalue(fixture)
-    result = runner.invoke(app, ["add", "device",  *args, "--yes"])
-    capture_logs(result, "test_add_device")
-    assert result.exit_code == 0
-    assert pass_condition(result.stdout)
-
-
-@pytest.mark.parametrize(
     "idx,hide",
     [
         [1, True],

@@ -9,11 +9,60 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, test_data
-from ._test_data import test_device_file, test_device_file_txt, test_sub_file_yaml, test_sub_file_csv, test_sub_file_test_ap, test_sub_file_classic_yaml
+from ._test_data import test_device_file, test_device_file_txt, test_sub_file_yaml, test_sub_file_csv, test_sub_file_test_ap, test_sub_file_classic_yaml, test_invalid_device_file_csv, test_invalid_empty_file
 
 runner = CliRunner()
 
 if config.dev.mock_tests:
+    @pytest.mark.parametrize(
+        "idx,glp_ok,fixture,args,pass_condition",
+        [
+            [1, False, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap"), lambda r: "code: 20" in r and "cache update ERROR" not in r],
+            [2, True, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap"), lambda r: "code: 20" in r and "cache update ERROR" not in r],
+            [3, False, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"],), lambda r: "code: 20" in r],
+            [4, True, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "--tags", "testtag1", "=", "''"), lambda r: "code: 20" in r],
+        ]
+    )
+    def test_add_device(ensure_no_inv_cache_test_ap, idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+        config._mock(glp_ok)
+        if fixture:
+            request.getfixturevalue(fixture)
+        result = runner.invoke(app, ["add", "device",  *args, "--yes"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
+        assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
+    @pytest.mark.parametrize(
+        "glp_ok",
+        [False, True]
+    )
+    def test_batch_add_devices(ensure_no_inv_dev_cache_batch_devices, glp_ok: bool):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_device_file)}', "-Y"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        assert result.exit_code == 0
+        assert "uccess" in result.stdout
+        assert "200" in result.stdout  # /platform/device_inventory/v1/devices
+        assert "201" in result.stdout  # /configuration/v1/preassign
+
+
+    @pytest.mark.parametrize(
+        "idx,glp_ok,args",
+        [
+            [1, False, ("devices", f'{str(test_invalid_device_file_csv)}')],
+            [2, True, ("devices", f'{str(test_invalid_device_file_csv)}')],
+            [3, False, ("devices", f'{str(test_invalid_empty_file)}')],
+            [4, True, ("devices", f'{str(test_invalid_empty_file)}')],
+        ]
+    )
+    def test_batch_add_fail(idx: int, glp_ok: bool, args: tuple[str]):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
+        assert result.exit_code == 1
+        assert "⚠" in result.stdout
+
+
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
         [
@@ -110,12 +159,16 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_archive(idx, file: str):
-        glp_ok = True if idx % 2 != 0 else False
+        glp_ok = True if idx % 2 != 0 else False # even numbers are glp calls
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "archive", str(file), "-y"])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
         assert result.exit_code == 0
-        assert "Accepted" in result.stdout or "True" in result.stdout
+        if glp_ok:
+            assert "async_operation_response" in result.stdout
+            assert "202" in result.stdout
+        else:
+            assert "Accepted" in result.stdout or "True" in result.stdout
 
 
     @pytest.mark.parametrize("glp_ok", [False, True])
@@ -131,9 +184,13 @@ if config.dev.mock_tests:
     def test_batch_unarchive(glp_ok: bool):
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
-        capture_logs(result, "test_batch_unarchive_device")
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
         assert result.exit_code == 0
-        assert "Accepted" in result.stdout or "uccess" in result.stdout
+        if glp_ok:
+            assert "async_operation_response" in result.stdout
+            assert "202" in result.stdout
+        else:
+            assert "Accepted" in result.stdout or "False" in result.stdout
 
 
     @pytest.mark.parametrize("glp_ok", [False, True])
@@ -237,8 +294,12 @@ if config.dev.mock_tests:
         result = runner.invoke(app, ["unarchive", *args])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
         assert result.exit_code == 0
-        assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
         assert "🆎" not in result.stdout
+        if glp_ok:
+            assert "async_operation_response" in result.stdout
+            assert "202" in result.stdout
+        else:
+            assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
 
 
     @pytest.mark.parametrize(

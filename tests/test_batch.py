@@ -21,8 +21,6 @@ from ._test_data import (
     test_device_file_one_not_exist,
     test_device_file_w_dup,
     test_group_file,
-    test_invalid_device_file_csv,
-    test_invalid_empty_file,
     test_invalid_var_file,
     test_invalid_var_file_bad_json,
     test_label_file,
@@ -117,29 +115,6 @@ def test_batch_add_sites():
     assert result.exit_code == 0
     assert "city" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
     assert "state" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
-
-
-def test_batch_add_devices():
-    result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_device_file)}', "-Y"])
-    capture_logs(result, "test_batch_add_device")
-    assert result.exit_code == 0
-    assert "uccess" in result.stdout
-    assert "200" in result.stdout  # /platform/device_inventory/v1/devices
-    assert "201" in result.stdout  # /configuration/v1/preassign
-
-
-@pytest.mark.parametrize(
-    "_,args",
-    [
-        [1, ("devices", f'{str(test_invalid_device_file_csv)}')],
-        [2, ("devices", f'{str(test_invalid_empty_file)}')],
-    ]
-)
-def test_batch_add_fail(_: int, args: tuple[str]):
-    result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
-    capture_logs(result, "test_batch_add_fail", expect_failure=True)
-    assert result.exit_code == 1
-    assert "⚠" in result.stdout
 
 
 if config.dev.mock_tests:
