@@ -2293,7 +2293,7 @@ def wlans(
     caption = []
     if verbose == 1:
         caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
-    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not name and filter_names else "yaml")
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if name and filter_names else "rich")
     pfx = "" if not name else f"Showing [green]1[/] ([cyan]{name}[/]) of "
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
@@ -2317,10 +2317,10 @@ def wlans(
         render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, group_by=group_by, reverse=reverse, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     else:
         resp = api.session.request(api.monitoring.get_wlans, **params)
-        caption = None
+        caption = []
         if resp and not name:
-            caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
-            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
+            caption += [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
+        caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
         render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
 
 
