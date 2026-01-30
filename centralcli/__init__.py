@@ -32,6 +32,7 @@ from rich.traceback import install
 
 from .environment import env
 from .utils import Utils
+from .strings import emoji as emoji
 
 install(show_locals=True, suppress=[click])
 
@@ -286,7 +287,7 @@ class APIClients:  # TODO play with cached property vs setting in init to see ho
 
 api_clients = APIClients()
 
-from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding
+from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding, CacheService
 
 cache = Cache(config=config)
 if config.valid:
@@ -304,6 +305,7 @@ if config.valid:
     CacheMpsk.set_db(cache.MpskDB)
     CacheBuilding.set_db(cache.BuildingDB)
     CacheFloorPlanAP.set_db(cache.FloorPlanAPDB, building_db=cache.BuildingDB)
+    CacheService.set_db(cache.SvcDB)
 
 from .clicommon import CLICommon
 

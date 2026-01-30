@@ -900,3 +900,10 @@ dev_options:          # --- Developer Options ---
   # There are also hidden command line flags supported globally for these options
   # --debug-limit --sanitize --capture-raw
 """
+
+@dataclass
+class Emoji:
+    warn: str = "[dark_orange3]\u26a0[/] "
+    info: str = "[deep_sky_blue3]\u2139[/] "
+
+emoji = Emoji()

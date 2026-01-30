@@ -24,7 +24,7 @@ try:
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     hook_enabled = False
 
-from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
+from centralcli import api_clients, caas, cache, cleaner, common, config, emoji, log, render, utils
 from centralcli.caas import CaasAPI
 from centralcli.cache import CacheDevice, CacheInvDevice, CentralObject
 from centralcli.client import BatchRequest
@@ -3450,7 +3450,7 @@ def bssids(
     resp = api.session.request(api.monitoring.get_bssids, **kwargs)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     if not ssid:
-        caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+        caption += [f"{emoji.info} If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
     title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
 
     render.display_results(
@@ -3612,7 +3612,7 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     else:
         out = {**out, config.workspace: workspaces.get(config.workspace, {})}
 
-    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
+    caption = f"[italic]{emoji.info} Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 
