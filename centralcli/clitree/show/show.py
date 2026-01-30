@@ -2202,8 +2202,10 @@ def routes(
     )
 
 
-def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]):
-    out, failed, passed = [], [], []
+def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]) -> Response | list[Response]:
+    """returns Response as long as any requests passed.  If all requests failed, returns a list of responses"""
+    out, passed = [], []
+    failed: list[Response] = []
     for group, res in zip(groups, responses):
         if res.ok:
             passed += [res]
@@ -2258,8 +2260,6 @@ def wlans(
     filter_names = [k for k, v in {"site": site, "label": label, "group": group, "swarm": swarm}.items() if v]
     if len(filter_names) > 1:
         common.exit("Invalid combination of options.  You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] options.")
-    if filter_names and name:
-        log.warning(f"WLAN Name is ignored if filtering flags are provided (--{filter_names[0]}) ...  [cyan]{name}[/] was ignored.", caption=True)
 
     if group:
         _group: CacheGroup = common.cache.get_group_identifier(group, dev_type="ap")
@@ -2290,27 +2290,31 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO # FIXME specifying WLAN name ... is ignored if verbose or --group is provided (assume others)
-    # should be able to use same call currently used, for the filters below, then pull the SSID requested from that data and flip to verbose output
-    # to show all the fields.
-    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    caption = []
+    if verbose == 1:
+        caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not name and filter_names else "yaml")
+    pfx = "" if not name else f"Showing [green]1[/] ([cyan]{name}[/]) of "
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
-        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in group [cyan]{group}[/]"]
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     elif swarm:
         resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
-        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in swarm associated with [cyan]{_dev.name}[/]"]
+        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     elif verbose:
-        _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
+        _ = api.session.request(common.cache.refresh_group_db)
         ap_group_names = [g.name for g in cache.ap_ui_groups]
         batch_req = [BatchRequest(api.configuration.get_full_wlan_list, g) for g in ap_group_names]
         batch_resp = api.session.batch_request(batch_req)
         resp = _combine_wlan_properties_responses(ap_group_names, batch_resp)
+        ssid_names = [wlan["essid"] for r in utils.listify(resp) if r.ok for wlan in r.output if "essid" in wlan]
+        unique_names = utils.unique(ssid_names)
+        caption = None if not ssid_names else [*caption, f"{pfx}[green]{len(ssid_names)} [dim italic]({len(unique_names)} unique SSIDs) across {len(ap_group_names)} AP groups."]
 
         group_by = "group" if not sort_by else None
-        render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, group_by=group_by, reverse=reverse, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     else:
         resp = api.session.request(api.monitoring.get_wlans, **params)
         caption = None

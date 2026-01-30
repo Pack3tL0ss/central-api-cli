@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .typedefs import CertType, InsightSeverityType
 
 TableFormat = Literal["json", "yaml", "csv", "rich", "tabulate"]
+TABULAR_FORMATS = ["csv", "rich", "table"]
 
 
 def _short_connection(value: str) -> str:
@@ -603,14 +604,10 @@ def get_clients(
     ]
 
     # if tablefmt is tabular we need each row to have the same columns
-    if format in ["csv", "rich", "table"]:
-        all_keys = list(set([key for d in data for key in d.keys()]))
-        data = [
-            {k: d.get(k) for k in [*list(d.keys()), *[k for k in sorted(all_keys) if k not in d.keys()]]}
-            for d in data
-        ]
+    if format in TABULAR_FORMATS:
+        data = utils.format_table(data)
 
-    data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in  ["csv", "rich", "table"]))
+    data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in  TABULAR_FORMATS))
 
     return utils.unlistify(data)  # Needed otherwise can end up with [{}] when no clients connected vs {} which is expected when payload is empty
 
@@ -1652,7 +1649,7 @@ def get_overlay_interfaces(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     return simple_kv_formatter(data)
 
-def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int = 0, format: TableFormat = "rich") -> list[dict]:
+def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int = 0, format: TableFormat = "rich", name: str = None) -> list[dict]:
     # TODO PlaceHolder logic, currently only support verbosity level 0
     verbosity_keys = {
         0: [
@@ -1668,9 +1665,41 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
             'opmode',
             'access_type',
             'cluster_name'
+        ],
+        1: [
+            "inactivity_timeout",
+            "max_clients_threshold",
+            "multicast_rate_optimization",
+            "dynamic_multicast_optimization",
+            "broadcast_filter",
+            "g_min_tx_rate",
+            "g_max_tx_rate",
+            "a_min_tx_rate",
+            "a_max_tx_rate",
+            "auth_server1",
+            "auth_server2",
+            "cloud_guest",
+            "cloud_auth",
         ]
     }
-    pretty_data = []
+
+
+    if name:
+        for field in {"essid", "name"}:
+            found = [w for w in data if w.get(field, "") == name]
+            if found:
+                verbosity = verbosity or 1
+                data = found
+                break
+
+    # combine all keys from each verbosity level up to the verbosity level chosen
+    if verbosity > max(verbosity_keys):
+        key_list = sorted(utils.all_keys(data))
+    else:
+        key_list = [
+            k for inner in list(verbosity_keys.values())[:verbosity + 1]
+            for k in inner
+        ]
 
     # rf_band all is a legacy key so all means 2.4 and 5, this updates so that all is only the value if 6 is also enabled.
     # also grabs values for keys that are stored in dicts
@@ -1683,22 +1712,34 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
 
         return v if not isinstance(v, dict) or "value" not in v else v["value"]
 
+    def _simplify_auth_keys(wlan: dict[str, str | int | bool]) -> dict[str, str | int | bool]:
+        if any([wlan.get("cloud_guest"), wlan.get("cloud_auth")]):
+            remove_key = "cloud_guest" if wlan.get("cloud_auth") else "cloud_auth"
+            return {k: v for k, v in wlan.items() if not k.startswith("auth_server") and not k == remove_key}
+        return wlan
 
+    pretty_data = []
     for wlan in data:
         ssid_data = {
             k: _simplify_value(wlan, k, wlan[k])
-            for k in verbosity_keys.get(verbosity, verbosity_keys[max(verbosity_keys.keys())]) if k in wlan
+            for k in key_list if k in wlan
         }
         if ssid_data.get("name", "") == ssid_data.get("essid", ""):
             ssid_data["name"] = None
+        if verbosity:
+            ssid_data = _simplify_auth_keys(ssid_data)
         pretty_data += [ssid_data]
 
     # override default which swaps in unicode checkmark/X (for rich output)
-    if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
+    if format in TABULAR_FORMATS:
+        pretty_data = utils.format_table(pretty_data)
+    else:  # TODO csv is handled with render.output.normalize_for_csv, need to handle conversions for json/yaml is covered, then this can be removed
         _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
+    # if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
 
     pretty_data = simple_kv_formatter(pretty_data)
-    pretty_data = utils.strip_no_value(pretty_data)
+
+    pretty_data = utils.strip_no_value(pretty_data, aggressive=bool(verbosity and format not in  TABULAR_FORMATS))
     return pretty_data
 
 
