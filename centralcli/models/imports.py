@@ -164,7 +164,7 @@ class BySubId():
 class _ImportDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
-    mac: str = Field(alias=AliasChoices("mac", "mac_address", "Mac Address", "macAddress", "MAC"))
+    mac: Optional[str] = Field(None, alias=AliasChoices("mac", "mac_address", "Mac Address", "macAddress", "MAC"))  # Optional only needed for add
     tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAG", "TAGS"))
     archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE"))
     subscription: Optional[str] = Field(None, alias=AliasChoices(*possible_sub_keys))
@@ -173,7 +173,7 @@ class _ImportDevice(BaseModel):
     @field_validator("subscription")
     @classmethod
     def _normalize_subscription(cls, v: str) -> str:
-        return v.lower().replace("_", "-")
+        return v if v is None else v.lower().replace("_", "-")
 
     @field_validator("tags", mode="before")
     @classmethod
