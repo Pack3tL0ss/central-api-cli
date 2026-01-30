@@ -718,7 +718,7 @@ def wlan(
         _groups = [common.cache.get_group_identifier(group, dev_type="ap") for group in groups]
     else:
         _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
-        _groups = [CacheGroup(g) for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
+        _groups = common.cache.ap_ui_groups
 
     batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
     api.session.silent = True

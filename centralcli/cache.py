@@ -1454,12 +1454,12 @@ class Cache:
     def licenses(self) -> List[str]:
         if hasattr(self, "LicenseDB"):
             return [lic["name"] for lic in self.LicenseDB.all()]
-        else:
+        else:  # pragma: no cover
             return [lic.value for lic in constants.LicenseTypes]
 
     @property
     def services(self) -> list[CacheService]:
-        if not self.SvcDB:
+        if not self.SvcDB:  # pragma: no cover
             asyncio.run(self.refresh_svc_db())
         return [CacheService(app) for app in self.SvcDB.all()]
 
@@ -1476,7 +1476,7 @@ class Cache:
     def LicenseTypes(self) -> constants.LicenseTypes:
         if len(self.licenses) > 0:
             return Enum("ValidLicenseTypes", {item: item.replace("_", "-") for item in self.licenses}, type=str)
-        else:
+        else:  # pragma: no cover
             return constants.LicenseTypes
 
     @property
