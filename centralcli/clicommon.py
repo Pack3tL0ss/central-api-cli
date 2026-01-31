@@ -28,7 +28,7 @@ from rich.table import Table
 from rich.traceback import install
 
 from centralcli import config, log, render, utils
-from centralcli.cache import CacheSite
+from centralcli.cache import CacheInvMonDevice, CacheSite
 from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
 from centralcli.constants import APIAction, GroupDevTypes, MacFormat, dynamic_antenna_models, flex_dual_models
@@ -1882,7 +1882,7 @@ class CLICommon:
             summarize_arch_res(arch_resp[0:2])
 
 
-    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
+    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice | CacheInvMonDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
         for dev in set(cache_devs):
             if dev.generic_type == "switch" and dev.swack_id is not None:

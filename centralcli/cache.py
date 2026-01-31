@@ -375,6 +375,10 @@ class CacheInvMonDevice(CentralObject):
         return hash(self.serial)
 
     @property
+    def generic_type(self):
+        return "switch" if self.type in ["cx", "sw"] else self.type
+
+    @property
     def assigned(self) -> bool:
         return bool(self._assigned)
 
