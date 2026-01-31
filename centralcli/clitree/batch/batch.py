@@ -13,7 +13,7 @@ from rich.markup import escape
 from centralcli import cache, cleaner, common, config, log, render, utils
 from centralcli.cache import CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys
+from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys, GroupDevTypes
 from centralcli.response import Response
 
 from . import add, delete, examples, update
@@ -585,6 +585,7 @@ def classic_subscribe(
 @app.command("subscribe" if config.glp.ok else "_subscribe", hidden=not config.glp.ok)
 def glp_subscribe(
     import_file: Path = common.arguments.import_file,
+    import_sites: bool = typer.Option(False, "--import-sites", help=f"indicates import file contains sites.  Devices associated with those sites will be re-subscribed. {render.help_block('import is expected to contain devices')}"),
     _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
     tags: list[str] = common.options.tags,
     sub: str = common.options.get(
@@ -592,7 +593,11 @@ def glp_subscribe(
         help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
         autocompletion=cache.sub_completion,
     ),  # TODO sub_completion ... get_sub_identifier add match capability based on subscription key, this is what is visible in GLP
+    site: str = common.options.get("site", help="Update subscription for devices associated with a specific site.  [dim italic]The subscription (matching existing tier) with the most remaining time is auto-selected if --sub not provided[/]"),
+    group: str = common.options.get("group", help="Update subscription for devices associated with a specific group.  [dim italic]The subscription (matching existing tier) with the most remaining time is auto-selected if --sub not provided[/]"),
+    dev_type: GroupDevTypes = typer.Option(None, "--dev-type", help="Only re-subscribe devices of a given type. [dim italic]Applies/Only valid with [cyan]--site and/or --group[/]", show_default=False,),
     show_example: bool = common.options.show_example,
+    no_refresh: bool = common.options.get("no_refresh", help="Forgo pre-command cache refresh, [dim italic]Applies when --site, --group, or --import-sites :triangular_flag: is provided[/]"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -602,18 +607,31 @@ def glp_subscribe(
 
     [cyan]--sub <subscription name|key|glp_id>[/] can be used to specify the subscription.  It will be applied to [bright_green]all[/] devices found in import [red italic](even if the device has a subsciption defined in the import)[/]
     [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
+
+    [cyan]--site[/] and/or [cyan]--group[/] Can be used to re-subscribe existing devices.  The subscription of the same tier with available subs and the most time remaining will be auto selected, or specify a specific subscription w/ the
+    [cyan]--sub[/] flag.
+
+
     """
     if show_example:
         render.console.print(examples.subscribe, emoji=True)
         return
+    if (site or group) and import_file:
+        common.exit("Invalid combination of Options/Arguments provide IMPORT_FILE (argument) or one of [cyan]--site[/], [cyan]--group[/].  Not both.")
 
-    if not import_file:
+    cache_site = None if not site else common.cache.get_site_identifier(site)
+    cache_group = None if not group else common.cache.get_group_identifier(group)
+
+    if cache_site or cache_group or (import_file and import_sites):
+        data = common.get_filtered_devices_w_inventory(refresh=not no_refresh, site=cache_site, group=cache_group, dev_type=dev_type, site_import=None if not import_file and import_sites else import_file)
+    elif import_file:
+        data = common._get_import_file(import_file, import_type="devices", subscriptions=True, text_ok=bool(sub))
+    else:
         common.exit(render._batch_invalid_msg("cencli batch assign subscriptions [OPTIONS] [IMPORT_FILE]"))
 
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
     tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
 
-    data = common._get_import_file(import_file, import_type="devices", subscriptions=True, text_ok=bool(sub))
     resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
 

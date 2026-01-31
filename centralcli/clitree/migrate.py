@@ -10,7 +10,7 @@ from time import sleep
 import pendulum
 import typer
 
-from centralcli import cache, common, config, log, render, utils
+from centralcli import common, config, render, utils
 from centralcli.cache import Cache
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import Session
@@ -47,16 +47,16 @@ def _write_migrate_file(data: list[dict[str, str]], cx_no_retain: bool = False, 
 def devices(
     to_workspace: str = common.arguments.dest_workspace,
     import_file: Path = common.arguments.get("import_file", help="A file containing devices to migrate"),
-    import_sites: bool = typer.Option(False, "--import-sites", help=f"indicates import file contains sites.  Devices associated withthose sites will be migrated. {render.help_block('import is expected to contain devices')}"),
+    import_sites: bool = typer.Option(False, "--import-sites", help=f"indicates import file contains sites.  Devices associated with those sites will be migrated. {render.help_block('import is expected to contain devices')}"),
     site: str = common.options.get("site", help="Migrate all devices associated with a given site"),
     group: str = common.options.get("group", help="Migrate all devices associated with a given group"),
     dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only migrate devices of a given type. [dim italic]Applies/Only valid with [cyan]--site and/or --group[/]", show_default=False,),
-    cx_no_retain: bool = typer.Option(False, "--no-cx-retain", help="Pre-provision CX to group by same name in dest workspace.  [dim red]CX existing config will [bold]NOT[/] be retained[/]"),
+    no_cx_retain: bool = typer.Option(False, "--no-cx-retain", help="Pre-provision CX to group by same name in dest workspace.  [dim red]CX existing config will [bold]NOT[/] be retained[/]"),
     show_example: bool = common.options.show_example,
     not_type: AllDevTypes = typer.Option(None, "--not-type", help="Exclude a specific device type [dim italic]Applies/Only valid with [cyan]--site and/or --group[/]"),
     not_group: str = typer.Option(None, "--not-group", help="Exclude devices belonging to a specific group [dim italic]Applies/Only valid with [cyan]--site and/or --group[/]"),
     no_group: bool = typer.Option(False, "--no-group", help="Do not pre-provision any devices to groups"),
-    no_refresh: bool = common.options.get("no_refresh", help="Forgo pre-command cache refresh, [dim italic]Applies when --site :triangular_flag: is provided[/]"),
+    no_refresh: bool = common.options.get("no_refresh", help="Forgo pre-command cache refresh, [dim italic]Applies when --site, --group, or --import-sites :triangular_flag: is provided[/]"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -83,10 +83,15 @@ def devices(
             render.console.print(examples.migrate_devices)
         return
     if (site or group) and import_file:
-        common.exit("Invalid combination of Options/Arguments provide IMPORT_FILE (argument) or --site.  Not both.")
+        common.exit("Invalid combination of Options/Arguments provide IMPORT_FILE (argument) or one of [cyan]--site[/], [cyan]--group[/].  Not both.")
     if group and not_group:
-        common.exit("Invalid combination of Options/Arguments provide --group or --not-group.  Not both.")
-
+        common.exit("Invalid combination of Options/Arguments provide [cyan]--group[/] or [cyan]--not-group[/].  Not both.")
+    if not to_workspace:
+        provide_str = (
+            "Provide [cyan]--example[/] to see example import file. [red blink]-or-[/]\n"
+            "Provide required [bright_red]to_workspace[/] argument along with either [bright_green]IMPORT_FILE[/] or at least one of [cyan]--site[/], [cyan]--group[/]"
+        )
+        common.exit(render._batch_invalid_msg("cencli migrate devices [OPTIONS] [IMPORT_FILE]", provide=provide_str))
 
     dest_workspace = config.workspaces.get(to_workspace)
     if not dest_workspace:
@@ -96,30 +101,17 @@ def devices(
     cache_group = None if not group else common.cache.get_group_identifier(group)
     _not_group  = None if not not_group else common.cache.get_group_identifier(not_group)
 
-    if cache_site or cache_group:
-        resp = cache.get_devices_with_inventory(device_type=dev_type, no_refresh=no_refresh)
-        if not resp:
-            log.error("Aborted.  Attempt to update the cache failed", caption=True)
-            render.display_results(resp, exit_on_fail=True)
-
-        data = resp.output.copy()
-        if cache_site:
-            data = [d for d in data if (d.get("site") or "") == cache_site.name]
-        if cache_group:
-            data = [d for d in data if (d.get("group_name", d.get("group")) or "") == cache_group.name]
-        if _not_group:
-            data = [d for d in data if (d.get("group_name", d.get("group")) or "") != _not_group.name]
-        if not_type:
-            data = [d for d in data if (d.get("type") or "") != not_type]
+    if cache_site or cache_group or (import_file and import_sites):
+        data = common.get_filtered_devices_w_inventory(refresh=not no_refresh, site=cache_site, group=cache_group, not_group=_not_group, dev_type=dev_type, not_dev_type=not_type, site_import=None if not import_file and import_sites else import_file)
     elif import_file:
-        data = common._get_import_file(import_file, import_type="devices" if not import_sites else "sites", text_ok=import_sites)
-        if import_sites:
-            cache_sites = [cache.get_site_identifier(s["name"]) for s in data]
-            data = [d for s in cache_sites for d in resp.output if (d.get("site") or "") == s.name]
+        data = common._get_import_file(import_file, import_type="devices")
     else:
         common.exit(render._batch_invalid_msg("cencli migrate devices [OPTIONS] [IMPORT_FILE]"))
 
-    migrate_file = import_file or _write_migrate_file(data, cx_no_retain=cx_no_retain, no_group=no_group)
+    if not data:
+        common.exit("No devices found to migrate given the provided filters / import file.")
+
+    migrate_file = import_file if (import_file and not import_sites) else _write_migrate_file(data, cx_no_retain=no_cx_retain, no_group=no_group)
 
     devs = utils.format_table(common._get_import_file(migrate_file, "devices"))
 
@@ -152,6 +144,7 @@ def devices(
     # common.cache = Cache(config=dest_config)
     # dest_api_clients = APIClients(config=config)
     config.workspace = to_workspace
+    # cache.set_config(config)
     common.cache = Cache(config=config)
     dest_session = Session(config.classic.base_url, workspace_name=to_workspace)
     dest_api = ClassicAPI(config=config)

@@ -202,7 +202,7 @@ class CLIOptions:
         self.banner_file: OptionInfo = typer.Option(None, "--banner-file", help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
         self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
         self.with_inv: OptionInfo = typer.Option(False, "-I", "--inv", help="Include device details from [green]GreenLake[/] Inventory", show_default=False,)
-        self.no_refresh: OptionInfo = typer.Option(False, "--no-refresh", help=f"Don't refresh the cache.  [dim]{'[default: Cache update is peformed prior to executing command]'}")
+        self.no_refresh: OptionInfo = typer.Option(False, "--no-refresh", help=f"Don't refresh the cache.  [dim]{escape('[default: Cache is updated]')}[/]")
         self.cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move")
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(

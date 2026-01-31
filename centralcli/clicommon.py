@@ -28,9 +28,10 @@ from rich.table import Table
 from rich.traceback import install
 
 from centralcli import config, log, render, utils
+from centralcli.cache import CacheSite
 from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import APIAction, MacFormat, dynamic_antenna_models, flex_dual_models
+from centralcli.constants import APIAction, GroupDevTypes, MacFormat, dynamic_antenna_models, flex_dual_models
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
@@ -720,6 +721,33 @@ class CLICommon:
 
             raise ValueError("get_time_range_caption() requires start when end is provided.  Use verify_time_range with end_offset to set a default when not provided by user")
 
+    def get_filtered_devices_w_inventory(self, refresh: bool = True, site: CacheSite = None, group: CacheGroup = None, not_group: CacheGroup = None, dev_type: GroupDevTypes = None, not_dev_type: GroupDevTypes = None, site_import: Path = None) -> list[dict[str, Any]]:
+        resp = self.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=not refresh)
+        if not resp:
+            log.error("Aborted.  Attempt to update the cache failed", caption=True)
+            render.display_results(resp, exit_on_fail=True)
+
+        if site or group:
+            data = resp.output.copy()
+            if site:
+                data = [d for d in data if (d.get("site") or "") == site.name]
+            if group:
+                data = [d for d in data if (d.get("group_name", d.get("group")) or "") == group.name]
+            if not_group:
+                data = [d for d in data if (d.get("group_name", d.get("group")) or "") != not_group.name]
+
+            if dev_type:
+                data = [d for d in data if (d.get("type") or "") == dev_type]
+            elif not_dev_type:
+                data = [d for d in data if (d.get("type") or "") != not_dev_type]
+        elif site_import:
+            site_data = self._get_import_file(site_import, import_type="sites", text_ok=True)
+            cache_sites = [self.cache.get_site_identifier(s["name"]) for s in site_data]
+            data = [d for s in cache_sites for d in resp.output if (d.get("site") or "") == s.name]
+        else:
+            raise TypeError("missing 1 required argument.  At least one of group, site, or site_import is required.")
+
+        return data
 
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
@@ -1232,7 +1260,8 @@ class CLICommon:
         return [*resp, *tag_resp, *group_resp]
 
 
-    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: bool = False, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
+        yes = yes if yes is not None else 0
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
         data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
         if not data:
@@ -1270,7 +1299,7 @@ class CLICommon:
         if warn and not migrate:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
 
-        warn = warn if not env.is_pytest else False  # bypass confirmation for test runs
+        warn = warn if not env.is_pytest and not yes > 1 else False  # bypass confirmation for test runs or
         render.confirm(yes=(not warn or migrate) and yes)
         if config.glp.ok:
             return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, api=api)
@@ -1921,15 +1950,12 @@ class CLICommon:
         return doc_ids
 
     def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
-        if config.glp.ok:
+        if config.glp.ok and not any([ui_only, cop_inv_only]):
             return self.glp_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)  # Note glp delete flow only deletes from GLP inventory not ui
         return self.classic_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
 
 
     def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
-        if any([ui_only, cop_inv_only]):
-            return self.classic_batch_delete_devices(data=data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
-
         api = api_clients.glp
         all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
         devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]
@@ -1939,7 +1965,7 @@ class CLICommon:
             if not devs:
                 self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
         word = "device" if len(devs) == 1 else f"{len(devs)} devices"
-        render.econsole.print(f"Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
+        render.econsole.print(f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
         render.econsole.print(
             "\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
             "\nUse [cyan]cencli batch archive devices ...[/] to archive devices, that's the closest thing possible to really deleting them."
@@ -1948,6 +1974,7 @@ class CLICommon:
 
         render.confirm(yes)
         return api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
+        # CACHE need to flip assigned to False for these devs in inventory cache
 
 
     def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
@@ -2013,8 +2040,8 @@ class CLICommon:
         # warn about devices that were not found
         if (mon_del_reqs or delayed_mon_del_reqs or cop_del_reqs) and not_found_devs:
             not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
-            render.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
-            render.econsole.print("[grey42 italic]They will be skipped[/]\n")
+            render.econsole.print(f"\n{emoji.warn} The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            render.econsole.print("[dim italic]They will be skipped[/]\n")
 
         if ui_only:
             _total_reqs = len(mon_del_reqs)
@@ -2031,9 +2058,9 @@ class CLICommon:
         cache_down_devs = [c for c in cache_mon_devs if c.status.lower() == 'down']
         confirm_devs = cache_found_devs if not ui_only else cache_down_devs
         sin_plural = f"[cyan]{len(confirm_devs)}[/] devices" if len(confirm_devs) > 1 else "device"
-        confirm_msg += [f"[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
+        confirm_msg += [f"{emoji.warn} [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
         if ui_only:
-            confirmation_devs = utils.summarize_list(cache_down_devs, max=40, color=None)
+            confirmation_devs = utils.summarize_list(cache_down_devs, max=40, color=None, pad=3).lstrip("\n")
             if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
                 render.econsole.print(
                     f"[cyan]{len([c for c in cache_mon_devs if c.status.lower() == 'up'])}[/] of the [cyan]{len(cache_mon_devs)}[/] found devices are currently [bright_green]online[/]. [dim italic]They will be skipped.[/]\n"
@@ -2147,11 +2174,12 @@ class CLICommon:
             if not res.devices:
                 continue
 
+            # TODO need to do validation and skip devices that are already assigned to the sub with the most remaining time.
             csub: CacheSub = res.cache_sub
             confirm_msg += [f"[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
-                confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
+                confirm_msg += [f"{emoji.warn} # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
             sub_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
 
         if sub_reqs and not self.cache.responses.sub:
@@ -2165,9 +2193,9 @@ class CLICommon:
 
         if _data.not_assigned_devs:
             confirm_msg += [
-                "\n[dark_orange3]\u26a0[/]  Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
+                f"\n{emoji.warn} Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
                 _data.warning_skip_not_assigned,
-                "\n[deep_sky_blue1]\u2139[/]  [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/]"
+                f"\n{emoji.info} [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/]"
             ]  # \u26a0 == :warning:, \u2139 = :information:
 
 
