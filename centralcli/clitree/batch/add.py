@@ -139,7 +139,7 @@ def devices(
         autocompletion=common.cache.sub_completion,
         hidden=not common.cache.config.glp.ok
     ),
-    yes: bool = common.options.yes,
+    yes: int = common.options.yes_int,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
