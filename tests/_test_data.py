@@ -395,6 +395,7 @@ test_files = [
     test_gen_bssid_xlsx_interim_file,
     test_gen_bssid_xlsx_out_file,
     test_gen_bssid_file_out,
+    test_gen_bssid_file.parent,
     gw_group_config_file,
     test_ap_ui_group_template,
     test_ap_ui_group_variables,

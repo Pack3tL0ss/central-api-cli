@@ -13,6 +13,7 @@ class GreenLakeServiceManagerAPI:
     def __init__(self, session: Session):
         self.session = session
 
+    # no cover: start  We only use my_services currently.
     async def get_service_managers(
         self,
         service_id: str = None,
@@ -86,11 +87,13 @@ class GreenLakeServiceManagerAPI:
 
         return await self.session.get(url, params=params)
 
+    # no cover: stop
+
     async def get_my_services(
         self,
         offset: int = 0,
         limit: int = 2000
-    ) -> Response:  # pragma: no cover returns 403 The token wasnt issued to perform operation
+    ) -> Response:
         url = "https://global.api.greenlake.hpe.com/service-catalog/v1beta1/my-services"
         params = {
             "offset": offset,
@@ -116,7 +119,7 @@ class GreenLakeServiceManagerAPI:
         self,
         offset: int = 0,
         limit: int = 2000
-    ) -> Response:  # pragma: no cover returns 403 The token wasnt issued to perform operation
+    ) -> Response:  # pragma: no cover
         url = "https://global.api.greenlake.hpe.com/service-catalog/v1beta1/service-offer-regions"
         params = {
             "offset": offset,

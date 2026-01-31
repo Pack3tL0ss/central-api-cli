@@ -210,12 +210,21 @@ def do_nothing():
     ...
 
 def cleanup_import_files():
+    # TODO all files in the test_file_dir are now OK to rm. can probably just iterdir through all of them.
     for file in test_files:
         if file.exists():
             if file.is_dir():
-                file.rmdir()  # must be empty
+                try:
+                    file.rmdir()  # must be empty
+                except OSError as e:  # pragma: no cover
+                    log.exception(f"{repr(e)} while attempting to remove {file.name} directory.")
             else:
                 file.unlink()
+
+    try:
+        TEST_FILE_DIR.rmdir()  # must be empty
+    except OSError as e:  # pragma: no cover
+        log.exception(f"{repr(e)} while attempting to remove test_file directory ({TEST_FILE_DIR}).")
 
 
 def setup():
@@ -240,7 +249,7 @@ def session_setup_teardown():
     yield from setup()
 
     # executed after test is run
-    teardown()
+    return teardown()
 
 
 @pytest.fixture(scope='function', autouse=True)
