@@ -1242,11 +1242,11 @@ class CLICommon:
             [utils.update_dict(_sub_to_id, sub, sub if utils.is_resource_id(sub) else self.cache.get_sub_identifier(sub, best_match=True).id) for sub in _subs]
             data = [{k: v if k != "subscription" else utils.unlistify(_sub_to_id[v]) for k, v in dev.items()} for dev in data]
 
-        resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, tags=tags, subscription_ids=subscription, cache=self.cache)
+        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, tags=tags, subscription_ids=subscription, cache=self.cache)
         # We send tags when devices are initially added, but if they fail because the device is already in GreenLake tags are not processed
         # So we need to send them in the update
         tag_resp = []
-        if any([r.is_already_claimed for r in resp]) and (tags or import_devs.has_tags):
+        if any([r.is_already_claimed for r in add_resp]) and (tags or import_devs.has_tags):
             tag_req_info = self._build_tag_reqs(import_devs, tags=tags)
             tag_resp = glp_api.session.batch_request(tag_req_info.requests)
 
@@ -1257,7 +1257,12 @@ class CLICommon:
             group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
             group_resp = api.session.batch_request(group_reqs)
 
-        return [*resp, *tag_resp, *group_resp]
+        # cache update.  Better to just query for the serials that were added vs parsing the async response.  Failure could indicate already claimed, which isn't really a failure
+        serial_numbers = [d["serial"] for d in data]
+        if serial_numbers:
+            asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
+
+        return [*add_resp, *tag_resp, *group_resp]
 
 
     def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
@@ -1951,14 +1956,14 @@ class CLICommon:
 
     def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         if config.glp.ok and not any([ui_only, cop_inv_only]):
-            return self.glp_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)  # Note glp delete flow only deletes from GLP inventory not ui
+            return self.glp_batch_delete_devices(data, yes=yes, force=force)  # Note glp delete flow only deletes from GLP inventory not ui
         return self.classic_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
 
 
-    def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+    def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, force: bool = False) -> List[Response]:  # force is ignored for glp flow, does not apply
         api = api_clients.glp
         all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
-        devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]
+        devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]  # retry_dev false means if the cache is outdated ui deletes may not occur for devs not in mon cache
         if None in devs:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Skipping {devs.count(None)} devices not found in [green]GreenLake[/]")
             devs = [d for d in devs if d is not None]
@@ -1973,11 +1978,34 @@ class CLICommon:
         )
 
         render.confirm(yes)
-        return api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
-        # CACHE need to flip assigned to False for these devs in inventory cache
+        glp_resp: list[Response] = api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
+        success_devs = [dev for r in glp_resp for dev in r.async_success_devices]
+        if success_devs:
+            inv_cache_devs = [self.cache.get_inv_identifier(d.id) for d in devs if d.id in success_devs]
+            cache_update_data = [{**dict(dev), "services": None, "subscription_key": None, "subscription_expires": None, "assigned": False} for dev in inv_cache_devs]
+            asyncio.run(self.cache.update_inv_db(cache_update_data))
+
+        mon_resp, mon_doc_ids = [], []
+        cache_mon_devs = [d for d in devs if d.status is not None]
+        if cache_mon_devs:
+            # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
+            mon_del_reqs = delayed_mon_del_reqs = []
+            mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+
+            if mon_del_reqs:
+                mon_resp = api_clients.classic.session.batch_request(mon_del_reqs)
+                mon_doc_ids += self._get_mon_doc_ids(mon_resp)
+            if delayed_mon_del_reqs:
+                log.info(f"{len(delayed_mon_del_reqs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offling.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
+
+            # Cache Updates
+            if mon_doc_ids:
+                asyncio.run(self.cache.update_dev_db(mon_doc_ids, remove=True))
+
+        return [*glp_resp, *mon_resp]
 
 
-    def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+    def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 

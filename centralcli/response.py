@@ -321,12 +321,22 @@ class Response:
         }
         if self.output:
             if isinstance(self.output, dict) and self.output.get("sourceResourceUri", "") == "AsyncOperationResource":
-                async_resp_fields = ["status", "startedAt", "endedAt", "result"]
-                output = {k.removesuffix("At"): self.output[k] if not k.endswith("At") else DateTime(pendulum.parse(self.output[k]).timestamp(), "mdyt") for k in async_resp_fields if k in self.output}
+                async_resp_fields = ["status", "startedAt", "endedAt", "result", "resultType"]
+                output = {k.removesuffix("At").replace("Type", "_type"): self.output[k] if not k.endswith("At") else DateTime(pendulum.parse(self.output[k]).timestamp(), "mdyt") for k in async_resp_fields if k in self.output}
                 summary = {**summary, **output}
             else:
                 summary["output"] = self.output
         return summary
+
+    @property
+    def async_success_devices(self) -> list[str]:
+        success_devs = self.summary.get("output", {}).get("async operation response", {}).get("result", {}).get("succeededDevices", [{}])
+        return [k for inner in success_devs for k in inner.values()]
+
+    @property
+    def async_failed_devices(self) -> list[str]:
+        failed_devs = self.summary.get("output", {}).get("async operation response", {}).get("result", {}).get("failedDevices", [{}])
+        return [k for inner in failed_devs for k in inner.values()]
 
     @property
     def is_already_claimed(self) -> bool:
