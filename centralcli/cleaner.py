@@ -1649,7 +1649,7 @@ def get_overlay_interfaces(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     return simple_kv_formatter(data)
 
-def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int = 0, format: TableFormat = "rich", name: str = None) -> list[dict]:
+def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int = 0, format: TableFormat = "rich") -> list[dict]:
     # TODO PlaceHolder logic, currently only support verbosity level 0
     verbosity_keys = {
         0: [
@@ -1682,15 +1682,6 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
             "cloud_auth",
         ]
     }
-
-
-    if name:
-        for field in {"essid", "name"}:
-            found = [w for w in data if w.get(field, "") == name]
-            if found:
-                verbosity = verbosity or 1
-                data = found
-                break
 
     # combine all keys from each verbosity level up to the verbosity level chosen
     if verbosity > max(verbosity_keys):

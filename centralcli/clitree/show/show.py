@@ -2224,7 +2224,13 @@ def _combine_wlan_properties_responses(groups: List[str], responses: List[Respon
 
     return resp
 
-
+# TODO break this into sep function, this made my head hurt.
+# multiple options.
+# show wlans with no flags:  should grab the summary (get_wlans) / else block below
+# show wlans -v: should get_full_wlan_list but isn't really verbose from the cleaners standpoint, we still want it to use rich
+#   and display horizontal. -vv to show more fields (cleaner verbosity 1), and -vvv to see all fields
+# Would also be good to fetch monitoring get_wlans output and combine those details with get_full_wlan_list, however the client count
+#   is the only additional info it provides.  Globally unless you specify group or swarm_id
 @app.command()
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
@@ -2291,37 +2297,62 @@ def wlans(
     }
 
     caption = []
-    if verbose == 1:
-        caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
-    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if name and filter_names else "rich")
+    verbose_caption = []
+    group_by = None
     pfx = "" if not name else f"Showing [green]1[/] ([cyan]{name}[/]) of "
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
         caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in group [cyan]{group}[/]"]
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     elif swarm:
         resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
         caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in swarm associated with [cyan]{_dev.name}[/]"]
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
     elif verbose:
         _ = api.session.request(common.cache.refresh_group_db)
         ap_group_names = [g.name for g in cache.ap_ui_groups]
         batch_req = [BatchRequest(api.configuration.get_full_wlan_list, g) for g in ap_group_names]
         batch_resp = api.session.batch_request(batch_req)
         resp = _combine_wlan_properties_responses(ap_group_names, batch_resp)
-        ssid_names = [wlan["essid"] for r in utils.listify(resp) if r.ok for wlan in r.output if "essid" in wlan]
-        unique_names = utils.unique(ssid_names)
-        caption = None if not ssid_names else [*caption, f"{pfx}[green]{len(ssid_names)} [dim italic]({len(unique_names)} unique SSIDs) across {len(ap_group_names)} AP groups."]
+        if resp.ok:
+            ssid_names = [wlan["essid"] for r in utils.listify(resp) if r.ok for wlan in r.output if "essid" in wlan]
+            unique_names = utils.unique(ssid_names)
+            caption = None if not ssid_names else [*caption, f"{pfx}[green]{len(ssid_names)} [dim italic]({len(unique_names)} unique SSIDs) across {len(ap_group_names)} AP groups."]
 
-        group_by = "group" if not sort_by else None
-        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, group_by=group_by, reverse=reverse, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt, name=name)
-    else:
+            group_by = "group" if not sort_by else None
+            if not name:
+                title = "All WLANs (SSIDs) by group"
+                verbose = min(0, verbose - 1)
+                verbose_caption += [f"{emoji.info} Use [cyan]-vv[/] to see additional fields. [cyan]-vvv[/] to see all fields."]
+    else:  # Summary response using get_wlans endpoint
         resp = api.session.request(api.monitoring.get_wlans, **params)
         caption = []
-        if resp and not name:
-            caption += [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
-        caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
-        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
+        if resp:
+            if not name:
+                caption += [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
+            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
+        tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, exit_on_fail=True, cleaner=cleaner.get_wlans)
+        return
+
+    if name and resp.ok:
+        found = None
+        for field in {"essid", "name"}:
+            found = [w for w in resp.output if w.get(field, "") == name]
+            if found:
+                if not verbose:
+                    verbose_caption += ["Use [cyan]-v[/] to see all fields."]
+                verbose = max(1, verbose + 1)
+                resp.output = found
+                break
+        if not found:
+            verbose = 0
+            verbose_caption.insert(f"{emoji.warn} WLAN Profile or SSID with name {name}, was [bold red]NOT FOUND[/].  Showing all found SSIDs")
+
+    if verbose and not name:
+        verbose_caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
+    caption = [*verbose_caption, *caption]
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, group_by=group_by, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
 
 
 @app.command()
