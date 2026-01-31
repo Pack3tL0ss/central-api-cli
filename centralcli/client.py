@@ -108,7 +108,7 @@ class Session():
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
-        self.running_spinners: List[str] = []
+        self.running_spinners: List[str] = []  # TODO this should probably be a class attribute of the Spinner class, which is already a singleton
         self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and ("greenlake" in self.base_url or ".api.central." in self.base_url))
 
     @cached_property
@@ -225,21 +225,22 @@ class Session():
         if spin_txt:
             if "retry" in spin_txt:
                 return spin_txt
-            elif "DEFAULT_SPIN_TXT" in spin_txt:
+            if spin_txt == DEFAULT_SPIN_TXT:
                 log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=self.config.debug)
-
 
             self.running_spinners = [*self.running_spinners, spin_txt]
         elif not self.running_spinners:  # pragma: no cover
             return "missing spin text"
 
-
         try:  # reformat for pagination multi-call.  There will be multiple spinners with the same base text w/ Request: <num> after the base text
-            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1 and ":" in self.running_spinners[0]:
-                return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
-
-        except Exception as e:
-            log.warning(f"DEV NOTE: {e.__class__.__name__} exception in combined spinner update")
+            if len(self.running_spinners) > 1:
+                if len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
+                    pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1]
+                    return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx}, {",".join(x.split(":")[1] for x in self.running_spinners[1:])}'.replace("...,", "...")
+                else:
+                    return f"{self.running_spinners[0]} [dim italic]Processing {len(self.running_spinners)} requests."
+        except Exception as e:  # pragma: no cover
+            log.exception(f"DEV NOTE: {repr(e)} exception in combined spinner update (Client.Session._get_spin_text)")
 
         return spin_txt if not self.running_spinners else self.running_spinners[0]
 
