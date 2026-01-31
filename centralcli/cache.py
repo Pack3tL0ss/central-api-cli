@@ -3200,7 +3200,7 @@ class Cache:
         )
         if isinstance(resp, CombinedResponse) and resp.ok:  # Can be Response | List[Response] if get_all_devices aborted due to failures
             # Any filters not in list below do not result in a cache update
-            filtered_resonse = True if any([label, serial, mac, model, stack_id, swarm_id, cluster_id, public_ip_address, status]) else False
+            filtered_resonse = True if any([serial, mac, model, stack_id, public_ip_address, status, swarm_id, label, cluster_id]) else False
             raw_data = await self.format_raw_devices_for_cache(resp)
             with console.status(f"preparing {len(resp)} records for cache update"):
                 _start_time = time.perf_counter()
@@ -3208,7 +3208,8 @@ class Cache:
                 raw_models = [*raw_models_by_type.aps, *raw_models_by_type.switches, *raw_models_by_type.gateways]
                 log.debug(f"prepared {len(resp)} records for dev cache update in {round(time.perf_counter() - _start_time, 2)}")
 
-            if dev_type:
+            # We combine existing cache data for these filters.  # TODO shouldn't be necessary.  Just add the 3 to filtered resp and use _add_update_devices
+            if any([dev_type, site, group]):
                 update_data = await self.prep_filtered_devs_for_cache(raw_models=raw_models, dev_type=dev_type, site=site, group=group)
             else:
                 update_data = [dev.model_dump() for dev in raw_models]
