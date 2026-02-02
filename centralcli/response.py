@@ -126,6 +126,7 @@ class Response:
         elapsed: Union[int, float] = None,
         data_key: str = None,
         caption: str | list[str] = None,
+        exit_code: int = None,
         mock_key_append: str | None = None,
     ):
         """Response Constructor
@@ -146,8 +147,10 @@ class Response:
             raw (Any, optional): raw response payload. Defaults to {}.
             status_code (int, optional): Response http status code. Defaults to None.
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
-            data_key: (str, optional): The key where the actual data is held in the response, typically a list[dict].
-            caption: (str | list[str], optional): Optional captions to be displayed with the response.
+            data_key (str, optional): The key where the actual data is held in the response, typically a list[dict].
+            caption (str | list[str], optional): Optional captions to be displayed with the response.
+            exit_code (int, optional):  Used to exit CLI with proper exit code, usually when resp is a combined respose w/ partial failure.
+                Defaults to None.  (exit_code is determined by resp status)
             mock_key_append: (str, optional): Used for testing.  A portion of payload is passed into Response object for the sake
                 of uniquely identifying mock responses.  This value is appended to the key when the response is captured in the mock response file.
         """
@@ -160,6 +163,7 @@ class Response:
         self.elapsed = elapsed or 0
         self.data_key = data_key
         self.caption = caption
+        self._exit_code = exit_code
         self.mock_key_append = mock_key_append  # used to create a more unique key in mock response file when using --capture-raw
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
@@ -293,7 +297,6 @@ class Response:
 
         return True
 
-
     @property
     def ok(self):
         return self.__bool__()
@@ -301,6 +304,14 @@ class Response:
     @ok.setter
     def ok(self, ok: bool):
         self._ok = ok
+
+    @property
+    def exit_code(self) -> int:
+        return self._exit_code if self._exit_code is not None else int(not self.ok)
+
+    @exit_code.setter
+    def exit_code(self, code: int):
+        self._exit_code = code
 
     @property
     def headers(self) -> Mapping:
@@ -351,7 +362,8 @@ class Response:
 
 
     def __repr__(self):  # pragma: no cover
-        return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
+        _exit_code_str = "" if not self.exit_code else f"|exit code: {self.exit_code}"
+        return f"<{self.__module__}.{type(self).__name__} ({self.error}{_exit_code_str}) object at {hex(id(self))}>"
 
     def __rich__(self):
         fg = "red" if not self.ok else "bright_green"

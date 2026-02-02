@@ -1161,7 +1161,7 @@ def display_results(
                     **cleaner_kwargs
                 )
 
-        if exit_on_fail and not all([r.ok for r in resp]):
+        if exit_on_fail and any([r.exit_code for r in resp]):
             raise typer.Exit(1)
 
     elif data:

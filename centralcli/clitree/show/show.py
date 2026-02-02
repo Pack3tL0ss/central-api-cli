@@ -1349,6 +1349,7 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     cfg_resp = api.session.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
     if not cfg_resp.ok:
         log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
+        resp.exit_code = 1
         return resp
 
     cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
