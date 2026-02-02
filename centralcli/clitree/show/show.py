@@ -39,7 +39,6 @@ from centralcli.constants import (
     DevTypes,
     DhcpArgs,
     EventDevTypeArgs,
-    GenericDeviceTypes,
     GenericDevTypes,
     InsightSeverity,
     LicenseTypes,
