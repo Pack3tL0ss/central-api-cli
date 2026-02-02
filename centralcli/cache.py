@@ -4200,6 +4200,15 @@ class Cache:
     def get_dev_identifier(
         self,
         query_str: str | Iterable[str],
+        retry: Literal[False],
+        silent: Literal[True],
+        exit_on_fail: Literal[False],
+    ) -> CacheDevice | None: ...  # pragma: no cover
+
+    @overload
+    def get_dev_identifier(
+        self,
+        query_str: str | Iterable[str],
         dev_type: list[constants.LibAllDevTypes],
         completion: Literal[True],
     ) -> list[CacheDevice]: ...  # pragma: no cover
