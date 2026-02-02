@@ -495,6 +495,13 @@ def test_show_dhcp_clients_gw_verbose():
     assert "API" in result.stdout
 
 
+def test_show_dhcp_clients_gw_verbose_fail_config_call():
+    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["name"], "-v"],)
+    capture_logs(result, env.current_test, expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠  Unable to provide additional DHCP reservation details" in result.stdout
+
+
 def test_show_dhcp_pools_gw():
     result = runner.invoke(app, ["show", "dhcp", "pools", test_data["dhcp_gateway"]["ip"]],)
     capture_logs(result, "test_show_dhcp_pools_gw")
@@ -512,7 +519,7 @@ def test_show_dhcp_pools_gw():
         [5, ("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
         [6, ("--site", test_data["ap"]["site"], "--ap", "--up", "--down"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --up and --down both being used
         [7, ("--site", test_data["ap"]["site"], "--ap", "--down", "--fast"), lambda r: "API" in r and "⚠" in r],  # ⚠ is for warning regarding --down and --fast both being used
-        [8, (test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
+        [8, (test_data["template_switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],  # need a switch that is not cx to hit all branches
         [9, (test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
         [10, (test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
         [11, ("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
@@ -537,6 +544,7 @@ def test_show_interfaces(idx: int, args: tuple[str], pass_condition: Callable):
         [3, "ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "⚠" in r and "Combination" in r, None],
         [4, "ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "500" in r, "cache_refresh"],
         [5, None, ("--ap", "--group", test_data["ap"]["group"]), lambda r: "calls failed" in r, "partial"],
+        [6, None, ("--ap", "--group", test_data["ap"]["group"]), lambda r: "Response" in r, "all_iface_calls"],
     ]
 )
 def test_show_interfaces_fail(idx: int, fixture: str | None | list[str], args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest, test_name_append: str | None):
@@ -909,20 +917,20 @@ def test_show_last():
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        (["--past", "5d"], lambda r: "Empty Response" in r or ("audit" in r and "id" in r)),
-        (["1"], lambda r: "Empty Response" in r or "API" in r),
-        (["audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"], lambda r: "Empty Response" in r or "API" in r),
-        (["--all"], lambda r: "Empty Response" in r or "API" in r),
-        (["--dev", test_data["ap"]["serial"], "-vv"], lambda r: "Empty Response" in r or "API" in r),
-        (["--dev", test_data["ap"]["name"], "--group", "ignored"], lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)),
-        (["--group", test_data["ap"]["group"],], lambda r: "Empty Response" in r or "API" in r),
+        [1, ("--past", "5d"), lambda r: "Empty Response" in r or ("audit" in r and "id" in r)],
+        [2, ("1",), lambda r: "Empty Response" in r or "API" in r],
+        [3, ("audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa",), lambda r: "Empty Response" in r or "API" in r],
+        [4, ("--all",), lambda r: "Empty Response" in r or "API" in r],
+        [5, ("--dev", test_data["ap"]["serial"], "-vv"), lambda r: "Empty Response" in r or "API" in r],
+        [6, ("--dev", test_data["ap"]["name"], "--group", "ignored"), lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)],
+        [7, ("--group", test_data["ap"]["group"]), lambda r: "Empty Response" in r or "API" in r],
     ]
 )
-def test_show_audit_logs(args: list[str], pass_condition: Callable):
+def test_show_audit_logs(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "audit", "logs", *args],)
-    capture_logs(result, "test_show_audit_logs")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 

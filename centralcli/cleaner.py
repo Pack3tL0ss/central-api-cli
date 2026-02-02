@@ -38,20 +38,12 @@ def _short_connection(value: str) -> str:
 
 
 def _serial_to_name(sernum: str | None) -> str | None:
-    if sernum is None:  #  have seen "target" of None in show audit logs response.
-        return sernum
-
     from centralcli import cache  # TODO circular import if placed at top review import logic
-
     if not utils.is_serial(sernum):
         return sernum
 
     match = cache.get_dev_identifier(sernum, retry=False, silent=True, exit_on_fail=False)
-    if not match:
-        return sernum
-
-    return match.name
-
+    return sernum if match is None else match.name
 
 def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | list[LibAllDevTypes] = None, summary_text: bool = False) -> str:
     if mac.count(":") != 5:
@@ -287,17 +279,6 @@ _short_key = {
     "power_denied_count": "denied count"
 }
 
-
-def ensure_common_keys(data: list[dict]) -> list[dict]:
-    try:
-        common_keys = []  # This preserves field order vs using set/intersection
-        _ = [common_keys.append(k) for inner in data for k in inner.keys() if k not in common_keys]
-        res = [{k: iface.get(k) for k in common_keys} for iface in data]
-    except Exception as e:  # pragma: no cover
-        log.exception(f"{repr(e)} occured in cleaner.ensure_common_keys.\n{e}")
-        return data
-
-    return res
 
 def strip_outer_keys(data: dict) -> list[dict[str, Any]] | dict[str, Any]:
     """strip unnecessary wrapping key from API response payload
@@ -745,8 +726,6 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
     """
     data = utils.listify(data)
     all_keys = utils.all_keys(data)
-    # common_keys = set.intersection(*map(set, data))
-    table_formats = ["csv", "rich", "tabulate"]
 
     # pre cleaned key values
     verbosity_keys = {
@@ -798,7 +777,7 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
 
     # strip any cols that have no value across all rows,
     # strip any keys that have no value regardless of other rows (dict lens won't match, but display is vertical)
-    data = utils.strip_no_value(data, aggressive=output_format not in table_formats)
+    data = utils.strip_no_value(data, aggressive=output_format not in TABULAR_FORMATS)
 
     data = sorted(data, key=lambda i: (i.get("site") or "", i.get("type") or "", i.get("name") or ""))
 
@@ -1418,15 +1397,13 @@ def sort_interfaces(interfaces: list[dict[str, Any]], interface_key: str= "port_
         return interfaces
 
 
-def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", filters: ShowInterfaceFilters = None, by_interface: bool = None) -> list[dict] | dict:
+def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", filters: ShowInterfaceFilters = None) -> list[dict] | dict:
     """Clean Output of interface endpoints for each device type.
 
     Args:
         data (list[dict] | dict): The API response payload
         verbosity (int, optional): verbosity, more fields displayed. Defaults to 0.
         dev_type (DevTypes, optional): One of ap, gw, cx, sw, switch. Defaults to "cx".
-        by_interface (bool, optional): By default if verbosity > 0 list[dict] will be converted to dict keyed by interface, set this to False to always return a list.
-            This is useful for multi-device interface listings.  Defaults to None.
 
     Returns:
         list[dict] | dict: Cleaned API response payload with less interesting fields removed
@@ -1487,7 +1464,6 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
 
     # API for AOS_SW always shows VLAN as 1
     if dev_type in ["sw", "switch"]:
-        # _ = verbosity_keys[0].pop(verbosity_keys[0].index("vlan"))
         data = [
             d if d.get("_dev_type", "") != "sw" and dev_type != "sw" else {
                 **d,
@@ -1498,10 +1474,7 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
     elif dev_type == "gw":
         verbosity_keys[0].insert(4, "trusted")
     elif dev_type == "ap" and data:
-        if "device" in data[0]:
-            data = [{"device": d["device"], **iface} for d in data for iface in d.get("ethernets", [])]
-        elif "ethernets" in data[0]:
-            data = data[0]["ethernets"]
+        data = [{"device": d["device"], **iface} for d in data for iface in d.get("ethernets", [])]
         verbosity_keys[0].insert(3, "macaddr")
         verbosity_keys[0].insert(11, "duplex_mode")
         for iface in data:
@@ -1524,15 +1497,13 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         key_order = [k for k in key_order if k in all_keys]  # strip any keys that don't exist for any interfaces
         data = [dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data]
         data = utils.strip_no_value(data, aggressive=verbosity==1)
-        if by_interface is not False:
-            key_field = "port number" if dev_type != "ap" else "name"
-            data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k not in [key_field, " dev type"]} for d in data if key_field in d}  # _dev_type is converted to " dev type" and is no longer needed
+
+        # arrange output as dictionary keyed by the interface for verbose listings
+        key_field = "port number" if dev_type != "ap" else "name"
+        data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k not in [key_field, " dev type"]} for d in data if key_field in d}  # _dev_type is converted to " dev type" and is no longer needed
+
 
     return data
-
-
-    # verbosity 0 will strip if all have no value for a field, 1 will strip any that lack a value as it's displayed vertically, 2+ will be vertical with all fields regardless of value
-    # return utils.strip_no_value(data, aggressive=verbosity==1)
 
 
 def get_switch_poe_details(data: list[dict[str, Any]], verbosity: int = 0, powered: bool = False, aos_sw: bool = False) -> list[dict[str, Any]]:
@@ -1706,10 +1677,15 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
             k: _simplify_value(wlan, k, wlan[k])
             for k in key_list if k in wlan
         }
+
         if ssid_data.get("name", "") == ssid_data.get("essid", ""):
             ssid_data["name"] = None
+        else:  # pragma: no cover  Currently no test data w/ diff profile name vs SSID  # TODO add a test SSID w/ such a scenario
+            ...
+
         if verbosity:
             ssid_data = _simplify_auth_keys(ssid_data)
+
         pretty_data += [ssid_data]
 
     # override default which swaps in unicode checkmark/X (for rich output)
@@ -1985,7 +1961,7 @@ def get_guests(data: list[dict[str, Any]], output_format: TableFormat = "yaml") 
             }
             for inner in data
     ]
-    all_keys = list(set([key for d in data for key in d.keys()]))
+    all_keys = list(utils.all_keys(data))
     key_order = [
         "portal",
         "name",
@@ -2023,7 +1999,7 @@ def show_ai_insights(data: list[dict[str, str | bool | int]], severity: InsightS
         "impact",
         "is_config_recommendation_insight"
     ]
-    all_keys = list(set([key for d in data for key in d.keys()]))
+    all_keys = list(utils.all_keys(data))
     field_order = [*field_order, *[k for k in all_keys if k not in field_order]]
     global _short_key
     _short_key["is_config_recommendation_insight"] = "config insight"
