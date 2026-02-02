@@ -18,9 +18,10 @@ if config.dev.mock_tests:
         "idx,glp_ok,fixture,args,pass_condition",
         [
             [1, False, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap"), lambda r: "code: 20" in r and "cache update ERROR" not in r],
-            [2, True, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap"), lambda r: "code: 20" in r and "cache update ERROR" not in r],
-            [3, False, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"],), lambda r: "code: 20" in r],
-            [4, True, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "--tags", "testtag1", "=", "''"), lambda r: "code: 20" in r],
+            [2, False, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"]), lambda r: "code: 20" in r and "cache update ERROR" not in r],
+            [3, True, "ensure_cache_group2", ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "group", test_data["test_devices"]["ap"]["group"], "-s", "foundation-ap"), lambda r: "code: 20" in r and "cache update ERROR" not in r],
+            [4, False, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"],), lambda r: "code: 20" in r],
+            [5, True, None, ("serial", test_data["test_devices"]["ap"]["serial"], "mac", test_data["test_devices"]["ap"]["mac"], "--tags", "testtag1", "=", "''"), lambda r: "code: 20" in r],
         ]
     )
     def test_add_device(ensure_no_inv_cache_test_ap, idx: int, glp_ok: bool, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -74,6 +75,7 @@ if config.dev.mock_tests:
             [2, True, ("--sub",), lambda r: "mac" in r],
             [3, True, ("--no-sub",), lambda r: "mac" in r],
             [4, True, ("-v",), lambda r: "mac" in r],
+            [5, True, ("--assigned",), lambda r: "mac" in r],
         ]
     )
     def test_show_inventory(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
@@ -140,12 +142,27 @@ if config.dev.mock_tests:
             [11, True, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch" in r.lower()],
         ]
     )
-    def test_show_subscriptions(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    def test_show_subscriptions(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
         config._mock(glp_ok)
         env.current_test = f"{env.current_test}-{'glp' if glp_ok else 'classic'}"
         result = runner.invoke(app, ["show", "subscriptions", *args])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
+        assert pass_condition(result.stdout)
+
+
+    @pytest.mark.parametrize(
+        "idx,glp_ok,args,pass_condition",
+        [
+            [1, False, (), lambda r: "Response" in r],
+            [2, True, (), lambda r: "ClientConnectorError" in r],
+        ]
+    )
+    def test_show_subscriptions_fail(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
+        config._mock(glp_ok)
+        result = runner.invoke(app, ["show", "subscriptions", *args])
+        capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+        assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
 

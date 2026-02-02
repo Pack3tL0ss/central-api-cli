@@ -524,7 +524,7 @@ def test_cleaner(idx: int, func: Callable, kwargs: dict, pass_condition: Callabl
     resp = func(**kwargs)
     try:
         assert pass_condition(resp)
-    except AssertionError as e:
+    except AssertionError as e:  # pragma: no cover
         log.inspect(f"{env.current_test}-{idx} FAILED.  {repr(e)}", resp)
 
 

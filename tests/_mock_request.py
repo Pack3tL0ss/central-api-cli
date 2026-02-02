@@ -117,6 +117,7 @@ def _build_response(
 class TestResponses:
     used_responses: list[int] = []
     missing_mocks: list[str] = []
+    last_rl: int = 5000
 
     def __init__(self):
         self.responses = self._get_responses_from_capture_file()
@@ -136,10 +137,18 @@ class TestResponses:
             # Render the template with the dates
             return json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months))
 
-    @staticmethod
-    def _adjust_payload(res: dict, url_path: str) -> dict:
+    @property
+    def next_rl(self) -> int:
+        TestResponses.last_rl -= 1
+        return self.last_rl
+
+    def _adjust_mock_response(self, res: dict, url_path: str) -> dict:
+        # some payloads return the last part of the path i.e. the serial number.
         if isinstance(res.get("payload"), str) and res.get("url", "").split("/")[-1] == res["payload"]:
             res["payload"] = url_path.split("/")[-1]
+
+        if res["headers"].get("X-RateLimit-Remaining-day"):
+            res["headers"]["X-RateLimit-Remaining-day"] = str(self.next_rl)
 
         return res
 
@@ -177,13 +186,13 @@ class TestResponses:
                         raise str_to_exc[matched_val]
 
                 candidates = utils.listify(matched_val)
-                return (True, [{**self._adjust_payload(c, url_path=path), "url": path, "method": method} for c in candidates])
+                return (True, [{**self._adjust_mock_response(c, url_path=path), "url": path, "method": method} for c in candidates])
 
         key = url.replace("/", "_").lstrip("_")
         ok_responses = self.responses.get("ok_responses", {})
 
         # strip audit_trail id from url, so any id will match.  this is for showing audit details for a specific log id.
-        if "_audit_trail_" in key:
+        if "_audit_trail_" in key:  # TODO can prob remove logic now that we support regex
             key = f'{key.split("_audit_trail_")[0]}_audit_trail_'
             candidates = [v for k, v in ok_responses.get(method, {}).items() if key in k]
             return (False, [candidates[0]]) if candidates else (False, [])
@@ -219,7 +228,7 @@ class TestResponses:
         if not matched_res:
             return (False, [])
 
-        res = self._adjust_payload(matched_res, url_path=path)
+        res = self._adjust_mock_response(matched_res, url_path=path)
         return (False, [{**res, "url": path, "method": method}])
 
     @property
@@ -252,7 +261,7 @@ class TestResponses:
 
         log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed (418) response.")  # pragma: no cover
         if not method == "GET" and url.startswith("/configuration/v2/wlan/"):  # TODO verify what a GET_/configuration/v2/wlan/<GROUP>/<ssid> response looks like when the SSID is not found.
-            self.missing_mocks += [key]
+            self.missing_mocks += [key]  # pragma: no cover
         return {
             "url": url,
             "method": method,

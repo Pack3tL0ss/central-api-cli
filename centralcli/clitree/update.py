@@ -280,7 +280,7 @@ def config_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    if group_dev.lower() in ["cencli", "self"]:
+    if group_dev.lower() in ["cencli", "self"]:  # pragma: no cover  required tty
         utils.open_file_with_editor(config.file)
         common.exit(code=0)
 

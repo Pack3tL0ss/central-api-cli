@@ -72,7 +72,7 @@ class UnsetType:
         return "UNSET"  # pragma: no cover
 
     def __bool__(self):
-        return False
+        return False  # pragma: no cover
 
 UNSET = UnsetType()
 
