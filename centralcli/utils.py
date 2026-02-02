@@ -6,8 +6,8 @@ import binascii
 import json
 import logging
 import os
-import subprocess as sp
 import string
+import subprocess as sp
 import sys
 import urllib.parse
 from datetime import datetime
@@ -26,12 +26,14 @@ from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
 
-from centralcli.typedefs import StrOrURL, StrEnum
+from centralcli.typedefs import StrEnum, StrOrURL
 
 if TYPE_CHECKING:
-    from .typedefs import PrimaryDeviceTypes
-    from centralcli.cache import CentralObject
     from multidict import CIMultiDictProxy
+
+    from centralcli.cache import CentralObject
+
+    from .typedefs import PrimaryDeviceTypes
 
 # removed from output and placed at top (provided with each item returned)
 CUST_KEYS = ["customer_id", "customer_name"]
@@ -380,7 +382,13 @@ class Utils:
 
         return data
 
-    def all_keys(self, data: list[dict[str, Any]], with_value: bool = False) -> set[str]:
+    @overload
+    def all_keys(self, data: list[dict[str, Any]], with_value: Literal[False]) -> set[str]: ...  # pragma: no cover
+
+    @overload
+    def all_keys(self, data: list[dict[str, Any]], with_value: Literal[True]) -> list[str]: ...  # pragma: no cover
+
+    def all_keys(self, data: list[dict[str, Any]], with_value: bool = False) -> set[str] | list[str]:
         if not with_value:
             return {key for key in chain.from_iterable(data)}
         else:
