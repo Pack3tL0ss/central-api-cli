@@ -79,7 +79,7 @@ from centralcli.constants import (
 )
 from centralcli.models.cache import Device
 from centralcli.objects import DateTime, ShowInterfaceFilters
-from centralcli.response import CombinedResponse, Response
+from centralcli.response import BatchResponse, Response
 from centralcli.strings import cron_weekly, emoji
 
 from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
@@ -166,8 +166,8 @@ def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
     return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
 
 def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, has_filters: bool = False) -> str:
-    # has_filters only applies to devices w/ inventory details it squelches the not on devs lacking a name
-    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
+    # This is only for captions from monitoring UI, potentially with inventory data.  Inventory only resp is
+    # has_filters only applies to devices w/ inventory details it squelches the not on devs lacking a name inventory response caption is done in refresh_inv_db
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
             status_by_type = _get_counts_with_inv(resp.output)
@@ -206,8 +206,6 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
         _cnt_str = _cnt_str + ", ".join(
             [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
         )
-        if "(" not in _cnt_str:
-            inventory_only = True
     else:
         _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
 
@@ -222,7 +220,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
     caption = f"[reset]{'Counts' if not status else f'{status.capitalize()} Devices'}: {_cnt_str}"
-    if inventory and not inventory_only and not has_filters:
+    if inventory and not has_filters:
         caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
@@ -293,40 +291,40 @@ def _get_details_for_specific_devices(
         devices: list[str],
         dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
-        do_table: bool = False
-    ) -> Tuple[Response | List[Response], str]:
+        tabular_output: bool = False
+    ) -> Tuple[BatchResponse, str]:
         caption = None
 
         # Build requests
         devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
-        batch_res = api.session.batch_request(reqs)
+        batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
         if include_inventory:  # Combine results with inventory results
             _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
-            for r, dev in zip(batch_res, devs):
+            for r, dev in zip(batch_resp.responses, devs):
                 if r.ok:
                     r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
                 else:
                     log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
 
-        _update_cache_for_specific_devices(batch_res, devs)
+        _update_cache_for_specific_devices(batch_resp.responses, devs)
 
-        if do_table and len(dev_types) > 1:
-            _output = [r.output for r in batch_res]
-            resp = batch_res[-1]
-            resp.output = _output
-            resp.output = resp.table
+        if tabular_output and len(dev_types) > 1 and len(batch_resp.passed) > 1:
+            _output = [r.output for r in batch_resp.passed]
+            batch_resp.display = batch_resp.last
+            batch_resp.display.output = _output
+            batch_resp.display.output = batch_resp.display.table
             caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
-        else:
-            resp = batch_res
+        # else:
+        #     resp = batch_resp.responses
 
         if "cx" in dev_types:
             caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
 
-        return resp, caption
+        return batch_resp, caption
 
 # TODO break this into multiple functions
 def show_devices(
@@ -384,11 +382,17 @@ def show_devices(
         dev_type = lib_to_api(dev_type)
 
     default_tablefmt = "rich" if not verbosity else "yaml"
+    exit_code = 0
 
     if devices:  # cencli show devices <device iden>
-        verbosity = verbosity or 99  # specific device implies verbose output vertically
+        verbosity = verbosity or 99  # specific device implies verbose output vertically, this is set for cleaner
         default_tablefmt = "yaml"
-        resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
+        batch_resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, tabular_output=do_table or do_csv)
+        resp = batch_resp.display or batch_resp.responses
+        exit_code = batch_resp.exit_code
+        if (do_table or do_csv) and batch_resp.failed and len(batch_resp.passed) <= 1:  # override tabular output if failures occured otherwise too many cols for horiz display
+            log.warning("Output switched to vertical due to failures")
+            do_table = do_csv = False
     elif dev_type == "all":  # cencli show all | cencli show devices
         resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, has_filters=bool(filter_params))
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
@@ -434,6 +438,7 @@ def show_devices(
         version=version,
         filter_params=filter_params,
     )
+    common.exit(code=exit_code)
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     if not resp.output.get("logo"):
@@ -940,49 +945,7 @@ def swarms(
 
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
-class ParsedCombinedResp:
-    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
-        self.dev_type = dev_type
-        self.passed = passed
-        self.failed = failed
-        self.output = output
-        self.raw = raw
-        self.elapsed = elapsed
-        self.verbosity = verbosity
 
-    @property
-    def to_dict(self) -> dict:
-        return {"response": self.response._response, "output": self.clean, "raw": self.raw, "elapsed": self.elapsed}
-
-    @property
-    def clean(self):
-        _clean = sorted(
-            [inner for r in self.output for inner in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)],
-            key=lambda d: d["device"]
-        )
-        return cleaner.ensure_common_keys(_clean)
-
-    @property
-    def response(self):
-        return sorted(self.passed or self.failed, key=lambda r: r.rl)[0]
-
-def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response], verbosity: int = 0) -> ParsedCombinedResp:
-    _failed = [r for r in responses if not r.ok]
-    _passed = responses if not _failed else [r for r in responses if r.ok]
-
-    if _failed:
-        try:
-            log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
-        except Exception:  # pragma: no cover
-            log.warning("Incomplete output, failures occured, see log")
-
-
-    output = [r.output for r in _passed]
-    raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
-    elapsed = sum(r.elapsed for r in _passed)
-
-    parsed = ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed, verbosity=verbosity)
-    return {**parsed.to_dict}
 
 def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str]]:
     if isinstance(data, dict) and "ethernets" in data:  # single AP output
@@ -993,14 +956,16 @@ def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters,
         filter_caption = None
         if filters.slow:
             filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) < 1000]
-            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [bright_magenta]{len(filtered)}[/]"
+            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [spring_green1]{len(filtered)}[/]"
         elif filters.fast:
             filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) >= 2500]
-            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [bright_magenta]{len(filtered)}[/]"
+            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [spring_green1]{len(filtered)}[/]"
         elif filters.up:
             filtered = [d for d in data if d.get("status", "") == "Up"]
         elif filters.down:
             filtered = [d for d in data if d.get("status", "") == "Down"]
+        else:  # pragma: no cover  filters checked before send here, but still prefer it explicit here.
+            ...
 
         if not filtered:
             log.warning("Filters resulted in no results. Showing unfiltered output", caption=True)
@@ -1010,8 +975,8 @@ def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters,
             caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
 
     except Exception as e:  # pragma: no cover
-        log.exception(f"{e.__class__.__name__} in do_interface_filters\n{e}")
-        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub", caption=True)
+        log.exception(f"{repr(e)} in do_interface_filters")
+        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub.", caption=True)
 
     return data, caption
 
@@ -1125,15 +1090,29 @@ def interfaces(
         render.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
         render.confirm(yes)
 
-    batch_resp = api.session.batch_request(batch_reqs)
+    batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
+    if not batch_resp.passed:  # all failed
+        return render.display_results(batch_resp.responses, tablefmt="action")
 
     # We need to include name and dev_type from cache for multi-device listings (not included in payload of all the interface endpoints)
-    if len(batch_resp) > 1:
-            for d, r in zip(devs, batch_resp):
-                if r.ok:
-                    r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in utils.listify(r.output)]
+    skip_failed = []
+    # if len(batch_resp) > 1:
+    for d, r in zip(devs, batch_resp.responses):
+        if r.ok:
+            if "member_port_detail" in r.output:  # vsf stack
+                normal_ports = [p for mbr in r.output["member_port_detail"] for p in mbr["ports"]]
+                stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in r.output["member_port_detail"] for p in sw.get("stack_ports", [])]
+                iface_list = cleaner.sort_interfaces([*normal_ports, *stack_ports])
+            else:
+                iface_list = utils.listify(r.output)
 
-    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose,))
+            r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in iface_list]
+        else:
+            skip_failed += [f"{d.summary_text}|[red]{r.error}[/]"]
+
+    if skip_failed:
+        log.warning(f"Incomplete output!! {len(skip_failed)} calls failed.  Skipped Devices:", caption=True)
+        [log.info(skip_msg, caption=True) for skip_msg in skip_failed]
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
@@ -1141,36 +1120,36 @@ def interfaces(
     caption = []
     min_width = None
     if dev_type == "switch":
-        if "sw" in [d.type for d in devs] and resp.ok:
-            dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
-            caption = ["[deep_sky_blue1]\u2139[/]  Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]  # \u2139 = :information:
-        if "cx" in [d.type for d in devs] and resp.ok:
-            caption = ["[deep_sky_blue1]\u2139[/]  [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
+        dev_types = [d.type for d in devs]
+        if len(dev_types) > 1 and tablefmt in cleaner.TABULAR_FORMATS:
+            batch_resp.output = utils.format_table(batch_resp.output)  # so a combined listing including cx and sw have correct dimensions for tabular display
+        if "sw" in dev_types:
+            caption = [f"{emoji.info} Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]
+        if "cx" in dev_types:
+            caption = [f"{emoji.info} [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
             min_width = 106
+    try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
+        ifaces = batch_resp.output if "ethernets" not in batch_resp.output else batch_resp.output["ethernets"]
+        ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
+        _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i.get("status") is None]))
+        if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
+            word = "devices" if len(_invalid_payload) > 1 else "device"
+            log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
+            ifaces = [i for i in ifaces if i.get("status") is not None]
 
-    if resp:
-        try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
-            ifaces = resp.output if "ethernets" not in resp.output else resp.output["ethernets"]
-            ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
-            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i["status"] is None]))
-            if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
-                word = "devices" if len(_invalid_payload) > 1 else "device"
-                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
-                ifaces = [i for i in ifaces if i["status"] is not None]
+        up_ifaces = [i["status"].lower() for i in ifaces].count("up")
+        down_ifaces = len(ifaces) - up_ifaces
 
-            up_ifaces = [i["status"].lower() for i in ifaces].count("up")
-            down_ifaces = len(ifaces) - up_ifaces
+        caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
+    except Exception as e:  # pragma: no cover
+        log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
 
-            caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
-        except Exception as e:  # pragma: no cover
-            log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
-
-        if filters:
-            resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
+    if filters:
+        batch_resp.output, caption = do_interface_filters(batch_resp.output, filters=filters, caption=caption)
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
     render.display_results(
-        resp,
+        batch_resp.display or batch_resp.responses,
         tablefmt=tablefmt,
         title=title,
         caption=caption,
@@ -1181,10 +1160,11 @@ def interfaces(
         output_by_key=None,
         group_by=None if len(batch_resp) <= 1 else "device",
         min_width=min_width,
-        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
+        cleaner=cleaner.show_interfaces,
         verbosity=verbose,
         dev_type=dev_type,
     )
+    common.exit(code=batch_resp.exit_code)
 
 
 @app.command()

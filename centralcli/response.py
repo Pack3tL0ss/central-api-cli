@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING, Callable
 
 from aiohttp import ClientResponse
 import pendulum
@@ -579,13 +579,49 @@ class BatchResponse:
     _rl: RateLimit
     _exit_code: int = 0
 
-    def __init__(self, responses: list[Response]):
+    def __init__(self, responses: list[Response], output_formatter: Callable = None):
         self.responses = responses
+        self._display_response: Response | None = None
+        self._output_formatter = output_formatter
+        self._output: list[dict] = None
         BatchResponse._rl = self.last_rl
         BatchResponse._exit_code = BatchResponse._exit_code or self.exit_code
 
     def __bool__(self):  # pragma: no cover
         return self.ok
+
+    def __len__(self):
+        return len(self.responses)
+
+    def get_output(self) -> list[dict] | None:
+        output = [item for r in self.responses if r.ok for item in utils.listify(r.output)] or None
+        if output and self._output_formatter:
+            output = self._output_formatter(output)
+        return output
+
+    @property
+    def display(self) -> Response | None:
+        if self._display_response is not None:
+            return self._display_response
+        return self.last
+
+    @display.setter
+    def display(self, response: Response):
+        self._display_response = response
+
+    @property
+    def output(self) -> list[dict] | None:
+        if self._output is not None:
+            return self._output
+        else:
+            output = self.get_output()
+            self.display.output = output
+            return output
+
+    @output.setter
+    def output(self, output: list[dict]):
+        self._output = output
+        self.display.output = output
 
     @cached_property
     def elapsed(self) -> float:  # pragma: no cover
@@ -603,7 +639,7 @@ class BatchResponse:
     def last(self):
         last_resp = [*self.failed, *self.passed][-1]
         raw = self.raw
-        resp = Response(last_resp._response, raw=raw)
+        resp = Response(last_resp._response, output=self.get_output(), raw=raw)
         resp.rl = self.last_rl
         return resp
 

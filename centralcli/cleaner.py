@@ -38,10 +38,10 @@ def _short_connection(value: str) -> str:
 
 
 def _serial_to_name(sernum: str | None) -> str | None:
-    if sernum is None:  #  pragma: no cover  show audit logs ... have seen "target" of None
+    if sernum is None:  #  have seen "target" of None in show audit logs response.
         return sernum
-    # TODO circular import if placed at top review import logic
-    from centralcli import cache
+
+    from centralcli import cache  # TODO circular import if placed at top review import logic
 
     if not utils.is_serial(sernum):
         return sernum
@@ -613,7 +613,7 @@ def get_clients(
 
 
 def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
-    all_keys = list(set([ik for k in data for ik in k.keys()]))
+    all_keys = list(utils.all_keys(data))
     ip_word = "ipv4" if "ipv4" in all_keys else "ip_address"
     mask_word = "ipv4_mask" if "ipv4_mask" in all_keys else "subnet_mask"
 
@@ -641,12 +641,8 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
             inner["mem_pct"] = f'{mem_pct}%'
 
     # concat stack_member_id and switch_role
-    stack_fields = ["stack_member_id", "switch_role"]
-    stack_remove_fields = ["stack_member_id"]
-    if all([key in all_keys for key in stack_fields]):
-        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] < 3 else f"{v} ({inner.get('stack_member_id')}:{SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
-    elif "switch_role" in all_keys:
-        data = [{k: v if k != "name" or "switch_role" not in inner or inner["switch_role"] or 0 < 3 else f"{v} ({inner.get('stack_member_id')}:{SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k not in stack_remove_fields} for inner in data]
+    if "switch_role" in all_keys:
+        data = [{k: v if k != "name" or "switch_role" not in inner or (inner["switch_role"] or 0) < 3 else f"{v} ({inner.get('stack_member_id')}:{SwitchRolesShort(inner['switch_role']).name})" for k, v in inner.items() if k != "stack_member_id"} for inner in data]
 
     to_front = order or [
         "vlan_id",
@@ -748,7 +744,7 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
         list[dict[str, Any]] | dict[str, Any]: The cleaned data with consistent field heading, and human readable values.
     """
     data = utils.listify(data)
-    all_keys = set([k for inner in data for k in inner.keys()])
+    all_keys = utils.all_keys(data)
     # common_keys = set.intersection(*map(set, data))
     table_formats = ["csv", "rich", "tabulate"]
 
@@ -774,6 +770,9 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
     }
     if "services" not in all_keys:  # indicates inventory is part of the listing
         verbosity_keys[0].insert(10, "uptime") # more space if inventory not in listing so provide uptime.
+    elif "id" in all_keys and output_format in ["rich", "tabulate"]:  # glp device ids take a lot of space, if format is horizontal nix them
+        data = [{k: v for k, v in inner.items() if k != "id"} for inner in data]
+
     if "type" not in all_keys:  # indicates data is for single device type. typically allows more space
         verbosity_keys[0].insert(10, "cpu_utilization")
         verbosity_keys[0].insert(10, "mem_pct")
@@ -1432,14 +1431,6 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
     Returns:
         list[dict] | dict: Cleaned API response payload with less interesting fields removed
     """
-    if isinstance(data, list) and data and "member_port_detail" in data[0]:  # switch stack
-        common = {"device": data[0]["device"], "_dev_type": data[0]["_dev_type"]}
-        normal_ports = [{**common, **p} for sw in data[0]["member_port_detail"] for p in sw["ports"]]
-        stack_ports = [{**common, **{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in data[0]["member_port_detail"] for p in sw.get("stack_ports", [])]
-        data = sort_interfaces([*normal_ports, *stack_ports])
-    else:
-        data = utils.listify(data)
-
     filters = filters if filters is not None else ShowInterfaceFilters()
 
     # TODO verbose and non-verbose
@@ -1528,14 +1519,14 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         ]
         data = utils.strip_no_value(data)
     else:
-        all_keys = list(set([k for iface in data for k in iface.keys()]))
+        all_keys = utils.all_keys(data)
         _ = [key_order.append(k) for k in all_keys if k not in key_order]  # append any additional keys in payload to end of key_order
         key_order = [k for k in key_order if k in all_keys]  # strip any keys that don't exist for any interfaces
-        key_field = "port number" if dev_type != "ap" else "name"
         data = [dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data]
         data = utils.strip_no_value(data, aggressive=verbosity==1)
         if by_interface is not False:
-            data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k != key_field} for d in data}
+            key_field = "port number" if dev_type != "ap" else "name"
+            data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k not in [key_field, " dev type"]} for d in data if key_field in d}  # _dev_type is converted to " dev type" and is no longer needed
 
     return data
 
@@ -1760,7 +1751,7 @@ def get_switch_stacks(data: list[dict[str, str]], status: StatusOptions = None, 
     data = [d for d in data if matches_filter(d)]
 
     if before and not data:
-        data = "\nNo stacks matched provided filters"
+        return "\nNo stacks matched provided filters"
 
     data = utils.strip_no_value(data)
     return simple_kv_formatter(data)
@@ -1915,11 +1906,10 @@ def get_swarm_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, Any
 
     data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
 
-    # if ap name == swarm_name no need to include swarm_name
+    # if ap name == swarm_name for all records... no need to include swarm_name
     if all([inner.get("name", "name") == inner.get("swarm_name", "swarm_name") for inner in data]):
         data = [{k: v for k, v in inner.items() if k != "swarm_name"} for inner in data]
-        if "swarm_name" in key_order:
-            _ = key_order.pop(key_order.index("swarm_name"))
+        _ = key_order.pop(key_order.index("swarm_name"))
 
     global _short_key
     _short_key = {**_short_key, "firmware_version": "running version", "is_stack": "stack", "device_status": "status", "status": "fw status"}
