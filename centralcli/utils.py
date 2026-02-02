@@ -12,6 +12,7 @@ import sys
 import urllib.parse
 from datetime import datetime
 from enum import Enum
+from itertools import chain
 from pathlib import Path
 from random import choice
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
@@ -379,16 +380,11 @@ class Utils:
 
         return data
 
-    @staticmethod
-    def all_keys(data: list[dict[str, Any]], with_value: bool = False) -> list[str]:
-        all_keys = []
-        for d in data:
-            if not with_value:
-                [all_keys.append(k) for k in d.keys() if k not in all_keys]
-            else:
-                [all_keys.append(k) for k, v in d.items() if (v or isinstance(v, (bool, int))) and k not in all_keys]
-
-        return all_keys
+    def all_keys(self, data: list[dict[str, Any]], with_value: bool = False) -> set[str]:
+        if not with_value:
+            return {key for key in chain.from_iterable(data)}
+        else:
+            return list(chain.from_iterable(self.strip_no_value(data, aggressive=True)))
 
     def format_table(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
