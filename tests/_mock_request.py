@@ -123,19 +123,39 @@ class TestResponses:
         self.responses = self._get_responses_from_capture_file()
 
     @staticmethod
-    def _get_responses_from_capture_file() -> list[dict[str, dict[str, Any]]]:
+    def _convert_event_ts(res: dict) -> dict:
+        if "events" not in res["payload"]:
+            return res
+
+        _events = [
+            {
+                k: v if k != "ts" else int(v) for k, v in r.items()
+            }
+            for r in res["payload"]["events"]
+        ]
+        res["payload"]["events"] = _events
+        return res
+
+    def _get_responses_from_capture_file(self) -> list[dict[str, dict[str, Any]]]:
         if not config.closed_capture_file.exists():
             return {}  # pragma: no cover
         else:
             now = datetime.datetime.now(tz=ZoneInfo("UTC"))
             in_five_months = now + datetime.timedelta(days=5 * 30)  # approx
             in_two_months = now + datetime.timedelta(days=2 * 30)  # approx
+            _three_hours_ago = now - datetime.timedelta(hours=3)
+            three_hours_ago_ts = int(_three_hours_ago.timestamp())
             # Set up Jinja2 environment
             j2env = Environment(loader=FileSystemLoader(config.closed_capture_file.parent)) # Assuming template is in the same directory
             template = j2env.get_template(config.closed_capture_file.name)
 
             # Render the template with the dates
-            return json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months))
+            mocks = json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months, three_hours_ago_ts=three_hours_ago_ts))
+            # _ok_responses_get = [res if "events" not in res["payload"] else self._convert_event_ts(res) for res in mocks["ok_responses"]]
+            _ok_responses_get = {url_key: self._convert_event_ts(mocks["ok_responses"]["GET"][url_key]) for url_key in mocks["ok_responses"]["GET"]}
+            mocks["ok_responses"]["GET"] = _ok_responses_get
+
+            return mocks
 
     @property
     def next_rl(self) -> int:
