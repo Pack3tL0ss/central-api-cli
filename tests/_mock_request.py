@@ -142,17 +142,30 @@ class TestResponses:
         TestResponses.last_rl -= 1
         return self.last_rl
 
-    def _adjust_mock_response(self, res: dict, url_path: str) -> dict:
-        # some payloads return the last part of the path i.e. the serial number.
+    @staticmethod
+    def _get_response_hash(resp: dict) -> int:
+        """Calculate hash of dict response - minus rate limit field which is updated with every response."""
+        _headers = {k: v for k, v in resp["headers"].items() if k != "X-RateLimit-Remaining-day"}
+        _resp = {**resp, "headers": _headers}
+        _hash = abs(hash(str(_resp)))  #  / 1_000_000
+        return _hash
+
+    def _adjust_mock_response(self, res: dict, url_path: str, method: str, ) -> dict:
+        # adjust payload.  some payloads return the last part of the path i.e. the serial number.  We can grab that from the url
         if isinstance(res.get("payload"), str) and res.get("url", "").split("/")[-1] == res["payload"]:
             res["payload"] = url_path.split("/")[-1]
+
+        # ensure method and url in matched mock response matches the request.
+        res["method"] = method
+        res["url"] = url_path
 
         if res["headers"].get("X-RateLimit-Remaining-day"):
             res["headers"]["X-RateLimit-Remaining-day"] = str(self.next_rl)
 
+        res["_hash"] = self._get_response_hash(res)
         return res
 
-    def _get_candidates(self, key: str) -> dict[str, Any]:
+    def _get_candidates(self, key: str) -> tuple[bool, dict[str, Any]]:
         parts = key.split("_")
         method = parts[0]
         url = "_".join(parts[1:])
@@ -186,7 +199,7 @@ class TestResponses:
                         raise str_to_exc[matched_val]
 
                 candidates = utils.listify(matched_val)
-                return (True, [{**self._adjust_mock_response(c, url_path=path), "url": path, "method": method} for c in candidates])
+                return True, [self._adjust_mock_response(c, url_path=path, method=method) for c in candidates]
 
         key = url.replace("/", "_").lstrip("_")
         ok_responses = self.responses.get("ok_responses", {})
@@ -228,8 +241,8 @@ class TestResponses:
         if not matched_res:
             return (False, [])
 
-        res = self._adjust_mock_response(matched_res, url_path=path)
-        return (False, [{**res, "url": path, "method": method}])
+        _hash = hash(str(matched_res))
+        return False, [self._adjust_mock_response(matched_res, url_path=path, method=method)]
 
     @property
     def unused(self) -> list[str]:  # pragma: no cover
@@ -249,7 +262,7 @@ class TestResponses:
         has_per_test_res, resp_candidates = self._get_candidates(key)
 
         for resp in resp_candidates:
-            res_hash = hash(str(resp))
+            res_hash = resp.pop("_hash")
             if res_hash not in self.used_responses:
                 self.used_responses += [res_hash]
                 log.info(f"{env.current_test} - returning {resp['status']} MOCK response{'.' if not has_per_test_res else ' (per test deffinition).'}")
