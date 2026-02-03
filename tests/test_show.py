@@ -1432,7 +1432,7 @@ def test_show_firmware_device(args: tuple[str], pass_condition: Callable | None,
         [2, (test_data["ap"]["name"], test_data["switch"]["name"]), lambda r: "Response" in r],
     ]
 )
-def test_show_firmware_device_fail(idx: int, args: tuple[str], pass_condition: Callable | None):
+def test_show_firmware_device_fail(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "firmware",
@@ -1674,16 +1674,21 @@ def test_show_upgrade_multi():
     assert "API" in result.stdout
 
 
-def test_show_upgrade_no_dev():
-    result = runner.invoke(app, [
-            "show",
-            "upgrade",
-            "status"
-        ]
-    )
-    capture_logs(result, "test_show_upgrade_no_dev", expect_failure=True)
+@pytest.mark.parametrize(
+"idx,args,pass_condition,test_name_append",
+[
+        [1, ("status",), lambda r: "required" in r, None],
+        [2, (test_data["ap"]["name"], test_data["gateway"]["name"]), lambda r: "⚠" in r, "partial"],
+        [3, (test_data["ap"]["name"], test_data["gateway"]["name"]), lambda r: "Response" in r, "all"],
+    ]
+)
+def test_show_upgrade_fail(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["show", "upgrade", *args])
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "required" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 def test_show_uplinks():

@@ -112,7 +112,7 @@ class Counts:
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
 
-def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[Dict[str: Dict[str: int]]] | None:
+def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[dict[str, dict[str, int]]] | None:
     """parse response data to determine switch counts by switch type
 
     Args:
@@ -1363,7 +1363,7 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     res_by_mac = {r["mac"]: r for r in reservations}
     for line in dhcp_res_lines:
         match = re.match("ip dhcp reserved hardware-address (.*) ip-address (.*) hostname (.*)", line)
-        if match:
+        if match:  # pragma: no cover
             mac, ip, hostname = map(str.strip, match.groups())
             if mac in res_by_mac and res_by_mac[mac].get("ip", "err") == ip:
                 res_by_mac[mac]["client_name"] = hostname
@@ -1464,26 +1464,23 @@ def upgrade(
 
     devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, swack=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
-    batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
-    batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
-    failed = [r for r in batch_resp if not r.ok]
-    passed = [r for r in batch_resp if r.ok]
+    batch_reqs = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp = BatchResponse(api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True))
 
-    if passed:
-        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, passed)]
-        rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
-        resp = passed[-1]
-        resp.rl = rl[0]
-        resp.output = combined_out
-        if failed:
-            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
-    else:
-        resp = batch_resp
+    if batch_resp.passed:
+        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, batch_resp.responses) if r.ok]
+        # rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
+        # resp = passed[-1]
+        # resp.rl = rl[0]
+        batch_resp.output = combined_out
+        if batch_resp.failed:
+            batch_resp.display.exit_code = 1
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in batch_resp.failed]
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     render.display_results(
-        resp,
+        batch_resp.display or batch_resp.responses,
         tablefmt=tablefmt,
         title="Upgrade Status",
         pager=pager,
@@ -2328,7 +2325,7 @@ def wlans(
                 break
         if not found:
             verbose = 0
-            verbose_caption.insert(f"{emoji.warn} WLAN Profile or SSID with name {name}, was [bold red]NOT FOUND[/].  Showing all found SSIDs")
+            verbose_caption.insert(0, f"{emoji.warn} WLAN Profile or SSID with name {name}, was [bold red]NOT FOUND[/].  Showing all found SSIDs")
 
     if verbose and not name:
         verbose_caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
