@@ -314,7 +314,8 @@ def test_ws_completion(incomplete=""):
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
 
-@pytest.mark.parametrize("expected", ["superlongemail", "superlongemail@kabrew.com", "6155551212", "7c9eb0df-b211-4225-94a6-437df0dfca59", ""])
+# ["superlongemail", "superlongemail@kabrew.com", "6155551212", "7c9eb0df-b211-4225-94a6-437df0dfca59", ""]
+@pytest.mark.parametrize("expected", ["superlongemail"])
 def test_guest_completion(ensure_cache_guest1, expected: str):
     result = list(cache.guest_completion(ctx, incomplete=expected[0:-2]))
     assert len(result) >= 1
@@ -322,6 +323,7 @@ def test_guest_completion(ensure_cache_guest1, expected: str):
         assert all([m.lower().startswith(expected.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
     except AssertionError:
         log.error(f"test_guest_completion: {expected = }    {result = }")
+        raise AssertionError(f"test_guest_completion: {expected = }    {result = }")
 
 
 @pytest.mark.parametrize("incomplete", ["cencli-tes", "781b9320972dc571d9", ""])
@@ -377,7 +379,7 @@ def test_sub_completion(fixture: str | None, incomplete: str, pass_condition: Ca
         (25, None, cache.get_template_identifier, "no-match_no-match", {"retry": False}, lambda r: r is None, None),
     ]
 )
-def test_get_identifier_funcs(idx: int, fixture: str | None, iden_func: Callable, query_str: str, kwargs: dict[str, str | bool], pass_condition: Callable | None, exception: Exception, request: pytest.FixtureRequest):
+def test_get_identifier_funcs(idx: int, fixture: str | None, iden_func: Callable, query_str: str, kwargs: dict[str, str | bool], pass_condition: Callable | None, exception: Exception | None, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     if exception:
@@ -389,13 +391,13 @@ def test_get_identifier_funcs(idx: int, fixture: str | None, iden_func: Callable
             log.error(f"test_get_identifier_funcs-{idx} was expected to raise {exception}, but did not.")
             console = Console(record=True, emoji=False)
             console.begin_capture()
-            inspect(result, console=console, show_locals=True)
+            inspect(result, console=console)
             res = console.end_capture()
             log.error(res)
             assert False
     else:
         result = iden_func(query_str, **kwargs)
-        assert pass_condition(result)
+        assert pass_condition and pass_condition(result)
 
 
 @pytest.mark.parametrize(

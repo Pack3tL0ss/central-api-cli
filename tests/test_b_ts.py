@@ -29,7 +29,7 @@ def test_ts_inventory():
 )
 def test_ts_ping(idx: int, args: list[str]):
     result = runner.invoke(app, ["ts", "ping", *args])
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert "completed" in result.stdout
 

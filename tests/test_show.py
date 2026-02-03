@@ -1093,7 +1093,7 @@ cmac = test_data["client"]["wireless"]["mac"]
         [4, None, ("--table", "-w", "--band", "6", "--group", test_data["ap"]["group"]), lambda r: "name" in r and "mac" in r],
         [5, None, ("-w", "--ssid", "BoilerUp"), lambda r: "name" in r and "mac" in r],
         [6, None, ("--wired", "--table", "--ssid", "ignored"), lambda r: "vlan" in r and "mac" in r and "ignored" in r],
-        [7, None, ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
+        [7, "ensure_cache_vsf_stack", ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
         [8, None, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
         [9, None, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
         [10, None, ("--dev", test_data["ap"]["name"]), lambda r: "API" in r],  # --site ignored
