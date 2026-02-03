@@ -787,8 +787,7 @@ def inventory(
         show_devices(
             dev_type=dev_type, assigned=assigned, archived=archived, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
-        )
-        common.exit(code=0 if all([r.ok for r in [*api.session.requests, *api.session.glp_requests] if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
+        )  # will display results and exit here
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
@@ -847,8 +846,22 @@ def subscriptions(
     set_width_cols = None
     _cleaner_kwargs = {}
     caption = None
-    _api = api_clients.glp or api
-    if what == "details":
+
+    if what == "auto":  # Classic API Only  # TOGLP
+        resp = api.session.request(api.platform.get_auto_subscribe)
+        if resp and "services" in resp.output:
+            _auto_subs = [s for s in resp.output["services"] if s != "dm"]
+            resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
+        title = "Services with auto-subscribe enabled"
+    elif what == "stats":  # Classic API Only  # TOGLP
+        resp = api.session.request(api.platform.get_subscription_stats)
+        title = "Subscription Stats"
+    elif what == "names":
+        resp = api.session.request(common.cache.refresh_license_db)
+        title = "Valid Subscription/License Names"
+        set_width_cols = {"name": {"min": 39}}
+    else:  # what == "details":
+        _api = api_clients.glp or api
         resp = _api.session.request(cache.refresh_sub_db, sub_type=sub_name, dev_type=dev_type)
         title = "Subscription Details ([green]GreenLake[/])"
         if resp.ok:
@@ -864,20 +877,6 @@ def subscriptions(
                 except Exception as e:  # pragma: no cover
                     log.exception(f"{repr(e)} occured while gathering counts from get_subscriptions response\n{e}")
                     caption = f"{repr(e)} occured while gathering counts from get_subscriptions response"
-
-    elif what == "auto":  # Classic API Only  # TOGLP
-        resp = _api.session.request(_api.platform.get_auto_subscribe)
-        if resp and "services" in resp.output:
-            _auto_subs = [s for s in resp.output["services"] if s != "dm"]
-            resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
-        title = "Services with auto-subscribe enabled"
-    elif what == "stats":  # Classic API Only  # TOGLP
-        resp = _api.session.request(_api.platform.get_subscription_stats)
-        title = "Subscription Stats"
-    elif what == "names":
-        resp = _api.session.request(common.cache.refresh_license_db)
-        title = "Valid Subscription/License Names"
-        set_width_cols = {"name": {"min": 39}}
 
     render.display_results(
         resp,
@@ -946,10 +945,8 @@ def swarms(
 
 
 
-def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str]]:
-    if isinstance(data, dict) and "ethernets" in data:  # single AP output
-        data = data["ethernets"]
-
+def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str], int]:
+    exit_code = 0
     try:
         filtered = data
         filter_caption = None
@@ -974,10 +971,11 @@ def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters,
             caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
 
     except Exception as e:  # pragma: no cover
+        exit_code = 1
         log.exception(f"{repr(e)} in do_interface_filters")
-        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub.", caption=True)
+        log.warning(f"{repr(e)} while attempting to filter interface output.  Please report issue on GitHub.", caption=True)
 
-    return data, caption
+    return data, caption, exit_code
 
 
 # TODO define sort_by fields
@@ -1065,7 +1063,7 @@ def interfaces(
             title_sfx = f" in site {site.name}"
         if group:
             devs = [d for d in devs if d.group == group.name]
-            title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
+            title_sfx = f"{title_sfx} and group {group.name}" if site else f" in group {group.name}"
 
         if not devs:
             common.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
@@ -1104,10 +1102,13 @@ def interfaces(
                 iface_list = cleaner.sort_interfaces([*normal_ports, *stack_ports])
             else:
                 iface_list = utils.listify(r.output)
+                _ethernets = [iface for i in iface_list if "ethernets" in i for iface in i["ethernets"]]  # AP interfaces are in "ethernets" key of monitoring ap details endpoint response
+                iface_list = _ethernets or iface_list
+
 
             r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in iface_list]
         else:
-            skip_failed += [f"{d.summary_text}|[red]{r.error}[/]"]
+            skip_failed += [f"  {d.summary_text}|[red]{r.error}[/]"]
 
     if skip_failed:
         log.warning(f"Incomplete output!! {len(skip_failed)} calls failed.  Skipped Devices:", caption=True)
@@ -1128,12 +1129,11 @@ def interfaces(
             caption = [f"{emoji.info} [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
             min_width = 106
     try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
-        ifaces = batch_resp.output if "ethernets" not in batch_resp.output else batch_resp.output["ethernets"]
-        ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
+        ifaces = batch_resp.output
         _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i.get("status") is None]))
         if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
             word = "devices" if len(_invalid_payload) > 1 else "device"
-            log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
+            log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status, or an empty list.", caption=True, log=True)
             ifaces = [i for i in ifaces if i.get("status") is not None]
 
         up_ifaces = [i["status"].lower() for i in ifaces].count("up")
@@ -1143,8 +1143,9 @@ def interfaces(
     except Exception as e:  # pragma: no cover
         log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
 
+    exit_code = batch_resp.exit_code
     if filters:
-        batch_resp.output, caption = do_interface_filters(batch_resp.output, filters=filters, caption=caption)
+        batch_resp.output, caption, exit_code = do_interface_filters(batch_resp.output, filters=filters, caption=caption)
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
     render.display_results(
@@ -1154,16 +1155,16 @@ def interfaces(
         caption=caption,
         pager=pager,
         outfile=outfile,
-        sort_by=sort_by,
+        sort_by=sort_by or "device",
         reverse=reverse,
         output_by_key=None,
-        group_by=None if len(batch_resp) <= 1 else "device",
+        group_by=None if (len(batch_resp) <= 1 or sort_by and sort_by != "device") else "device",
         min_width=min_width,
         cleaner=cleaner.show_interfaces,
         verbosity=verbose,
         dev_type=dev_type,
     )
-    common.exit(code=batch_resp.exit_code)
+    common.exit(code=exit_code)
 
 
 @app.command()
@@ -1278,7 +1279,7 @@ def vlans(
     obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), swack=True)
     if obj.is_site:
         resp = api.session.request(api.topo.get_site_vlans, obj.id)
-    elif obj.is_dev:
+    else:  # obj.is_dev:
         if obj.generic_type == "switch":
             if obj.swack_id:
                 iden = obj.swack_id
@@ -1355,6 +1356,8 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
     dhcp_res_lines = [line for line in cfg_resp.output if line.lstrip().startswith("ip dhcp reserved hardware-address")]
     if not dhcp_res_lines:
+        log.warning(f"Unable to provide additional DHCP reservation details call to fetch gw config {cfg_resp.error}, but no dhcp reservation lines were found.", caption=True)
+        resp.exit_code = 1
         return resp
 
     res_by_mac = {r["mac"]: r for r in reservations}

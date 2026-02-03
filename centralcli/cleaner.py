@@ -21,7 +21,7 @@ from centralcli import log, utils
 from .constants import STRIP_KEYS, LLDPCapabilityTypes, PoEDetectionStatus, RadioBandOptions, SwitchRolesShort
 from .models.cache import Sites
 from .models.formatter import CloudAuthUploadResponse
-from .objects import DateTime, ShowInterfaceFilters
+from .objects import DateTime
 from .render import tty
 
 if TYPE_CHECKING:
@@ -1397,7 +1397,7 @@ def sort_interfaces(interfaces: list[dict[str, Any]], interface_key: str= "port_
         return interfaces
 
 
-def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx", filters: ShowInterfaceFilters = None) -> list[dict] | dict:
+def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTypes = "cx") -> list[dict] | dict:
     """Clean Output of interface endpoints for each device type.
 
     Args:
@@ -1408,8 +1408,6 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
     Returns:
         list[dict] | dict: Cleaned API response payload with less interesting fields removed
     """
-    filters = filters if filters is not None else ShowInterfaceFilters()
-
     # TODO verbose and non-verbose
     # TODO determine if "mode" has any value, appears to always be Access on SW
     key_order = [
@@ -1474,7 +1472,6 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
     elif dev_type == "gw":
         verbosity_keys[0].insert(4, "trusted")
     elif dev_type == "ap" and data:
-        data = [{"device": d["device"], **iface} for d in data for iface in d.get("ethernets", [])]
         verbosity_keys[0].insert(3, "macaddr")
         verbosity_keys[0].insert(11, "duplex_mode")
         for iface in data:
@@ -1501,7 +1498,6 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         # arrange output as dictionary keyed by the interface for verbose listings
         key_field = "port number" if dev_type != "ap" else "name"
         data = {d[key_field] if not d[key_field].isdigit() else int(d[key_field]): {k: v for k, v in d.items() if k not in [key_field, " dev type"]} for d in data if key_field in d}  # _dev_type is converted to " dev type" and is no longer needed
-
 
     return data
 
