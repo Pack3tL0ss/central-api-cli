@@ -52,7 +52,7 @@ except Exception:  # pragma: no cover
     pass
 
 try:
-    from fuzzywuzzy import process  # type: ignore noqa
+    from fuzzywuzzy import process
     FUZZ = True
 except (ModuleNotFoundError, ImportError):  # pragma: no cover
     FUZZ = False
@@ -1451,7 +1451,7 @@ class Cache:
         return self.LabelDB.all()
 
     @property
-    def labels_by_name(self) -> dict[str: CacheLabel]:
+    def labels_by_name(self) -> dict[str, CacheLabel]:
         return {label["name"]: CacheLabel(label) for label in self.labels}
 
     @property
@@ -1488,7 +1488,7 @@ class Cache:
         return self.ClientDB.all()
 
     @property
-    def cache_clients_by_mac(self) -> Dict[str: Document]:
+    def cache_clients_by_mac(self) -> dict[str, Document]:
         """All Clients by MAC connected within the last 90 days
 
         This property is used by the cache to filter clients older than 90 days
@@ -1505,7 +1505,7 @@ class Cache:
         }
 
     @property
-    def clients_by_mac(self) -> Dict[str: Document]:
+    def clients_by_mac(self) -> dict[str, Document]:
         return {c["mac"]: c for c in self.clients}
 
     @property
@@ -2109,8 +2109,21 @@ class Cache:
     def get_cert_identifier(
         self,
         query_str: str,
-        completion: bool,
+        completion: Literal[True],
     ) -> list[CacheCert]: ...
+
+    @overload
+    def get_cert_identifier(
+        self,
+        query_str: str,
+    ) -> CacheCert: ...
+
+    @overload
+    def get_cert_identifier(
+        self,
+        query_str: str,
+        retry: Literal[False]
+    ) -> None | CacheCert: ...
 
     def get_cert_identifier(
         self,
@@ -2118,7 +2131,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheCert:
+    ) -> CacheCert | list[CacheCert] | None:
         """Get certificate info from Certificate Cache"""
         retry = False if completion else retry
         if not query_str and completion:
@@ -4915,14 +4928,14 @@ class Cache:
             # case insensitive
             if not match or completion:
                 this_match = self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower() == query_str.lower())  # type: ignore
+                    self.Q.name.test(lambda v: v.lower() == query_str.lower())
                 )
                 match = [*match, *[m for m in this_match if m not in match]]
 
             # case insensitive startswith
             if not match or completion:
                 this_match = self.GroupDB.search(
-                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))  # type: ignore
+                    self.Q.name.test(lambda v: v.lower().startswith(query_str.lower()))
                 )
                 match = [*match, *[m for m in this_match if m not in match]]
 
@@ -4931,7 +4944,7 @@ class Cache:
                 if "_" in query_str or "-" in query_str:
                     this_match = self.GroupDB.search(
                         self.Q.name.test(
-                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")  # type: ignore
+                            lambda v: v.lower().strip("-_") == query_str.lower().strip("_-")
                         )
                     )
                     match = [*match, *[m for m in this_match if m not in match]]
@@ -4940,7 +4953,7 @@ class Cache:
             if not match or completion:
                 this_match = self.GroupDB.search(
                     self.Q.name.test(
-                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))  # type: ignore
+                        lambda v: v.lower().strip("-_").startswith(query_str.lower().strip("-_"))
                     )
                 )
                 match = [*match, *[m for m in this_match if m not in match]]
@@ -4998,6 +5011,12 @@ class Cache:
     @overload
     def get_template_identifier(self, query_str: str, completion: Literal[True]) -> list[CacheTemplate]: ...  # pragma: no cover
 
+    @overload
+    def get_template_identifier(self, query_str: str) -> CacheTemplate: ...  # pragma: no cover
+
+    @overload
+    def get_template_identifier(self, query_str: str, retry: Literal[False]) -> CacheTemplate | None: ...  # pragma: no cover
+
     def get_template_identifier(
         self,
         query_str: str,
@@ -5005,7 +5024,7 @@ class Cache:
         retry: bool = True,
         completion: bool = False,
         silent: bool = False,
-    ) -> CacheTemplate | List[CacheTemplate]:
+    ) -> CacheTemplate | List[CacheTemplate] | None:
         """Allows case insensitive template match by template name"""
         retry = False if completion else retry
         if not query_str and completion:
