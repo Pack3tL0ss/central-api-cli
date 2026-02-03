@@ -846,7 +846,7 @@ def _sort_results(
         if not all([sort_by in d for d in data]):
             sort_msg = [
                     f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
-                    "Valid Fields: {}".format(", ".join([f'{k.replace(" ", "-")}' for k in data[0].keys()]))
+                    "Valid Fields: {}".format(", ".join([f'{str(k).replace(" ", "-")}' for k in data[0].keys()]))
             ]
         else:
             try:
@@ -935,7 +935,7 @@ def _display_results(
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
     min_width: int = 40,
-    cleaner: callable = None,
+    cleaner: Callable = None,
     **cleaner_kwargs,
 ):
     if not data:  # pragma: no cover
@@ -977,7 +977,7 @@ def _display_results(
     if isinstance(outdata.tty, Text):
         emoji = ":cd:" not in outdata  # HACK prevent :cd: often found in MAC addresses from being rendered as 💿
         if pager and tty and len(outdata) > tty.rows:
-            with console.pager:
+            with console.pager():
                 console.print(outdata, emoji=emoji)
         else:
             console.print(outdata, emoji=emoji)
@@ -1017,7 +1017,7 @@ def display_results(
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
     min_width: int = 40,
-    cleaner: callable = None,
+    cleaner: Callable = None,
     **cleaner_kwargs,
 ) -> None:
     """Output Formatted API Response to display and optionally to file
@@ -1109,7 +1109,7 @@ def display_results(
                         if config.dev.sanitize:  # pragma: no cover
                             r.raw = json.loads(Output().sanitize_strings(json.dumps(r.raw), config=config))
                         if pager:  # pragma: no cover
-                            with plain_console.pager:
+                            with plain_console.pager():
                                 plain_console.print(r.raw)
                         else:
                             plain_console.print(r.raw)
