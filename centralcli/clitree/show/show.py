@@ -1155,7 +1155,7 @@ def interfaces(
         caption=caption,
         pager=pager,
         outfile=outfile,
-        sort_by=sort_by or "device",
+        sort_by=None if verbose else sort_by or "device",
         reverse=reverse,
         output_by_key=None,
         group_by=None if (len(batch_resp) <= 1 or sort_by and sort_by != "device") else "device",
