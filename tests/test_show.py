@@ -481,18 +481,23 @@ def test_show_devices_cnx(idx: int, args: tuple[str], pass_condition: Callable):
     assert pass_condition(result.stdout)
 
 
-def test_show_dhcp_clients_gw():
-    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["serial"], "--no-res"],)
-    capture_logs(result, "test_show_dhcp_clients_gw")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_dhcp_clients_gw_verbose():
-    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["name"], "-v"],)
-    capture_logs(result, "test_show_dhcp_clients_gw_verbose")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
+@pytest.mark.parametrize(
+    "idx,args,pass_condition,exit_code,test_name_append",
+    [
+        [1, ("clients", test_data["dhcp_gateway"]["serial"], "--no-res"), lambda r: "API" in r, 0, None],
+        [2, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "API" in r, 0, None],
+        [3, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "⚠" in r, 1, "no_res_in_config"],
+        [4, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "API" in r, 0, "no_res"],
+        [5, ("pools", test_data["dhcp_gateway"]["ip"]), lambda r: "API" in r, 0, None],
+    ]
+)
+def test_show_dhcp(idx: int, args: tuple[str], pass_condition: Callable, exit_code: int, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["show", "dhcp", *args],)
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
+    assert pass_condition(result.stdout)
 
 
 def test_show_dhcp_clients_gw_verbose_fail_config_call():
@@ -500,13 +505,6 @@ def test_show_dhcp_clients_gw_verbose_fail_config_call():
     capture_logs(result, env.current_test, expect_failure=True)
     assert result.exit_code == 1
     assert "⚠  Unable to provide additional DHCP reservation details" in result.stdout
-
-
-def test_show_dhcp_pools_gw():
-    result = runner.invoke(app, ["show", "dhcp", "pools", test_data["dhcp_gateway"]["ip"]],)
-    capture_logs(result, "test_show_dhcp_pools_gw")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -1049,11 +1047,12 @@ def test_show_switch_vlans_by_name():
     [
         [1, ("--up", "--group", test_data["vsf_switch"]["group"]), lambda r: "API" in r],
         [2, (test_data["vsf_switch"]["mac"],), lambda r: "API" in r],
-        [3, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"]), lambda r: "API" in r],  # we specify the same switch x2 to hit a different logical branch
-        [4, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"], "--down"), lambda r: "o stacks matched" in r],  # No data matches filter
+        [3, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"], "--group", test_data["vsf_switch"]["group"]), lambda r: "API" in r],  # we specify the same switch x2 to hit a different logical branch
+        [4, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"]), lambda r: "API" in r],  # we specify the same switch x2 to hit a different logical branch
+        [5, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"], "--down"), lambda r: "o stacks matched" in r],  # No data matches filter
     ]
 )
-def test_show_stacks(idx: int, args: list[str], pass_condition: Callable):
+def test_show_stacks(ensure_cache_vsf_stack, idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "stacks", *args],)
     capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0

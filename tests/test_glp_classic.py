@@ -156,6 +156,7 @@ if config.dev.mock_tests:
         [
             [1, False, (), lambda r: "Response" in r],
             [2, True, (), lambda r: "ClientConnectorError" in r],
+            [3, True, ("auto",), lambda r: "ClientConnectorError" in r],  # classic API call only still
         ]
     )
     def test_show_subscriptions_fail(idx: int, glp_ok: bool, args: tuple[str], pass_condition: Callable):
