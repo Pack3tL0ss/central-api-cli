@@ -4375,7 +4375,7 @@ class Cache:
             swack (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
                 Does not filter non stacks.
             swack_only (bool, optional): For switches only return the conductor switch that matches. For APs only return the VC of the swarm the match belongs to. Defaults to False.
-                If swack=True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
+                If True devices that lack a swack_id (swarm_id | stack_id) are filtered (even if they match).
             retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
             completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
             silent (bool, optional): Do not display errors / output, simply returns match if match is found. Defaults to False.
