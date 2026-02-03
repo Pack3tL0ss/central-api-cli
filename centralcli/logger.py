@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -11,6 +12,7 @@ from rich import inspect as _inspect
 from rich.console import Console
 
 from . import env, utils
+from .constants import PYTEST_EXPECTED_EXCEPTIONS
 
 console = Console(emoji=False, markup=False)
 econsole = Console(stderr=True)
@@ -156,6 +158,8 @@ class MyLogger:
 
             if i not in _logged:  # prevents errant duplicates.
                 if log:
+                    if level == "exception" and env.is_pytest:  # Don't log tracebacks for expected exceptions during test runs
+                        exc_info = exc_info if (sys.exc_info()[0] not in PYTEST_EXPECTED_EXCEPTIONS.values()) else False
                     getattr(self._log, level)(self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:

@@ -8,6 +8,9 @@ import sys
 from enum import Enum
 from typing import Literal
 
+from aiohttp import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.http_exceptions import ContentLengthError
+
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
 generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
@@ -100,6 +103,13 @@ CLUSTER_URLS = {
     }
 }
 
+
+PYTEST_EXPECTED_EXCEPTIONS = str_to_exc = {
+    "ClientConnectorError": ClientConnectorError,
+    "ClientOSError": ClientOSError,
+    "ContentTypeError": ContentTypeError,
+    "ContentLengthError": ContentLengthError
+}
 
 class ClusterName(str, Enum):
     internal = "internal"

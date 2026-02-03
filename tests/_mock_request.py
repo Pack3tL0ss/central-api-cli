@@ -14,7 +14,7 @@ from aiohttp.helpers import TimerNoop
 from jinja2 import Environment, FileSystemLoader
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
-from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.client_exceptions import ClientConnectorError
 from aiohttp.client_reqrep import ConnectionKey
 from aiohttp.http_exceptions import ContentLengthError
 from pathlib import Path
@@ -22,14 +22,8 @@ import re
 
 from centralcli import config, log, utils
 from centralcli.environment import env
+from centralcli.constants import PYTEST_EXPECTED_EXCEPTIONS
 
-
-str_to_exc = {
-    "ClientConnectorError": ClientConnectorError,
-    "ClientOSError": ClientOSError,
-    "ContentTypeError": ContentTypeError,
-    "ContentLengthError": ContentLengthError
-}
 
 # MOCKED aiohttp.client.ClientResponse object
 # vendored/customized from aioresponses
@@ -216,7 +210,7 @@ class TestResponses:
                     elif matched_val == "ContentLengthError":
                         raise ContentLengthError("mock content length error")
                     else:  # pragma: no cover
-                        raise str_to_exc[matched_val]
+                        raise PYTEST_EXPECTED_EXCEPTIONS[matched_val]
 
                 candidates = utils.listify(matched_val)
                 return True, [self._adjust_mock_response(c, url_path=path, method=method) for c in candidates]
@@ -228,7 +222,7 @@ class TestResponses:
         if "_audit_trail_" in key:  # TODO can prob remove logic now that we support regex
             key = f'{key.split("_audit_trail_")[0]}_audit_trail_'
             candidates = [v for k, v in ok_responses.get(method, {}).items() if key in k]
-            return (False, [candidates[0]]) if candidates else (False, [])
+            return (False, [self._adjust_mock_response(candidates[0], url_path=path, method=method)]) if candidates else (False, [])
 
         # Try exact match, then regex match in ok_responses for this method
         matched_res = None
@@ -261,7 +255,6 @@ class TestResponses:
         if not matched_res:
             return (False, [])
 
-        _hash = hash(str(matched_res))
         return False, [self._adjust_mock_response(matched_res, url_path=path, method=method)]
 
     @property

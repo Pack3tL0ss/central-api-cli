@@ -339,13 +339,13 @@ class Session():
                     resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed, mock_key_append=mock_key_append)
 
             except (ClientOSError, ClientConnectorError) as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
+                log.exception(f'[{method}:{URL(url).path}] {str(e).removesuffix(" [None]")}')
                 resp = Response(error=repr(e), url=_url.path_qs)
             except ContentLengthError as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
+                log.exception(f'[{method}:{URL(url).path}] {e}')
                 resp = Response(error=repr(e), url=_url.path_qs)
             except Exception as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
+                log.exception(f'[{method}:{URL(url).path}] {e}')
                 resp = Response(error=repr(e), url=_url.path_qs)
                 _ += 1
 
