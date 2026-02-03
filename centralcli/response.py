@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from collections.abc import Callable
 
 import json
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING, Callable
+from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING
 
 from aiohttp import ClientResponse
 import pendulum
@@ -748,7 +749,7 @@ class CombinedResponse(Response):
 
         return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
 
-    def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
+    def __init__(self, responses: List[Response], combiner_func: Callable = flatten_resp):
         self.responses = responses
         combined_kwargs: dict = combiner_func(responses)
         super().__init__(**combined_kwargs)

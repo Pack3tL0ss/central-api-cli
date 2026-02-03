@@ -54,7 +54,7 @@ class ToBool:
             return True
 
     def __bool__(self) -> bool:
-        return self.value
+        return bool(self.value)
 
     @property
     def ok(self) -> bool:
@@ -202,10 +202,10 @@ class Utils:
         return True if res_id and len(res_id) == 36 and res_id.count("-") == 4 else False
 
     @overload
-    def listify(self, var: str | Sequence[str]) -> Sequence[str]: ...
+    def listify(self, var: str | list[str]) -> list[str]: ...
 
     @overload
-    def listify(self, var: PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes]) -> Sequence[str]: ...
+    def listify(self, var: PrimaryDeviceTypes | list[PrimaryDeviceTypes]) -> list[PrimaryDeviceTypes]: ...
 
     @overload
     def listify(self, var: int | Sequence[int]) -> Sequence[int]: ...
@@ -214,10 +214,13 @@ class Utils:
     def listify(self, var: dict | Sequence[dict]) -> Sequence[dict]: ...
 
     @overload
-    def listify(self, var: tuple) -> Sequence: ...
+    def listify(self, var: tuple) -> tuple: ...
 
     @overload
-    def listify(self, var: list) -> Sequence: ...
+    def listify(self, var: list) -> list: ...
+
+    @overload
+    def listify(self, var: list, flatten: bool) -> list[Any]: ...
 
     @overload
     def listify(self, var: None) -> None: ...
@@ -301,12 +304,19 @@ class Utils:
 
         return contents
 
+    @staticmethod
     @overload
     def strip_none(data: dict, strip_empty_obj: Optional[bool]) -> dict: ...
 
+    @staticmethod
     @overload
     def strip_none(data: list, strip_empty_obj: Optional[bool]) -> list: ...
 
+    @staticmethod
+    @overload
+    def strip_none(data: list) -> list: ...
+
+    @staticmethod
     @overload
     def strip_none(data: None, strip_empty_obj: Optional[bool]) -> None: ...
 
@@ -357,7 +367,7 @@ class Utils:
         return data
 
 
-    def strip_no_value(self, data: list[dict] | dict[dict], aggressive: bool = False) -> list[dict] | dict[dict]:
+    def strip_no_value(self, data: list[dict] | dict[str, dict], aggressive: bool = False) -> list[dict] | dict[str, dict]:
         """strip out any columns that have no value in any row
 
         Accepts either list of dicts, or a dict where the value for each key is a dict
@@ -624,7 +634,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str, StrEnum | CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
+    def summarize_list(items: list[str | StrEnum | CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -705,7 +715,7 @@ class Utils:
         return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
 
     @staticmethod  # HACK # REQUESTS still using requests/prepared to build the multi-part form data, as have not been able to get it to work with aiohttp
-    def build_multipart_form_data(url: StrOrURL, method: str = "POST", *, files: dict, params: dict[str, str] = None, base_url: StrOrURL = None) -> dict[str, bytes, dict[str, str]]:
+    def build_multipart_form_data(url: StrOrURL, method: str = "POST", *, files: dict, params: dict[str, str] = None, base_url: StrOrURL = None) -> dict[str, bytes | dict[str, str]]:
         import requests
         req_url = f"{base_url or ''}{url}"
         req = requests.Request(method, url=req_url, params=params, files=files)

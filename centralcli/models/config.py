@@ -157,7 +157,7 @@ class Classic(BaseModel):
         return False
 
     @property
-    def central_info(self) -> Dict[str, Dict[str, str]]:
+    def central_info(self) -> dict[str, dict[str, str | None]]:
         return {
             "central_info": {
                 "base_url": self.base_url,
@@ -209,7 +209,7 @@ class Workspaces(RootModel):
     def __getattr__(self, name):
         if hasattr(self.root, name):
             return getattr(self.root, name)
-        if name in self.root:
+        if name in (self.root or []):
             return self.root[name]
 
         raise AttributeError(f"'{type(self)}' object has no attribute '{name}'")

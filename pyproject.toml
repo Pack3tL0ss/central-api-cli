@@ -236,3 +236,15 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
+
+[tool.ty.rules]
+invalid-return-type = "ignore"
+not-subscriptable = "ignore"
+invalid-parameter-default = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+possibly-missing-attribute = "ignore"
+no-matching-overload = "ignore"
+unsupported-operator = "ignore"
+unresolved-attribute = "ignore"
+invalid-method-override = "ignore"

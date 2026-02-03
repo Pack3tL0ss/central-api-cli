@@ -1,4 +1,5 @@
 from __future__ import annotations
+from collections.abc import Callable
 
 import asyncio
 import json
@@ -63,7 +64,7 @@ class LoggedRequests:
 
 
 class BatchRequest:
-    def __init__(self, func: callable, *args, **kwargs) -> None:
+    def __init__(self, func: Callable, *args, **kwargs) -> None:
         """Constructor object for for api requests.
 
         Used to pass multiple requests into CentralApi batch_request method for parallel
@@ -97,7 +98,7 @@ class Session():
         cnx: bool = None
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
-        self.base_url = None if not base_url else base_url.rstrip('/')
+        self.base_url = None if not base_url else str(base_url).rstrip('/')
         self.config = config or cfg if workspace_name is None else Config(workspace=workspace_name)
         self.workspace_name = workspace_name or self.config.workspace # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
@@ -442,8 +443,8 @@ class Session():
         return paged_raw, paged_output
 
     async def api_call(self, url: StrOrURL, data: dict = None, json_data: dict | list = None,
-                       method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
-                       callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
+                       method: str = "GET", headers: dict = {}, params: dict = {}, callback: Callable = None,
+                       callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response | list[Response]:
         """Perform API calls and handle paging
 
         Args:
@@ -465,7 +466,7 @@ class Session():
         params = utils.strip_none(params)
 
         # /routing endpoints use "marker" rather than "offset" for pagination
-        offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
+        offset_key = "marker" if "marker" in params or "/api/routing/" in str(url) else "offset"
 
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
         if params and params.get("limit") and self.config.dev.limit:
@@ -509,7 +510,7 @@ class Session():
             # total is provided for some calls with the total # of records available
             # TODO # TOGLP  need to use "next" as pagination field
             # if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + (params.get("limit", 0) * params["next"]) < r.raw["total"]):
-            is_events = True if url.endswith("/monitoring/v2/events") else False
+            is_events = True if str(url).endswith("/monitoring/v2/events") else False
             do_next = do_pagination = False
             if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) if params["next"] in [None, 1] else len(r.output) + (params.get("limit", 0)) * params["next"]) < r.raw["total"]:
                 do_pagination = True
@@ -728,12 +729,12 @@ class Session():
 
         return token_data
 
-    async def _request(self, func: callable, *args, **kwargs):
+    async def _request(self, func: Callable, *args, **kwargs):
         # async with ClientSession() as self.aio_session:
         async with self.aio_session:
             return await func(*args, **kwargs)
 
-    def request(self, func: callable, *args, **kwargs) -> Response:
+    def request(self, func: Callable, *args, **kwargs) -> Response:
         """non async to async wrapper for all API calls
 
         Args:
@@ -818,16 +819,16 @@ class Session():
         """
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail, retry_failed=retry_failed))
 
-    def build_url(func):
+    def build_url(func: Callable):
         @wraps(func)
         def wrapper(self: Session, url: StrOrURL, *args, **kwargs):
-            url = url if url.startswith("http") or self.base_url is not None else self.auth.central_info["base_url"] + url
+            url = url if str(url).startswith("http") or self.base_url is not None else self.auth.central_info["base_url"] + url
             return func(self, url, *args, **kwargs)
 
         return wrapper
 
     @build_url
-    async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response:
+    async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response | list[Response]:
         return await self.api_call(url, params=params, headers=headers, count=count, **kwargs)
 
     @build_url
@@ -839,7 +840,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -851,7 +852,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -863,7 +864,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="PATCH", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -875,5 +876,5 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="DELETE", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)

@@ -179,7 +179,7 @@ class CentralURLs(Mapping):  # pragma: no cover  used in first run wizard which 
 clusters = CentralURLs()
 
 
-def _get_config_file(cwd: Path) -> Path:
+def _get_config_file(cwd: Path) -> Path | None:
     dirs = [
         Path().home() / ".config" / "centralcli",
         Path().home() / ".centralcli",
@@ -203,7 +203,7 @@ class SafeLineLoader(yaml.SafeLoader):
         """Annotate a node with the first line it was seen."""
         last_line: int = self.line
         node: yaml.nodes.Node = super().compose_node(parent, index)
-        node.__line__ = last_line + 1  # type: ignore
+        node.__line__ = last_line + 1
         return node
 
 
@@ -412,11 +412,11 @@ class Config:
         )
 
     @property
-    def tok_file(self) -> Path:
+    def tok_file(self) -> Path | None:
         return Path(self.cache_dir / f'tok_{self.classic.customer_id}_{self.classic.client_id}.json') if self.classic.ok else None
 
     @property
-    def cnx_tok_file(self) -> Path:
+    def cnx_tok_file(self) -> Path | None:
         return Path(self.cache_dir / f'cnx_tok_{self._normalized_workspace}_{self.classic.client_id}.json') if self.classic.client_id else None
 
     @property
@@ -566,7 +566,7 @@ class Config:
                             "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
                         )
             except Exception as e:
-                e.add_note(f'Unable to load data from {import_file} due to error above')
+                print(f'Unable to load data from {import_file}: {repr(e)}', file=sys.stderr)
                 raise e
 
             if isinstance(import_data, list):
@@ -646,7 +646,7 @@ class Config:
 
             return workspace_dict
 
-    def first_run(self) -> str:  # pragma: no cover
+    def first_run(self):  # pragma: no cover
         """Method to collect configuration from user when no config file exists.
 
         Returns:
