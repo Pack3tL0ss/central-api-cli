@@ -2477,7 +2477,7 @@ def clients(
         title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
         verbose = verbose or 1
     elif device:
-        dev: CacheDevice = common.cache.get_dev_identifier(device)
+        dev: CacheDevice = common.cache.get_dev_identifier(device, swack=True)
         kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
