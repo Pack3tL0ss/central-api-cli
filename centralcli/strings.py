@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.syntax import Syntax
 
-from centralcli import log, utils
+from centralcli import log, utils, config
 from centralcli.render import tty
 from centralcli.vendored.csvlexer.csv import CsvLexer
 
@@ -60,6 +60,10 @@ ADD_FIELDS = {
         }
     }
 }
+
+if config.glp.ok:
+    ADD_FIELDS["devices"]["optional"]["tags"] = "Assign tags to device in GreenLake"
+
 MOVE_FIELDS = {
      "devices": {
           "required": ["serial"],
@@ -312,10 +316,10 @@ CN12345679,aa:bb:cc:00:11:22,phl-access,Barn,,advanced_ap
 
 # -- // ADD DEVICES \\ --  NOT USED
 # This uses example.full_text property, retaining for reference
-device_add_data = """
-serial,mac,group,subscription
-CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
-CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
+device_add_data = f"""
+serial,mac,group,subscription{'' if not config.glp.ok else ',tags'}
+CN12345678,aabbccddeeff,phl-access,foundation_switch_6300{'' if not config.glp.ok else ",key=value singlewordtag"}
+CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap{'' if not config.glp.ok else ",siteCode=SNANTX singlewordtag"}
 """
 
 example = Example(device_add_data, type="devices", action="add")
