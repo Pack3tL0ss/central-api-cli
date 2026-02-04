@@ -4523,7 +4523,7 @@ class Cache:
             return match[0]
 
         elif retry:
-            log.error(f"Unable to gather device info from provided identifier {query_str}", show=not silent)
+            log.error(f"Unable to gather device info from provided identifier [cyan]{query_str}[/]", show=not silent)  # TODO should have log_print retain styling and only strip for log
             if all_match:
                 _all_match_summary = [m.get('name', m.get('serial')) for m in all_match[0:5]]
                 all_match_msg = f"{utils.color(_all_match_summary)}{', ...' if len(all_match) > 5 else ''}"
@@ -5472,7 +5472,7 @@ class Cache:
         completion: bool = False,
         silent: bool = False,
         end_date: dt.datetime = None,
-        best_match: bool = False,
+        best_match: bool = False,  # TODO change to default True
         all_match: bool = False,
     ) -> CacheSub | list[CacheSub] | None:
         """Fetch items from subscription cache based on query
