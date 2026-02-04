@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from time import sleep
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -70,7 +69,7 @@ class GreenLakeDevicesAPI:
 
     async def get_devices(
             self,
-            serial_numbers: str | list[str] = None,
+            serial_numbers: str | list[str] | tuple[str] = None,
             assigned: bool = None,
             archived: bool = None,
             sort_by: str | list[str] = None,
@@ -81,7 +80,7 @@ class GreenLakeDevicesAPI:
         """Retrieve a list of devices managed in a workspace
 
         Args:
-            serial_numbers (str | list[str], optional): Fetch results for a specific set of provided serial numbers. Defaults to None.
+            serial_numbers (str | list[str] | tuple[str], optional): Fetch results for a specific set of provided serial numbers. Defaults to None.
             assigned (bool, optional): Filter results, fetching only devices assigned to a service (Aruba Central) if True or only devices lacking an assignment if set to False. Defaults to None.
             archived (bool, optional): Filter results, fetching only archived if True or only unarchived if set to False. Defaults to None.
             sort_by: (str | list[str], optional): Field to sort by (ascending by default). Defaults to None.
@@ -187,10 +186,8 @@ class GreenLakeDevicesAPI:
 
         new_devs_by_serial = {dev["serialNumber"]: dev for dev in inv_resp.output}
         if devs_by_sub:
-            update_tasks = set()
-            for sub in devs_by_sub:
-                update_tasks.add(asyncio.create_task(self.update_devices([new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]], subscription_ids=sub, application_id=application_id, region=region)))
-            update_responses = [r for r_list in await asyncio.gather(*update_tasks) for r in r_list]
+            update_reqs = [BatchRequest(self.update_devices, [new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]], subscription_ids=sub, application_id=application_id, region=region) for sub in devs_by_sub]
+            update_responses = await self.session._batch_request(update_reqs)
             return [*async_add_resp, *update_responses]
 
         device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
