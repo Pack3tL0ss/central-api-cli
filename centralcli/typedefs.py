@@ -1,7 +1,7 @@
 # future annotations does not work here, need to use Union to support py < 3.10
 import os
 from functools import lru_cache
-from typing import Callable, Dict, List, Literal, Optional, ParamSpec, Sequence, TypedDict, TypeVar, Union
+from typing import Callable, Dict, List, Literal, Optional, Sequence, TypedDict, TypeVar, Union, ParamSpec
 
 from yarl import URL
 
@@ -13,6 +13,35 @@ T = TypeVar("T")
 # The decorator is used as a type hint for the wrapper function
 def typed_lru_cache(func: Callable[P, T]) -> Callable[P, T]:
     return lru_cache()(func) # Use lru_cache with arguments
+
+
+
+
+# Define type variables for function signature preservation
+# F = TypeVar('F', bound=Callable[..., Any])
+
+# def typed_lru_cache(maxsize: int = 128, typed: bool = False) -> Callable[P, T]:
+#     """
+#     A wrapper for lru_cache that converts lists/dicts to tuples/frozensets,
+#     ensuring they are hashable, and maintains proper typing.
+#     """
+#     def decorator(func: F) -> F:
+#         @lru_cache(maxsize=maxsize, typed=typed)
+#         def wrapper(*args: Any, **kwargs: Any) -> Any:
+#             # Convert mutable args to immutable alternatives
+#             new_args = tuple(
+#                 tuple(arg) if isinstance(arg, list) else arg for arg in args
+#             )
+#             new_kwargs = {
+#                 k: tuple(v) if isinstance(v, list) else v for k, v in kwargs.items()
+#             }
+#             return func(*new_args, **new_kwargs)
+
+#         # Maintain original function's docstring, name, and typing
+#         return wraps(func)(wrapper)
+
+#     return decorator
+
 
 StrOrPath = str | os.PathLike
 StrOrURL = Union[str, URL]
@@ -85,12 +114,12 @@ class Self:
         self.serial: str  # pragma: no cover
 
 try:
-    from typing import Self  # noqa
+    from typing import Self  # type: ignore # noqa
 except ImportError:  # pragma: no cover
     ...
 
 
 try:
-    from enum import StrEnum
+    from enum import StrEnum  # type: ignore
 except ImportError:  # pragma: no cover
     from stringenum import StrEnum as StrEnum  # type: ignore # backport StrEnum functionality pre 3.11
