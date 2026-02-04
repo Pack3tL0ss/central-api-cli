@@ -15,7 +15,7 @@ from centralcli.typedefs import PrimaryDeviceTypes
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
-from ._test_data import test_files, test_group_file, TEST_FILE_DIR
+from ._test_data import test_group_file, TEST_FILE_DIR
 
 runner = CliRunner()
 
@@ -140,7 +140,8 @@ def restore_cache_file():  # pragma: no cover
 def _cleanup_mock_cache():
     dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
     doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
-    assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
+    if any(doc_ids):  # pragma: no cover
+        assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids) if ids]
     return
 
 
@@ -210,21 +211,18 @@ def do_nothing():
     ...
 
 def cleanup_import_files():
-    # TODO all files in the test_file_dir are now OK to rm. can probably just iterdir through all of them.
-    for file in test_files:
+    for file in TEST_FILE_DIR.iterdir():
         if file.exists():
             if file.is_dir():
-                try:
-                    file.rmdir()  # must be empty
-                except OSError as e:  # pragma: no cover
-                    log.exception(f"{repr(e)} while attempting to remove {file.name} directory.")
+                _ = [f.unlink() for f in file.iterdir()]
+                file.rmdir()
             else:
                 file.unlink()
 
     try:
         TEST_FILE_DIR.rmdir()  # must be empty
     except OSError as e:  # pragma: no cover
-        log.exception(f"{repr(e)} while attempting to remove test_file directory ({TEST_FILE_DIR}).")
+        log.exception(f"{repr(e)} while attempting to remove test_file directory ({TEST_FILE_DIR}). (conftest.cleanup_import_files)", exc_info=True)
 
 
 def setup():
@@ -438,7 +436,7 @@ def ensure_cache_mpsk_network():
     if config.dev.mock_tests:
         doc_ids = [m.doc_id for m in cache.mpsk_networks if m["name"] == cache_data["name"]]
         if doc_ids:  # pragma: no cover
-            assert asyncio.run(cache.update_mpsk_net_db(data=doc_ids, remove=True))
+            assert asyncio.run(cache.update_mpsk_net_db(doc_ids, remove=True))
         doc_ids = [m.doc_id for m in cache.mpsk if m["ssid"] == cache_data["name"]]
         if doc_ids:  # pragma: no cover
             assert asyncio.run(cache.update_db(cache.MpskDB, doc_ids=doc_ids))
@@ -465,6 +463,7 @@ def ensure_no_cache():
 
     cache_file.write_text(cache_file_bak.read_text())
     cache_file_bak.unlink()
+    return
 
 
 @pytest.fixture(scope="function")
