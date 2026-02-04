@@ -3318,7 +3318,7 @@ class Cache:
     async def refresh_inv_db(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,
-            serial_numbers: str | list[str] | None = None,
+            serial_numbers: str | list[str] | tuple[str] | None = None,
             assigned: bool = None,
             archived: bool = None,
     ) -> Response:
@@ -3347,7 +3347,7 @@ class Cache:
     async def refresh_inv_db_glp(
             self,
             dev_type: Literal['ap', 'gw', 'switch', 'bridge', 'all'] = None,  # dev_type is filtered after the API call for glp/cnx
-            serial_numbers: str | list[str] | None = None,
+            serial_numbers: str | list[str] | tuple[str] | None = None,
             assigned: bool = None,  # classic endpoint only returns assigned, this only applies to GLP
             archived: bool = None,
     ) -> Response:
@@ -3360,6 +3360,8 @@ class Cache:
         Args:
             dev_type (Literal['ap', 'gw', 'switch', 'all'], optional): Device Type.
                 Defaults to None = 'all' device types.
+            serial_numbers: (str | list[str] | tuple[str], optional): For more effecient cache update.  Send all suspected serial numbers and on first failure an inv update
+                will occur just for those serials.  Note: If any of the items sent do not appear to be serials, they are ignored.
             assigned (bool, optional): filter by devices that are assigned/lack assignment to a service (Aruba Central).
                 Applies to GLP only.  Defaults to None: No filter by assignment.
             archived (bool, optional): filter by devices that are archived/unarchived.
@@ -3370,9 +3372,22 @@ class Cache:
         """
         br = BatchRequest
         glp_api = api_clients.glp
+
+        # determine if all values provided are serial numbers if they are not we need to do a full inventory cache update
+        _serial_numbers = None
+        if serial_numbers:
+            _serial_numbers = tuple([s for s in utils.listify(serial_numbers) if utils.is_serial(s)])
+            if len(serial_numbers) != len(_serial_numbers):
+                not_serials = [s for s in serial_numbers if s not in _serial_numbers]
+                word = "None" if not _serial_numbers else len(not_serials)
+                log.info(f"{word} of the {len(serial_numbers)} serial_numbers provided to cache.refresh_inv_db_glp do not appear to be serial numbers.")
+                log.debug(f"{not_serials = }")
+                log.info(f"A Full Inventory cache update will occur disregarding {len(serial_numbers)} provided serial numbers.")
+                _serial_numbers = None
+
         batch_resp = await glp_api.session._batch_request(
             [
-                br(glp_api.devices.get_devices, serial_numbers=serial_numbers, assigned=assigned, archived=archived),
+                br(glp_api.devices.get_devices, serial_numbers=_serial_numbers, assigned=assigned, archived=archived),
                 br(glp_api.subscriptions.get_subscriptions),
             ]
         )
@@ -3755,9 +3770,9 @@ class Cache:
         if remove:
             return await self.update_db(self.MpskNetDB, doc_ids=data)
 
-        data = models.MpskNetworks(data)
-        data = data.model_dump()
-        return await self.update_db(self.MpskNetDB, data=data, truncate=True)
+        _data = models.MpskNetworks(data)
+        _data = _data.model_dump()
+        return await self.update_db(self.MpskNetDB, data=_data, truncate=True)
 
 
     async def refresh_mpsk_networks_db(self) -> Response:
@@ -3914,7 +3929,7 @@ class Cache:
         dev_type: constants.AllDevTypes = None,
         assigned: bool = None,
         archived: bool = None,
-        serial_numbers: list[str] | None = None,
+        serial_numbers: str | list[str] | tuple[str] | None = None,
         ):
         update_funcs = []
         db_res: CombinedResponse | List[Response] = []
@@ -3991,7 +4006,7 @@ class Cache:
         dev_type: constants.GenericDeviceTypes = None,
         assigned: bool = None,
         archived: bool = None,
-        serial_numbers: list[str] | None = None,
+        serial_numbers: str | list[str] | tuple[str] | None = None,
     ) -> List[Response]:
         db_res = None
         db_map = {
@@ -4556,7 +4571,9 @@ class Cache:
 
         Args:
             query_str (str | Iterable[str]): The query string or Iterable of strings to attempt to match.  Iterable will be joined with ' ' to form a single string with spaces.
-            serial_numbers (tuple[str], optional): A full list of all serials that are expected to be looked up.  This is used to do an efficient cache refresh only involving the serials of interest. Defaults to None.
+            serial_numbers (tuple[str], optional): A full list of all serials that are expected to be looked up.
+                This is used to do an efficient cache refresh only involving the serials of interest. Defaults to None.
+                Note: If any of the serial numbers do not appear to be serial numbers they are ignored, resulting in a full cache update.
             dev_type (Literal["ap", "cx", "sw", "switch", "gw"] | List[Iterable["ap", "cx", "sw", "switch", "gw"]], optional): Limit matches to specific device type. Defaults to None (all device types).
             retry (bool, optional): If failure to match should result in a cache update and retry. Defaults to True.
             completion (bool, optional): If this is being called for tab completion (Allows multiple matches, implies retry=False, silent=True, exit_on_fail=False). Defaults to False.
