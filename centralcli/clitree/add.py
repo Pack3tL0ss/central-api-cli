@@ -147,7 +147,7 @@ def device(
 
     if config.glp.ok:
         kwargs = {**kwargs, "application_id": common.cache.my_service.id, "region": common.cache.my_service.region}
-        tag_dict = None if not tags else common.parse_var_value_list([*tags, *(_tags or [])], error_name="tags")
+        tag_dict = None if not tags else utils.parse_var_value_list([*tags, *(_tags or [])])
         kwargs["tags"] = tag_dict
         resp = common.batch_add_devices(data=[kwargs], yes=yes)
         render.display_results(resp, tablefmt="action", exit_on_fail=True)
@@ -304,7 +304,7 @@ def wlan(
     workspace: str = common.options.workspace,
 ) -> None:
     """Add WLAN (SSID)"""
-    group = common.cache.get_group_identifier(group)
+    cgroup = common.cache.get_group_identifier(group)
     kwarg_list = [psk, wlan_type, vlan, zone, ssid, bw_up, bw_down, bw_user_up, bw_user_down, portal_profile]
     _to_name = {
         "psk": "wpa_passphrase",
@@ -322,9 +322,9 @@ def wlan(
     if "wpa_passphrase" not in kwargs:
         common.exit("psk/passphrase is currently required for this command")
 
-    econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{cgroup.name}[/]")
     render.confirm(yes)
-    resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
+    resp = api.session.request(api.configuration.create_wlan, cgroup.name, name, **kwargs)
     render.display_results(resp, tablefmt="action")
 
 

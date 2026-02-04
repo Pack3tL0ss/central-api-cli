@@ -159,6 +159,11 @@ class Mac(Convert):
         return list(map(case_func, [getattr(mac, mac_format.value.lower()) for mac in mac_objects]))
 
 
+class VarValueSource(str, Enum):
+    VARIABLES = "variables"
+    TAGS = "tags"
+
+
 class Utils:
     def __init__(self):
         self.Mac = Mac
@@ -386,7 +391,7 @@ class Utils:
             values = self._strip_no_value_from_dicts(list(data.values()), aggressive=aggressive)
             data = {k: v for k, v in zip(data.keys(), values)}
         else:
-            log.error(
+            log.info(
                 f"utils.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is."
             )
 
@@ -675,7 +680,8 @@ class Utils:
         Returns:
             str: summary of each dict, 1 line per dict.
         """
-        out_list = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, (bool, int))]) for d in data]
+        ignore_fields = ["ignore", "retired"]
+        out_list = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))]) for d in data]
         # out = self.summarize_list(list(map(lambda line: f"{' ':<{pad}}{line}\n", out_list)), max=max, pad=pad, sep=sep)
         out = self.summarize_list(out_list, max=max, pad=pad, sep=sep)
         return out
@@ -756,7 +762,37 @@ class Utils:
         # Launch the editor process and wait for it to close
         sp.Popen([editor, *args, str(filename)] + args).wait()
 
+    @staticmethod
+    def parse_var_value_list(var_value: list[str], *, source: VarValueSource = VarValueSource.TAGS) -> dict[str, str]:
+        # GLP tags are a key value pair, but you can just have a single str by setting the key to something with an empty str as the value.
+        if "=" not in str(var_value) and source == VarValueSource.TAGS:
+            tags = [t.strip().rstrip(",") for t in var_value]
+            return {t: "" for t in tags}
 
+        vars, vals, get_next = [], [], False
+        for var in var_value:
+            var = var.rstrip(",")
+            if var == '=':
+                continue
+            if '=' not in var:
+                if get_next:
+                    vals += [var]
+                    get_next = False
+                else:
+                    vars += [var]
+                    get_next = True
+            else:
+                _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
+                vars += [_[0]]
+                vals += [_[1]]
+                get_next = False
+
+        if len(vars) != len(vals):
+            econsole = Console(stderr=True)
+            econsole.print(f"[dark_orange3]\u26a0[/]  Something went wrong parsing {source.value}.  Unequal length for {source.value} vs values.", emoji=False)
+            raise typer.Exit(1)
+
+        return {k: v for k, v in zip(vars, vals)}
 
 if __name__ == "__main__":
     ...

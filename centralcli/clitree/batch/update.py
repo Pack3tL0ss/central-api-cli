@@ -90,7 +90,7 @@ def devices(
         common.exit(render._batch_invalid_msg("cencli batch update devices [OPTIONS] [IMPORT_FILE]"))
 
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+    tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags])
 
     data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
     resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, yes=yes)

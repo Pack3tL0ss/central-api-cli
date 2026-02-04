@@ -156,7 +156,7 @@ def devices(
         common.exit(render._batch_invalid_msg("cencli batch add devices [OPTIONS] [IMPORT_FILE]"))
 
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+    tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags])
 
     resp = common.batch_add_devices(import_file, tags=tag_dict, subscription=sub, yes=yes)
     if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:  # pragma: no cover # TOGLP will add to tests once adjusted to use GLP

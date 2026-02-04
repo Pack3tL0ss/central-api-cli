@@ -16,6 +16,7 @@ from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, Ca
 from centralcli.client import BatchRequest
 from centralcli.config import VALID_EXT
 from centralcli.constants import DevTypes, DynamicAntMode, GatewayRole, IAPTimeZoneNames, NotifyToArgs, RadioBandOptions, iden_meta, state_abbrev_to_pretty
+from centralcli.utils import VarValueSource
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
@@ -128,7 +129,7 @@ def variables(
     var_dict = {} if not var_file else utils.unlistify(config.get_file_data(var_file))
     var_dict = var_dict.get(dev.serial, var_dict)  # json by serial
     if var_value:
-        var_dict = {**var_dict, **common.parse_var_value_list(var_value)}
+        var_dict = {**var_dict, **utils.parse_var_value_list(var_value, source=VarValueSource.VARIABLES)}
     if not var_dict:
         common.exit(
             "Missing required paramerter.  [cyan]var_value[/] (args) and/or [cyan]--file[/] is required.\n"

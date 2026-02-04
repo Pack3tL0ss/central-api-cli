@@ -140,7 +140,7 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no co
             log.error("Error occured while gathering lldp neighbor info", show=True)
             render.display_results(lldp_resp, exit_on_fail=True)
 
-        _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]  # type: ignore
+        _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]
         lldp_dict = {d["serial"]: {k: v for k, v in d.items()} for d in _unlistified_output}
         by_ap_dict = {
             serial: {
@@ -170,9 +170,9 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
     _all_aps = utils.listify(resp.output)
     _keys = ["name", "macaddr", "model", "site", "serial"]
     if not default_only:
-        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}  # type: ignore
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}
     else:
-        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}  # type: ignore
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}
         if not ap_dict:
             common.exit("No Up APs found with default name.  Nothing to rename.")
 
@@ -527,7 +527,7 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
         log.warning(f"Ignored {len(ignored)} devices, no desired subscription provided", caption=True)
 
     try:
-        subs = [common.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
+        subs = [common.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]  # type: ignore
     except ValueError as e:
         sub_names = "\n".join(common.cache.license_names)
         common.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
@@ -630,7 +630,7 @@ def glp_subscribe(
         common.exit(render._batch_invalid_msg("cencli batch assign subscriptions [OPTIONS] [IMPORT_FILE]"))
 
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+    tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags], source="tags")
 
     resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
