@@ -157,14 +157,14 @@ class TestResponses:
         return self.last_rl
 
     @staticmethod
-    def _get_response_hash(resp: dict) -> int:
+    def _get_response_hash(resp: dict, per_test: bool = False) -> int:
         """Calculate hash of dict response - minus rate limit field which is updated with every response."""
         _headers = {k: v for k, v in resp["headers"].items() if k != "X-RateLimit-Remaining-day"}
         _resp = {**resp, "headers": _headers}
-        _hash = abs(hash(str(_resp)))  #  / 1_000_000
+        _hash = abs(hash(f"{'' if not per_test else f'{env.current_test}:'}{str(_resp)}")) #  / 1_000_000
         return _hash
 
-    def _adjust_mock_response(self, res: dict, url_path: str, method: str, ) -> dict:
+    def _adjust_mock_response(self, res: dict, url_path: str, method: str, per_test: bool = False) -> dict:
         # adjust payload.  some payloads return the last part of the path i.e. the serial number.  We can grab that from the url
         if isinstance(res.get("payload"), str) and res.get("url", "").split("/")[-1] == res["payload"]:
             res["payload"] = url_path.split("/")[-1]
@@ -176,7 +176,7 @@ class TestResponses:
         if res["headers"].get("X-RateLimit-Remaining-day"):
             res["headers"]["X-RateLimit-Remaining-day"] = str(self.next_rl)
 
-        res["_hash"] = self._get_response_hash(res)
+        res["_hash"] = self._get_response_hash(res, per_test=per_test)
         return res
 
     def _get_candidates(self, key: str) -> tuple[bool, dict[str, Any]]:
@@ -213,7 +213,7 @@ class TestResponses:
                         raise PYTEST_EXPECTED_EXCEPTIONS[matched_val]
 
                 candidates = utils.listify(matched_val)
-                return True, [self._adjust_mock_response(c, url_path=path, method=method) for c in candidates]
+                return True, [self._adjust_mock_response(c, url_path=path, method=method, per_test=True) for c in candidates]
 
         key = url.replace("/", "_").lstrip("_")
         ok_responses = self.responses.get("ok_responses", {})
