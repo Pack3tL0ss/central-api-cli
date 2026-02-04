@@ -7,6 +7,7 @@ import re
 import sys
 from enum import Enum
 from typing import Literal
+from json import JSONDecodeError
 
 from aiohttp import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
@@ -27,7 +28,7 @@ ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 _ = ["license", "services", "subscription"]
-possible_sub_keys = [*_, *map(str.upper, _)]
+possible_sub_keys = [*_, *map(str.upper, _), *map(str.capitalize, _)]
 
 
 CLUSTER_URLS = {
@@ -104,11 +105,12 @@ CLUSTER_URLS = {
 }
 
 
-PYTEST_EXPECTED_EXCEPTIONS = str_to_exc = {
+PYTEST_EXPECTED_EXCEPTIONS = {
     "ClientConnectorError": ClientConnectorError,
     "ClientOSError": ClientOSError,
     "ContentTypeError": ContentTypeError,
-    "ContentLengthError": ContentLengthError
+    "ContentLengthError": ContentLengthError,
+    "JSONDecodeError": JSONDecodeError,
 }
 
 class ClusterName(str, Enum):
@@ -209,6 +211,7 @@ class MacFormat(str, Enum):
     DASHES = "DASHES"
     DOTS = "DOTS"
     CLEAN = "CLEAN"
+    OBJECT = "OBJECT"
     cols = "cols"
     dashes = "dashes"
     dots = "dots"
