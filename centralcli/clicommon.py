@@ -58,12 +58,11 @@ MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will
 
 api = api_clients.classic
 
-
-class VendorDetails(BaseModel):
-    oui: str
-    companyName: str
-    companyAddress: str
-    countryCode: str
+@dataclass
+class BuiltRequests:
+    requests: list[BatchRequest]
+    confirm_msgs: list[str] = None
+    warnings: list[str] = None
 
 class BlockDetails(BaseModel):
     blockSize: int
@@ -73,10 +72,6 @@ class MacDetails(BaseModel):
     wiresharkNotes: str
     isValid: bool
 
-class Vendor(BaseModel):
-    vendor_details: VendorDetails
-    block_details: BlockDetails
-    mac_details: MacDetails
 
 class Convert:
     def __init__(self, mac: str, fuzzy: bool = False):
@@ -127,7 +122,7 @@ class Convert:
 
     @property
     def url(self) -> str:
-        return urllib.parse.quote_plus(self.cols)  # type: ignore
+        return urllib.parse.quote_plus(self.cols)
 
     def __len__(self):
         return len(self.clean)
@@ -159,7 +154,7 @@ class Convert:
 
 
 class Mac(Convert):
-    def __init__(self, mac: str | bytes, vendor_lookup: bool = False, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
+    def __init__(self, mac: str | bytes, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
         if isinstance(mac, bytes):
             mac: str = binascii.hexlify(mac).decode('utf-8')
         super().__init__(mac, fuzzy=fuzzy)
@@ -172,15 +167,6 @@ class Mac(Convert):
         self.num_bssids = num_bssids
         self.tablefmt = tablefmt or "table"
         self._show_mac_info = show_mac_info
-
-        if vendor_lookup:
-            if config.lookup_configured:
-                # TODO each attribute has lower <8 spaces> upper as a single string.  refactor so each has own attr
-                self.vendor = asyncio.run(self.get_vendor(self.clean.split()[0]))
-            else:
-                self.vendor = f"  Vendor Lookup Not Possible please configure macaddress.io:api_key in {config.file}"
-        else:
-            self.vendor: Vendor = None
 
     def __bool__(self):
         return self.ok
@@ -222,9 +208,6 @@ class Mac(Convert):
             title = f"Mac Address Details for {self.cols}"
             line = f'[dark_olive_green2]{"-" * 52}[/]'
             out_str = render.rich_capture("\n".join([line, f"[magenta]{title:^52}[/]", line, *mac_info]) + "\n")
-
-            if self.vendor:
-                out_str += f"\n\n{self.vendor}"
 
             if self.mac_range:
                 console = Console(emoji=False)
@@ -1100,7 +1083,6 @@ class CLICommon:
 
         Args:
             data (List[Dict[str, Any]]): The data from the import
-            subscription (str, optional): A subscription identifier to apply to add devices in the data, overriding anything found within.
 
         Returns:
             Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
@@ -1109,6 +1091,7 @@ class CLICommon:
         data = utils.normalize_device_sub_field(data)
         warn = False
         already_warned = []
+
         for row, d in enumerate(data, start=1):
             if d.get("subscription"):
                 for idx in range(2):
@@ -1121,8 +1104,7 @@ class CLICommon:
                                 break
 
                         sub = self.cache.get_sub_identifier(d['subscription'], best_match=True)
-                        d['subscription'] = sub.api_name
-
+                        d['subscription'] = sub.id
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
@@ -1231,24 +1213,20 @@ class CLICommon:
         return resp or Response(error="No Devices were added")
 
     def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, api: ClassicAPI = api_clients.classic) -> List[Response]:
+        import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)  # replaces subscription with global subscrition override for each dev if provided
+
+        confirm_msg = []
+        if import_devs.has_subs and not self.cache.responses.sub:
+            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+
         glp_api = api_clients.glp
-        import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)
-        data = import_devs.model_dump()
+        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=import_devs.model_dump(), application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
 
-        # gather subscription ids for each subscription in import which can be name/key/sub_id
-        _subs = set([d["subscription"] for d in data if d.get("subscription")])  # sub field already normalized at this point.
-        if _subs:
-            _sub_to_id = {}
-            [utils.update_dict(_sub_to_id, sub, sub if utils.is_resource_id(sub) else self.cache.get_sub_identifier(sub, best_match=True).id) for sub in _subs]
-            data = [{k: v if k != "subscription" else utils.unlistify(_sub_to_id[v]) for k, v in dev.items()} for dev in data]
+        # cache update.  Better to just query for the serials that were added vs parsing the async response.  Failure could indicate already claimed, which isn't really a failure
+        serial_numbers = [d["serial"] for d in data]
+        asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
 
-        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, tags=tags, subscription_ids=subscription, cache=self.cache)
-        # We send tags when devices are initially added, but if they fail because the device is already in GreenLake tags are not processed
-        # So we need to send them in the update
-        tag_resp = []
-        if any([r.is_already_claimed for r in add_resp]) and (tags or import_devs.has_tags):
-            tag_req_info = self._build_tag_reqs(import_devs, tags=tags)
-            tag_resp = glp_api.session.batch_request(tag_req_info.requests)
+        update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True)  # confirmation is done in batch_add_devices
 
         # pre-provision devices to groups / classic API
         to_group, group_resp = {}, []
@@ -1257,18 +1235,13 @@ class CLICommon:
             group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
             group_resp = api.session.batch_request(group_reqs)
 
-        # cache update.  Better to just query for the serials that were added vs parsing the async response.  Failure could indicate already claimed, which isn't really a failure
-        serial_numbers = [d["serial"] for d in data]
-        if serial_numbers:
-            asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
-
-        return [*add_resp, *tag_resp, *group_resp]
+        return [*add_resp, *update_resp, *group_resp]
 
 
     def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
         yes = yes if yes is not None else 0
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-        data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
+        data: list[dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
         if not data:
             self.exit("No data/import file")
 
@@ -1283,9 +1256,22 @@ class CLICommon:
         file_str = f"{'provided devices' if len(data) > 1 else 'device'}:" if not import_file else f"devices found in [cyan]{import_file.name}[/]:"
         file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
         render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}')
-        render.console.print(f'   {utils.summarize_data(data, pad=3).lstrip()}\n', emoji=False)
-        if subscription or "subscription" in all_keys:
-            render.console.print('[dim italic]Devices with a subscription specified will be assigned to the specified subscription.[/]')
+
+        # can only do friendly name lookups for glp as sub cache was added with glp support
+        confirm_data, sub = None, None
+        if config.glp.ok:
+            confirm_data = [{k: v if k != "subscription" else self.cache.subscriptions_by_id[v].name for k, v in d.items() if v} for d in data]
+            if subscription:
+                sub = self.cache.get_sub_identifier(subscription, best_match=True)
+
+        render.console.print(f'   {utils.summarize_data(confirm_data or data, pad=3).lstrip()}\n', emoji=False)
+        if subscription:
+            render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub and sub.summary_text or subscription}[/]')
+        elif "subscription" in all_keys:
+            render.console.print('[dim italic]Devices will be assigned subscriptions based on subscriptions found in the import.[/]')
+        else:  # pragma: no cover
+            ...
+
         if tags or "tags" in all_keys:
             render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/]')
         if "group" in all_keys:
@@ -1364,8 +1350,9 @@ class CLICommon:
 
     def batch_archive_unarchive_devices_glp(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
         devs = []
+        serials = [d["serial"] for d in data]
         for d in data:
-            dev = self.cache.get_inv_identifier(d["serial"], exit_on_fail=False, silent=True)
+            dev = self.cache.get_inv_identifier(d["serial"], exit_on_fail=False, silent=True, serial_numbers=tuple(serials))
             if not dev:
                 render.econsole.print(f"[dark_orange3]\u26a0[/]  [red]Skipping[/] [cyan]{d['serial']}[/].  Not found in [green]GreenLake[/] Inventory", emoji=False)
             else:
@@ -1620,8 +1607,8 @@ class CLICommon:
     def device_move_cache_update(
             self,
             mv_resp: List[Response],
-            serials_by_site: Dict[str: List[str]] = None,
-            serials_by_group: Dict[str: List[str]] = None,
+            serials_by_site: dict[str, list[str]] = None,
+            serials_by_group: dict[str, list[str]] = None,
         ) -> None:
         serials_by_site = serials_by_site or {}
         serials_by_group = serials_by_group or {}
@@ -2142,12 +2129,8 @@ class CLICommon:
 
         return batch_resp
 
-    @dataclass
-    class TagReqInfo:
-        requests: list[BatchRequest]
-        confirm_msgs: list[str]
 
-    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> TagReqInfo:
+    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> BuiltRequests:
         api = api_clients.glp
         tags = tags or {}
         ret_dict = {}
@@ -2172,11 +2155,31 @@ class CLICommon:
             confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(ids)}[/] [bright_green]devices[/bright_green]:\n{_tag_msg}"]
             batch_reqs += [BatchRequest(api.devices.update_devices, device_ids=ids, tags=_tags)]
 
-        return self.TagReqInfo(batch_reqs, confirm_msg)
+        return BuiltRequests(batch_reqs, confirm_msgs=confirm_msg)
+
+    def _build_glp_sub_reqs(self, import_devs: ImportDevices, *, assigned: bool = None) -> BuiltRequests:
+        glp_api = GreenLakeAPI()
+        devs_by_sub_id = import_devs.serials_by_subscription_id(assigned=assigned)
+        confirm_msg = [""]
+        sub_reqs = []
+        for sub_id, res in devs_by_sub_id.items():
+            if not res.devices:
+                continue
+
+            # TODO need to do validation and skip devices that are already assigned to the sub with the most remaining time.
+            csub: CacheSub = res.cache_sub
+            confirm_msg += [f"{emoji.info} [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
+            if len(res.devices) > csub.available:
+                confirm_msg[-1] = confirm_msg[-1].rstrip()
+                confirm_msg += [f"{emoji.warn} # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
+            sub_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
+
+        return BuiltRequests(sub_reqs, confirm_msgs=confirm_msg)
+
 
     def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False, action: GLPAction = GLPAction.UPDATE) -> ImportDevices:
         data = utils.normalize_device_sub_field(data)
-        if subscription:
+        if subscription:  # if they provide subscription via --sub flag. It overrides anything found in the import file (or adds it if it doesn't exist)
             _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
             data = [{**inner, "subscription": _sub.id} for inner in data]
 
@@ -2186,7 +2189,7 @@ class CLICommon:
         try:
             _data = ImportDevices(self.cache, data)
             if action == GLPAction.ADD:
-                self.verify_required_fields(data, ["mac"], exit_on_fail=True)
+                self.verify_required_fields(data, required=["mac"], exit_on_fail=True)  # same pydantic model used for add and update.  mac is not required for update but is for add so model has it as optional
         except ValidationError as e:
             self.exit(utils.clean_validation_errors(e))
 
@@ -2194,21 +2197,9 @@ class CLICommon:
 
     def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False) -> list[Response]:
         _data = self._prep_glp_add_update_data(data, subscription=subscription, sub_required=sub_required)
-        glp_api = GreenLakeAPI()
-        devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
-        confirm_msg = [""]
-        sub_reqs = []
-        for sub_id, res in devs_by_sub_id.items():
-            if not res.devices:
-                continue
-
-            # TODO need to do validation and skip devices that are already assigned to the sub with the most remaining time.
-            csub: CacheSub = res.cache_sub
-            confirm_msg += [f"[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
-            if len(res.devices) > csub.available:
-                confirm_msg[-1] = confirm_msg[-1].rstrip()
-                confirm_msg += [f"{emoji.warn} # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
-            sub_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
+        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=True)
+        confirm_msg = sub_req_obj.confirm_msgs
+        sub_reqs = sub_req_obj.requests
 
         if sub_reqs and not self.cache.responses.sub:
             confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
@@ -2224,18 +2215,16 @@ class CLICommon:
                 f"\n{emoji.warn} Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
                 _data.warning_skip_not_assigned,
                 f"\n{emoji.info} [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/]"
-            ]  # \u26a0 == :warning:, \u2139 = :information:
-
+            ]
 
         batch_reqs = [*sub_reqs, *tag_reqs]
-        if batch_reqs:
-            confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
-        render.econsole.print("\n".join(confirm_msg), emoji=False)
-
         if not batch_reqs:
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
 
+        confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
+        render.econsole.print("\n".join(confirm_msg), emoji=False)
         render.confirm(yes) # aborts here if they don't confirm
+        glp_api = GreenLakeAPI()
         batch_res = glp_api.session.batch_request(batch_reqs)
 
         return batch_res
@@ -2461,31 +2450,6 @@ class CLICommon:
             with log.log_file.open("a") as file:
                 print(Traceback(), file=file)
             self.exit(repr(e))
-
-    def parse_var_value_list(self, var_value: list[str, str], *, error_name: str = "variables") -> dict[str, str]:
-        vars, vals, get_next = [], [], False
-        for var in var_value:
-            var = var.rstrip(",")
-            if var == '=':
-                continue
-            if '=' not in var:
-                if get_next:
-                    vals += [var]
-                    get_next = False
-                else:
-                    vars += [var]
-                    get_next = True
-            else:
-                _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
-                vars += [_[0]]
-                vals += [_[1]]
-                get_next = False
-
-        if len(vars) != len(vals):
-            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
-
-        return {k: v for k, v in zip(vars, vals)}
-
 
 if __name__ == "__main__":
     pass
