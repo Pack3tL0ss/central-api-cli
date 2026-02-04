@@ -237,7 +237,7 @@ class Session():
             if len(self.running_spinners) > 1:
                 if len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
                     pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1]
-                    return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx}, {",".join(x.split(":")[1] for x in self.running_spinners[1:])}'.replace("...,", "...")
+                    return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx},{",".join(x.split(":")[1] for x in self.running_spinners[1:])}'.replace("...,", "...")
                 else:
                     return f"{self.running_spinners[0]} [dim italic]Processing {len(self.running_spinners)} requests."
         except Exception as e:  # pragma: no cover
