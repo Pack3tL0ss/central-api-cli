@@ -124,23 +124,23 @@ def method(
             common.exit(f"Sorry, {func.__name__}, lacks a docstr.  No help.", code=0)
 
     # pasrse args/kwargs from command line
-    kwargs = kwargs or {}
-    kwargs = (
-        "~".join(kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
+    _kwargs = kwargs or {}
+    _kwargs = (
+        "~".join(_kwargs).replace("'", "").replace('"', '').replace("~=", "=").replace("=~", "=").replace(",~", "~").split("~")
     )
-    args = [k if not k.isdigit() else int(k) for k in kwargs if k and "=" not in k]
-    kwargs = [k.split("=") for k in kwargs if "=" in k]
-    kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in kwargs}
+    args = [k if not k.isdigit() else int(k) for k in _kwargs if k and "=" not in k]
+    _kwargs = [k.split("=") for k in _kwargs if "=" in k]
+    _kwargs = {k[0]: k[1] if not k[1].isdigit() else int(k[1]) for k in _kwargs}
     for arg in args:
         if isinstance(arg, str):
             if arg.startswith("[") and arg.endswith("]"):
                 args[args.index(arg)] = [a if not a.isdigit() else int(a) for a in arg.strip("[]").split(",")]
-    for k, v in kwargs.items():
+    for k, v in _kwargs.items():
         if isinstance(v, str):
             if v.startswith("[") and v.endswith("]"):
-                kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
+                _kwargs[k] = [vv if not vv.isdigit() else int(vv) for vv in v.strip("[]").split(",")]
             if v.lower() in ["true", "false"]:
-                kwargs[k] = True if v.lower() == "true" else False
+                _kwargs[k] = True if v.lower() == "true" else False
 
     from rich.console import Console
     c = Console(file=outfile)
@@ -155,10 +155,10 @@ def method(
         return response if response is not None else Response(error=resp_str)
 
     try:
-        resp = api.session.request(func, *args, **kwargs)
-        resp = _check_bool_to_str(args, kwargs, response=resp)
+        resp = api.session.request(func, *args, **_kwargs)
+        resp = _check_bool_to_str(args, _kwargs, response=resp)
     except TypeError as e:
-        resp = _check_bool_to_str(args, kwargs, resp_str=str(e))
+        resp = _check_bool_to_str(args, _kwargs, resp_str=str(e))
 
     attrs = {
         k: v for k, v in resp.__dict__.items() if k not in ["output", "raw", "data_key", "caption"] and (log.DEBUG or not k.startswith("_"))
@@ -166,7 +166,7 @@ def method(
 
     req = (
         f"{full_api.__class__.__name__}.{method}({', '.join(str(a) for a in args)}{', ' if args else ''}"
-        f"{', '.join([f'{k}={kwargs[k]}' for k in kwargs]) if kwargs else ''})"
+        f"{', '.join([f'{k}={_kwargs[k]}' for k in _kwargs]) if _kwargs else ''})"
     )
 
     c.print(req)

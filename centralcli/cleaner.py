@@ -9,7 +9,8 @@ import ipaddress
 import json
 import logging
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Literal
+from typing import TYPE_CHECKING, Any, Literal
+from collections.abc import Callable
 
 import pendulum
 import yaml
@@ -106,7 +107,7 @@ class radio_modes(Enum):
     spectrum = 4
 
 
-_short_value = {
+_short_value: dict[str, Callable[[str], str] | str] = {
     "Aruba, a Hewlett Packard Enterprise Company": "HPE/Aruba",
     "No Authentication": "open",
     "last_connection_time": lambda x: DateTime(x, "timediff"),
@@ -309,12 +310,12 @@ def short_key(key: str) -> str:
 def short_value(key: str, value: Any):
     # Run any inner dicts through cleaner funcs
     if isinstance(value, dict):
-        value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}
+        value = {short_key(k): v if k not in _short_value else _short_value[k](v) for k, v in value.items()}  # ty:ignore[call-non-callable]
 
     if isinstance(value, (str, int, float)):
         return (
             short_key(key),
-            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, (bool, int)) and not value) else _short_value[key](value),
+            _short_value.get(value, value) if key not in _short_value or (not isinstance(value, (bool, int)) and not value) else _short_value[key](value),  # ty:ignore[call-non-callable]
         )
     elif isinstance(value, list) and all(isinstance(x, dict) for x in value):
         if key in ["sites", "labels"]:
@@ -322,7 +323,7 @@ def short_value(key: str, value: Any):
         elif key in ["events_details"]:  # pragma: no cover  TODO get_event_logs no longer includes fetching this, may be safe to remnove
             value = _extract_event_details(value)
     elif key in _short_value and value is not None:
-        value = _short_value[key](value)
+        value = _short_value[key](value)  # ty:ignore[call-non-callable]
 
     return short_key(key), utils.unlistify(value)
 
@@ -518,7 +519,7 @@ def _client_concat_associated_dev(
 def get_clients(
     data: list[dict],
     verbosity: int = 0,
-    cache: callable = None,
+    cache: Callable = None,
     format: TableFormat = None,
     **kwargs
 ) -> list:
@@ -783,7 +784,7 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
 
     return data
 
-def get_audit_logs(data: list[dict], cache_update_func: callable = None, verbosity: int = 0) -> list[dict]:
+def get_audit_logs(data: list[dict], cache_update_func: Callable = None, verbosity: int = 0) -> list[dict]:
     if verbosity > 1:
         return data  # No formatting with verbosity -vv
 
@@ -856,7 +857,7 @@ def get_alerts(data: list[dict],) -> list[dict]:
     return data
 
 
-def get_event_logs(data: list[dict], cache_update_func: callable = None) -> list[dict]:
+def get_event_logs(data: list[dict], cache_update_func: Callable = None) -> list[dict]:
     # TODO accept verbose option and provide additional details with verbose. (currently just bypasses cleaner and displays yaml)
 
     field_order = [
@@ -959,7 +960,7 @@ def get_certificates(data: dict[str, Any], valid: bool = None, cert_types: list[
         return data
 
 
-def get_lldp_neighbor(data: list[dict[str, str]]) -> dict[str: dict[str, str]]:
+def get_lldp_neighbor(data: list[dict[str, str]]) -> dict[str, dict[str, str]]:
     data = utils.listify(data)
     strip_keys = ["cid"]
     # grab the key details from switch lldp return, make data look closer to lldp return from AP
