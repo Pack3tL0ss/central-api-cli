@@ -1123,7 +1123,7 @@ def display_results(
                     # and formatted contents of any payload. example below
                     # status code: 201
                     # Success
-                    if r.ok and cleaner:
+                    if r.ok and r.output and cleaner and cleaner.__name__ != "simple_kv_formatter":  # We send select action responses through cleaner when they pass
                         r.output = _clean_output(r.output, cleaner, **cleaner_kwargs)
                     console.print(r, emoji=False)
 
