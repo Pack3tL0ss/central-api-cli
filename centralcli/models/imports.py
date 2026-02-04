@@ -165,8 +165,8 @@ class _ImportDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
     mac: Optional[str] = Field(None, alias=AliasChoices("mac", "mac_address", "Mac Address", "macAddress", "MAC"))  # Optional only needed for add
-    tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAG", "TAGS"))
-    archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE"))
+    tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAGS", "TAG", "Tags", "Tag"))
+    archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE", "Archived"))
     subscription: Optional[str] = Field(None, alias=AliasChoices(*possible_sub_keys))
     group: Optional[str] = Field(None, alias=AliasChoices("group", "group_name"))
 
@@ -178,11 +178,20 @@ class _ImportDevice(BaseModel):
     @field_validator("tags", mode="before")
     @classmethod
     def _convert_csv_tags(cls, v: str | dict[str, str]) -> dict[str, str]:
+        tags = None
         if isinstance(v, str):
-            v = v.replace(",", " ")
-            return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
+            # v = v.replace(",", " ")  # HACK  need to make more elegant and build common helper for parsing from args and from csv...
+            # return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
+            v = [item for item in list(map(lambda part:part.strip('{}"\'[]').rstrip("'"), str(v).replace(",", " ").replace("=", ":").replace(": ", ":").replace(" :", ":").replace(":'", ":").split())) if item]
+            tags = {}
+            for i in v:
+                if ":" in i:
+                    key, value = i.split(":")
+                    tags[key] =value
+                else:
+                    tags[i] = ""
 
-        return v
+        return tags or v
 
 class ImportDevice(_ImportDevice):
     _sub_object: CacheSub | None = None
@@ -209,12 +218,12 @@ class ImportDevice(_ImportDevice):
             return False
         return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
-    def _get_inv_object(self) -> CacheInvDevice | None:
+    def _get_inv_object(self, serials: list[str] | None = None) -> CacheInvDevice | None:
         inv_dev = cache.InvDB.search(cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
         if not inv_dev and cache.responses.inv is None:
-            return cache.get_inv_identifier(self.serial, exit_on_fail=False)
+            return cache.get_inv_identifier(self.serial, exit_on_fail=False, silent=True)
         self._inv_fetched = True
-        self._inv_object = None if inv_dev is None else CacheInvDevice(inv_dev[0])
+        self._inv_object = None if not inv_dev else CacheInvDevice(inv_dev[0])
         return self._inv_object
 
     @property
@@ -276,7 +285,7 @@ class ImportDevice(_ImportDevice):
 class ImportDevices(RootModel):
     root: list[ImportDevice]
 
-    def __init__(self, cache: Cache, data: list[Dict[str, Any]]) -> None:
+    def __init__(self, cache: Cache, data: list[dict[str, Any]]) -> None:
         super().__init__([ImportDevice(cache=cache, **s) for s in data])
 
     def __iter__(self):
@@ -312,6 +321,10 @@ class ImportDevices(RootModel):
         return {dev.serial: dev for dev in self.root}
 
     @property
+    def has_subs(self) -> bool:
+        return any([True for dev in self.root if dev.subscription is not None])
+
+    @property
     def has_tags(self) -> bool:
         return any([True for dev in self.root if dev.tags])
 
@@ -340,7 +353,7 @@ class ImportDevices(RootModel):
         return self.by_serial.get(serial, default)
 
     def get_inv_objects(self) -> list[CacheInvDevice | None]:
-        return [dev._get_inv_object() for dev in self.root]
+        return [dev._get_inv_object(serials=[d.serial for d in self.root]) for dev in self.root]
 
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
