@@ -285,7 +285,7 @@ if config.dev.mock_tests:
     def test_archive_fail(ensure_inv_cache_test_ap, glp_ok: bool):
         config._mock(glp_ok)
         result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "USD8H1R1KG", "--yes"])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
+        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
         assert result.exit_code == 1
         assert "Response" in result.stdout
         assert "💿" not in result.stdout

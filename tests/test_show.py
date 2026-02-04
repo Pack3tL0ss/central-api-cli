@@ -1688,7 +1688,11 @@ def test_show_upgrade_fail(idx: int, args: tuple[str], pass_condition: Callable,
     result = runner.invoke(app, ["show", "upgrade", *args])
     capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert pass_condition(result.stdout)
+    try:
+        assert pass_condition(result.stdout)
+    except AssertionError as e:  # pragma: no cover
+        capture_logs(result, f"{env.current_test}-{idx}", log_output=True)
+        raise(e)
 
 
 def test_show_uplinks():
