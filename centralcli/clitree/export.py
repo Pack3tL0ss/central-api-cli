@@ -11,7 +11,7 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import caas, cache, common, config, log, render, utils
+from centralcli import caas, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
@@ -233,7 +233,7 @@ def configs(
     [red]:warning:[/]  This command can result in a lot of API calls.
     """
     caasapi = caas.CaasAPI()
-    api = ClassicAPI()
+    api = ClassicAPI(config)
     gw_reqs, ap_reqs, ap_env_reqs, gw_grp_reqs, ap_grp_reqs, aps, gws, ap_groups, gw_groups, ap_template_reqs = [], [], [], [], [], [], [], [], [], []
 
     if do_switch:
@@ -348,7 +348,7 @@ def _get_ap_location_via_api() -> tuple[dict[str, str], RateLimit]:
     bldg_reqs = [BatchRequest(api.visualrf.get_buildings_for_campus, campus) for campus in campuses]
     bldg_resp = api.session.batch_request(bldg_reqs)
     eval_location_response(bldg_resp)
-    _ = asyncio.run((cache.update_floor_plan_cache(bldg_resp)))
+    _ = asyncio.run((common.cache.update_floor_plan_cache(bldg_resp)))
     buildings = {
         bldg["building_id"]: {"name": bldg["building_name"], "lat": bldg["latitude"], "lon": bldg["longitude"]} for resp in bldg_resp for bldg in resp.raw["buildings"]
     }
@@ -363,7 +363,7 @@ def _get_ap_location_via_api() -> tuple[dict[str, str], RateLimit]:
     ap_loc_reqs = [BatchRequest(api.visualrf.get_aps_for_floor, floor) for floor in floors]
     ap_loc_resp = api.session.batch_request(ap_loc_reqs)
     eval_location_response(ap_loc_resp)
-    _ = asyncio.run(cache.update_floor_plan_cache(ap_loc_resp, cache="floors"))
+    _ = asyncio.run(common.cache.update_floor_plan_cache(ap_loc_resp, cache="floors"))
     ap_loc_data = {
         ap["serial_number"]: {
             "id": ap["ap_id"],
@@ -380,7 +380,7 @@ def _get_ap_location_via_api() -> tuple[dict[str, str], RateLimit]:
 def get_location_for_all_aps(ap_data: dict[str, dict[str, str | list[str]]], update_cache: bool = None) -> tuple[dict[str, dict[str, str | dict[str, str]]], RateLimit | None]:
     not_found_cnt = 0
     if update_cache is not True:
-        cache_aps = {serial: cache.floor_plan_aps_by_serial.get(serial) for serial in ap_data}
+        cache_aps = {serial: common.cache.floor_plan_aps_by_serial.get(serial) for serial in ap_data}
         not_found_cnt = list(cache_aps.values()).count(None)
 
     if update_cache is True or (not_found_cnt and update_cache is not False):
@@ -450,12 +450,12 @@ def redsky_bssids(
 
     [deep_sky_blue3]:information:[/]  Output for [cyan]--table[/], [cyan]--yaml[/], and [cyan]--json[/] includes additional information [italic](not in a RedSky 911Anywhere compatible format)[/].  [dim italic]default output is csv[/]
     """
-    api = ClassicAPI()
+    api = ClassicAPI(config)
     no_mask = no_mask if not mask_entries else True
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="csv")
-    _group = None if not group else cache.get_group_identifier(group, dev_type="ap")
-    _site = None if not site else cache.get_site_identifier(site)
-    _label = None if not label else cache.get_label_identifier(label)
+    _group = None if not group else common.cache.get_group_identifier(group, dev_type="ap")
+    _site = None if not site else common.cache.get_site_identifier(site)
+    _label = None if not label else common.cache.get_label_identifier(label)
     if len([flag for flag in [group, site, label] if flag is not None]) > 1:
         common.exit(f"You can only specify one of :triangular_flag: {utils.color(['--group', '--site', '--label'], color_str='cyan')} :triangular_flag:")
 
@@ -471,7 +471,7 @@ def redsky_bssids(
         "[deep_sky_blue3]:information:[/]  As with all commands that return data, the command can be repeated without doing any API calls using [cyan]cencli show last[/]"
     ] if update is not False else ["[deep_sky_blue1]:information:[/]  [cyan]--no-update[/] :triangular_flag: used.  Only APs that exist in location cache will be included in output."]
 
-    if len(cache.sites) > 5:  # pragma: no cover
+    if len(common.cache.sites) > 5:  # pragma: no cover
         render.econsole.print("\n".join(confirm_msg))
         render.confirm(yes)
 

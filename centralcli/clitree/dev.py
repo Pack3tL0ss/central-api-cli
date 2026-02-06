@@ -9,6 +9,7 @@ from functools import partial
 from pathlib import Path
 
 import typer
+from rich import print
 
 from centralcli import common, config, render
 from centralcli.environment import env
@@ -434,6 +435,58 @@ def cache_del(
     cache_resp = asyncio.run(update_func(_match.doc_id, remove=True))
     render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
     common.exit(int(not cache_resp))
+
+
+@app.command()
+def ws_change(
+    workspace_list: list[str] = typer.Argument(
+        None,
+        help="A list of workspaces to verify workspace changes within a CLI session (command)",
+        autocompletion=common.cache.workspace_completion,
+        show_default=False,
+    ),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Remove an item from the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Test mid command workspace switching functionality"""
+    from centralcli.clitree.show.show import _get_cencli_config
+
+
+    for idx, (ws, serial) in enumerate(zip([config.workspace, "kfc", "ge"], ["CNR4LHJ08G", "CNC7J0T11X", "CNGFJ0TJX5"])):
+        if idx > 0:
+            config.workspace = ws
+
+        print(render.render_title(f"{'Starting ' if idx == 0 else ''}Workspace [bright_green]{config.workspace} Config[/]"))
+        _get_cencli_config(brief=True)
+
+        from centralcli import api_clients
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} Classic API info[/]"))
+        render.display_results(data=api_clients.classic.session.auth.central_info, tablefmt="yaml")
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP API info[/]"))
+        glp_data = {
+            "token info": api_clients.glp.session.auth.token_info,
+            "central info": api_clients.glp.session.auth.central_info,
+        }
+        render.display_results(data=glp_data, tablefmt="yaml")
+
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP Cache Inventory refresh test call using serial# {serial}[/]"))
+        resp = api_clients.glp.session.request(common.cache.refresh_inv_db, serial_numbers=(serial,))
+        print(resp._response.request_info.headers["authorization"])
+        render.display_results(resp, title="glp API test call", exit_on_fail=False)
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP direct Inventory test call using serial# {serial}[/]"))
+        resp = api_clients.glp.session.request(api_clients.glp.devices.get_devices, serial_numbers=(serial,))
+        print(resp._response.request_info.headers["authorization"])
+        print(resp.output[0].get("id") or resp.error)
+
+        if idx != 2:
+            render.pause()
+
 
 
 @app.callback(no_args_is_help=True)

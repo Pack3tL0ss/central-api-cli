@@ -333,7 +333,7 @@ class Response:
         }
         if self.output:
             if isinstance(self.output, dict) and self.output.get("sourceResourceUri", "") == "AsyncOperationResource":
-                async_resp_fields = ["status", "startedAt", "endedAt", "result", "resultType"]
+                async_resp_fields = ["status", "startedAt", "endedAt", "result", "error", "resultType"]
                 output = {k.removesuffix("At").replace("Type", "_type"): self.output[k] if not k.endswith("At") else DateTime(pendulum.parse(self.output[k]).timestamp(), "mdyt") for k in async_resp_fields if k in self.output}
                 summary = {**summary, **output}
             else:

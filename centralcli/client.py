@@ -5,7 +5,7 @@ import asyncio
 import json
 import sys
 import time
-from functools import cached_property, wraps
+from functools import wraps
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Tuple, Type
@@ -112,7 +112,7 @@ class Session():
         self.running_spinners: List[str] = []  # TODO this should probably be a class attribute of the Spinner class, which is already a singleton
         self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and ("greenlake" in self.base_url or ".api.central." in self.base_url))
 
-    @cached_property
+    @property
     def auth(self):
         return self.get_conn_from_file(self.workspace_name) if not self.is_cnx else self.get_glp_conn_from_file()
 

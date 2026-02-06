@@ -409,9 +409,10 @@ class Utils:
         else:
             return list(chain.from_iterable(self.strip_no_value(data, aggressive=True)))
 
-    def format_table(self, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def format_table(self, data: list[dict[str, Any]], key_order: list[str] = None) -> list[dict[str, Any]]:
         """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
-        all_keys = self.all_keys(data)
+        _all_keys = self.all_keys(data)
+        all_keys = _all_keys if not key_order else [*[k for k in key_order if k in _all_keys], *[k for k in _all_keys if k not in key_order]]
         return [{k: d.get(k) for k in all_keys} for d in data]
 
     @staticmethod
@@ -681,7 +682,14 @@ class Utils:
             str: summary of each dict, 1 line per dict.
         """
         ignore_fields = ["ignore", "retired"]
-        out_list = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))]) for d in data]
+        out_list = [
+            '|'.join(
+                [
+                    f'[green]{k}[/]:[cyan]{v}[/]' if k != 'status' else f'[{"red" if v.lower() == "down" else "bright_green"}]{v}[/]'  for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))
+                ]
+            )
+            for d in data
+        ]
         # out = self.summarize_list(list(map(lambda line: f"{' ':<{pad}}{line}\n", out_list)), max=max, pad=pad, sep=sep)
         out = self.summarize_list(out_list, max=max, pad=pad, sep=sep)
         return out

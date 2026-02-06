@@ -21,6 +21,7 @@ HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
 import os
+from re import A
 import sys
 from pathlib import Path
 from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
@@ -263,26 +264,45 @@ if "--again" in sys.argv:
 from .classic.api import ClassicAPI
 from .cnx.api import CentralAPI, GreenLakeAPI
 
-class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-    def __init__(self, workspace_name: str = None, *, config: Config = None, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url, silent: bool = True):
-        self.workspace_name = workspace_name
-        self.config = config
-        self.classic_base_url = classic_base_url if not config else config.classic.base_url
-        self.glp_base_url = glp_base_url if not config else config.glp.base_url
-        self.cnx_base_url = cnx_base_url if not config else config.cnx.base_url
+class APIClients:
+    # clients_by_workspace: dict[str, ClassicAPI | GreenLakeAPI | CentralAPI | None] = {}
+
+    def __init__(self, cfg: Config = None, classic_base_url: str = None, glp_base_url: str = None, cnx_base_url: str = None, silent: bool = True):
+        self.config = cfg or config
+        self.classic_base_url = classic_base_url
+        self.glp_base_url = glp_base_url
+        self.cnx_base_url = cnx_base_url
         self.silent = silent
 
-    @cached_property
-    def classic(self):
-        return ClassicAPI(self.classic_base_url, workspace_name=self.workspace_name, silent=self.silent, config=self.config)
+    @property
+    def classic(self) -> ClassicAPI:
+        return ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("classic"):
+        #     return APIClients.clients_by_workspace[config.workspace]["classic"]
+        # classic_client = ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
+        # new_data = {"classic": classic_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return classic_client
 
-    @property  # This is not cached so we can toggle using config._mock()
-    def glp(self):
-        return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url, workspace_name=self.workspace_name, silent=self.silent, config=self.config)
+    @property
+    def glp(self) -> GreenLakeAPI | None:
+        return None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("glp"):
+        #     return APIClients.clients_by_workspace[config.workspace]["glp"]
+        # glp_client = None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
+        # new_data = {"glp": glp_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return glp_client
 
-    @cached_property
-    def cnx(self):
-        return None if not config.cnx.ok else CentralAPI(self.cnx_base_url, workspace_name=self.workspace_name, silent=self.silent, config=self.config)
+    @property
+    def cnx(self) -> CentralAPI | None:
+        return None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("cnx"):
+        #     return APIClients.clients_by_workspace[config.workspace]["cnx"]
+        # cnx_client = None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
+        # new_data = {"cnx": cnx_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return cnx_client
 
 api_clients = APIClients()
 
