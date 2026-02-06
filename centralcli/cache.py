@@ -1479,7 +1479,7 @@ class Cache:
 
     @property
     def my_service(self) -> CacheService:
-        key = "public" if config.cluster != "internal" else "internal"
+        key = "public" if self.config.cluster != "internal" else "internal"
         return self.services_by_name[key]
 
     @property
@@ -1737,11 +1737,10 @@ class Cache:
                 resp.raw = {"Error": "raw output not available due to partial failure."}
         return resp
 
-    @staticmethod
-    def workspace_completion(incomplete: str):
-        for ws in config.defined_workspaces:
+    def workspace_completion(self, incomplete: str):
+        for ws in self.config.defined_workspaces:
             if ws.lower().startswith(incomplete.lower()):
-                yield ws, config.data["workspaces"][ws].get("cluster") or ""  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
+                yield ws, self.config.data["workspaces"][ws].get("cluster") or ""  # TODO help text to include friendly name for cluster i.e. ("WadeLab", "us-west4")
 
     @ensure_config
     def method_test_completion(self, incomplete: str, args: List[str] = []):  # pragma: no cover
@@ -1755,7 +1754,7 @@ class Cache:
             importlib.import_module(f"centralcli.{bpdir.name}.{f.stem}") for f in bpdir.iterdir()
             if not f.name.startswith("_") and f.suffix == ".py"
         ]
-        client = Session(config.classic.base_url)
+        client = Session(self.config.classic.base_url)
         for m in all_calls:
             methods += [
                 d for d in m.AllCalls(client).__dir__()
@@ -2085,7 +2084,7 @@ class Cache:
         args: List[str] = None,
     ):
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
+        if not self.config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
@@ -2209,7 +2208,7 @@ class Cache:
         args: List[str] = None,
     ):
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
+        if not self.config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
@@ -2598,7 +2597,7 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
+        if not self.config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
@@ -2642,7 +2641,7 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
+        if not self.config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
@@ -2677,7 +2676,7 @@ class Cache:
                 Returns None if config is invalid
         """
         # Prevents exception during completion when config missing or invalid
-        if not config.valid:
+        if not self.config.valid:
             econsole.print(":warning:  Invalid config")
             return
 
@@ -2988,7 +2987,7 @@ class Cache:
         args: List[str] = None,
     ) -> Iterator[Tuple[str, str]]:
         # Prevents exception during completion when config missing or invalid
-        if config.valid:
+        if self.config.valid:
             yield from self.dev_gw_switch_completion(ctx, incomplete, args=args)
             yield from self.site_completion(ctx, incomplete, args=args)
 
@@ -3344,7 +3343,7 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
-        if config.glp.ok:
+        if self.config.glp.ok:
             return await self.refresh_inv_db_glp(dev_type=dev_type, serial_numbers=serial_numbers, assigned=assigned, archived=archived)
 
         if archived is not None:
@@ -3955,9 +3954,9 @@ class Cache:
             update_funcs += [self.refresh_label_db]
         if license_db:
             update_funcs += [self.refresh_license_db]
-        if app_db and config.glp.ok:
+        if app_db and self.config.glp.ok:
             update_funcs += [self.refresh_svc_db]  # app db only updated when full refresh is done as the app ids should not change
-        inv_update_kwargs = {} if not config.glp.ok or not serial_numbers else {"serial_numbers": serial_numbers, "assigned": assigned, "archived": archived}
+        inv_update_kwargs = {} if not self.config.glp.ok or not serial_numbers else {"serial_numbers": serial_numbers, "assigned": assigned, "archived": archived}
 
         if update_funcs:
             kwarg_list = [{} if f.__name__ not in dev_update_funcs else {"dev_type": dev_type} if f.__name__ != "refresh_inv_db" else {"dev_type": dev_type, **inv_update_kwargs} for f in update_funcs]
@@ -3990,7 +3989,7 @@ class Cache:
                 else:
                     db_res += [dev_res]
                 remaining_cache_updates = [self.refresh_inv_db, self.refresh_site_db, self.refresh_template_db, self.refresh_label_db, self.refresh_license_db]
-                if config.glp.ok:
+                if self.config.glp.ok:
                     remaining_cache_updates += [self.refresh_svc_db]
                 if db_res[-1]:
                     batch_reqs = [BatchRequest(req) for req in remaining_cache_updates]
@@ -4031,8 +4030,8 @@ class Cache:
         refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
-        if refresh or not config.cache_file_ok:
-            _word = "Refreshing" if config.cache_file_ok else "Populating"
+        if refresh or not self.config.cache_file_ok:
+            _word = "Refreshing" if self.config.cache_file_ok else "Populating"
             updating_db = "[bright_green]Full[/] Identifier mapping" if not update_count else utils.color([k for k, v in db_map.items() if v])
             print(f"[cyan]-- {_word} {updating_db} Cache --[/cyan]", end="")
 
@@ -4432,11 +4431,12 @@ class Cache:
             if "switch" in dev_type:
                 dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
 
-        Model = CacheDevice
+        # CacheObject = CacheDevice
         if isinstance(query_str, (list, tuple)):
             query_str = " ".join(query_str)
 
         match = None
+        inv_match = None
         for _ in range(0, 2 if retry else 1):
             # Try exact match
             match = self.DevDB.search(
@@ -4453,12 +4453,12 @@ class Cache:
 
             # Inventory must be exact match expecting full serial numbers MAC just needs to be the same effective MAC regardless of format
             if not match and include_inventory:
-                match = self.InvDB.search(
+                inv_match = self.InvDB.search(
                     (self.Q.serial == query_str)
                     | (self.Q.mac == utils.Mac(query_str))
                 )
-                if match:
-                    Model = CacheInvDevice
+                # if inv_match:
+                #     CacheObject = CacheInvDevice
 
             # retry with case insensitive name match if no match with original query
             if not match:
@@ -4494,14 +4494,14 @@ class Cache:
 
 
             # no match found initiate cache update
-            if retry and (not match or Model == CacheInvDevice) and self.responses.dev is None:
+            if retry and not match and self.responses.dev is None:
                 if dev_type and (cache_updated or self.responses.device_type == dev_type):
                     ...  # pragma: no cover self.responses.dev is not currently updated if dev_type provided [ update it does now, but keeping this in until tested ], but cache update may have already occured in this session.
                 else:
-                    if not match:
+                    if not any([match, inv_match]):
                         _msg = f"[bright_red]No Match found[/] in {'Inventory or Device (monitoring)' if include_inventory else 'Device (monitoring)'} Cache"
                     else:
-                        _msg = "[bright_red]No Match found[/]" if Model != CacheInvDevice else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
+                        _msg = "[bright_red]No Match found[/]" if not inv_match else "[bright_green]Match found in Inventory Cache[/], [bright_red]No Match found in Device (monitoring) Cache[/]"
                     dev_type_sfx = "" if not dev_type else f" [dim italic](Device Type: {utils.unlistify(dev_type)})[/]"
                     econsole.print(f"[dark_orange3]:warning:[/]  {_msg} for [cyan]{query_str}[/]{dev_type_sfx}.")
                     # fuzz_match = None
@@ -4509,9 +4509,9 @@ class Cache:
                         match = self.fuzz_lookup(query_str, db=self.DevDB, dev_type=dev_type)
 
                     # If there is an inventory only match we still update monitoring cache (to see if device came online since it was added. Otherwise commands like move will reject due to only being in Inventory)
-                    if not match or Model == CacheInvDevice:
+                    if not match:
                         kwargs = {"dev_db": True}
-                        if include_inventory and Model != CacheInvDevice:
+                        if include_inventory and not inv_match:
                             _word = " & Inventory "
                             kwargs["inv_db"] = True
                         else:
@@ -4519,11 +4519,14 @@ class Cache:
                         econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
                         self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
                         cache_updated = True  # Need this for scenario when dev_type is the only thing refreshed, as that does not update self.responses.dev
-                        if Model == CacheInvDevice:
+                        if inv_match:
                             continue
 
             if match:
-                match = [Model(dev) for dev in match]
+                match = [CacheDevice(dev) for dev in match]
+                break
+            if inv_match:
+                match = [CacheInvDevice(dev) for dev in inv_match]
                 break
 
         if len(match) > 1 and (swack or swack_only):

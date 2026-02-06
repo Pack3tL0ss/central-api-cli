@@ -153,8 +153,10 @@ def devices(
     # update status in monitoring cache so --ui-only delete is possible without cache update
     try:
         deleted = [d["id"] for r in resp if r.ok and r.output.get("async operation response") for d in r.output["async operation response"].get("result", {}).get("succeededDevices", [{}]) if "id" in d]
-        update_data = [{**common.cache.devices_by_serial[common.cache.inventory_by_id[_id].serial], "status": "Down"} for _id in deleted]
-        _ = asyncio.run(common.cache.update_dev_db(update_data))
+        update_data = [{**common.cache.devices_by_serial.get(common.cache.inventory_by_id[_id].serial, {}), "status": "Down"} for _id in deleted]
+        update_data = [d for d in update_data if len(d) > 1]  # inner dict will just be {"status": "Down"} if the dev is not found in dev cache
+        if update_data:
+            _ = asyncio.run(common.cache.update_dev_db(update_data))
     except Exception as e:
         log.exception(f"{repr(e)} during attempt to update device cache with down status after glp device unassignment.")
         render.econsole.print(
