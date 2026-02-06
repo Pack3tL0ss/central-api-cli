@@ -4,9 +4,9 @@ import asyncio
 import time
 from typing import Any, Dict, Generator, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator, PrivateAttr
 
-from centralcli import cache, utils
+from centralcli import utils
 from centralcli.render import Spinner
 
 from ..cache import Cache, CacheInvDevice, CacheInvMonDevice, CacheSub
@@ -194,20 +194,22 @@ class _ImportDevice(BaseModel):
         return tags or v
 
 class ImportDevice(_ImportDevice):
+    _cache: Cache = PrivateAttr(None)
     _sub_object: CacheSub | None = None
     _sub_fetched: bool = False
     _inv_object: CacheInvDevice | None = None
     _inv_fetched: bool = False
 
-    def __init__(self, **kwargs):
+    def __init__(self, cache: Cache, **kwargs):
+        ImportDevice._cache = cache
         super().__init__(**kwargs)
 
     @property
-    def sub(self):
+    def sub(self) -> CacheSub:
         if self.subscription is None:
             return None
         if not self._sub_object:
-            self._sub_object = cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
+            self._sub_object = self._cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
             self._sub_fetched = True
 
         return self._sub_object
@@ -219,9 +221,9 @@ class ImportDevice(_ImportDevice):
         return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
     def _get_inv_object(self, serials: list[str] | None = None) -> CacheInvDevice | None:
-        inv_dev = cache.InvDB.search(cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
-        if not inv_dev and cache.responses.inv is None:
-            return cache.get_inv_identifier(self.serial, exit_on_fail=False, silent=True)
+        inv_dev = self._cache.InvDB.search(self._cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
+        if not inv_dev and self._cache.responses.inv is None:
+            return self._cache.get_inv_identifier(self.serial, serial_numbers=tuple(serials), exit_on_fail=False, silent=True)
         self._inv_fetched = True
         self._inv_object = None if not inv_dev else CacheInvDevice(inv_dev[0])
         return self._inv_object
@@ -286,6 +288,7 @@ class ImportDevices(RootModel):
     root: list[ImportDevice]
 
     def __init__(self, cache: Cache, data: list[dict[str, Any]]) -> None:
+        self._cache = cache
         super().__init__([ImportDevice(cache=cache, **s) for s in data])
 
     def __iter__(self):
@@ -357,7 +360,7 @@ class ImportDevices(RootModel):
 
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
-        subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root if dev.subscription)
+        subs: set[CacheSub] = set(self._cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root if dev.subscription)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
         start = time.perf_counter()
         with Spinner(f"Gathering [green]GreenLake[/] device_ids from cache for [cyan]{len(self)}[/] devices found in import") as spinner:
@@ -379,7 +382,7 @@ class ImportDevices(RootModel):
         _additional_subs = {}
         for sub_id in out_dict:
             if len(out_dict[sub_id].devices) > out_dict[sub_id].cache_sub.available:
-                this_subs: list[CacheSub] = cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
+                this_subs: list[CacheSub] = self._cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
                 if len(utils.listify(this_subs)) > 1:
                     devs = out_dict[sub_id].devices
                     exact_matches = [devs.pop(devs.index(d)) for d in devs if d.exact_sub]

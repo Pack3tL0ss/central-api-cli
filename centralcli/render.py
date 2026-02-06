@@ -919,6 +919,12 @@ def _clean_output(data: list[dict] | list[str] | dict | None, cleaner: Callable,
         return data
 
 
+def render_title(title: str, bar_color: str = "green") -> Text:
+    _title = Text.from_markup(f"[dodger_blue2]{title}[/]")
+    _lines = f"[{bar_color}]{'─' * len(_title)}[/]"
+    return Text.from_markup("\n".join([_lines, _title.markup, _lines]))
+
+
 def _display_results(
     data: Union[List[dict], List[str], dict, None] = None,
     tablefmt: str = "rich",
@@ -1081,12 +1087,10 @@ def display_results(
             conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")).capitalize() == "False")]
             if any(conditions):
                 if isinstance(title, list) and len(title) == len(resp):
-                    print(title[idx])
+                    print(render_title(title[idx], bar_color="green" if r.ok else "red"))
                 else:
                     if title and tablefmt == "action" and idx == 0:
-                        _title = Text.from_markup(f"[dodger_blue2]{title}[/]")
-                        _lines = f"[{'green' if r.ok else 'red'}]{'─' * len(_title)}[/]"
-                        console.print(_lines, _title, _lines, justify="left", sep="\n")
+                        print(render_title(title, bar_color="green" if r.ok else "red"))
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
                     print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")

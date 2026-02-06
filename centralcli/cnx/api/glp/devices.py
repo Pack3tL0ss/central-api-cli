@@ -64,6 +64,7 @@ class GreenLakeDevicesAPI:
             else:
                 with render.Spinner(f"Allowing more time for {len(retry_reqs)} Async operations to complete..."):
                     sleep(2)
+        # TODO this needs a return or error if there are still retrys marked running
 
 
 
@@ -135,7 +136,7 @@ class GreenLakeDevicesAPI:
             cache: Cache = None,
         ) -> list[Response]:  # pragma: no cover  still use classic for now
         url = "/devices/v2beta1/devices"
-        header = {"Content-Type": "application/json"}
+        # We need to add the device before we can assign it to Aruba Central
         devices = devices if isinstance(devices, list) else [devices]
         payloads = [
             {
@@ -149,7 +150,7 @@ class GreenLakeDevicesAPI:
         if location_id:
             payloads = [{**p, "location": {"id": location_id}} for p in payloads]
 
-        batch_reqs = [BatchRequest(self.session.post, url, json_data=payload, headers=header) for payload in payloads]
+        batch_reqs = [BatchRequest(self.session.post, url, json_data=payload) for payload in payloads]
         add_resp = await self.session._batch_request(batch_reqs)
         passed = [r for r in add_resp if r.ok]
         if not passed:
@@ -157,6 +158,7 @@ class GreenLakeDevicesAPI:
 
         async_add_resp = await self.get_progresss_of_async_ops(add_resp)
 
+        # Send Assignment to Central and Subscription assignments to update
         devs_by_sub = {}
         if not subscription_ids:
             devices = utils.normalize_device_sub_field(devices)
@@ -171,7 +173,14 @@ class GreenLakeDevicesAPI:
             return async_add_resp
 
         serials = [d["serial"] for d in devices]
-        inv_resp = await self.get_devices(serial_numbers=serials)
+        for _ in range(2):
+            inv_resp = await self.get_devices(serial_numbers=serials)
+            if inv_resp.ok and len(inv_resp) == len(serials):
+                break
+
+            with render.Spinner(f"Allowing more time for [GreenLake] to be prepared to send inventory response for {len(serials)} added devices."):
+                sleep(3)
+
         if not inv_resp.ok or not inv_resp.output:
             sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
             log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
@@ -182,7 +191,7 @@ class GreenLakeDevicesAPI:
                 cache_data = Inventory(**inv_resp.raw)
                 _ = await cache.update_inv_db(cache_data.model_dump()["items"])
             except Exception as e:
-                log.exception(f"Exception ({repr(e)}) during cache update after device addition", caption=True)
+                log.exception(f"Exception ({repr(e)}) during cache update after device addition (devices.add_devices())", caption=True)
 
         new_devs_by_serial = {dev["serialNumber"]: dev for dev in inv_resp.output}
         if devs_by_sub:

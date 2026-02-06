@@ -3600,7 +3600,10 @@ def cron(
     )
 
 
-def _get_cencli_config(all_workspaces: bool = False) -> None:
+def _get_cencli_config(*, all_workspaces: bool = False, brief: bool = False) -> None:
+    out = {}
+    caption = None
+
     omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
     if not config.is_old_cfg:
         omit += ["is_old_cfg"]
@@ -3612,18 +3615,21 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     defined_workspaces = out.pop("defined_workspaces", [])
     current_workspace = out.pop("_workspace", "[red]ERROR[/]")
     out = {**out, "defined_workspaces": ", ".join(defined_workspaces), "current_workspace": f"[bright_green]{current_workspace}[/]"}
-    workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
 
     dev_options = config.dev.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
     if dev_options:  # pragma: no cover
         out = {**out, "dev_options": dev_options}
 
-    if all_workspaces:
+    workspaces: dict[str, Any] = out.pop("data", {}).get("workspaces", {})
+
+    caption = None if brief else f"[italic]{emoji.info} Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
+
+    if brief:
+        out = {config.workspace: workspaces.get(config.workspace, {}), "cache file": config.cache_file}
+    elif all_workspaces:
         out = {"workspaces": workspaces,  **out}
     else:
         out = {**out, config.workspace: workspaces.get(config.workspace, {})}
-
-    caption = f"[italic]{emoji.info} Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 

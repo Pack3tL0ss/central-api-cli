@@ -13,12 +13,20 @@ from .central.monitoring import MonitoringAPI
 
 if TYPE_CHECKING:
     from ...typedefs import StrOrURL
-    from aiohttp.client import ClientSession
 
 class GreenLakeAPI:
-    def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
+    _by_workspace: dict[str, GreenLakeAPI] = {}
+
+    def __init__(self, config: Config = None, *, base_url: StrOrURL = None, silent: bool = True):
         self.config = config or cfg
-        self._session = Session(base_url=base_url or self.config.glp.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config, cnx=True)
+        self._session = Session(config=self.config, base_url=base_url or self.config.glp.base_url, silent=silent, cnx=True)
+
+    def __new__(cls, config: Config = None, **kwargs):
+        workspace = config and config.workspace or cfg.workspace
+        if cls._by_workspace.get(workspace) is None:
+            cls._by_workspace[workspace] = super().__new__(cls)
+
+        return cls._by_workspace[workspace]
 
     @property
     def session(self) -> Session:
@@ -41,9 +49,18 @@ class GreenLakeAPI:
         return GreenLakeServiceManagerAPI(self.session)
 
 class CentralAPI:
-    def __init__(self, base_url: StrOrURL = None, *, workspace_name: str = None, aio_session: ClientSession = None, silent: bool = True, config: Config = None):
+    _by_workspace: dict[str, CentralAPI] = {}
+
+    def __init__(self, config: Config = None, *, base_url: StrOrURL = None, silent: bool = True):
         self.config = config or cfg
-        self._session = Session(base_url=base_url or self.config.cnx.base_url, workspace_name=workspace_name, aio_session=aio_session, silent=silent, config=self.config, cnx=True)
+        self._session = Session(config=self.config, base_url=base_url or self.config.cnx.base_url, silent=silent, cnx=True)
+
+    def __new__(cls, config: Config = None, **kwargs):
+        workspace = config and config.workspace or cfg.workspace
+        if cls._by_workspace.get(workspace) is None:
+            cls._by_workspace[workspace] = super().__new__(cls)
+
+        return cls._by_workspace[workspace]
 
     @property
     def session(self) -> Session:

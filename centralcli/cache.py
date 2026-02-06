@@ -1271,10 +1271,13 @@ class Cache:
 
     def __init__(
         self,
-        config: Config = None,
+        config: Config,
     ) -> None:
         """Central-API-CLI Cache object
         """
+        self.init(config)
+
+    def init(self, config: Config) -> None:
         self.updated: list = []  # TODO # DEPRECATED change from list of methods to something easier
         self.config = config
         self.responses = CacheResponses()
@@ -1393,6 +1396,11 @@ class Cache:
     def inventory_by_serial(self) -> Dict[str, Document]:
         return {d["serial"]: d for d in self.inventory}
 
+    # TODO return dict of Cache Objects need to check impact, but likely easier to work with
+    @property
+    def inventory_by_id(self) -> Dict[str, CacheInvDevice]:
+        return {d["id"]: CacheInvDevice(d) for d in self.inventory}
+
     @property
     def invdev_by_id(self) -> Dict[str, CacheInvMonDevice]:
         return {
@@ -1473,7 +1481,7 @@ class Cache:
 
     @property
     def my_service(self) -> CacheService:
-        key = "public" if self.config.cluster != "internal" else "internal"
+        key = "public" if config.cluster != "internal" else "internal"
         return self.services_by_name[key]
 
     @property
@@ -1712,7 +1720,8 @@ class Cache:
         combined = [
             {
                 **_inv_by_ser.get(serial, {}),
-                **_dev_by_ser.get(serial, {})
+                **_dev_by_ser.get(serial, {}),
+                "model": _inv_by_ser.get(serial, {}).get("model", _dev_by_ser.get(serial, {}).get("model"))  # The model from inv is more concise, better for confirmation prompts
             } for serial in _all_serials
         ]
 
@@ -3337,7 +3346,7 @@ class Cache:
         Returns:
             Response: CentralAPI Response object
         """
-        if api_clients.glp:
+        if config.glp.ok:
             return await self.refresh_inv_db_glp(dev_type=dev_type, serial_numbers=serial_numbers, assigned=assigned, archived=archived)
 
         if archived is not None:

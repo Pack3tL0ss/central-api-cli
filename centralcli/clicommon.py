@@ -15,6 +15,7 @@ from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
+from time import sleep
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
 
 import pendulum
@@ -40,7 +41,6 @@ from centralcli.utils import ToBool
 
 from . import api_clients
 from .client import BatchRequest, Session
-from .cnx.api import GreenLakeAPI
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
 from .models.imports import ImportDevices
@@ -412,7 +412,7 @@ class CLICommon:
             return workspace
 
         # dev commands that change files, we don't need to verify the workspace.
-        if sys.argv[1:] and sys.argv[1] == "dev":
+        if sys.argv[1:] and sys.argv[1] == "dev" and "cache-del" not in str(sys.argv):
             return workspace
 
         # cencli test method requires --ws when using non default, we do not honor forget_account_after
@@ -423,18 +423,16 @@ class CLICommon:
             else:
                 return config.default_workspace
 
-        workspace = workspace or config.default_workspace  # workspace only has value if --ws flag is used.
+        _workspace = workspace or config.default_workspace  # workspace only has value if --ws flag is used.
 
-        if default:  # They used the -d flag
+        if default or workspace == "default":  # They used the -d flag or --ws default
             render.econsole.print(":information:  [bright_green]Using default central workspace[/]\n",)
             if config.sticky_workspace_file.is_file():
                 config.sticky_workspace_file.unlink()
-            if workspace in config.defined_workspaces:
-                return workspace
             return config.default_workspace
 
         # -- // sticky last account messaging account is loaded in config.py \\ --
-        elif workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
+        elif _workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
             if config.last_workspace:
                 # last account messaging.
                 if config.forget is not None:
@@ -445,37 +443,37 @@ class CLICommon:
                             config.sticky_workspace_file.unlink()
 
                     else:
-                        workspace = config.last_workspace
-                        msg = self.WorkSpaceMsg(workspace)
+                        _workspace = config.last_workspace
+                        msg = self.WorkSpaceMsg(_workspace)
                         if not config.last_workspace_msg_shown:
                             render.econsole.print(msg.previous_will_forget)
-                            config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
+                            config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
                         else:
                             render.econsole.print(msg.previous_short)
 
                 else:
-                    workspace = config.last_workspace
-                    msg = self.WorkSpaceMsg(workspace)
+                    _workspace = config.last_workspace
+                    msg = self.WorkSpaceMsg(_workspace)
                     if not config.last_workspace_msg_shown:
                         render.econsole.print(msg.previous)
-                        config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
+                        config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
                     else:
                         render.econsole.print(msg.previous_short)
 
-        elif workspace in config.defined_workspaces:
-            if workspace == (env.workspace or ""):
-                msg = self.WorkSpaceMsg(workspace)
+        elif _workspace in config.defined_workspaces:
+            if _workspace == (env.workspace or ""):
+                msg = self.WorkSpaceMsg(_workspace)
                 render.econsole.print(msg.envvar)
             elif config.forget is not None and config.forget > 0:
-                render.econsole.print(self.WorkSpaceMsg(workspace).initial)
+                render.econsole.print(self.WorkSpaceMsg(_workspace).initial)
             # No need to print account msg if forget is set to zero
 
         if config.valid:
-            return workspace
+            return _workspace
         else:  # -- Error messages config invalid or account not found in config --
             _def_msg = False
             render.econsole.print(
-                f":warning:  [bright_red]Error:[/] The specified workspace: [cyan]{config.workspace}[/] is not defined in the config @\n"
+                f":warning:  [bright_red]Error:[/] The specified workspace: [cyan]{workspace}[/] is not defined in the config @\n"
                 f"  {config.file}\n"
             )
 
@@ -486,7 +484,7 @@ class CLICommon:
                     f"--ws|--workspace flag or [cyan]{env_var.workspace}[/] environment variable.\n"
                 )
 
-            if workspace != "default":
+            if _workspace != "default":
                 if config.defined_workspaces:
                     render.econsole.print(f"[bright_green]The following workspaces are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_workspaces)}[reset]\n", emoji=False)
                     if not _def_msg:
@@ -1103,8 +1101,8 @@ class CLICommon:
                                 d['subscription'] = d['subscription'].lower().replace("-", "_")
                                 break
 
-                        sub = self.cache.get_sub_identifier(d['subscription'], best_match=True)
-                        d['subscription'] = sub.id
+                        _ = self.cache.get_sub_identifier(d['subscription'], best_match=True)  # Only validating it exists value is kept as entered for migrate flow
+                        # d['subscription'] = sub.id
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
@@ -1184,7 +1182,7 @@ class CLICommon:
                 self.exit()
         return ok
 
-    def batch_add_devices_classic(self, data: list[dict[str, Any]] | None = None, *, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices_classic(self, data: list[dict[str, Any]] | None = None) -> List[Response]:
         resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
 
         _data = None if not all([r.ok for r in resp]) else data
@@ -1212,26 +1210,32 @@ class CLICommon:
 
         return resp or Response(error="No Devices were added")
 
-    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False) -> List[Response]:
         import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)  # replaces subscription with global subscrition override for each dev if provided
 
         confirm_msg = []
         if import_devs.has_subs and not self.cache.responses.sub:
             confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
+        # glp_api = GreenLakeAPI(config.glp.base_url)
         glp_api = api_clients.glp
-        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=import_devs.model_dump(), application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
+        add_data = [{k: v for k, v in dev.items() if k != "subscription"} for dev in import_devs.model_dump()]  # strip the subscription from the add, as it's whatever the user put in the import.  We send it in the update below where it is flipped to the necessary subscription.id
+        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=add_data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
 
-        # cache update.  Better to just query for the serials that were added vs parsing the async response.  Failure could indicate already claimed, which isn't really a failure
+        with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for devices updates after device addition"):
+            sleep(4)
+
+        # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
         serial_numbers = [d["serial"] for d in data]
         asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
 
-        update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True)  # confirmation is done in batch_add_devices
+        update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate)  # confirmation is done in batch_add_devices
 
         # pre-provision devices to groups / classic API
         to_group, group_resp = {}, []
         [utils.update_dict(to_group, d["group"], d["serial"]) for d in data if "group" in d and d["group"]]
         if to_group:
+            api = api_clients.classic
             group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
             group_resp = api.session.batch_request(group_reqs)
 
@@ -1253,20 +1257,14 @@ class CLICommon:
         data, retain_warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
         all_keys = utils.all_keys(data, with_value=True)
 
-        file_str = f"{'provided devices' if len(data) > 1 else 'device'}:" if not import_file else f"devices found in [cyan]{import_file.name}[/]:"
+        file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
         file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
-        render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}')
+        render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
 
-        # can only do friendly name lookups for glp as sub cache was added with glp support
-        confirm_data, sub = None, None
-        if config.glp.ok:
-            confirm_data = [{k: v if k != "subscription" else self.cache.subscriptions_by_id[v].name for k, v in d.items() if v} for d in data]
-            if subscription:
-                sub = self.cache.get_sub_identifier(subscription, best_match=True)
-
-        render.console.print(f'   {utils.summarize_data(confirm_data or data, pad=3).lstrip()}\n', emoji=False)
+        render.console.print(f'   {utils.summarize_data(data, pad=3).lstrip()}\n', emoji=False)
         if subscription:
-            render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub and sub.summary_text or subscription}[/]')
+            sub = self.cache.get_sub_identifier(subscription, best_match=True)
+            render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub}[/]')
         elif "subscription" in all_keys:
             render.console.print('[dim italic]Devices will be assigned subscriptions based on subscriptions found in the import.[/]')
         else:  # pragma: no cover
@@ -1293,9 +1291,9 @@ class CLICommon:
         warn = warn if not env.is_pytest and not yes > 1 else False  # bypass confirmation for test runs or
         render.confirm(yes=(not warn or migrate) and yes)
         if config.glp.ok:
-            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, api=api)
+            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, migrate=migrate)
         else:
-            return self.batch_add_devices_classic(data, api=api)
+            return self.batch_add_devices_classic(data)
 
     # TODO this has not been tested validated at all
     # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
@@ -1604,6 +1602,9 @@ class CLICommon:
 
         return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
 
+    # FIXME after doing a move from import_file including 1 swich and 2 APs where the switch needed both done, but the APs had the group ignored.  Only the switch
+    # reflected both the group and site.  The AP was moved to the site, but the cache was not updated to reflect that.
+    # to recreate "cencli migrate devices kfc --site Barn --not-group bridge --not-type gw -d" then "cencli batch move <migrate file> --ws kfc"
     def device_move_cache_update(
             self,
             mv_resp: List[Response],
@@ -1943,11 +1944,11 @@ class CLICommon:
 
     def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
         if config.glp.ok and not any([ui_only, cop_inv_only]):
-            return self.glp_batch_delete_devices(data, yes=yes, force=force)  # Note glp delete flow only deletes from GLP inventory not ui
+            return self.glp_batch_delete_devices(data, yes=yes)  # Note glp delete flow only deletes from GLP inventory not ui
         return self.classic_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
 
 
-    def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, force: bool = False) -> List[Response]:  # force is ignored for glp flow, does not apply
+    def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False) -> List[Response]:
         api = api_clients.glp
         all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
         devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]  # retry_dev false means if the cache is outdated ui deletes may not occur for devs not in mon cache
@@ -2153,12 +2154,14 @@ class CLICommon:
             _tags: dict = hash_to_tags[tag_hash]
             _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v or _empty_str}' for k, v in _tags.items()])
             confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(ids)}[/] [bright_green]devices[/bright_green]:\n{_tag_msg}"]
+            # api = GreenLakeAPI()
+            api = api_clients.glp
             batch_reqs += [BatchRequest(api.devices.update_devices, device_ids=ids, tags=_tags)]
 
         return BuiltRequests(batch_reqs, confirm_msgs=confirm_msg)
 
     def _build_glp_sub_reqs(self, import_devs: ImportDevices, *, assigned: bool = None) -> BuiltRequests:
-        glp_api = GreenLakeAPI()
+        glp_api = api_clients.glp
         devs_by_sub_id = import_devs.serials_by_subscription_id(assigned=assigned)
         confirm_msg = [""]
         sub_reqs = []
@@ -2195,9 +2198,9 @@ class CLICommon:
 
         return _data
 
-    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False) -> list[Response]:
+    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False, migrate: bool = False) -> list[Response]:
         _data = self._prep_glp_add_update_data(data, subscription=subscription, sub_required=sub_required)
-        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=True)
+        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=not migrate)
         confirm_msg = sub_req_obj.confirm_msgs
         sub_reqs = sub_req_obj.requests
 
@@ -2224,8 +2227,22 @@ class CLICommon:
         confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
         render.econsole.print("\n".join(confirm_msg), emoji=False)
         render.confirm(yes) # aborts here if they don't confirm
-        glp_api = GreenLakeAPI()
+        glp_api = api_clients.glp
         batch_res = glp_api.session.batch_request(batch_reqs)
+
+        # cache update
+        sub_res = batch_res[:len(sub_reqs)]
+        update_ids = []
+        try:
+            for res in sub_res:
+                if res.ok:
+                    update_ids += [d.get("id") for d in res.output["async operation response"].get("result", {}).get("succeededDevices", [{}])]
+            if update_ids:
+                update_import_devs = [d for d in _data if d.glp_id in update_ids]
+                update_data = [{**self.cache.inventory_by_serial[d.serial], "services": d.sub.name, "subscription_key": d.sub.key, "subscription_expires": d.sub.end_date} for d in update_import_devs]
+                _ = glp_api.session.request(self.cache.update_inv_db, update_data)
+        except Exception as e:  # pragma: no cover
+            log.exception(f"{repr(e)} while attempting Inventory cache update after subscription assignment in clicommon.batch_update_glp_devices", caption=True, log=True)
 
         return batch_res
 

@@ -364,7 +364,7 @@ class Config:
         return len(self.data) > 0 and self.workspace in self.data
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data)  # pragma: no cover
 
     @property
     def workspace(self) -> str:
@@ -374,6 +374,8 @@ class Config:
     def workspace(self, workspace: str):  # pragma: no cover
         self._workspace = workspace
         self.set_attributes()
+        from .cache import Cache
+        Cache.set_config(self)
 
     @property
     def closed_capture_file(self) -> Path:
