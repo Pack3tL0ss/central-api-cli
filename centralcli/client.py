@@ -378,9 +378,15 @@ class Session():
                 elif resp.status == 504:
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
-                elif resp.status == 429:  # per second rate limit.
-                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
-                    self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
+                elif resp.status == 429:
+                    if "greenlake" in resp.url.host:
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per minute rate limit"
+                        self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/m: {resp.rl.remain_min}: {resp.url.path_qs}"]
+                        with Spinner(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):
+                            await asyncio.sleep(resp.rl.glp_rl_reset)
+                    else:  # per second rate limit.
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
+                        self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
                 elif resp.status == 418:  # Spot to handle retries for any caught exceptions
                     if resp.error == "ContentLengthError":

@@ -26,13 +26,19 @@ if TYPE_CHECKING:
 class RateLimit():
     def __init__(self, resp: ClientResponse = None):
         self.total_day, self.remain_day, self.total_sec, self.remain_sec = 0, 0, 0, 0
+        self.total_min, self.remain_min, self.glp_rl_reset = 0, 0, 0
+        self.is_glp = False
         if hasattr(resp, "headers"):
             rh = resp.headers
             self.total_day = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
             self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
             self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
             self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
+            self.total_min = int(f"{rh.get('ratelimit-limit', 0)}")  # glp
+            self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")  # glp
+            self.glp_rl_reset = int(f"{rh.get('ratelimit-reset', 0)}")  # glp
             self.call_performed = True
+            self.is_glp = True if "greenlake" in resp.url.host else False
         else:
             self.call_performed = False
 
@@ -45,6 +51,8 @@ class RateLimit():
 
     def __str__(self):
         if self.call_performed:
+            if self.total_min:
+                return f"GLP API Per Minute Rate Limit: {self.remain_min} of {self.total_min} remaining."
             return f"API Rate Limit: {self.remain_day} of {self.total_day} remaining."
         else:
             return "No API call was performed."
@@ -56,27 +64,39 @@ class RateLimit():
         return len(self.__str__())
 
     def __lt__(self, other) -> bool:
-        return True if self.remain_day is None else bool(self.remain_day < other)
+        if not self.is_glp:
+            return True if self.remain_day is None else bool(self.remain_day < other)
+        return bool(self.remain_min < other)
 
     def __le__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day <= other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day <= other)
+        return bool(self.remain_min <= other)
 
     def __eq__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day == other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day == other)
+        return bool(self.remain_min == other)
 
     def __gt__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day > other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day > other)
+        return bool(self.remain_min > other)
 
     def __ge__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day >= other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day >= other)
+        return bool(self.remain_min >= other)
 
     @property
     def ok(self) -> bool:
-        if self.used_sec + self.remain_sec + self.total_sec == 0:
-            secs_ok = True
-        else:
-            secs_ok = True if self.remain_sec > 0 else False
-        return True if self.remain_day != 0 and secs_ok else False
+        if not self.is_glp:
+            if self.used_sec + self.remain_sec + self.total_sec == 0:
+                secs_ok = True
+            else:
+                secs_ok = True if self.remain_sec > 0 else False
+            return True if self.remain_day != 0 and secs_ok else False
+        return self.remain_min != 0
 
     @property
     def near_sec(self) -> bool:
@@ -88,7 +108,11 @@ class RateLimit():
 
     @property
     def text(self) -> str:
-        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        if not self.is_glp:
+            full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        else:
+            full_text = f"{self}\n{' ':16}{self.reamin_min}/min of {self.total_min}/min remaining.\nRate Limit will reset in {self.glp_rl_reset} Seconds."
+
         return full_text if self.call_performed else str(self)
 
     @property
@@ -157,7 +181,7 @@ class Response:
         """
         self.rl = RateLimit(response)
         self._response = response
-        self.output = output or {}
+        self.output = {} if output is None else output
         self.raw = raw or {}
         self._ok = ok
         self.method = ""
@@ -266,7 +290,7 @@ class Response:
             "method": self.method,
             "status": self.status,
             "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
-            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-RateLimit") or k == "Location"},
+            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if "ratelimit" in k.lower() or k == "Location"},
             # "body": '',
             "payload": {}
         }
@@ -592,10 +616,11 @@ class BatchResponse:
     _rl: RateLimit
     _exit_code: int = 0
 
-    def __init__(self, responses: list[Response], output_formatter: Callable = None):
+    def __init__(self, responses: list[Response], output_formatter: Callable = None, raw_formatter: Callable = None):
         self.responses = responses
         self._display_response: Response | None = None
         self._output_formatter = output_formatter
+        self._raw_formatter = raw_formatter
         self._output: list[dict] = None
         BatchResponse._rl = self.last_rl
         BatchResponse._exit_code = BatchResponse._exit_code or self.exit_code
@@ -663,7 +688,19 @@ class BatchResponse:
 
     @cached_property
     def raw(self) -> dict[str, Any]:
-        return {res.url.path: res.raw for res in self.responses}
+        if all([r.url.path == "/devices/v1/devices" for r in self.responses]) and all([r.method == "GET" for r in self.responses]):
+            count = sum([r.raw.get("count", 0) or 0 for r in self.responses if r.ok])
+            total = sum([r.raw.get("total", 0) or 0 for r in self.responses if r.ok])
+            items = [dev for r in self.responses for dev in r.raw["items"]]
+            return {"items": items, "count": count, "offset": 0, "total": total}
+
+        raw = {}
+        for idx, res in enumerate(self.responses, start=1):
+            if res.url.path not in raw:
+                raw[res.url.path] = res.raw
+            else:
+                raw[f"{res.url.path}_call_{idx}"] = res.raw
+        return raw
 
     @property
     def ok(self):
