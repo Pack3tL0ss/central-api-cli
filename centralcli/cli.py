@@ -10,7 +10,7 @@ from rich.markup import escape
 from centralcli import cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade, generate, migrate
+from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, generate, kick, migrate, refresh, rename, test, ts, unassign, update, upgrade
 from centralcli.clitree import dev as clidev
 from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
@@ -18,6 +18,7 @@ from centralcli.clitree.set import set as cliset
 from centralcli.clitree.show import show
 from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, LicenseTypes, ResetArgs, StartArgs, do_load_pycentral, iden_meta
 from centralcli.environment import env
+from centralcli.strings import emoji
 
 try:
     import psutil
@@ -700,10 +701,12 @@ def all_commands_callback(ctx: typer.Context, **kwargs):  # pragma: no cover  te
         common.version_callback(ctx)
         common.exit(code=0)
     if default:
-        if ("--ws" in sys.argv or "--workspace" in sys.argv) and workspace != config.default_workspace:
-            ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
-            render.econsole.print(f":warning:  Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
-            workspace = config.default_workspace
+        ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
+        if ws_flag in sys.argv:
+            workspace = workspace or sys.argv[sys.argv.index(ws_flag) + 1]
+            if workspace != config.default_workspace:
+                render.econsole.print(f"{emoji.warn} Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
+                workspace = config.default_workspace
         common.workspace_name_callback(ctx, workspace=config.default_workspace, default=True)
     else:
         common.workspace_name_callback(ctx, workspace=workspace)
