@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Optional, TypedDict
 
 from centralcli import utils, log, render
 from centralcli.client import BatchRequest, Session
+from centralcli.response import BatchResponse
 from centralcli.typedefs import UNSET
 from centralcli.cnx.models.cache import Inventory
 
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from centralcli.cache import Cache
     from centralcli.response import Response
 
+LEGIT_FAILURES = ["HPE_GL_ERROR_NOT_FOUND"]  # ["result"]["failedDevices"]["errorCode"]
 
 class GLPDevice(TypedDict):
     serial: str
@@ -141,7 +143,7 @@ class GreenLakeDevicesAPI:
         payloads = [
             {
                 "serialNumber": d["serial"],
-                "macAddress": d.get("mac"),
+                "macAddress": d.get("mac") and utils.Mac(d["mac"]).cols.upper(),  # has to be uppercase col delim.  If lowercase GLP will return device not found error.
                 "deviceType": "NETWORK",
                 "tags": {**(tags or {}), **(d.get("tags") or {})} or None,
             } for d in devices
@@ -172,9 +174,12 @@ class GreenLakeDevicesAPI:
             log.info("Devices have been added to [green]GreenLake[/], but no application_id/subscription provided to add function, they are not associated with Aruba Central.", caption=True, show=True, log=False)
             return async_add_resp
 
-        serials = [d["serial"] for d in devices]
+        serials = [d["serial"] for d in devices]  # Max is 112 serials or 414 request uri too long
         for _ in range(2):
-            inv_resp = await self.get_devices(serial_numbers=serials)
+            chunks = utils.chunker(serials, 100)
+            inv_batch_reqs = [BatchRequest(self.get_devices, serial_numbers=chunk) for chunk in chunks]
+            inv_batch_resp = BatchResponse(await self.session._batch_request(inv_batch_reqs))
+            inv_resp = inv_batch_resp.display
             if inv_resp.ok and len(inv_resp) == len(serials):
                 break
 

@@ -175,6 +175,11 @@ class _ImportDevice(BaseModel):
     def _normalize_subscription(cls, v: str) -> str:
         return v if v is None else v.lower().replace("_", "-")
 
+    @field_validator("mac")
+    @classmethod
+    def _normalize_mac(cls, v: str) -> str:
+        return v and utils.Mac(v).cols.upper()
+
     @field_validator("tags", mode="before")
     @classmethod
     def _convert_csv_tags(cls, v: str | dict[str, str]) -> dict[str, str]:
