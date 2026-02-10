@@ -38,7 +38,7 @@ class RateLimit():
             self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")  # glp
             self.glp_rl_reset = int(f"{rh.get('ratelimit-reset', 0)}")  # glp
             self.call_performed = True
-            self.is_glp = True if "greenlake" in resp.url.host else False
+            self.is_glp = True if "greenlake" in (resp.url.host or "") else False
         else:
             self.call_performed = False
 
