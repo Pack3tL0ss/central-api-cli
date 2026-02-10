@@ -7,7 +7,8 @@ So to test handling of invalid arguments to the library methods we need to test 
 """
 
 from enum import Enum
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 import pytest
 from click.exceptions import Exit
@@ -109,6 +110,23 @@ if config.dev.mock_tests:
         ]
         resp = api.session.request(api.configuration.replace_per_ap_config, test_data["test_devices"]["ap"]["serial"], clis=clis)
         assert resp.ok
+
+
+    @pytest.mark.parametrize(
+        "_,fixture,func,kwargs,exception",
+        [
+            [1, "ensure_old_config", cache.refresh_inv_db, {"archived": True}, ValueError]
+        ],
+    )
+    def test_cache(_: int, fixture: str | list[str], func: Callable, kwargs: dict[str, Any], exception: Exception, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        if exception:
+            with pytest.raises(exception):
+                resp = api.session.request(func, **kwargs)
+        else:
+            resp = api.session.request(func, **kwargs)
+            assert resp.status == 200
 
 else:  # pragma: no cover
     ...

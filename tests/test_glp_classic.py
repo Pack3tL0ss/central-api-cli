@@ -54,12 +54,13 @@ if config.dev.mock_tests:
             [2, True, ("devices", f'{str(test_invalid_device_file_csv)}')],
             [3, False, ("devices", f'{str(test_invalid_empty_file)}')],
             [4, True, ("devices", f'{str(test_invalid_empty_file)}')],
+            [5, True, ("devices", f'{str(test_device_file)}')],
         ]
     )
     def test_batch_add_fail(idx: int, glp_ok: bool, args: tuple[str]):
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
-        capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
+        capture_logs(result, f"{env.current_test}-{idx}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
 
@@ -117,13 +118,19 @@ if config.dev.mock_tests:
         assert "counts" in result.stdout.lower()
 
 
-    @pytest.mark.parametrize("glp_ok", [False, True])
-    def test_show_archived_fail(glp_ok: bool):
+    @pytest.mark.parametrize(
+        "idx,args,glp_ok,pass_condition",
+        [
+            [1, (), False, lambda r: "Response" in r],
+            [2, (), True, lambda r: "Response" in r],
+        ]
+    )
+    def test_show_archived_fail(idx: int, args: tuple[str], glp_ok: bool, pass_condition: Callable):
         config._mock(glp_ok)
-        result = runner.invoke(app, ["show", "archived"],)
+        result = runner.invoke(app, ["show", "archived", *args],)
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
         assert result.exit_code == 1
-        assert "Response" in result.stdout
+        assert pass_condition(result.stdout)
 
 
     @pytest.mark.parametrize(
