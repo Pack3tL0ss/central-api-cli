@@ -189,6 +189,7 @@ class GreenLakeDevicesAPI:
         if not inv_resp.ok or not inv_resp.output:
             sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
             log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
+            async_add_resp[-1].exit_code = 1
             return [*async_add_resp, inv_resp]
 
         if cache:  # We update cache here, as we need to do the call to fetch device_ids here to process the service assignment/subscriptions.

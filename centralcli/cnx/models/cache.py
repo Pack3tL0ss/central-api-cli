@@ -256,7 +256,7 @@ class InvCounts:
 class Inventory(BaseModel):
     items: list[InventoryDevice]
     count: int
-    offset: int
+    offset: Optional[int] = 0
     total: int
 
     def __len__(self) -> int:

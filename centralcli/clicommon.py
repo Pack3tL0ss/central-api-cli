@@ -1221,13 +1221,23 @@ class CLICommon:
         glp_api = api_clients.glp
         add_data = [{k: v for k, v in dev.items() if k != "subscription"} for dev in import_devs.model_dump()]  # strip the subscription from the add, as it's whatever the user put in the import.  We send it in the update below where it is flipped to the necessary subscription.id
         add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=add_data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
-
-        with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for devices updates after device addition"):
-            sleep(4)
+        if any([r.exit_code == 1 for r in add_resp]):  # exit_code 1 from devices.add_devices indicates iventory call has already been attempted, add failed.
+            return add_resp
 
         # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
         serial_numbers = [d["serial"] for d in data]
-        asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
+        for _ in range(2):
+            inv_resp = asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
+            if inv_resp.ok and len(inv_resp) == len(serial_numbers):
+                break
+
+            with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for device updates after device addition"):
+                sleep(3)
+
+        if not inv_resp or not inv_resp.output:  # None of the serials were found after add
+            sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
+            log.error(f"Unable to perform subscription/tag updates due to failure fetching device_ids. {sfx}", caption=True, log=True)
+            return [*add_resp, inv_resp]
 
         update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate)  # confirmation is done in batch_add_devices
 
@@ -1260,7 +1270,6 @@ class CLICommon:
         file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
         file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
         render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
-
         render.console.print(f'   {utils.summarize_data(data, pad=3).lstrip()}\n', emoji=False)
         if subscription:
             sub = self.cache.get_sub_identifier(subscription, best_match=True)
@@ -2222,6 +2231,7 @@ class CLICommon:
 
         batch_reqs = [*sub_reqs, *tag_reqs]
         if not batch_reqs:
+            render.econsole.print(_data.warning_skip_not_assigned)
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
 
         confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]

@@ -25,7 +25,7 @@ from tinydb.table import Document
 from yarl import URL
 
 from centralcli import config, constants, log, render, utils
-from centralcli.response import CombinedResponse
+from centralcli.response import CombinedResponse, BatchResponse
 from centralcli.typedefs import typed_lru_cache
 
 from . import api_clients
@@ -3337,7 +3337,7 @@ class Cache:
                 Defaults to None = 'all' device types.
             assigned (bool, optional): filter by devices that are assigned/lack assignment to a service (Aruba Central).
                 Defaults to None: No filter by assignment.
-            archived (bool, optional): filter by devices that are archived/unarchived.
+            archived (bool, optional): filter by devices that are archived/unarchived (GLP Only).
                 Defaults to None: All devices
 
         Returns:
@@ -3347,7 +3347,7 @@ class Cache:
             return await self.refresh_inv_db_glp(dev_type=dev_type, serial_numbers=serial_numbers, assigned=assigned, archived=archived)
 
         if archived is not None:
-            raise ValueError("archived argument is only valid for classic API, not GLP")
+            raise ValueError("archived argument is only valid for GLP API, not classic")
         return await self.refresh_inv_db_classic(dev_type=dev_type)  # pragma: no cover
 
     async def refresh_inv_db_glp(
@@ -3391,15 +3391,23 @@ class Cache:
                 log.info(f"A Full Inventory cache update will occur disregarding {len(serial_numbers)} provided serial numbers.")
                 _serial_numbers = None
 
-        batch_resp = await glp_api.session._batch_request(
-            [
-                br(glp_api.devices.get_devices, serial_numbers=_serial_numbers, assigned=assigned, archived=archived),
-                br(glp_api.subscriptions.get_subscriptions),
-            ]
-        )
+        if _serial_numbers:
+            chunks = utils.chunker(_serial_numbers, 100)
+            inv_batch_reqs = [BatchRequest(glp_api.devices.get_devices, serial_numbers=chunk) for chunk in chunks]
+            inv_batch_resp = BatchResponse(await glp_api.session._batch_request(inv_batch_reqs))
+            inv_resp = inv_batch_resp.display
+            batch_resp = [inv_resp] if not inv_resp.ok else [inv_resp, await glp_api.subscriptions.get_subscriptions()]
+        else:
+            batch_resp = await glp_api.session._batch_request(
+                [
+                    br(glp_api.devices.get_devices, serial_numbers=_serial_numbers, assigned=assigned, archived=archived),
+                    br(glp_api.subscriptions.get_subscriptions),
+                ]
+            )
+
         if not any([r.ok for r in batch_resp]):
             log.error("Unable to perform Inv cache update due to API call failure", show=True)
-            return batch_resp[0]  # will abort in _batch_request if first call fails
+            return batch_resp[0]  # will abort in _batch_request if first call fails.  Calling fucs expect a resp not [Response]
 
         inv_resp, sub_resp = batch_resp  # if first call failed above it doesn't get this far.
 
