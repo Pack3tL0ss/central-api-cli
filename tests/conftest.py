@@ -218,6 +218,8 @@ def cleanup_import_files():
                 file.rmdir()
             else:
                 file.unlink()
+        else:  # pragma: no cover
+            ...
 
     try:
         TEST_FILE_DIR.rmdir()  # must be empty

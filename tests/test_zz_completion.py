@@ -321,7 +321,7 @@ def test_guest_completion(ensure_cache_guest1, expected: str):
     assert len(result) >= 1
     try:
         assert all([m.lower().startswith(expected.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
-    except AssertionError:
+    except AssertionError:  # pragma: no cover
         log.error(f"test_guest_completion: {expected = }    {result = }")
         raise AssertionError(f"test_guest_completion: {expected = }    {result = }")
 

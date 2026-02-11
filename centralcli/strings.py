@@ -61,7 +61,7 @@ ADD_FIELDS = {
     }
 }
 
-if config.glp.ok:
+if config.glp.ok:  # pragma: no cover
     ADD_FIELDS["devices"]["optional"]["tags"] = "Assign tags to device in GreenLake"
 
 MOVE_FIELDS = {
