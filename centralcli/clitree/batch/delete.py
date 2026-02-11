@@ -81,7 +81,7 @@ def sites(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch delete sites [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, import_type="sites",)
+    data = common._get_import_file(import_file, import_type="sites", text_ok=True)
     resp = batch_delete_sites(data, yes=yes)
     render.display_results(resp, tablefmt="action")
 

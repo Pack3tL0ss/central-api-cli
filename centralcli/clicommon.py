@@ -791,15 +791,15 @@ class CLICommon:
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                 if import_type == "variables":
                     data = list(data.values())
-                else:
+                else:  # devices by serial
                     data = [{"serial": k, **v} for k, v in data.items()]
         elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):  # list of str txt file or single col csv
             if import_type == "devices" and utils.is_serial(data[-1]):  # spot check the last key to ensure it looks like a serial
-                data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
+                data = [{"serial": s} for s in data if s != "" and not s.lower().startswith("serial")]
             elif import_type == "labels":
-                data = [{"name": label} for label in data if not label.lower().startswith("label")]
+                data = [{"name": label} for label in data if label != "" and not label.lower().startswith("label")]
             elif import_type == "sites":
-                data = [{"name": v} for v in data]
+                data = [{"name": v} for v in data if v != "" and not any([v.lower().startswith("name"), v.lower().startswith("site") and "name" in v.lower()])]
 
         data = utils.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
                                                             # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
