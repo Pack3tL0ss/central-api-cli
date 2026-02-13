@@ -1226,18 +1226,29 @@ class CLICommon:
 
         # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
         serial_numbers = [d["serial"] for d in data]
-        for _ in range(2):
-            inv_resp = asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
-            if inv_resp.ok and len(inv_resp) == len(serial_numbers):
+        for _ in range(3):
+            inv_devs = [self.cache.get_inv_identifier(s, serial_numbers=tuple(serial_numbers), exit_on_fail=False, silent=True) for s in serial_numbers]
+            # inv_resp = asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
+            # if inv_resp.ok and len(inv_resp) == len(serial_numbers):
+            if None not in inv_devs:
                 break
 
             with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for device updates after device addition"):
                 sleep(3)
 
-        if not inv_resp or not inv_resp.output:  # None of the serials were found after add
-            sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
-            log.error(f"Unable to perform subscription/tag updates due to failure fetching device_ids. {sfx}", caption=True, log=True)
-            return [*add_resp, inv_resp]
+        # if not inv_resp or not inv_resp.output:  # None of the serials were found after add
+        #     sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
+        #     log.error(f"Unable to perform subscription/tag updates due to failure fetching device_ids. {sfx}", caption=True, log=True)
+        #     return [*add_resp, inv_resp]
+        # elif len(inv_resp) != len(serial_numbers):
+        #     inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
+        #     missing = [s for s in serial_numbers if s not in inv_resp_serials]
+        #     log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)
+        #     log.warning(f"{len(missing)} will not have subscription or tags assigned.")
+        missing = [serial_numbers[idx] for idx, v in enumerate(inv_devs) if v is None]
+        if missing:
+            # log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)  # we already log in add_devices
+            log.warning(f"{len(missing)} devices will not have subscription or tags assigned as they not found in [green]GreenLake[/].", show=True, log=True, caption=True)
 
         update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate)  # confirmation is done in batch_add_devices
 
@@ -1507,10 +1518,11 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            render.econsole.print(f'{emoji.warn} {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
-                            render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                            render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
+                            if idx == 0:
+                                render.econsole.print(f'{emoji.warn} {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                                render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                                render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                     else:
                         req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
                         msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
@@ -1951,13 +1963,13 @@ class CLICommon:
 
         return doc_ids
 
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, migrate: bool = False) -> List[Response]:
         if config.glp.ok and not any([ui_only, cop_inv_only]):
-            return self.glp_batch_delete_devices(data, yes=yes)  # Note glp delete flow only deletes from GLP inventory not ui
-        return self.classic_batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+            return self.batch_delete_devices_glp(data, yes=yes, migrate=migrate)  # Note glp delete flow only deletes from GLP inventory not ui
+        return self.batch_delete_devices_classic(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
 
 
-    def glp_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False) -> List[Response]:
+    def batch_delete_devices_glp(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, migrate: bool = False) -> List[Response]:
         api = api_clients.glp
         all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
         devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]  # retry_dev false means if the cache is outdated ui deletes may not occur for devs not in mon cache
@@ -1965,7 +1977,10 @@ class CLICommon:
             render.econsole.print(f"[dark_orange3]:warning:[/]  Skipping {devs.count(None)} devices not found in [green]GreenLake[/]")
             devs = [d for d in devs if d is not None]
             if not devs:
-                self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
+                if migrate:
+                    return [Response(output=f"No devices provided were found in [cyan]{config.workspace}[/] workspace [green]GreenLake[/] inventory.  No deletes to process.")]
+                else:
+                    self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
         word = "device" if len(devs) == 1 else f"{len(devs)} devices"
         render.econsole.print(f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
         render.econsole.print(
@@ -1993,7 +2008,7 @@ class CLICommon:
                 mon_resp = api_clients.classic.session.batch_request(mon_del_reqs)
                 mon_doc_ids += self._get_mon_doc_ids(mon_resp)
             if delayed_mon_del_reqs:
-                log.info(f"{len(delayed_mon_del_reqs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offling.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
+                log.info(f"{len(delayed_mon_del_reqs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offline.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
 
             # Cache Updates
             if mon_doc_ids:
@@ -2002,7 +2017,7 @@ class CLICommon:
         return [*glp_resp, *mon_resp]
 
 
-    def classic_batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
+    def batch_delete_devices_classic(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 
@@ -2222,19 +2237,20 @@ class CLICommon:
             confirm_msg += tag_req_info.confirm_msgs
             tag_reqs = tag_req_info.requests
 
-        if _data.not_assigned_devs:
+        if _data.not_assigned_devs and not migrate:
             confirm_msg += [
                 f"\n{emoji.warn} Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
                 _data.warning_skip_not_assigned,
-                f"\n{emoji.info} [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/]"
+                f"\n{emoji.info} [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/italic]"
             ]
 
         batch_reqs = [*sub_reqs, *tag_reqs]
         if not batch_reqs:
-            render.econsole.print(_data.warning_skip_not_assigned)
+            render.econsole.print("The following devices were skipped as they do not appear to be assigned to Aruba Central", _data.warning_skip_not_assigned, emoji=False, sep="\n")
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
 
-        confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
+        if not migrate:
+            confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
         render.econsole.print("\n".join(confirm_msg), emoji=False)
         render.confirm(yes) # aborts here if they don't confirm
         glp_api = api_clients.glp
