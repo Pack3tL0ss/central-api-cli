@@ -236,7 +236,7 @@ class Session():
         try:  # reformat for pagination multi-call.  There will be multiple spinners with the same base text w/ Request: <num> after the base text
             if len(self.running_spinners) > 1:
                 if len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
-                    pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1]
+                    pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1].lstrip()
                     sfx = ",".join(f" {idx}" if ":" not in x else x.split(":")[1] for idx, x in enumerate(self.running_spinners[1:], start=2))
                     return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx},{sfx}'.replace("...,", "...")
                 else:
@@ -382,8 +382,9 @@ class Session():
                     if "greenlake" in resp.url.host:
                         spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per minute rate limit"
                         self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/m: {resp.rl.remain_min}: {resp.url.path_qs}"]
-                        with Spinner(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):
-                            await asyncio.sleep(resp.rl.glp_rl_reset)
+                        self.spinner.update(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit.")
+                        await asyncio.sleep(resp.rl.glp_rl_reset)
+                        # with Spinner(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):
                     else:  # per second rate limit.
                         spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                         self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
