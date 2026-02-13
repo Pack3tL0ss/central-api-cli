@@ -44,6 +44,8 @@ class GreenLakeDevicesAPI:
         original_responses = {idx: res for idx, res in enumerate(responses)}
 
         batch_reqs = [async_status_reqs[idx] for idx in resp_idx_list]
+        if not batch_reqs:
+            return list(return_responses.values())
         async_status_resp = {idx: res for idx, res in zip(resp_idx_list, await self.session._batch_request(batch_reqs))}
         retry_reqs = {}
         for _ in range(3):
