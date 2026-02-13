@@ -178,9 +178,11 @@ class DeviceStatusFilter(str, Enum):
     ONLINE = "ONLINE"
     OFFLINE = "OFFLINE"
 
+
 class APDeployment(str, Enum):
     STANDALONE = "Standalone"
     CLUSTER = "Cluster"
+
 
 class GroupDevTypes(str, Enum):
     ap = "ap"
@@ -188,6 +190,15 @@ class GroupDevTypes(str, Enum):
     cx = "cx"
     gw = "gw"
     sdwan = "sdwan"
+
+
+class CNXDevTypes(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+    sdwan = "sdwan"
+    bridge = "bridge"
 
 
 class TSDevTypes(str, Enum):
