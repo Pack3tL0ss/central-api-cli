@@ -343,7 +343,7 @@ def clear_raw(
     else:
         render.econsole.print(f":wastebasket:  [red]Delet{'ing' if yes else 'e'}[/] active capture file [cyan italic]{config.capture_file.name}[/]{sfx}")
         if not yes:
-            render.econsole.print(f"  [italic][dark_orange3]:warning:[/]  This will delete the file.  Use [cyan]-b[/]|[cyan]--bak[/] option to stash (rename) the file to [cyan]{bak_file.name}[/][/italic]")
+            render.econsole.print(f"  [italic]{emoji.warn} This will delete the file.  Use [cyan]-b[/]|[cyan]--bak[/] option to stash (rename) the file to [cyan]{bak_file.name}[/][/italic]")
         func = config.capture_file.unlink
 
     render.confirm(yes)

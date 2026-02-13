@@ -23,22 +23,29 @@ if TYPE_CHECKING:
     from collections.abc import KeysView
 
 
-class RateLimit():
+class RateLimit:
     def __init__(self, resp: ClientResponse = None):
         self.total_day, self.remain_day, self.total_sec, self.remain_sec = 0, 0, 0, 0
         self.total_min, self.remain_min, self.glp_rl_reset = 0, 0, 0
-        self.is_glp = False
+        self.is_glp = self.is_cnx = False
         if hasattr(resp, "headers"):
             rh = resp.headers
+            self.is_glp = True if "greenlake" in (resp.url.host or "") else False
+            self.is_cnx = True if "X-RateLimit-Limit" in rh else False
+            if self.is_cnx:
+                self.total_sec = int(f"{rh.get('X-RateLimit-Limit', 0)}")
+                self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining', 0)}")
+                self.reset_sec = int(f"{rh.get('X-RateLimit-Reset', 0)}")
+            else:
+                self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
+                self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
             self.total_day = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
             self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
-            self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
-            self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
+            #glp
             self.total_min = int(f"{rh.get('ratelimit-limit', 0)}")  # glp
             self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")  # glp
             self.glp_rl_reset = int(f"{rh.get('ratelimit-reset', 0)}")  # glp
             self.call_performed = True
-            self.is_glp = True if "greenlake" in (resp.url.host or "") else False
         else:
             self.call_performed = False
 
