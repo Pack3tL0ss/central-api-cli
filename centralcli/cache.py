@@ -1482,7 +1482,7 @@ class Cache:
         key = "public" if self.config.cluster != "internal" else "internal"
         return self.services_by_name[key]
 
-    @property
+    @cached_property
     def LicenseTypes(self) -> constants.LicenseTypes:
         if len(self.licenses) > 0:
             return Enum("ValidLicenseTypes", {item: item.replace("_", "-") for item in self.licenses}, type=str)
