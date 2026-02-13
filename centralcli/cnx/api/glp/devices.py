@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from time import sleep
+import asyncio
 from typing import TYPE_CHECKING, Optional, TypedDict
 
 from centralcli import utils, log, render
@@ -65,7 +65,7 @@ class GreenLakeDevicesAPI:
                 return list({**original_responses, **return_responses}.values())
             else:
                 with render.Spinner(f"Allowing more time for {len(retry_reqs)} Async operations to complete..."):
-                    sleep(2)
+                    await asyncio.sleep(2)
         # TODO this needs a return or error if there are still retrys marked running
 
 
@@ -175,7 +175,7 @@ class GreenLakeDevicesAPI:
             return async_add_resp
 
         serials = [d["serial"] for d in devices]  # Max is 112 serials or 414 request uri too long
-        for _ in range(2):
+        for _ in range(3):
             chunks = utils.chunker(serials, 100)
             inv_batch_reqs = [BatchRequest(self.get_devices, serial_numbers=chunk) for chunk in chunks]
             inv_batch_resp = BatchResponse(await self.session._batch_request(inv_batch_reqs))
@@ -184,13 +184,18 @@ class GreenLakeDevicesAPI:
                 break
 
             with render.Spinner(f"Allowing more time for [GreenLake] to be prepared to send inventory response for {len(serials)} added devices."):
-                sleep(3)
+                await asyncio.sleep(3)
 
         if not inv_resp.ok or not inv_resp.output:
             sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
             log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
             async_add_resp[-1].exit_code = 1
             return [*async_add_resp, inv_resp]
+        elif len(inv_resp) != len(serials):
+            inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
+            missing = [s for s in serials if s not in inv_resp_serials]
+            log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)
+            log.warning(f"{len(missing)} will not have service assignment (Aruba Central), or subscription assignment.", show=True)
 
         if cache:  # We update cache here, as we need to do the call to fetch device_ids here to process the service assignment/subscriptions.
             try:
@@ -277,8 +282,8 @@ class GreenLakeDevicesAPI:
         batch_reqs = []
         for chunk in utils.chunker(device_ids, 25):  # MAX 25 per call
             query_str = "&".join([f"id={dev}" for dev in chunk])
-            url = f"{url}?{query_str}"
-            batch_reqs += [BatchRequest(self.session.patch, url, json_data=payload, headers=header)]
+            _url = f"{url}?{query_str}"
+            batch_reqs += [BatchRequest(self.session.patch, _url, json_data=payload, headers=header)]
 
         del_resp = await self.session._batch_request(batch_reqs)
         return await(self.get_progresss_of_async_ops(del_resp))
