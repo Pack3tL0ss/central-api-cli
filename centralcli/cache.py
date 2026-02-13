@@ -1715,6 +1715,16 @@ class Cache:
         else:
             _all_serials = set([*_inv_by_ser.keys(), *_dev_by_ser.keys()])
 
+        if no_refresh:  # update inv cache for any devices that indicate status up but lack an inv entry (they are obviously in the inventory)
+            inv_refresh_serials = [serial for serial in _dev_by_ser if _dev_by_ser[serial].get("status", "").lower() == "up" and serial not in _inv_by_ser]
+            if inv_refresh_serials:
+                inv_resp = asyncio.run(self.refresh_inv_db(dev_type=device_type, serial_numbers=inv_refresh_serials))
+                if inv_resp.ok:
+                    _inv_by_ser = {**_inv_by_ser, **{d["serial"]: d for d in inv_resp.output}}
+                else:
+                    log.error(f"Attempt to fetch [green]GreenLake[/] inventory data from {len(inv_refresh_serials)} devices that appear to be missing from cache failed ({inv_resp.error}).  Inventory data may be incomplete.", show=True, caption=True)
+                    log.error(f"The following {len(inv_refresh_serials)} appear in monitoring cache with status Up, so should be in inventory cache.  Attempt to update inventory cache failed: ({inv_resp.error}).\n{inv_refresh_serials = }")
+
         combined = [
             {
                 **_inv_by_ser.get(serial, {}),
@@ -3073,7 +3083,7 @@ class Cache:
                 return self.verify_db_action(db, expected=len(data), response=db_res, elapsed=round(time.perf_counter() - _start_time, 2))
 
         doc_ids = utils.listify(doc_ids) or []
-        with econsole.status(f":wastebasket:  [red]Removing[/]] [cyan]{len(doc_ids)}[/] records from [dark_olive_green2]{db.name}[/] cache."):
+        with econsole.status(f":wastebasket:  [red]Removing[/] [cyan]{len(doc_ids)}[/] records from [dark_olive_green2]{db.name}[/] cache."):
             db_res = db.remove(doc_ids=doc_ids)
             return self.verify_db_action(db, expected=len(doc_ids), response=db_res, remove=True, elapsed=round(time.perf_counter() - _start_time, 2))
 
