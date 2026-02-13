@@ -259,7 +259,7 @@ class Response:
             return res.content.decode("utf-8")
 
         def combine_response(url: str, out: dict) -> dict | None:  # TODO add handler to create METHOD key in ok_responses/failed_responses if it doesn't exist.  i.e. failed_responses["DELETE"] currently KeyError if DELETE doesn't exist
-            now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
+            now = {} if not config.closed_capture_file.exists() else (config.closed_capture_file.read_text() and json.loads(config.closed_capture_file.read_text())) or {}
             if env.current_test:  # Use of --test <test name> when using --capture-raw will capture and place under a specific test key
                 key = f"{self.method}_{url}{self.mock_key_append or ''}"
                 log.info(f"Prepped new MOCK for {env.current_test}[{key}]")
@@ -276,12 +276,13 @@ class Response:
             pkey = "ok_responses" if self.ok else "failed_responses"
             if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
                 log.warning(
-                    f"A{'n' if self.ok else ''} ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True
+                    f"A{'n' if self.ok else ''} ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire is to replace it.", show=True, caption=True
                 )
                 return
 
             log.info(f"Prepped new MOCK for {pkey}[{self.method}][{key}]")
-            return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
+            # return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
+            return {**now, pkey: {**now.get(pkey, {}), self.method: {**now.get(pkey, {self.method: {}})[self.method], key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         out = {
