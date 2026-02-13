@@ -788,7 +788,7 @@ class Session():
                     if len(api_calls[1:]) > slice_end:
                         chunked_calls += utils.chunker(api_calls[1:][slice_end:], res.rl.total_min)
                 else:
-                    chunked_calls = api_calls[1:]
+                    chunked_calls = [api_calls[1:]]
             else:
                 chunked_calls: list[BatchRequest] = utils.chunker(api_calls[1:], max_calls_per_chunk)
 
