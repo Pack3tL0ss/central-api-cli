@@ -265,8 +265,12 @@ class GreenLakeDevicesAPI:
             for payload in payloads:
                 batch_reqs += [BatchRequest(self.session.patch, _url, json_data=payload, headers=header)]
 
-        update_resp = await self.session._batch_request(batch_reqs)
-        return [*async_app_resp, *await self.get_progresss_of_async_ops(update_resp)]
+        async_update_resp = []
+        if batch_reqs:
+            update_resp = await self.session._batch_request(batch_reqs)
+            async_update_resp = await self.get_progresss_of_async_ops(update_resp)
+
+        return [*async_app_resp, *async_update_resp]
 
     async def remove_devices(self, device_ids: list[str] | str, remove_app: bool = True) -> list[Response]:
         url = "/devices/v2beta1/devices"
