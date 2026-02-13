@@ -185,7 +185,7 @@ class GreenLakeDevicesAPI:
             if inv_resp.ok and len(inv_resp) == len(serials):
                 break
 
-            with render.Spinner(f"Allowing more time for [GreenLake] to be prepared to send inventory response for {len(serials)} added devices."):
+            with render.Spinner(f"Allowing more time for [green]GreenLake[/] to be prepared to send inventory response for {len(serials)} added devices."):
                 await asyncio.sleep(3)
 
         if not inv_resp.ok or not inv_resp.output:
