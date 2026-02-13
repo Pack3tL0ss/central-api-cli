@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from centralcli import cache, cleaner, common, config, log, render, utils
-from centralcli.cache import CentralObject, api
+from centralcli.cache import api
 from centralcli.client import BatchRequest
 from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys, GroupDevTypes
 from centralcli.response import Response
@@ -392,12 +392,13 @@ def verify(
         return
 
     data = common._get_import_file(import_file, import_type="devices")
+    data = utils.normalize_device_sub_field(data, word_sep="-")
+    file_all_keys = utils.all_keys(data)
 
     resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         render.display_results(resp, stash=False, exit_on_fail=True)
-    resp.output = cleaner.simple_kv_formatter(resp.output)
-    central_devs = [CentralObject("dev", data=r) for r in resp.output]
+    resp.output = utils.normalize_device_sub_field(cleaner.simple_kv_formatter(resp.output), word_sep="-")
 
     file_by_serial = {
         d["serial"]: {
@@ -405,23 +406,28 @@ def verify(
         } for d in data
     }
     central_by_serial = {
-        d.serial: {
-            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
+        d["serial"]: {
+            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.items() if k != "serial"
         }
-        for d in central_devs
+        for d in resp.output
     }
-    # TODO figure out what key we are going to require  batch add devices --example show license
-    # batch add allows the same three keys
-    _keys = ["license", "services", "subscription"]
-    file_key = [k for k in _keys if k in file_by_serial[list(file_by_serial.keys())[0]].keys()]
-    file_key = None if not file_key else file_key[0]
 
     validation = {}
+    not_in_inventory = not_checked_in = _up = _down = 0
     for s in file_by_serial:
         validation[s] = []
         if s not in central_by_serial:
             validation[s] += ["Device not in inventory"]
+            not_in_inventory += 1
             continue
+
+        if not central_by_serial[s].get("status"):
+            not_checked_in += 1
+        elif central_by_serial[s]['status'].lower() == 'up':
+            _up += 1
+        else:
+            _down += 1
+
         _dev_type = central_by_serial[s]['type'].upper()
         _dev_type = _dev_type if _dev_type not in ["CX", "SW"] else f"{_dev_type} switch"
         _pfx = f"[magenta]{_dev_type}[/] is in inventory, "
@@ -441,27 +447,37 @@ def verify(
             elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
                 validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
 
-        if file_key:
+        if "subscription" in file_all_keys:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s][file_key].replace("_", "-") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
+            if file_by_serial[s].get("subscription", "null") != (central_by_serial[s]["subscription"] or "null"): # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s].get('subscription', 'null')}[/] from import != [bright_green]{central_by_serial[s]['subscription'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
-
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['subscription'] or '[red]No Subscription[/]'}) Assigned.  Matches import file."]
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["group", "site", file_key]:
+            for field in ["group", "site", "subscription"]:
                 if field is not None and field in file_by_serial[s] and file_by_serial[s][field]:
-                    _msg += f", {field.title()} [bright_green]OK[/]"
+                    _msg += f", {field.title()}: [bright_green]OK[/]"
+            if central_by_serial[s].get("status"):
+                _msg += f", Status: [{'bright_green' if central_by_serial[s]['status'].lower() == 'up' else 'red'}]{central_by_serial[s]['status']}[/]"
             validation[s] += [_msg]
         else:
             not_ok_devs += [s]
 
-    caption = f"Out of {len(file_by_serial)} in {import_file.name} {len(not_ok_devs)} potentially have validation issue, and {len(ok_devs)} validate OK."
+    if not_ok_devs:
+        caption = f"Out of {len(file_by_serial)} devices in {import_file.name} [red]{len(not_ok_devs)}[/] potentially have validation issues, and [green]{len(ok_devs)}[/] validate [green]OK[/]."
+    else:
+        caption = f"\u2705 All validations pass for the {len(file_by_serial)} devices in {import_file.name}"
+    caption = f"{caption}\n[dark_olive_green2]Counts[/]: Total: {len(file_by_serial)}, {utils.color([f'{k}: [cyan]{v}[/]' for k, v in zip(['Not in Inventory', 'Not Checked in'], [not_in_inventory, not_checked_in]) if v])}".rstrip(", ")
+    if _up:
+        caption = f"{caption}, [bright_green]Up[/]: [bright_green]{_up}[/]"
+    if _down:
+        caption = f"{caption}, [red]Down[/]: [red]{_down}[/]"
+
     console = Console(emoji=False, record=True)
     console.begin_capture()
 
@@ -472,11 +488,16 @@ def verify(
     else:
         console.rule("Validation Results")
         for s in validation:
+            _hostname = central_by_serial.get(s, {}).get("name", "")
+            _hostname = _hostname and f"|{_hostname}"
+            _site = central_by_serial.get(s, {}).get("site", "") or ""
+            _site = _site and f"|s:{_site}"
+            dev_summary = f'{f"{s}{_hostname}{_site}":>35}'
             if s in ok_devs:
-                console.print(f"[bright_green]{s}[/]: {validation[s][0]}")
+                console.print(f"[bright_green]\u2714  {dev_summary}[/]: {validation[s][0]}")
             else:
                 _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
-                console.print(f"[bright_red]{s}[/]: {_msg}")
+                console.print(f"[bright_red]\u274c  {dev_summary}[/]: {_msg}")
         console.rule()
         console.print(f"[italic dark_olive_green2]{caption}[/]")
 

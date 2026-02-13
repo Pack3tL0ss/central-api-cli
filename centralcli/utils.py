@@ -480,9 +480,14 @@ class Utils:
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
     @staticmethod
-    def normalize_device_sub_field(data: list[dict[str,  str]]) -> list[dict[str, str]]:
+    def normalize_device_sub_field(data: list[dict[str,  str]], *, word_sep: Literal["-", "_"] = None) -> list[dict[str, str]]:
         possible_sub_keys = ["license", "services", "subscription"]
-        return [{k if k.lower() not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
+        if not word_sep:
+            return [{k if k.lower() not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
+
+        from_char = "_" if word_sep == "-" else "-"
+        return [{k if k.lower() not in possible_sub_keys else "subscription": v if k not in possible_sub_keys else (v and v.replace(from_char, word_sep)) for k, v in dev.items()} for dev in data]
+
 
     @staticmethod
     def generate_template(template_file: Path | str, var_file: Path | str | None = None, *, config_data: list | dict = None) -> str:
