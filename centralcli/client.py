@@ -765,7 +765,7 @@ class Session():
         if self.base_url == self.config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
             max_calls_per_chunk = 10
 
-        if (not self.is_cnx and self.requests):  #  or (self.is_cnx and self.glp_requests): # a call has been made no need to verify first call (token refresh)
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests): # a call has been made no need to verify first call (token refresh)
             chunked_calls = utils.chunker(api_calls, max_calls_per_chunk)
         else:
             resp: Response = await api_calls[0].func(
@@ -777,20 +777,20 @@ class Session():
 
             m_resp: List[Response] = utils.listify(resp)
 
-            if self.is_cnx:
-                res = m_resp[-1]
-                if res.rl.remain_min > len(api_calls[1:]):
-                    slice_end = res.rl.remain_min + 1
-                    if len(api_calls[1:]) < slice_end:
-                        slice_end = len(api_calls[1:])
+            # if self.is_cnx:
+            #     res = m_resp[-1]
+            #     if res.rl.remain_min > len(api_calls[1:]):
+            #         slice_end = res.rl.remain_min + 1
+            #         if len(api_calls[1:]) < slice_end:
+            #             slice_end = len(api_calls[1:])
 
-                    chunked_calls = [api_calls[1:][:slice_end]]
-                    if len(api_calls[1:]) > slice_end:
-                        chunked_calls += utils.chunker(api_calls[1:][slice_end:], res.rl.total_min)
-                else:
-                    chunked_calls = [api_calls[1:]]
-            else:
-                chunked_calls: list[BatchRequest] = utils.chunker(api_calls[1:], max_calls_per_chunk)
+            #         chunked_calls = [api_calls[1:][:slice_end]]
+            #         if len(api_calls[1:]) > slice_end:
+            #             chunked_calls += utils.chunker(api_calls[1:][slice_end:], res.rl.total_min)
+            #     else:
+            #         chunked_calls = [api_calls[1:]]
+            # else:
+            chunked_calls: list[BatchRequest] = utils.chunker(api_calls[1:], max_calls_per_chunk)
 
         # Classic Central API Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
         # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk
@@ -800,7 +800,7 @@ class Session():
 
             _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
-                chunk += [self.BatchRequest(asyncio.sleep, 1 if not self.is_cnx else 60)]
+                chunk += [self.BatchRequest(asyncio.sleep, 1)]  # if not self.is_cnx else 60)]
 
             m_resp += await asyncio.gather(
                 *[call.func(*call.args, **call.kwargs) for call in chunk]
