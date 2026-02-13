@@ -910,4 +910,9 @@ class Emoji:
     warn: str = "[dark_orange3]\u26a0[/] "  # ⚠
     info: str = "[deep_sky_blue3]\u2139[/] "  # ℹ
 
+@dataclass
+class CLIStrings:
+    glp: str = "[green]GreenLake[/]"
+
 emoji = Emoji()
+cli_strings = CLIStrings()
