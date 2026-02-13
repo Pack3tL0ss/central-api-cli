@@ -3419,10 +3419,11 @@ class Cache:
             combined = {serial: {**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()}
             inv_model = models.Inventory(list(combined.values()))
         else:
-            sub_data = Subscriptions(**sub_resp.raw)
-            inv_data = GlpInventory(**inv_resp.raw)
-            combined = await get_inventory_with_sub_data(inv_data, sub_data)
-            inv_model = models.Inventory(combined)
+            with render.Spinner("Preparing data for cache update", spinner="runner"):
+                sub_data = Subscriptions(**sub_resp.raw)
+                inv_data = GlpInventory(**inv_resp.raw)
+                combined = await get_inventory_with_sub_data(inv_data, sub_data)
+                inv_model = models.Inventory(combined)
 
         if dev_type and dev_type != "all":
             dev_type: list[str] = [dev_type] if dev_type != "switch" else ["cx", "sw"]
