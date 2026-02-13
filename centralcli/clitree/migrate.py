@@ -213,6 +213,7 @@ def devices(
     caption = [
         f"Run [cyan]cencli batch delete devices {migrate_file} --ui-only --ws {config.workspace}[/] to remove devices from UI monitoring views in [cyan]{config.workspace}[/] WorkSpace [italic](Once they've gone offline)[/].",
         f"Run [cyan]cencli batch move devices {migrate_file} --ws {to_workspace}[/] to move devices to site and move any cx switches to the final group [dim](with retain configuration option)[/] in the [cyan]{to_workspace}[/] workspace.",
+        f"[cyan]cencli batch verify {migrate_file} --ws {to_workspace}[/] can be used to verify {utils.color(['[green]GreenLake[/] Inventory', 'Group', 'Site', '[green]Up[/]/[red]Down[/] status'], sep='|')}"
     ]
     title = f"Add Devices to {cli_strings.glp} inventory in [cyan]{to_workspace}[/] workspace. Assign Subscriptions.  Pre-provision to groups (CX depends on retain-config options)"
 

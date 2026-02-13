@@ -1281,7 +1281,8 @@ class CLICommon:
         file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
         file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
         render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
-        render.console.print(f'   {utils.summarize_data(data, pad=3).lstrip()}\n', emoji=False)
+        confirm_data = [d if d.get("type", "") != "cx" or d.get("group") is not None else {**d, "group": "[dark_olive_green2]unprovisioned[/]"} for d in data]
+        render.console.print(f'   {utils.summarize_data(confirm_data, pad=3).lstrip()}\n', emoji=False)
         if subscription:
             sub = self.cache.get_sub_identifier(subscription, best_match=True)
             render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub}[/]')
@@ -1291,22 +1292,22 @@ class CLICommon:
             ...
 
         if tags or "tags" in all_keys:
-            render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/]')
+            render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/green][/]')
         if "group" in all_keys:
             render.econsole.print('[dim italic]Devices with a group specified will be pre-provisioned to the group[/]')
         if "site" in all_keys:
-            render.econsole.print('[dark_orange3]:warning:[/]  [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
+            render.econsole.print(f'{emoji.warn} [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
 
         if "group" in all_keys and not retain_warn:
             render.econsole.print(
-                '\n[dark_orange3]:warning:[/]  [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
+                f'\n{emoji.warn} [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
                 '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
                 '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
             )
 
         warn = warn or retain_warn
         if warn and not migrate:
-            render.econsole.print(f"[dark_orange3]:warning:[/]  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
+            render.econsole.print(f"{emoji.warn} Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
 
         warn = warn if not env.is_pytest and not yes > 1 else False  # bypass confirmation for test runs or
         render.confirm(yes=(not warn or migrate) and yes)
@@ -1327,11 +1328,11 @@ class CLICommon:
             already_exists = [d["name"] for d in data if d["name"] in self.cache.label_names]
             if already_exists:
                 if idx == 0:
-                    render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
+                    render.econsole.print(f"{emoji.warn} [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
                     _ = api.session.request(self.cache.refresh_label_db)
                 else:
                     skip_txt = utils.summarize_list(already_exists)
-                    render.econsole.print(f"[dark_orange3]:warning:[/]  The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                    render.econsole.print(f"{emoji.warn} The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
                     data = [label for label in data if label["name"] not in self.cache.label_names]
 
         if not data:
@@ -1350,8 +1351,8 @@ class CLICommon:
             cache_data = Labels([r.output for r in resp if r.ok])
             _  = api.session.request(self.cache.update_label_db, data=cache_data.model_dump())
         except Exception as e:
-            log.exception(f'Exception during label cache update in batch_add_labels]\n{e}')
-            render.econsole.print(f'[dark_orange3]:warning:[/]  [bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
+            log.exception(f'Exception {e.__class__.__name__} during label cache update in batch_add_labels')
+            render.econsole.print(f'{emoji.warn} [bright_red]Cache Update Error[/]: {repr(e)}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
         return resp
 
