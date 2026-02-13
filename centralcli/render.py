@@ -1100,15 +1100,15 @@ def display_results(
                 # raw output (unformatted response from Aruba Central API GW)
                 if tablefmt in ["raw", "clean"]:
                     status_code = f"[{fg}]status code: {r.status}[/{fg}]"
-                    print(r.url)
-                    print(status_code)
+                    econsole.print(r.url)
+                    econsole.print(status_code)
                     if not r.ok:
-                        print(r.error)
+                        econsole.print(r.error)
 
                     if tablefmt == "clean":
                         typer.echo_via_pager(r.output) if pager else typer.echo(r.output)
                     else:
-                        print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
+                        econsole.print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         plain_console = Console(color_system=None, emoji=False)
                         if config.dev.sanitize:  # pragma: no cover
                             r.raw = json.loads(Output().sanitize_strings(json.dumps(r.raw), config=config))
