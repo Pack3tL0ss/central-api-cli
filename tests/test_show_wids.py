@@ -10,18 +10,20 @@ from centralcli.environment import env
 from . import capture_logs, test_data
 
 runner = CliRunner()
-
 now = pendulum.now()
+
+
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition", [
-        [None, ("--group", test_data["ap"]["group"]), lambda r: "ogue" in r],
-        [None, ("rogues", "--site", test_data["ap"]["site"]), lambda r: "ogue" in r],
-        ["ensure_cache_label1", ("neighbors", "--label", "cencli_test_label1"), lambda r: "ogue" in r or "Empty Response" in r],
-        [None, ("interfering", "--end", f"{now.month}/{now.day}/{now.year}-{now.hour}:{now.minute}"), lambda r: "Interfering" in r],
-        [None, ("suspect",), lambda r: "Suspect" in r],
+    "idx,fixture,args,pass_condition", [
+        [1, None, ("--group", test_data["ap"]["group"]), lambda r: "ogue" in r],
+        [2, None, ("rogues", "--site", test_data["ap"]["site"]), lambda r: "ogue" in r],
+        [3, "ensure_cache_label1", ("neighbors", "--label", "cencli_test_label1"), lambda r: "ogue" in r or "Empty Response" in r],
+        [4, None, ("interfering", "--end", f"{now.month}/{now.day}/{now.year}-{now.hour}:{now.minute}"), lambda r: "Interfering" in r],
+        [5, None, ("suspect",), lambda r: "Suspect" in r],
+        [6, None, ("interfering", "-S", test_data["aos8_ap"]["serial"]), lambda r: "Interfering" in r],
     ]
 )
-def test_show_wids(fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+def test_show_wids(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, [
@@ -30,7 +32,7 @@ def test_show_wids(fixture: str | None, args: tuple[str], pass_condition: Callab
             *args
         ]
     )
-    capture_logs(result, "test_show_wids")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 

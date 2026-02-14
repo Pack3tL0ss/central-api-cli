@@ -2,7 +2,7 @@
 
 [![Latest Version](https://img.shields.io/pypi/v/centralcli.svg)](https://pypi.org/project/centralcli)
 [![Documentation Status](https://readthedocs.org/projects/central-api-cli/badge/?version=latest)](https://central-api-cli.readthedocs.io/en/latest/?badge=latest)
-[![Coverage](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/coverage.svg)](https://raw.githubusercontent.com/Pack3tL0ss/central-api-cli/master/docs/img/coverage.svg)
+[![Coverage](https://img.shields.io/badge/coverage-92%25-green)](https://img.shields.io/badge/coverage-92%25-green)
 [![CodeFactor](https://www.codefactor.io/repository/github/pack3tl0ss/central-api-cli/badge/master)](https://www.codefactor.io/repository/github/pack3tl0ss/central-api-cli/overview/master)
 [![Downloads](https://static.pepy.tech/badge/centralcli)](https://pepy.tech/project/centralcli)
 [![PyPI - Installs](https://img.shields.io/pypi/dm/centralcli.svg?color=blue&label=Installs&logo=pypi&logoColor=gold)](https://pypi.org/project/centralcli/)

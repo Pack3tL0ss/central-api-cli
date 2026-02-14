@@ -16,6 +16,7 @@ from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, Ca
 from centralcli.client import BatchRequest
 from centralcli.config import VALID_EXT
 from centralcli.constants import DevTypes, DynamicAntMode, GatewayRole, IAPTimeZoneNames, NotifyToArgs, RadioBandOptions, iden_meta, state_abbrev_to_pretty
+from centralcli.utils import VarValueSource
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
@@ -96,12 +97,12 @@ def template(
     render.econsole.print(f"    Device Type: [cyan]{kwargs['device_type']}[/]")
     render.econsole.print(f"    Model: [cyan]{kwargs['model']}[/]")
     render.econsole.print(f"    Version: [cyan]{kwargs['version']}[/]")
-    if render.confirm(yes):
-        resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        # will exit above if call failed.
-        cache_template.data["template_hash"] = api.session.request(common.get_file_hash, file=template, string=payload)
-        _ = api.session.request(common.cache.update_template_db, data=cache_template.data)
+    render.confirm(yes)
+    resp = api.session.request(api.configuration.update_existing_template, **kwargs, template=template, payload=payload)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # will exit above if call failed.
+    cache_template.data["template_hash"] = api.session.request(common.get_file_hash, file=template, string=payload)
+    _ = api.session.request(common.cache.update_template_db, data=cache_template.data)
 
 
 @app.command()
@@ -128,7 +129,7 @@ def variables(
     var_dict = {} if not var_file else utils.unlistify(config.get_file_data(var_file))
     var_dict = var_dict.get(dev.serial, var_dict)  # json by serial
     if var_value:
-        var_dict = {**var_dict, **common.parse_var_value_list(var_value)}
+        var_dict = {**var_dict, **utils.parse_var_value_list(var_value, source=VarValueSource.VARIABLES)}
     if not var_dict:
         common.exit(
             "Missing required paramerter.  [cyan]var_value[/] (args) and/or [cyan]--file[/] is required.\n"
@@ -252,7 +253,7 @@ def group(
     #CACHE Needs cache update
 
 
-config_help = f"""Update group or device level config (ap or gw).
+config_help = f"""Update group or device level config (ap or gw), or update cencli config.
 
 [cyan]cli_file[/] Can be raw CLI (no variables or conditional logic) or a jinja2 template.
 [italic][deep_sky_blue]:information:[/]  If the cli_file is a [medium_spring_green].j2[/] file the template will be converted based on variables in [cyan]var_file[/] prior to sending.[/italic]
@@ -263,7 +264,12 @@ If providing a jinja2 template, this command will automatically look for a [cyan
 """
 @app.command("config", help=config_help)
 def config_(
-    group_dev: str = common.arguments.get("group_dev", autocompletion=common.cache.group_dev_ap_gw_completion),
+    group_dev: str = common.arguments.get(
+        "group_dev",
+        metavar=iden_meta.group_dev_cencli,
+        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to update cencli configuration details.",
+        autocompletion=common.cache.group_dev_ap_gw_completion
+    ),
     cli_file: Path = typer.Argument(None, help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
     var_file: Path = typer.Argument(None, help="File containing variables for j2 config template.", exists=True, show_default=False,),
     banner_file: Path = common.options.banner_file,
@@ -275,6 +281,10 @@ def config_(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
+    if group_dev.lower() in ["cencli", "self"]:  # pragma: no cover  required tty
+        utils.open_file_with_editor(config.file)
+        common.exit(code=0)
+
     is_tmp_file = False
     group_dev: CacheDevice | CacheGroup = common.cache.get_identifier(group_dev, qry_funcs=["group", "dev"], device_type=["ap", "gw"])
     if banner:  # pragma: no cover requires tty
@@ -317,6 +327,8 @@ def config_(
     elif do_ap or (device and device.generic_type == "ap"):
         use_caas = False
         node_iden = group_dev.name if group_dev.is_group else group_dev.swack_id  # cache is populated with serial for swack_id for aos_10 so this works for both aos8 and aos10
+    else:  # pragma: no cover
+        ...
 
     render.console.rule("Configuration to be sent")
     render.console.print(output, emoji=False)
@@ -325,13 +337,13 @@ def config_(
         render.console.print(f"\nUpdating Swarm associted with {group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
     else:
         render.console.print(f"\nUpdating {'group' if group_dev.is_group else group_dev.generic_type.upper()} [cyan]{group_dev.name}[/]")
-    if render.confirm(yes):
-        if use_caas:
-            resp = api.session.request(caasapi.send_commands, node_iden, cli_cmds)
-            render.display_results(resp, cleaner=cleaner.parse_caas_response)
-        else:
-            resp = api.session.request(api.configuration.replace_ap_config, node_iden, cli_cmds)
-            render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    if use_caas:
+        resp = api.session.request(caasapi.send_commands, node_iden, cli_cmds)
+        render.display_results(resp, cleaner=cleaner.parse_caas_response)
+    else:
+        resp = api.session.request(api.configuration.replace_ap_config, node_iden, cli_cmds)
+        render.display_results(resp, tablefmt="action")
 
 
 # FIXME typer is not handling list[str] as expected.  Change groups metevar back to iden_meta.group_many once sorted.
@@ -591,9 +603,9 @@ def webhook(
     updates = "\n".join([f"  [bright_green]{k}[/]: {v if k == 'name' else ''.join([f'{_pfx}{url}' for url in v])}" for k, v in {"name": name, "urls": urls}.items() if v is not None])
     conf_msg = f"{conf_msg}\n{updates}"
     render.console.print(conf_msg, overflow="ellipsis")
-    if render.confirm(yes):
-        resp = api.session.request(api.central.update_webhook, wid, name, urls)
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.central.update_webhook, wid, name, urls)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()
@@ -639,7 +651,7 @@ def site(
     # We also populate Country for US if it's one of the US states/territories
     if state and len(state) == 2:
         state = state_abbrev_to_pretty.get(state, state)
-        if not country and state in state_abbrev_to_pretty.values():
+        if not country and state in state_abbrev_to_pretty.values():  # pragma: no cover
             country = "United States"
     if country and (country.upper() in ["US", "USA"] or "united states" in country.lower()):
         country = "United States"
@@ -667,10 +679,10 @@ def site(
         # Only provided new name send current address info to endpoint along with new name (name alone not allowed)
         if not address_fields:  # update requires either address fields or lon/lat even to change the name so send back existing data from cache with new name
             rename_only = True
-            geo_keys = ["latitude", "longitude"]
+            geo_keys = {"lat": "latitude", "lon": "longitude"}  # cache stores lat/lon API and central.update_site() use long form
             address_fields = {k: v for k, v in site_now.data.items() if k in kwargs.keys() and k not in geo_keys and v}
             if not address_fields:
-                address_fields = {k: v for k, v in site_now.data.items() if k in geo_keys and v}
+                address_fields = {geo_keys[k]: v for k, v in site_now.data.items() if k in geo_keys and v}
 
         render.econsole.print(f"  Chang{'e' if not yes else 'ing'} Name [red]{site_now.name}[/] --> [bright_green]{new_name}[/]")
     if rename_only:
@@ -707,7 +719,7 @@ def wlan(
         _groups = [common.cache.get_group_identifier(group, dev_type="ap") for group in groups]
     else:
         _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
-        _groups = [CacheGroup(g) for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
+        _groups = common.cache.ap_ui_groups
 
     batch_req = [BatchRequest(api.configuration.get_wlan, group=group.name, wlan_name=wlan) for group in _groups]
     api.session.silent = True
@@ -823,11 +835,11 @@ def guest(
         _msg += "\n[italic dark_olive_green2]Password not displayed[/]\n"
 
     render.econsole.print(_msg)
-    if render.confirm(yes):
-        resp = api.session.request(api.guest.update_guest, **payload)
-        password = None
-        payload = None
-        render.display_results(resp, tablefmt="action")
+    render.confirm(yes)
+    resp = api.session.request(api.guest.update_guest, **payload)
+    password = None
+    payload = None
+    render.display_results(resp, tablefmt="action")
 
 
 @app.callback()

@@ -87,7 +87,6 @@ def group(
             "rename only supported on AOS_8X groups. Use clone."
 
     render.display_results(resp, tablefmt="action")
-    common.exit(code=int(not resp.ok))
 
 
 @app.callback()

@@ -587,7 +587,7 @@ class MonitoringAPI:
         """Get all devices from Aruba Central.
 
         Args:
-            dev_types (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to Update. Defaults to None.
+            dev_types (Literal['ap', 'gw', 'cx', 'sw', 'sdwan', 'switch'], optional): Device Types to fetch. Defaults to None (all types).
             group (str, optional): Filter by devices in a Group. Defaults to None.
             site (str, optional): Filter by devices in a Site. Defaults to None.
             label (str, optional): Filter by devices with a label assigned. Defaults to None.

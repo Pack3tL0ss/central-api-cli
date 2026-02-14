@@ -62,7 +62,7 @@ def bssids_from_xls(
     import tablib
     import importlib.util
     if importlib.util.find_spec("et_xmlfile") is None:
-        common.exit(f"Missing optional xlsx support.  re-install centralcli with optional dependency to add support for xlsx files. [cyan]uv tool install {escape('centralcli[xlsx]')}[/]\n[italic]No need to uninstall, just re-run as described to add support for xlsx[/]")
+        common.exit(f"Missing optional xlsx support.  re-install centralcli with optional dependency to add support for xlsx files. [cyan]uv tool install {escape('centralcli[xlsx]')}[/]\n[italic]No need to uninstall, just re-run as described to add support for xlsx[/]")  # pragma: no cover
 
     book = tablib.Databook()
     book.xlsx = file.read_bytes()  # type: ignore
@@ -87,7 +87,7 @@ def bssids_from_xls(
 
 @app.command()
 def bssids(
-    ap_mac: str = typer.Argument(None, help="AP Mac Address", show_default=False),
+    ap_mac: str = typer.Argument(None, help="AP Mac Address", show_default=False),  # TODO add support for existing AP lookup by iden
     file: Path = typer.Option(None, help="fetch MACs from file for bssid calc", exists=True, show_default=False),
     dir: Path = typer.Option(None, help="process all files in dir for bssid calc", exists=True, show_default=False),
     site: str = typer.Option(None, "--site", "-s", help="The official name of the site (from SFDC), not required if [cyan]description[/] field is in the input file.  [dim italic]Only applies with [cyan]--file[/][/] :triangular_flag:"),

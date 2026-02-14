@@ -48,13 +48,13 @@ class AddGroupArgs(str, Enum):
 err_console = Console(stderr=True)
 
 
-def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, license: str | List[str] = None) -> None:
-    if license:
+def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, subscription: str | List[str] = None) -> None:
+    if subscription:
         try:
-            license = utils.unlistify(license)
-            license: str = license.lower().replace("_", "-").replace(" ", "-"),
+            subscription = utils.unlistify(subscription)
+            subscription: str = subscription.lower().replace("_", "-").replace(" ", "-"),
         except Exception as e:  # pragma: no cover
-            log.exception(f"{e.__class__.__name__} Exception in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
+            log.exception(f"{repr(e)} in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
 
     inv_data = {
         'type': "-",
@@ -62,7 +62,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
         'sku': "-",
         'mac': mac,
         'serial': serial,
-        'services': license,
+        'services': subscription,
     }
     resp = utils.listify(resp)
     for r in resp:
@@ -72,7 +72,7 @@ def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str
             try:
                 inv_data["sku"] = r.raw["extra"]["message"]["available_device"][0]["part_number"]
             except Exception as e:  # pragma: no cover
-                log.warning(f"Unable to extract sku after inventory update ({e.__class__.__name__}), value will be omitted from inv cache.\n{e}")
+                log.exception(f"Unable to extract sku after inventory update ({repr(e)}), value will be omitted from inv cache.")
 
     api.session.request(common.cache.update_inv_db, data=inv_data)
 
@@ -94,7 +94,9 @@ def device(
                             #    autocompletion=cli.cache.smg_kw_completion, show_default=False,),
     _group: str = typer.Option(None, "--group", autocompletion=common.cache.group_completion, hidden=True),
     # _site: str = typer.Option(None, autocompletion=cli.cache.site_completion, hidden=False),
-    subscription: List[common.cache.LicenseTypes] = common.options.subscription,  # type: ignore
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = common.options.get("tags", hidden=not common.cache.config.glp.ok),
+    subscription: common.cache.LicenseTypes = common.options.subscription,  # type: ignore
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -112,16 +114,19 @@ def device(
     kwd_vars = [kw1, kw2, kw3]
     vals = [serial, mac, group]
     kwargs = {
-        "mac": None,
         "serial": None,
+        "mac": None,
         "group": None,
         # "site": None,
-        "license": subscription
+        "subscription": None,
     }
 
     for name, value in zip(kwd_vars, vals):
         if name is not None:
-            kwargs[name if not hasattr(name, "value") else name.value] = value
+            if name.startswith("="):  # HACK so --tags can take a list[str]
+                _tags = [*(_tags or []), "=", *([] if len(name) == 1 else [name.lstrip("=")]), *([] if value is None else [value])]
+            else:
+                kwargs[name if not hasattr(name, "value") else name.value] = value
 
     kwargs["group"] = kwargs["group"] or _group
 
@@ -130,23 +135,28 @@ def device(
         common.exit("[bright_red]Error[/]: both serial number and mac address are required.")
 
     _msg = [f"Add device: [bright_green]{kwargs['serial']}|{kwargs['mac']}[/bright_green]"]
-    if "group" in kwargs and kwargs["group"]:
+    if kwargs["group"]:
         _group: CacheGroup = common.cache.get_group_identifier(kwargs["group"])
         kwargs["group"] = _group.name
         _msg += [f"\n  Pre-Assign to Group: [bright_green]{kwargs['group']}[/bright_green]"]
-    if "license" in kwargs and kwargs["license"]:
-        _lic_msg = [lic.value for lic in kwargs["license"]]
-        _lic_msg = _lic_msg if len(kwargs["license"]) > 1 else _lic_msg[0]
+    if subscription:
         _msg += [
-            f"\n  Assign Subscription{'s' if len(kwargs['license']) > 1 else ''}: [bright_green]{_lic_msg}[/bright_green]"
+            f"\n  Assign Subscription: [bright_green]{subscription.value}[/bright_green]"
         ]
-        kwargs["license"] = [lic.replace("-", "_") for lic in kwargs["license"]]
+        kwargs["subscription"] = subscription.replace("-", "_")
 
-    render.econsole.print("".join(_msg), emoji=False)
-    render.confirm(yes)
-    resp = api.session.request(api.platform.add_devices, **kwargs)  # TOGLP
-    render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, license=subscription)
+    if config.glp.ok:
+        kwargs = {**kwargs, "application_id": common.cache.my_service.id, "region": common.cache.my_service.region}
+        tag_dict = None if not tags else utils.parse_var_value_list([*tags, *(_tags or [])])
+        kwargs["tags"] = tag_dict
+        resp = common.batch_add_devices(data=[kwargs], yes=yes)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    else:
+        render.econsole.print("".join(_msg), emoji=False)
+        render.confirm(yes)
+        resp = api.session.request(api.platform.add_devices, **kwargs)
+        render.display_results(resp, tablefmt="action", exit_on_fail=True)
+        _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, subscription=subscription)
 
 @app.command()
 def group(
@@ -196,8 +206,8 @@ def group(
         _arch = "SD_WAN_Gateway"
         allowed_types = ["sdwan"]
         if gw_role and gw_role != "vpnc":
-            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring Gateway Role: [red]{gw_role}[/].  As the group is configured for [cyan]--sdwan[/], Gateway role [bright_green]vpnc[/] is implied.")
-        gw_role = "vpnc"
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Ignoring Gateway Role: [red]{gw_role.value}[/].  As the group is configured for [cyan]--sdwan[/], Gateway role [bright_green]vpnc[/] is implied.")
+        gw_role = GatewayRole.vpnc
 
     # -- // Error on combinations that are not allowed by API \\ --
     if any([ap, sw, cx, gw]) and sdwan:
@@ -236,40 +246,40 @@ def group(
 
     econsole.print(f"{_msg}")
 
-    if render.confirm(yes):
-        resp = api.session.request(
-            api.configuration.create_group,
-            group,
-            wired_tg=wired_tg,
-            wlan_tg=wlan_tg,
-            allowed_types=allowed_types,
-            aos10=aos10,
-            microbranch=microbranch,
-            gw_role=gw_role,
-            monitor_only_sw=mon_only_sw,
-            monitor_only_cx=mon_only_cx,
-            cnx=cnx
-        )
-        if not resp.ok:  # pragma: no cover
-            log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
-        render.display_results(resp, tablefmt="action", exit_on_fail=True)
-        # prep data for cache
-        data={
-            'name': group,
-            "allowed_types": allowed_types,
-            "gw_role": gw_role,
-            'aos10': aos10,
-            "microbranch": None if not aos10 else bool(microbranch),
-            'wlan_tg': wlan_tg,
-            'wired_tg': wired_tg,
-            'monitor_only_sw': mon_only_sw,
-            'monitor_only_cx': mon_only_cx,
-            'cnx': cnx
-        }
-        api.session.request(
-            common.cache.update_group_db,
-            data=data
-        )
+    render.confirm(yes)
+    resp = api.session.request(
+        api.configuration.create_group,
+        group,
+        wired_tg=wired_tg,
+        wlan_tg=wlan_tg,
+        allowed_types=allowed_types,
+        aos10=aos10,
+        microbranch=microbranch,
+        gw_role=gw_role,
+        monitor_only_sw=mon_only_sw,
+        monitor_only_cx=mon_only_cx,
+        cnx=cnx
+    )
+    if not resp.ok:  # pragma: no cover
+        log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
+    render.display_results(resp, tablefmt="action", exit_on_fail=True)
+    # prep data for cache
+    data={
+        'name': group,
+        "allowed_types": allowed_types,
+        "gw_role": gw_role,
+        'aos10': aos10,
+        "microbranch": None if not aos10 else bool(microbranch),
+        'wlan_tg': wlan_tg,
+        'wired_tg': wired_tg,
+        'monitor_only_sw': mon_only_sw,
+        'monitor_only_cx': mon_only_cx,
+        'cnx': cnx
+    }
+    api.session.request(
+        common.cache.update_group_db,
+        data=data
+    )
 
 
 # TODO autocompletion
@@ -294,7 +304,7 @@ def wlan(
     workspace: str = common.options.workspace,
 ) -> None:
     """Add WLAN (SSID)"""
-    group = common.cache.get_group_identifier(group)
+    cgroup = common.cache.get_group_identifier(group)
     kwarg_list = [psk, wlan_type, vlan, zone, ssid, bw_up, bw_down, bw_user_up, bw_user_down, portal_profile]
     _to_name = {
         "psk": "wpa_passphrase",
@@ -312,9 +322,9 @@ def wlan(
     if "wpa_passphrase" not in kwargs:
         common.exit("psk/passphrase is currently required for this command")
 
-    econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{group.name}[/]")
+    econsole.print(f"Add{'ing' if yes else ''} wlan [cyan]{name}[/] to group [cyan]{cgroup.name}[/]")
     render.confirm(yes)
-    resp = api.session.request(api.configuration.create_wlan, group.name, name, **kwargs)
+    resp = api.session.request(api.configuration.create_wlan, cgroup.name, name, **kwargs)
     render.display_results(resp, tablefmt="action")
 
 
@@ -527,11 +537,12 @@ def template(
     workspace: str = common.options.workspace,
 ) -> None:
     group: CacheGroup = common.cache.get_group_identifier(group)
+    template_string = None
     if not template:  # pragma: no cover
         econsole.print("[bright_green]No Template file provided[/].  Template content is required.")
         econsole.print("Provide Template Content:")
-        template = utils.get_multiline_input()
-        template = template.encode("utf-8")
+        template_string = utils.get_multiline_input()
+        template_string = template_string.encode("utf-8")
 
     econsole.print(f"\n[bright_green]Add{'ing' if yes else ''} Template[/] [cyan]{name}[/] to group [cyan]{group.name}[/]")
     econsole.print("[bright_green]Template will apply to[/]:")
@@ -541,8 +552,8 @@ def template(
     render.confirm(yes)
     template_hash, resp = api.session.batch_request(
         [
-            BatchRequest(common.get_file_hash, template),
-            BatchRequest(api.configuration.add_template, name, group=group.name, template=template, device_type=dev_type, version=version, model=model)
+            BatchRequest(common.get_file_hash, template, string=template_string),
+            BatchRequest(api.configuration.add_template, name, group=group.name, template=template or template_string, device_type=dev_type, version=version, model=model)
         ]
     )
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
@@ -669,8 +680,8 @@ def guest(
         cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
         _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
     except Exception as e:  # pragma: no cover
-        log.exception(f"Exception attempting to update Guest cache after adding guest {name}.\n{e}")
-        render.econsole.print(f"[red]:warning:[/]  Exception ({e.__class__.__name__}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
+        log.exception(f"{repr(e)} attempting to update Guest cache after adding guest {name}.")
+        render.econsole.print(f"[red]:warning:[/]  Exception ({(repr(e))}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")
 
 
 @app.command()

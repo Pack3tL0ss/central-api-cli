@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 import typer
 
-from centralcli import common, config, render, utils, log
-from centralcli.cache import CacheSite, api
+from centralcli import common, config, render, utils, log, api_clients
+from centralcli.cache import CacheSite
 from centralcli.constants import AllDevTypes
 from centralcli.models.imports import ImportSites
 
@@ -15,6 +15,9 @@ from . import examples
 
 if TYPE_CHECKING:
     from centralcli.response import Response
+
+api = api_clients.classic
+glp_api = api_clients.glp
 
 app = typer.Typer()
 
@@ -78,7 +81,7 @@ def sites(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch delete sites [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, import_type="sites",)
+    data = common._get_import_file(import_file, import_type="sites", text_ok=True)
     resp = batch_delete_sites(data, yes=yes)
     render.display_results(resp, tablefmt="action")
 
@@ -113,9 +116,11 @@ def groups(
 def devices(
     import_file: Path = common.arguments.import_file,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views (devices must be offline).  Devices will remain in inventory with subscriptions unchanged."),
-    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub[/]", show_default=False,),
+    dev_type: AllDevTypes = typer.Option(None, "--dev-type", help="Only delete devices of a given type. [dim italic]Applies/Only valid with [cyan]--no-sub or --site[/]", show_default=False,),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.  (Devices are not deleted from monitoring UI)", hidden=not config.is_cop,),
     unsubscribed: bool = typer.Option(False, "--no-sub", help="Disassociate from the Aruba Central Service in GLP all devices that have no subscription assigned"),
+    site: str = common.options.get("site", help="Delete all devices from a given site."),
+    no_refresh: bool = common.options.get("no_refresh", help="Don't refresh the cache prior to collecting devices to delete.  [dim italic]Applies to --no-sub and --site options[/]"),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -123,7 +128,7 @@ def devices(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Batch delete devices based on data from import file or delete all devices that lack a subscription.
+    """Batch delete devices based on data from import file, delete all devices that lack a subscription, or delete all devices associated with a provided site.
 
     Use [cyan]cencli batch delete devices --example[/] to see example import file formats.
 
@@ -146,10 +151,14 @@ def devices(
             common.exit("[cyan]--dev-type[/] option is currently only valid in combination with [cyan]--no-sub[/].")
         data = common._get_import_file(import_file, import_type="devices",)
     elif unsubscribed:
-        resp = common.cache.get_devices_with_inventory(device_type=dev_type)
+        resp = common.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=no_refresh)
         if not resp:
             render.display_results(resp, exit_on_fail=True)
         data = [d for d in resp.output if d["subscription_key"] is None]
+    elif site:
+        resp = common.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=no_refresh)
+        cache_site = common.cache.get_site_identifier(site)
+        data = [d for d in resp.output if (d.get("site") or "") == cache_site.name]
     else:
         common.exit(render._batch_invalid_msg(usage_msg, provide="Provide [bright_green]IMPORT_FILE[/], [cyan]--no-sub[/] or [cyan]--example[/]"))
 

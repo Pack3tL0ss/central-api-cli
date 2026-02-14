@@ -11,7 +11,6 @@ import typer
 
 from centralcli import cleaner, common, render
 from centralcli.cache import CacheDevice, api
-from centralcli.constants import iden_meta
 from centralcli.models.wids import Wids
 from centralcli.response import Response
 
@@ -90,7 +89,7 @@ def get_wids_response(
 # Default Time-Range for all wids Endpoints is past 3 hours.
 @app.command()
 def rogues(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,
@@ -130,7 +129,7 @@ def rogues(
 
 @app.command()
 def interfering(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,
@@ -170,7 +169,7 @@ def interfering(
 
 @app.command()
 def neighbors(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,
@@ -210,7 +209,7 @@ def neighbors(
 
 @app.command()
 def suspect(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,
@@ -249,7 +248,7 @@ def suspect(
 
 @app.command()
 def all(
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,
@@ -292,7 +291,7 @@ def all(
 
 @app.callback(invoke_without_command=True)
 def callback(ctx: typer.Context,
-    device: str = typer.Option(None, "-S", "--swarm", help="Filter by the swarm the provided AP belongs to", metavar=iden_meta.dev, autocompletion=common.cache.dev_ap_completion, show_default=False,),
+    device: str = common.options.swarm_device,
     group: List[str] = common.options.group_many,
     site: List[str] = common.options.site_many,
     label: List[str] = common.options.label_many,

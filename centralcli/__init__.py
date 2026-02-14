@@ -21,6 +21,7 @@ HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
 import os
+from re import A
 import sys
 from pathlib import Path
 from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
@@ -222,6 +223,9 @@ sys.argv, raw_out = _get_value_from_argv("--raw", is_flag=True)
 if "--capture-raw" in sys.argv:  # captures raw responses into a flat file for later use in local testing
     config.dev.capture_raw = True
     _ = sys.argv.pop(sys.argv.index("--capture-raw"))
+if "--no-glp" in sys.argv:
+    config._mock()
+    sys.argv.pop(sys.argv.index("--no-glp"))
 if "--test" in sys.argv:
     config.dev.capture_raw = True
     sys.argv, env.current_test = _get_value_from_argv("--test")
@@ -260,28 +264,49 @@ if "--again" in sys.argv:
 from .classic.api import ClassicAPI
 from .cnx.api import CentralAPI, GreenLakeAPI
 
-class APIClients:  # TODO play with cached property vs setting in init to see how it impacts import performance across the numerous files that need this
-    def __init__(self, *, classic_base_url: str = config.classic.base_url, glp_base_url: str = config.glp.base_url, cnx_base_url: str = config.cnx.base_url, silent: bool = False):
+class APIClients:
+    # clients_by_workspace: dict[str, ClassicAPI | GreenLakeAPI | CentralAPI | None] = {}
+
+    def __init__(self, cfg: Config = None, classic_base_url: str = None, glp_base_url: str = None, cnx_base_url: str = None, silent: bool = True):
+        self.config = cfg or config
         self.classic_base_url = classic_base_url
         self.glp_base_url = glp_base_url
         self.cnx_base_url = cnx_base_url
         self.silent = silent
 
-    @cached_property
-    def classic(self):
-        return ClassicAPI(self.classic_base_url, silent=self.silent)
+    @property
+    def classic(self) -> ClassicAPI:
+        return ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("classic"):
+        #     return APIClients.clients_by_workspace[config.workspace]["classic"]
+        # classic_client = ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
+        # new_data = {"classic": classic_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return classic_client
 
-    @cached_property
-    def glp(self):
-        return None if not config.glp.ok else GreenLakeAPI(self.glp_base_url, silent=self.silent)
+    @property
+    def glp(self) -> GreenLakeAPI | None:
+        return None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("glp"):
+        #     return APIClients.clients_by_workspace[config.workspace]["glp"]
+        # glp_client = None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
+        # new_data = {"glp": glp_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return glp_client
 
-    @cached_property
-    def cnx(self):
-        return None if not config.cnx.ok else CentralAPI(self.cnx_base_url, silent=self.silent)
+    @property
+    def cnx(self) -> CentralAPI | None:
+        return None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
+        # if APIClients.clients_by_workspace.get(config.workspace, {}).get("cnx"):
+        #     return APIClients.clients_by_workspace[config.workspace]["cnx"]
+        # cnx_client = None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
+        # new_data = {"cnx": cnx_client}
+        # APIClients.clients_by_workspace[config.workspace] = {**APIClients.clients_by_workspace.get(config.workspace, {}), **new_data}
+        # return cnx_client
 
 api_clients = APIClients()
 
-from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding
+from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding, CacheService, CacheSub
 
 cache = Cache(config=config)
 if config.valid:
@@ -299,6 +324,9 @@ if config.valid:
     CacheMpsk.set_db(cache.MpskDB)
     CacheBuilding.set_db(cache.BuildingDB)
     CacheFloorPlanAP.set_db(cache.FloorPlanAPDB, building_db=cache.BuildingDB)
+    if config.glp.ok:
+        CacheSub.set_db(cache.SubDB)
+        CacheService.set_db(cache.SvcDB)
 
 from .clicommon import CLICommon
 

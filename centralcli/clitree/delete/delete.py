@@ -265,7 +265,8 @@ def device(
     # The provided input does not have to be the serial number batch_del_devices will use get_dev_identifier to look the dev
     # up.  It just validates the import has the `serial` field.
     data = [{"serial": d} for d in devices]
-    common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+    resp = common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+    render.display_results(resp, tablefmt="action")
 
 
 @app.command()

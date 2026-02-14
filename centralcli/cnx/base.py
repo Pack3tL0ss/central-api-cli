@@ -74,9 +74,40 @@ class NewCentralBase:
         """
         self.token_info = _load_token_info(token_info)
         self.token_resp = None
-        self.central_info = None
+        self._access_token = None
+        # self.central_info = None
 
         # auth is always through glp so access token is the same
+        # access_token = None
+        # for app in self.token_info:
+        #     if "access_token" in self.token_info[app]:
+        #         access_token = self.token_info[app]["access_token"]
+        #         break
+
+        # if not access_token:
+        #     _token = self.load_token_from_cache()
+        #     if not _token:
+        #         self.token_resp = self.get_access_token()
+        #         access_token = self.token_resp.get("access_token")
+        #     else:
+        #         access_token = _token
+
+
+        # for app in self.token_info:
+        #     self.token_info[app]["access_token"] = self.token_info.get("access_token") or access_token
+
+        # Make NewCentralBase have some of the same attributes as pycentralv1
+        # self.central_info = {"token": {"access_token": self.access_token}}
+
+    @property
+    def central_info(self) -> dict[str, dict[str, str]]:
+        return {"token": {"access_token": self.access_token}}
+
+    @property
+    def access_token(self):
+        if self._access_token:
+            return self._access_token
+
         access_token = None
         for app in self.token_info:
             if "access_token" in self.token_info[app]:
@@ -91,12 +122,11 @@ class NewCentralBase:
             else:
                 access_token = _token
 
-
         for app in self.token_info:
-            self.token_info[app]["access_token"] = self.token_info.get("access_token") or access_token
+            self.token_info[app]["access_token"] = self.token_info[app].get("access_token") or access_token
 
-        # Make NewCentralBase have some of the same attributes as pycentralv1
-        self.central_info = {"token": {"access_token": access_token}}
+        self._access_token = access_token
+        return self._access_token
 
 
     def load_token_from_cache(self) -> str | None:
@@ -143,7 +173,8 @@ class NewCentralBase:
                 log.info(
                     f"{app_name} Login Successful.. Obtained Access Token!"
                 )
-                self.central_info = {"token": {"access_token": token_dict["access_token"]}}
+                # self.central_info = {"token": {"access_token": token_dict["access_token"]}}
+                self._access_token = token_dict["access_token"]
                 if config.cnx_tok_file:
                     token_data = {
                         "access_token": token_dict["access_token"],

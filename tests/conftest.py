@@ -15,12 +15,93 @@ from centralcli.typedefs import PrimaryDeviceTypes
 
 from . import mock_sleep, test_data
 from ._mock_request import test_responses
-from ._test_data import test_device_file, test_files, test_group_file
+from ._test_data import test_group_file, TEST_FILE_DIR
 
 runner = CliRunner()
 
 cache_bak_file = config.cache_file.parent / f"{config.cache_file.name}.pytest.bak"
 
+
+BATCH_DEVICES = [
+    {
+        "id": "19478ff1-4168-5c61-895c-bc7c11aec0bd",
+        "serial": "CNKDKSM0YH",
+        "mac": "20:4C:03:BA:20:6C",
+        "type": "ap",
+        "model": "AP-505H-US",
+        "sku": "R3V48A",
+        "services": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1788715367,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "6702ffe6-0770-518a-9e42-188d715a9c7b",
+        "serial": "CNFHJ0TPF7",
+        "mac": "38:17:c3:c6:e0:38",
+        "type": "ap",
+        "model": "315",
+        "sku": "JW813A",
+        "subscription": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1924905600,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
+        "serial": "CNKJKV309D",
+        "mac": "D0:D3:E0:CD:08:24",
+        "type": "ap",
+        "model": "AP-575-US",
+        "sku": "R4H18A",
+        "services": "advanced-ap",
+        "subscription_key": "ENCYHFWQLJNQCWDU",
+        "subscription_expires": 1788715367,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "347bd5b1-e53e-50e9-8fac-1e80bba794a1",
+        "serial": "CNHPKLB01P",
+        "mac": "20:4C:03:81:E7:B2",
+        "type": "gw",
+        "model": "9004-US",
+        "sku": "R1B20A",
+        "services": "advance-70xx",
+        "subscription_key": "ARI76TMSFHXNJBJH",
+        "subscription_expires": 1860052515,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
+        "serial": "CN29FP403H",
+        "mac": "80:C1:6E:CD:32:40",
+        "type": "sw",
+        "model": "2530-12G",
+        "sku": "J9773A",
+        "services": "foundation-switch-6100",
+        "subscription_key": "AZFG8CVMXQB23NNQ",
+        "subscription_expires": 1924799400,
+        "assigned": True,
+        "archived": False
+    },
+    {
+        "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
+        "serial": "SG90KN00N5",
+        "mac": "88:3a:30:9a:cc:40",
+        "type": "cx",
+        "model": "'6300'",
+        "sku": "JL661A",
+        "services": "advanced-switch-6300",
+        "subscription_key": "E4F587FF6F6F848289",
+        "subscription_expires": 1924799400,
+        "assigned": True,
+        "archived": False
+    }
+]
 
 def pytest_configure(config):
     """
@@ -59,7 +140,8 @@ def restore_cache_file():  # pragma: no cover
 def _cleanup_mock_cache():
     dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
     doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
-    assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
+    if any(doc_ids):  # pragma: no cover
+        assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids) if ids]
     return
 
 
@@ -89,15 +171,31 @@ def _cleanup_test_labels():  # pragma: no cover
 
 @pytest.hookimpl()
 def pytest_sessionfinish(session: pytest.Session):
-    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests and session.testscollected > 120:  # pragma: no cover
-        unused = "\n".join(test_responses.unused)
-        unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
-        log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+    if "--collect-only" not in session.config.invocation_params.args and config.dev.mock_tests:  # pragma: no cover
         now = pendulum.now()
         ts = " ".join(now.to_day_datetime_string().split(", ")[1:])
-        unused_log_file.write_text(
-            f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
+
+        if test_responses.unused and session.testscollected > 900:
+            # Log unused mocks.  This is currently disable (always returns empty list)
+            unused = "\n".join(test_responses.unused)
+            unused_log_file = Path(config.log_dir / "pytest-unused-mocks.log")
+            log.info(f"{len(test_responses.unused)} mock responses were unused.  See {unused_log_file} for details.")
+            unused_log_file.write_text(
+                f"The following {len(test_responses.unused)} mock responses were not used during this test run {ts}\n{unused}\n"
+            )
+
+        if not test_responses.missing_mocks:
+            return
+
+        # Log missing mocks
+        missing_mocks_log_file = Path(config.log_dir / "pytest-missing-mocks.log")
+        missing = "\n".join(test_responses.missing_mocks)
+        log.warning(f"{len(test_responses.missing_mocks)} mock responses were missing.  See {missing_mocks_log_file} for details.")
+        missing_mocks_log_file.write_text(
+            f"The following {len(test_responses.missing)} mock responses were not used during this test run {ts}\n{missing}\n"
         )
+
+
 
 
 def cleanup_test_items():  # pragma: no cover
@@ -113,9 +211,20 @@ def do_nothing():
     ...
 
 def cleanup_import_files():
-    for file in test_files:
+    for file in TEST_FILE_DIR.iterdir():
         if file.exists():
-            file.unlink()
+            if file.is_dir():
+                _ = [f.unlink() for f in file.iterdir()]
+                file.rmdir()
+            else:
+                file.unlink()
+        else:  # pragma: no cover
+            ...
+
+    try:
+        TEST_FILE_DIR.rmdir()  # must be empty
+    except OSError as e:  # pragma: no cover
+        log.exception(f"{repr(e)} while attempting to remove test_file directory ({TEST_FILE_DIR}). (conftest.cleanup_import_files)", exc_info=True)
 
 
 def setup():
@@ -140,7 +249,7 @@ def session_setup_teardown():
     yield from setup()
 
     # executed after test is run
-    teardown()
+    return teardown()
 
 
 @pytest.fixture(scope='function', autouse=True)
@@ -329,7 +438,7 @@ def ensure_cache_mpsk_network():
     if config.dev.mock_tests:
         doc_ids = [m.doc_id for m in cache.mpsk_networks if m["name"] == cache_data["name"]]
         if doc_ids:  # pragma: no cover
-            assert asyncio.run(cache.update_mpsk_net_db(data=doc_ids, remove=True))
+            assert asyncio.run(cache.update_mpsk_net_db(doc_ids, remove=True))
         doc_ids = [m.doc_id for m in cache.mpsk if m["ssid"] == cache_data["name"]]
         if doc_ids:  # pragma: no cover
             assert asyncio.run(cache.update_db(cache.MpskDB, doc_ids=doc_ids))
@@ -347,51 +456,143 @@ def ensure_hook_proxy_started():  # pragma: no cover
 
 
 @pytest.fixture(scope="function")
+def ensure_no_cache():
+    cache_file = config.cache_dir / "db.mocked.json"
+    cache_file_bak = config.cache_dir / "db.mocked.json.bak"
+    cache_file_bak.write_text(cache_file.read_text())
+    cache_file.unlink()
+    yield
+
+    cache_file.write_text(cache_file_bak.read_text())
+    cache_file_bak.unlink()
+    return
+
+
+@pytest.fixture(scope="function")
 def ensure_inv_cache_batch_devices():
+    if config.dev.mock_tests:
+        devices = BATCH_DEVICES
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        if not cache_devs == devices:
+            assert asyncio.run(cache.update_inv_db(data=devices))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_inv_dev_cache_batch_devices():
+    if config.dev.mock_tests:
+        devices = BATCH_DEVICES
+        cache_inv_devs_by_serial = {
+            dev["serial"]: cache.inventory_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.inventory_by_serial
+        }
+        if cache_inv_devs_by_serial:  # pragma: no cover
+            assert asyncio.run(cache.update_inv_db(data=[d.doc_id for d in cache_inv_devs_by_serial.values()], remove=True))
+        cache_mon_devs_by_serial = {
+            dev["serial"]: cache.devices_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.devices_by_serial
+        }
+        if cache_mon_devs_by_serial:  # pragma: no cover
+            assert asyncio.run(cache.update_dev_db(data=[d.doc_id for d in cache_mon_devs_by_serial.values()], remove=True))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_inv_cache_batch_sub_devices():
     if config.dev.mock_tests:
         devices = [
             {
-                "id": "19478ff1-4168-5c61-895c-bc7c11aec0bd",
-                "serial": "CNKDKSM0YH",
-                "mac": "20:4C:03:BA:20:6C",
-                "type": "ap",
-                "model": "AP-505H-US",
-                "sku": "R3V48A",
-                "services": "advanced-ap",
-                "subscription_key": "ENCYHFWQLJNQCWDU",
+                "id": "7750bcaa-aef8-11f0-986e-00155df42dd5",
+                "serial": "CN29FP403H",
+                "mac": "80:C1:6E:CD:32:40",
+                "type": "sw",
+                "model": "2530-12G",
+                "sku": "J9773A",
+                "services": "foundation-switch-6100",
+                "subscription_key": "AZFG8CVMXQB23NNQ",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "88e21965-d335-5d40-94de-29d76dbf42b9",
+                "serial": "CN80FP53YW",
+                "mac": "80:30:E0:60:D5:C0",
+                "type": "sw",
+                "model": "2530",
+                "sku": "J9774A",
+                "services": "foundation-switch-6100",
+                "subscription_key": "AZFG8CVMXQB23NNQ",
                 "subscription_expires": 1788715367,
                 "assigned": True,
                 "archived": False
             },
             {
-                "id": "f26c4528-4260-5e38-8167-2f4a08a214a4",
-                "serial": "CNKJKV309D",
-                "mac": "D0:D3:E0:CD:08:24",
+                "id": "5a3c4c8a-5756-5302-a036-2f04180b0dcf",
+                "serial": "CN36FP500Q",
+                "mac": "80:C1:6E:CE:F2:00",
+                "type": "sw",
+                "model": "2530",
+                "sku": "J9774A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": "CN63HH906Z",
+                "mac": "F0:5C:19:CE:7A:86",
                 "type": "ap",
-                "model": "AP-575-US",
-                "sku": "R4H18A",
-                "services": "advanced-ap",
-                "subscription_key": "ENCYHFWQLJNQCWDU",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
                 "subscription_expires": 1788715367,
                 "assigned": True,
                 "archived": False
             },
             {
-                "id": "347bd5b1-e53e-50e9-8fac-1e80bba794a1",
-                "serial": "CNHPKLB01P",
-                "mac": "20:4C:03:81:E7:B2",
-                "type": "gw",
-                "model": "9004-US",
-                "sku": "R1B20A",
-                "services": "advance-70xx",
-                "subscription_key": "ARI76TMSFHXNJBJH",
-                "subscription_expires": 1860052515,
+                "id": "85c46b1b-695d-564b-92a8-a6d36dae4bc0",
+                "serial": "CN71HKZ1CL",
+                "mac": "F4:03:43:07:57:20",
+                "type": "sw",
+                "model": "2930F",
+                "sku": "JL258A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
                 "assigned": True,
                 "archived": False
-            }
+            },
+            {
+                "id": "6b538f45-f0bb-515d-87fc-0816495c0d44",
+                "serial": "SG90KN00N5",
+                "mac": "88:3a:30:9a:cc:40",
+                "type": "cx",
+                "model": "'6300'",
+                "sku": "JL661A",
+                "services": "advanced-switch-6300",
+                "subscription_key": "E4F587FF6F6F848289",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
+            {
+                "id": "adf55d3d-6f97-5cf4-8990-3e72e3d2671a",
+                "serial": "SG06KMY1S1",
+                "mac": "64:E8:81:B8:0C:80",
+                "type": "cx",
+                "model": "6300",
+                "sku": "JL659A",
+                "services": "advanced-switch-6300",
+                "subscription_key": "E4F587FF6F6F848289",
+                "subscription_expires": 1924799400,
+                "assigned": True,
+                "archived": False
+            },
         ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        if not cache_devs == devices:
             assert asyncio.run(cache.update_inv_db(data=devices))
     yield
 
@@ -455,12 +656,10 @@ def ensure_dev_cache_batch_devices():
     return
 
 
-
 @pytest.fixture(scope="function")
 def ensure_inv_cache_test_ap():
     if config.dev.mock_tests:
-        devices = [
-            {
+        cache_data = {
                 "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
                 "serial": test_data["test_devices"]["ap"]["serial"],
                 "mac": test_data["test_devices"]["ap"]["mac"],
@@ -472,11 +671,31 @@ def ensure_inv_cache_test_ap():
                 "subscription_expires": 1788715367,
                 "assigned": True,
                 "archived": False
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:  # pragma: no cover
-            assert asyncio.run(cache.update_inv_db(data=devices))
+        }
+        if not cache.inventory_by_serial.get(cache_data["serial"]) or not dict(cache.inventory_by_serial[cache_data["serial"]]) == cache_data:  # pragma: no cover
+            assert asyncio.run(cache.update_inv_db(data=[cache_data]))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_no_inv_cache_test_ap():
+    if config.dev.mock_tests:
+        cache_data = {
+                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+                "serial": test_data["test_devices"]["ap"]["serial"],
+                "mac": test_data["test_devices"]["ap"]["mac"],
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": "foundation-ap",
+                "subscription_key": "ADURDXCTOYTUXKJE",
+                "subscription_expires": 1788715367,
+                "assigned": True,
+                "archived": False
+        }
+        cache_dev = cache.inventory_by_serial.get(cache_data["serial"])
+        if cache_dev:
+            assert asyncio.run(cache.update_inv_db(data=[cache_dev.doc_id], remove=True))
     yield
 
 
@@ -786,8 +1005,7 @@ def ensure_cache_vsf_stack():
     if config.dev.mock_tests:
         missing = [d for d in cache_data if d["serial"] not in cache.devices_by_serial]
         if missing:
-            resp = common.batch_add_devices(data=missing, yes=True)
-            assert all([r.ok for r in resp])
+            assert asyncio.run(cache.update_dev_db(missing))
     yield
 
 
@@ -823,8 +1041,7 @@ def ensure_dev_cache_test_vsx_switch():
 
 # Ensures subscription has 0 available for certain tests
 @pytest.fixture(scope="function")
-def ensure_cache_subscription(request: pytest.FixtureRequest):
-    avail = 0 if not hasattr(request, "param") else request.param
+def ensure_cache_subscription():
     if config.dev.mock_tests:
         test_sub = {
             "id": "7658e672-2af5-5646-aa37-406af19c6d41",
@@ -842,10 +1059,37 @@ def ensure_cache_subscription(request: pytest.FixtureRequest):
             "valid": True
         }
         if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
-            update_data = {**test_sub, "available": avail}
+            assert asyncio.run(cache.update_db(cache.SubDB, data=test_sub, truncate=False))
+        else:  # pragma: no cover
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": test_sub["available"]}]
+            assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_cache_subscription_none_available():
+    if config.dev.mock_tests:
+        # available 982 below as we restore this after the test
+        test_sub = {
+            "id": "7658e672-2af5-5646-aa37-406af19c6d41",
+            "name": "advanced-ap",
+            "type": "AP",
+            "key": "ENCYHFWQLJNQCWDU",
+            "qty": 1000,
+            "available": 982,
+            "is_eval": True,
+            "sku": "Q9Y63-EVALS",
+            "start_date": 1611532800,
+            "end_date": 1924905600,
+            "started": True,
+            "expired": False,
+            "valid": True
+        }
+        if test_sub["id"] not in cache.subscriptions_by_id:  # pragma: no cover
+            update_data = {**test_sub, "available": 0}
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=False))
         else:  # pragma: no cover
-            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": avail}]
+            update_data = [*[v for k, v in cache.subscriptions_by_id.items() if k != test_sub["id"]], {**cache.subscriptions_by_id[test_sub["id"]], "available": 0}]
             assert asyncio.run(cache.update_db(cache.SubDB, data=update_data, truncate=True))
     yield
 
@@ -1219,7 +1463,9 @@ def ensure_cache_all_floor_plan():
     yield
 
     if config.dev.mock_tests:
-        assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=doc_ids))
+        _doc_ids = [fp.doc_id for fp in cache.FloorPlanAPDB.all() if fp["serial"] in serials]
+        if _doc_ids:  # Need to re-check doc_ids... if --update is tested cache will be refreshed/truncated, doc_ids not guaranteed to be the same, devices may not be in mock response
+            assert asyncio.run(cache.update_db(cache.FloorPlanAPDB, doc_ids=_doc_ids))
 
 
 def _ensure_cache_group_cloned(allowed_types: list[PrimaryDeviceTypes] = ["ap"],):
@@ -1273,36 +1519,62 @@ def ensure_cache_group_cloned_cx_only():
 @pytest.fixture(scope="function")
 def ensure_inv_cache_add_do_del_ap():
     if config.dev.mock_tests:
-        devices = [
-            {
-                "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
-                "serial": "CN63HH906Z",
-                "mac": "F0:5C:19:CE:7A:86",
-                "type": "ap",
-                "model": "IAP-205-US",
-                "sku": "JL185A",
-                "services": "foundation-ap",
-                "subscription_key": "ADURDXCTOYTUXKJE",
-                "subscription_expires": 1788715367,
-                "assigned": True,
-                "archived": False
-            }
-        ]
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
-            assert asyncio.run(cache.update_inv_db(data=devices))
+        cache_device = {
+            "id": "e3e8cc40-5545-55f3-abcb-6551acf5bdcc",
+            "serial": "CN63HH906Z",
+            "mac": "F0:5C:19:CE:7A:86",
+            "type": "ap",
+            "model": "IAP-205-US",
+            "sku": "JL185A",
+            "services": "foundation-ap",
+            "subscription_key": "ADURDXCTOYTUXKJE",
+            "subscription_expires": 1788715367,
+            "assigned": True,
+            "archived": False
+        }
+        assert asyncio.run(cache.update_inv_db(data=cache_device))
     yield
+
+    # if cache.inventory_by_serial.get(cache_device["serial"]):
+    #     assert asyncio.run(cache.update_inv_db(cache.inventory_by_serial[cache_device["serial"]].doc_id, remove=True))
 
 
 @pytest.fixture(scope="function")
-def ensure_cache_batch_devices():
+def ensure_inv_cache_fake_archived_devs():
     if config.dev.mock_tests:
-        devices = common._get_import_file(test_device_file, import_type="devices")
-        missing = [dev["serial"] for dev in devices if dev["serial"] not in cache.inventory_by_serial]
-        if missing:
-            resp = common.batch_add_devices(data=devices, yes=True)
-            assert any([r.ok for r in resp])
+        cache_devices = [
+            {
+                "id": "a1b233cc-5545-1234-abcb-6551acaabbcc",
+                "serial": "US18CEN103",
+                "mac": "F0:5C:19:AB:CD:EF",
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": True
+            },
+            {
+                "id": "a1b233cc-5545-1234-abcb-6551acccbbaa",
+                "serial": "US18CEN112",
+                "mac": "F0:5C:19:12:34:56",
+                "type": "ap",
+                "model": "IAP-205-US",
+                "sku": "JL185A",
+                "services": None,
+                "subscription_key": None,
+                "subscription_expires": None,
+                "assigned": True,
+                "archived": True
+            }
+        ]
+        assert asyncio.run(cache.update_inv_db(data=cache_devices))
     yield
+
+    doc_ids = [cache.inventory_by_serial[d["serial"]].doc_id for d in cache_devices]
+    assert asyncio.run(cache.update_inv_db(doc_ids, remove=True))
 
 
 @pytest.fixture(scope="function")
@@ -1377,6 +1649,27 @@ def ensure_cache_template():
 
 
 @pytest.fixture(scope="function")
+def ensure_cache_ap_template():
+    if config.dev.mock_tests:
+        cache_data = {
+            "name": "cencli_test_ap_template",
+            "device_type": "ap",
+            "group": "cencli_test_group2",
+            "model": "ALL",
+            "version": "ALL",
+            "template_hash": "ece4e8651b45dcfd82f4cc2ae1ccfb4c"  # need to validate hash based on template from mock response
+        }
+        if f'{cache_data["name"]}_{cache_data["group"]}' not in cache.templates_by_name_group:
+            assert asyncio.run(cache.update_db(cache.TemplateDB, data=cache_data, truncate=False))
+    yield
+
+    if config.dev.mock_tests:
+        update_data = [d for d in cache.templates if d["name"] != cache_data["name"]]
+        assert asyncio.run(cache.update_db(cache.TemplateDB, update_data, truncate=True))
+
+
+
+@pytest.fixture(scope="function")
 def ensure_cache_template_by_name():
     if config.dev.mock_tests:
         cache_data = {
@@ -1394,7 +1687,7 @@ def ensure_cache_template_by_name():
 
 @pytest.fixture(scope="function")
 def ensure_cache_j2_var_yaml():
-    test_j2_file = config.cache_dir / "test_runner_template.yaml"
+    test_j2_file = TEST_FILE_DIR / "test_runner_template.yaml"
     test_j2_file.write_text(
         "some_var: some_value\n"
     )
@@ -1405,7 +1698,7 @@ def ensure_cache_j2_var_yaml():
 
 @pytest.fixture(scope="function")
 def ensure_cache_j2_var_csv():
-    test_j2_file = config.cache_dir / "test_runner_template.csv"
+    test_j2_file = TEST_FILE_DIR / "test_runner_template.csv"
     test_j2_file.write_text(
         "some_var,\nsome_value,\n"
     )
@@ -1413,3 +1706,26 @@ def ensure_cache_j2_var_csv():
     yield
 
     test_j2_file.unlink(missing_ok=True)
+
+@pytest.fixture(scope="function")
+def ensure_assign_dev_no_sub():
+    test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
+    if test_assign_dev.services is not None:  # pragma: no cover
+        cache_update_data = {**dict(test_assign_dev), "services": None, "subscription_expires": None, "subscription_key": None}
+        asyncio.run(common.cache.update_inv_db(cache_update_data))
+    yield
+
+@pytest.fixture(scope="function")
+def ensure_assign_dev_sub():
+    test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
+    if test_assign_dev.services is None:  # pragma: no cover
+        in_2_months = pendulum.now() + pendulum.duration(months=2)
+        cache_update_data = {**dict(test_assign_dev), "services": test_data["subscription"]["name"], "subscription_expires": in_2_months.int_timestamp, "subscription_key": test_data["subscription"]["key"]}
+        asyncio.run(common.cache.update_inv_db(cache_update_data))
+    yield
+
+
+@pytest.fixture(scope="function")
+def ensure_old_config():
+    yield config._mock()
+    return config._mock(True)

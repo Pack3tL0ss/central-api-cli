@@ -10,10 +10,10 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render, utils, config, cache
-from centralcli.cache import CentralObject, api
+from centralcli import cache, cleaner, common, config, log, render, utils
+from centralcli.cache import api
 from centralcli.client import BatchRequest
-from centralcli.constants import BatchRenameArgs, iden_meta
+from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys, GroupDevTypes
 from centralcli.response import Response
 
 from . import add, delete, examples, update
@@ -140,7 +140,7 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no co
             log.error("Error occured while gathering lldp neighbor info", show=True)
             render.display_results(lldp_resp, exit_on_fail=True)
 
-        _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]  # type: ignore
+        _unlistified_output: list[dict[str, Any]] = [d for r in lldp_resp for d in r.output]
         lldp_dict = {d["serial"]: {k: v for k, v in d.items()} for d in _unlistified_output}
         by_ap_dict = {
             serial: {
@@ -170,9 +170,9 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
     _all_aps = utils.listify(resp.output)
     _keys = ["name", "macaddr", "model", "site", "serial"]
     if not default_only:
-        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}  # type: ignore
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps}
     else:
-        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}  # type: ignore
+        ap_dict = {d["serial"]: {k if k != "macaddr" else "mac": d[k] for k in d if k in _keys} for d in _all_aps if d["name"] == d["macaddr"]}
         if not ap_dict:
             common.exit("No Up APs found with default name.  Nothing to rename.")
 
@@ -392,12 +392,13 @@ def verify(
         return
 
     data = common._get_import_file(import_file, import_type="devices")
+    data = utils.normalize_device_sub_field(data, word_sep="-")
+    file_all_keys = utils.all_keys(data)
 
     resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
     if not resp.ok:
         render.display_results(resp, stash=False, exit_on_fail=True)
-    resp.output = cleaner.simple_kv_formatter(resp.output)
-    central_devs = [CentralObject("dev", data=r) for r in resp.output]
+    resp.output = utils.normalize_device_sub_field(cleaner.simple_kv_formatter(resp.output), word_sep="-")
 
     file_by_serial = {
         d["serial"]: {
@@ -405,23 +406,28 @@ def verify(
         } for d in data
     }
     central_by_serial = {
-        d.serial: {
-            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.data.items() if k != "serial"
+        d["serial"]: {
+            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.items() if k != "serial"
         }
-        for d in central_devs
+        for d in resp.output
     }
-    # TODO figure out what key we are going to require  batch add devices --example show license
-    # batch add allows the same three keys
-    _keys = ["license", "services", "subscription"]
-    file_key = [k for k in _keys if k in file_by_serial[list(file_by_serial.keys())[0]].keys()]
-    file_key = None if not file_key else file_key[0]
 
     validation = {}
+    not_in_inventory = not_checked_in = _up = _down = 0
     for s in file_by_serial:
         validation[s] = []
         if s not in central_by_serial:
             validation[s] += ["Device not in inventory"]
+            not_in_inventory += 1
             continue
+
+        if not central_by_serial[s].get("status"):
+            not_checked_in += 1
+        elif central_by_serial[s]['status'].lower() == 'up':
+            _up += 1
+        else:
+            _down += 1
+
         _dev_type = central_by_serial[s]['type'].upper()
         _dev_type = _dev_type if _dev_type not in ["CX", "SW"] else f"{_dev_type} switch"
         _pfx = f"[magenta]{_dev_type}[/] is in inventory, "
@@ -441,27 +447,37 @@ def verify(
             elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
                 validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
 
-        if file_key:
+        if "subscription" in file_all_keys:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s][file_key].replace("_", "-") != central_by_serial[s]["services"]: # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s][file_key]}[/] from import != [bright_green]{central_by_serial[s]['services'] or 'No Subscription Assigned'}[/] reflected in Central."]
+            if file_by_serial[s].get("subscription", "null") != (central_by_serial[s]["subscription"] or "null"): # .replace("-", "_").replace(" ", "_")
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s].get('subscription', 'null')}[/] from import != [bright_green]{central_by_serial[s]['subscription'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['services']}) Assigned.  Matches import file."]
-
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['subscription'] or '[red]No Subscription[/]'}) Assigned.  Matches import file."]
 
     ok_devs, not_ok_devs = [], []
     for s in file_by_serial:
         if not validation[s]:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
-            for field in ["group", "site", file_key]:
+            for field in ["group", "site", "subscription"]:
                 if field is not None and field in file_by_serial[s] and file_by_serial[s][field]:
-                    _msg += f", {field.title()} [bright_green]OK[/]"
+                    _msg += f", {field.title()}: [bright_green]OK[/]"
+            if central_by_serial[s].get("status"):
+                _msg += f", Status: [{'bright_green' if central_by_serial[s]['status'].lower() == 'up' else 'red'}]{central_by_serial[s]['status']}[/]"
             validation[s] += [_msg]
         else:
             not_ok_devs += [s]
 
-    caption = f"Out of {len(file_by_serial)} in {import_file.name} {len(not_ok_devs)} potentially have validation issue, and {len(ok_devs)} validate OK."
+    if not_ok_devs:
+        caption = f"Out of {len(file_by_serial)} devices in {import_file.name} [red]{len(not_ok_devs)}[/] potentially have validation issues, and [green]{len(ok_devs)}[/] validate [green]OK[/]."
+    else:
+        caption = f"\u2705 All validations pass for the {len(file_by_serial)} devices in {import_file.name}"
+    caption = f"{caption}\n[dark_olive_green2]Counts[/]: Total: {len(file_by_serial)}, {utils.color([f'{k}: [cyan]{v}[/]' for k, v in zip(['Not in Inventory', 'Not Checked in'], [not_in_inventory, not_checked_in]) if v])}".rstrip(", ")
+    if _up:
+        caption = f"{caption}, [bright_green]Up[/]: [bright_green]{_up}[/]"
+    if _down:
+        caption = f"{caption}, [red]Down[/]: [red]{_down}[/]"
+
     console = Console(emoji=False, record=True)
     console.begin_capture()
 
@@ -472,11 +488,16 @@ def verify(
     else:
         console.rule("Validation Results")
         for s in validation:
+            _hostname = central_by_serial.get(s, {}).get("name", "")
+            _hostname = _hostname and f"|{_hostname}"
+            _site = central_by_serial.get(s, {}).get("site", "") or ""
+            _site = _site and f"|s:{_site}"
+            dev_summary = f'{f"{s}{_hostname}{_site}":>35}'
             if s in ok_devs:
-                console.print(f"[bright_green]{s}[/]: {validation[s][0]}")
+                console.print(f"[bright_green]\u2714  {dev_summary}[/]: {validation[s][0]}")
             else:
                 _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
-                console.print(f"[bright_red]{s}[/]: {_msg}")
+                console.print(f"[bright_red]\u274c  {dev_summary}[/]: {_msg}")
         console.rule()
         console.print(f"[italic dark_olive_green2]{caption}[/]")
 
@@ -518,20 +539,16 @@ def deploy(
 
 # TODO if from get inventory API endpoint subscriptions are under services key, if from endpoint file currently uses license key (maybe make subscription key)
 def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[dict], list[dict], list[BatchRequest]]:  # pragma: no cover non GLP API
-    if "'license': " in str(devices):                                       # v1 config import file
-        devices = [{k if k != "license" else "services": v for k, v in d.items()} for d in devices]
-    elif "'subscription': " in str(devices):                                # v2 config import file we moved most to "subscription" for consistency but allo either.
-        devices = devices = [{k if k != "subscription" else "services": v for k, v in d.items()} for d in devices]   # classic API response returns "services": list[str] always with 1 service in the list
-
-    subs = set([d["services"] for d in devices if d.get("services")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
-    ignored = [d for d in devices if not d.get("services")]
-    devices = [d for d in devices if d.get("services")]  # filter any devs that currently do not have subscription
+    devices = [{k if k not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in devices]
+    subs = set([d["subscription"] for d in devices if d.get("subscription")])  # TODO Inventory actually returns a list for services if the device has multiple subs this would be an issue
+    ignored = [d for d in devices if not d.get("subscription")]
+    devices = [d for d in devices if d.get("subscription")]  # filter any devs that currently do not have subscription
 
     if ignored:
         log.warning(f"Ignored {len(ignored)} devices, no desired subscription provided", caption=True)
 
     try:
-        subs = [common.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]
+        subs = [common.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]  # type: ignore
     except ValueError as e:
         sub_names = "\n".join(common.cache.license_names)
         common.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
@@ -539,11 +556,11 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     devs_by_sub = {s: [] for s in subs}
     try:
         for d in devices:
-            devs_by_sub[d["services"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
+            devs_by_sub[d["subscription"].lower().replace("-", "_").replace(" ", "_")] += [d["serial"]]
     except KeyError as e:
         common.exit(f"Malformed import data, or required field is missing. {repr(e)}")
 
-    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses  # TOGLP
+    func = api.platform.unassign_licenses if unsub else api.platform.assign_licenses
     requests = [
         BatchRequest(func, serials=chunk, services=sub) for sub in devs_by_sub for chunk in utils.chunker(devs_by_sub[sub], 50)
     ]  # Both Assign and unassign allow a max of 50 serials per call
@@ -574,7 +591,7 @@ def classic_subscribe(
     elif not import_file:
         common.exit(render._batch_invalid_msg("cencli batch subscribe [OPTIONS] [IMPORT_FILE]"))
 
-    devices = common._get_import_file(import_file, "devices")
+    devices = common._get_import_file(import_file, "devices", subscriptions=True)
     devices, ignored, sub_reqs = _build_sub_requests(devices)
 
     render.display_results(data=devices, title="Devices to be subscribed", caption=f'{len(devices)} devices will have subscriptions assigned')
@@ -583,45 +600,64 @@ def classic_subscribe(
     render.confirm(yes)
     resp = api.session.batch_request(sub_reqs)
     render.display_results(resp, tablefmt="action")
+    # CACHE
 
 
 @app.command("subscribe" if config.glp.ok else "_subscribe", hidden=not config.glp.ok)
 def glp_subscribe(
     import_file: Path = common.arguments.import_file,
+    import_sites: bool = typer.Option(False, "--import-sites", help=f"indicates import file contains sites.  Devices associated with those sites will be re-subscribed. {render.help_block('import is expected to contain devices')}"),
     _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
-    tags: list[str] = typer.Option(None, "-t", "--tags", help="Tags to be assigned to [bright_green]all[/] imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]"),
+    tags: list[str] = common.options.tags,
     sub: str = common.options.get(
         "subscription",
         help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
         autocompletion=cache.sub_completion,
     ),  # TODO sub_completion ... get_sub_identifier add match capability based on subscription key, this is what is visible in GLP
+    site: str = common.options.get("site", help="Update subscription for devices associated with a specific site.  [dim italic]The subscription (matching existing tier) with the most remaining time is auto-selected if --sub not provided[/]"),
+    group: str = common.options.get("group", help="Update subscription for devices associated with a specific group.  [dim italic]The subscription (matching existing tier) with the most remaining time is auto-selected if --sub not provided[/]"),
+    dev_type: GroupDevTypes = typer.Option(None, "--dev-type", help="Only re-subscribe devices of a given type. [dim italic]Applies/Only valid with [cyan]--site and/or --group[/]", show_default=False,),
     show_example: bool = common.options.show_example,
+    no_refresh: bool = common.options.get("no_refresh", help="Forgo pre-command cache refresh, [dim italic]Applies when --site, --group, or --import-sites :triangular_flag: is provided[/]"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Assign Subscriptions to devices [bright_green](GreenLake)[/].
+    """Assign Subscriptions to devices ([green]GreenLake[/]).
 
     [cyan]--sub <subscription name|key|glp_id>[/] can be used to specify the subscription.  It will be applied to [bright_green]all[/] devices found in import [red italic](even if the device has a subsciption defined in the import)[/]
     [cyan]--tags ...[/] can also be used to assign tags to all devices in import.  This in addition to any per-device tags found within the import, it's cumulative, not an override.
+
+    [cyan]--site[/] and/or [cyan]--group[/] Can be used to re-subscribe existing devices.  The subscription of the same tier with available subs and the most time remaining will be auto selected, or specify a specific subscription w/ the
+    [cyan]--sub[/] flag.
+
+
     """
     if show_example:
-        render.console.print(examples.assign_subscriptions, emoji=True)
+        render.console.print(examples.subscribe, emoji=True)
         return
+    if (site or group) and import_file:
+        common.exit("Invalid combination of Options/Arguments provide IMPORT_FILE (argument) or one of [cyan]--site[/], [cyan]--group[/].  Not both.")
 
-    if not import_file:
+    cache_site = None if not site else common.cache.get_site_identifier(site)
+    cache_group = None if not group else common.cache.get_group_identifier(group)
+
+    if cache_site or cache_group or (import_file and import_sites):
+        data = common.get_filtered_devices_w_inventory(refresh=not no_refresh, site=cache_site, group=cache_group, dev_type=dev_type, site_import=None if not import_file and import_sites else import_file)
+    elif import_file:
+        data = common._get_import_file(import_file, import_type="devices", subscriptions=True, text_ok=bool(sub))
+    else:
         common.exit(render._batch_invalid_msg("cencli batch assign subscriptions [OPTIONS] [IMPORT_FILE]"))
 
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
-    tag_dict = None if not tags else common.parse_var_value_list([*tags, *_tags], error_name="tags")
+    tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags], source="tags")
 
-    data = common._get_import_file(import_file, import_type="devices", subscriptions=True)
-    resp = common.batch_assign_subscriptions(data, tags=tag_dict, subscription=sub, yes=yes)
+    resp = common.batch_update_glp_devices(data, tags=tag_dict, subscription=sub, sub_required=True, yes=yes)
     render.display_results(resp, tablefmt="action")
 
 
-@app.command()
+@app.command()  #TOGLP  Need GLP version
 def unsubscribe(
     import_file: Path = common.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
@@ -840,7 +876,7 @@ def archive(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Batch archive devices based on import data from file.
+    """Batch archive devices (in [green]GreenLake[/]) based on import data from file.
 
     This will archive the devices in GreenLake
     """
@@ -851,31 +887,14 @@ def archive(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch archive [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, "devices", text_ok=True)
-    serials = [x.get("serial") or x.get("serial_num") for x in data]
-
-    render.econsole.print(f"[red]Archiv{'e' if not yes else 'ing'}[/] the [bright_green]{len(serials)}[/] devices found in {import_file.name}")
-    render.confirm(yes)
-    res = api.session.request(api.platform.archive_devices, serials)
-    if res:
-        caption = res.output.get("message")
-        if res.get("succeeded_devices"):
-            title = "Devices successfully archived."
-            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-        if res.get("failed_devices"):
-            title = "These devices failed to archived."
-            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-    else:
-        render.display_results(res, tablefmt="action", exit_on_fail=True)
+    common.batch_archive_unarchive_devices(import_file, yes=yes, operation="archive")
 
 
 @app.command()
 def unarchive(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    yes: bool = common.options.yes,
+    yes: bool = typer.Option(True, hidden=True),  # We allow -y but not necessary for unarchive
     debug: bool = common.options.debug,
     debugv: bool = common.options.debugv,
     default: bool = common.options.default,
@@ -892,22 +911,7 @@ def unarchive(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch unarchive [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, import_type="devices", text_ok=True)
-    serials = [dev["serial"] for dev in data]
-
-    res = api.session.request(api.platform.unarchive_devices, serials)
-    if res:
-        caption = res.output.get("message")
-        if res.get("succeeded_devices"):
-            title = "Devices successfully unarchived."
-            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-        if res.get("failed_devices"):
-            title = "These devices failed to unarchived."
-            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
-            render.display_results(data=data, title=title, caption=caption)
-    else:
-        render.display_results(res, tablefmt="action", exit_on_fail=True)
+    common.batch_archive_unarchive_devices(import_file, yes=yes, operation="unarchive")
 
 
 @app.callback()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Literal
 
@@ -120,6 +121,7 @@ class PlatformAPI:
         # site: int = None,
         part_num: str = None,
         license: str | List[str] = None,
+        subscription: str | List[str] = None,
         device_list: List[Dict[str, str]] = None
     ) -> Response | List[Response]:
         """Add device(s) using Mac and Serial number (part_num also required for CoP)
@@ -133,7 +135,8 @@ class PlatformAPI:
             group (str, optional): Add device to pre-provisioned group (additional API call is made)
             site (int, optional): -- Not implemented -- Site ID
             part_num (str, optional): Part Number is required for Central On Prem.
-            license (str|List(str), optional): The subscription license(s) to assign.
+            license (str|List(str), optional): Deprecated use subscription.
+            subscription (str|List(str), optional): The subscription/license to assign.
             device_list (List[Dict[str, str]], optional): List of dicts with mac, serial for each device
                 and optionally group, part_num, license,
 
@@ -142,18 +145,21 @@ class PlatformAPI:
         """
         url = "/platform/device_inventory/v1/devices"
         license_kwargs = []
-        if not (serial and mac) and not device_list:
-            raise ValueError("mac and serial or device_list is required")
+        subscription = subscription or license
         if device_list:
             if not isinstance(device_list, list) or not (isinstance(device_list, list) and all(isinstance(d, dict) for d in device_list)):
                 raise ValueError("When using device_list to batch add devices, they should be provided as a list of dicts")
 
         device_list = device_list or []
         if serial or mac:
-            device_list += [{"serial": serial, "mac": mac, "group": group, "parn_num": part_num, "license": license}]
+            device_list += [{"serial": serial, "mac": mac, "group": group, "part_num": part_num, "subscription": subscription}]
 
-        json_data = []
+        if not device_list:
+            raise ValueError("Missing Required Arguments: serial and mac are required.")
+
+        json_data = []  # could simplify by creating pydantic model for validation and decorating the function
         for d in device_list:
+            d = {k if k not in constants.possible_sub_keys else "subscription": v for k, v in d.items()}
             mac = d.get("mac", d.get("mac_address"))
             if not mac:
                 raise ValueError(f"No Mac Address found for entry {d}")
@@ -162,6 +168,8 @@ class PlatformAPI:
                 if not mac:
                     raise ValueError(f"Mac Address {mac} appears to be invalid.")
             serial = d.get("serial", d.get("serial_num"))
+            if not serial:
+                raise ValueError(f"No Serial Number found for entry with MAC Address {mac}")
             _this_dict = {"mac": mac.cols, "serial": serial}
             part_num = d.get("part_num", d.get("partNumber"))
             if part_num:  # pragma: no cover CoP only.  CoP is not currently tested
@@ -183,27 +191,25 @@ class PlatformAPI:
         # TODO this needs to be tested
         _lic_kwargs = {}
         for d in device_list:
-            if "license" not in d or not d["license"]:
+            if "subscription" not in d or not d["subscription"]:
                 continue
 
-            d["license"] = utils.listify(d["license"])
-            _key = f"{d['license'] if len(d['license']) == 1 else '|'.join(sorted(d['license']))}"
-            _serial = d.get("serial", d.get("serial_num"))
-            if not _serial:
-                raise ValueError(f"No serial found for device: {d}")
+            d["subscription"] = utils.listify(d["subscription"])
+            _key = f"{d['subscription'] if len(d['subscription']) == 1 else '|'.join(sorted(d['subscription']))}"
 
             if _key in _lic_kwargs:
-                _lic_kwargs[_key]["serials"] += utils.listify(_serial)
+                _lic_kwargs[_key]["serials"] += [d["serial"]]
             else:
                 _lic_kwargs[_key] = {
-                    "services": utils.listify(d["license"]),
-                    "serials": utils.listify(_serial)
+                    "services": utils.listify(d["subscription"]),
+                    "serials": utils.listify(d["serial"])
                 }
         license_kwargs = list(_lic_kwargs.values())
 
         # Perform API call(s) to Central API GW
         if to_group or license_kwargs:
             # Add devices to central.  1 API call for 1 or many devices.
+            group_reqs, lic_reqs = [], []
             br = BatchRequest
             reqs = [
                 br(self.session.post, url, json_data=json_data),
@@ -212,7 +218,8 @@ class PlatformAPI:
             if to_group:
                 config_api = ConfigAPI(self.session)
                 group_reqs = [br(config_api.preprovision_device_to_group, g, devs) for g, devs in to_group.items()]
-                reqs = [*reqs, *group_reqs]
+            else:  # pragma: no cover
+                ...
 
             # TODO You can add the device to a site after it's been pre-assigned (gateways only)
             # if to_site:
@@ -222,11 +229,14 @@ class PlatformAPI:
             # Assign license to devices.  1 API call for all devices with same combination of licenses
             if license_kwargs:
                 lic_reqs = [br(self.assign_licenses, **kwargs) for kwargs in license_kwargs]
-                reqs = [*reqs, *lic_reqs]
 
-            return await self.session._batch_request(reqs, continue_on_fail=True)
+            # We need to sleep for some time allowing time for devices to populate in GLP inventroy prior to issuing pre-provision or sub commands
+            # otherwise it's a race condition and API can error with devices not found...
+            reqs = [*reqs, br(asyncio.sleep, 5), *group_reqs, *lic_reqs]
+
+            return utils.strip_none(await self.session._batch_request(reqs, continue_on_fail=True))  # strip the sleep response (None)
         else:
-            return await self.session.post(url, json_data=json_data)
+            return [await self.session.post(url, json_data=json_data)]
 
     async def cop_delete_device_from_inventory(
         self,
@@ -537,11 +547,8 @@ class PlatformAPI:
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
-        if isinstance(services, str):
-            services = [services]
-
         json_data = {
-            'services': services
+            'services': utils.listify(services)
         }
 
         return await self.session.post(url, json_data=json_data)
@@ -563,11 +570,8 @@ class PlatformAPI:
         """
         url = "/platform/licensing/v1/customer/settings/autolicense"
 
-        if isinstance(services, str):
-            services = [services]
-
         json_data = {
-            'services': services
+            'services': utils.listify(services)
         }
 
         return await self.session.delete(url, json_data=json_data)

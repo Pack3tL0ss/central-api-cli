@@ -7,6 +7,10 @@ import re
 import sys
 from enum import Enum
 from typing import Literal
+from json import JSONDecodeError
+
+from aiohttp import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.http_exceptions import ContentLengthError
 
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
@@ -23,6 +27,8 @@ ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
+_ = ["license", "services", "subscription"]
+possible_sub_keys = [*_, *map(str.upper, _), *map(str.capitalize, _)]
 
 
 CLUSTER_URLS = {
@@ -99,6 +105,14 @@ CLUSTER_URLS = {
 }
 
 
+PYTEST_EXPECTED_EXCEPTIONS = {
+    "ClientConnectorError": ClientConnectorError,
+    "ClientOSError": ClientOSError,
+    "ContentTypeError": ContentTypeError,
+    "ContentLengthError": ContentLengthError,
+    "JSONDecodeError": JSONDecodeError,
+}
+
 class ClusterName(str, Enum):
     internal = "internal"
     us1 = "us1"
@@ -164,9 +178,11 @@ class DeviceStatusFilter(str, Enum):
     ONLINE = "ONLINE"
     OFFLINE = "OFFLINE"
 
+
 class APDeployment(str, Enum):
     STANDALONE = "Standalone"
     CLUSTER = "Cluster"
+
 
 class GroupDevTypes(str, Enum):
     ap = "ap"
@@ -174,6 +190,15 @@ class GroupDevTypes(str, Enum):
     cx = "cx"
     gw = "gw"
     sdwan = "sdwan"
+
+
+class CNXDevTypes(str, Enum):
+    ap = "ap"
+    sw = "sw"
+    cx = "cx"
+    gw = "gw"
+    sdwan = "sdwan"
+    bridge = "bridge"
 
 
 class TSDevTypes(str, Enum):
@@ -197,6 +222,7 @@ class MacFormat(str, Enum):
     DASHES = "DASHES"
     DOTS = "DOTS"
     CLEAN = "CLEAN"
+    OBJECT = "OBJECT"
     cols = "cols"
     dashes = "dashes"
     dots = "dots"
@@ -550,6 +576,7 @@ class CacheArgs(str, Enum):
     groups = "groups"
     labels = "labels"
     licenses = "licenses"
+    services = "services"
     logs = "logs"
     events = "events"
     hook_config = "hook_config"
@@ -739,9 +766,6 @@ class ArgToWhat:
         self.bssids = self.bssid = "bssids"
         self.labels = self.label = "labels"
 
-    def _init_export(self):
-        self.configs = self.config = "configs"
-
     def _init_refresh(self):
         self.token = self.tokens = "token"
         self.webhook = self.webhooks = "webhook"
@@ -752,7 +776,6 @@ class ArgToWhat:
 
     def _init_unassign(self):
         self.subscription = self.subscriptions = "subscription"
-        self.license = self.licenses = "license"  # TODO # DEPRECATED need to add unassign subscription and hide license if config.glp.ok
         self.label = self.labels = "label"
 
     def _init_cancel(self):
@@ -831,9 +854,9 @@ class ArgToWhat:
         self.send_cmd = self.send_cmds = "send_cmds"
 
     def __call__(self, key: ShowArgs | str, default: str = None, cmd: str = "show") -> str:
-        if cmd != "show":
-            if hasattr(self, f"_init_{cmd}"):
-                getattr(self, f"_init_{cmd}")()
+        if cmd != "show" and hasattr(self, f"_init_{cmd}"):
+            getattr(self, f"_init_{cmd}")()
+        # defaults to show init if cmd is not defined.
 
         if isinstance(key, Enum):
             key = key.value
@@ -2442,7 +2465,6 @@ def do_load_pycentral() -> bool:
         for command to complete.
     """
     args = [arg for arg in sys.argv[1:] if "--debug" not in arg]
-    # for x in NO_LOAD_FLAGS:
     if [a for a in args if a in NO_LOAD_FLAGS]:
         return False
 

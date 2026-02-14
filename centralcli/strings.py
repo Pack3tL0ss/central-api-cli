@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.syntax import Syntax
 
-from centralcli import log, utils
+from centralcli import log, utils, config
 from centralcli.render import tty
 from centralcli.vendored.csvlexer.csv import CsvLexer
 
@@ -60,6 +60,10 @@ ADD_FIELDS = {
         }
     }
 }
+
+if config.glp.ok:  # pragma: no cover
+    ADD_FIELDS["devices"]["optional"]["tags"] = "Assign tags to device in GreenLake"
+
 MOVE_FIELDS = {
      "devices": {
           "required": ["serial"],
@@ -239,13 +243,13 @@ class Example:
         field_dict = FIELDS[self.action]
         required_strings =  utils.color(field_dict[self.type]["required"], "red")
         header += [f'    {required_strings}']
-        if field_dict[self.type].get("optional"):
-            header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
-            if self.action == "move":
-                header += [f'    [italic]At least one of {utils.color(["group", "site", "label"], "cyan")} is also required[/]']
-            header += [""]
-            for idx, (field, description) in enumerate(field_dict[self.type]["optional"].items(), start=1):
-                header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/]: [italic dark_olive_green2]{description}[/]"]
+        # if field_dict[self.type].get("optional"):  # currently all defined have optional fields
+        header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
+        if self.action == "move":
+            header += [f'    [italic]At least one of {utils.color(["group", "site", "label"], "cyan")} is also required[/]']
+        header += [""]
+        for idx, (field, description) in enumerate(field_dict[self.type]["optional"].items(), start=1):
+            header += [f"{'Where ' if idx == 1 else '      '}[cyan]{field}[/]: [italic dark_olive_green2]{description}[/]"]
 
         return "\n".join(header)
 
@@ -312,10 +316,10 @@ CN12345679,aa:bb:cc:00:11:22,phl-access,Barn,,advanced_ap
 
 # -- // ADD DEVICES \\ --  NOT USED
 # This uses example.full_text property, retaining for reference
-device_add_data = """
-serial,mac,group,subscription
-CN12345678,aabbccddeeff,phl-access,foundation_switch_6300
-CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap
+device_add_data = f"""
+serial,mac,group,subscription{'' if not config.glp.ok else ',tags'}
+CN12345678,aabbccddeeff,phl-access,foundation_switch_6300{'' if not config.glp.ok else ",key=value singlewordtag"}
+CN12345679,aa:bb:cc:00:11:22,phl-access,advanced_ap{'' if not config.glp.ok else ",siteCode=SNANTX singlewordtag"}
 """
 
 example = Example(device_add_data, type="devices", action="add")
@@ -516,7 +520,7 @@ Accepts the following keys (include as header row for csv import):
 
 clibatch_add_labels = f"""[italic cyan]cencli batch add labels IMPORT_FILE[/]:
 
-For {utils.color(['csv', 'json'], color_str='cyan')}, & [cyan]yaml[/] formats, labels should be under a 'labels' key/header.
+For {utils.color(['yaml', 'json'], color_str='cyan')}, & [cyan]csv[/] formats, labels should be under a 'labels' key/header.
 The 'labels' key/header is optional if import file is a simple text file.
 
 -------------- [cyan]yaml[/] --------------------
@@ -548,6 +552,7 @@ example3
 """
 
 clibatch_delete_labels = clibatch_add_labels.replace('batch add labels', 'batch delete labels')
+clibatch_migrate_devs_by_site = clibatch_add_labels.replace('batch add labels IMPORT_FILE', 'migrate IMPORT_FILE --import-sites...').replace("labels", "sites")
 
 # -- // ADD GROUPS \\ --
 data = """
@@ -624,13 +629,14 @@ This is a placeholder
 TODO add deploy example
 """
 
+# TODO REMOVE
 # -- // CLASSIC SUBSCRIBE DEVICES \\ --
 data="""serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_subscribe = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
+clibatch_subscribe_deprecated_delme = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]license[/] [italic](both are required)[/]
@@ -704,7 +710,7 @@ CN12345678,foundation_switch_6300
 CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
 CN12345680,advanced_ap"""
 example = Example(data, type="devices", action="other")
-clibatch_assign_subscriptions = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
+clibatch_subscribe = f"""[italic cyan]cencli batch subscribe IMPORT_FILE[/]:
 
 Requires the following keys (include as header row for csv import):
     [cyan]serial[/], [cyan]subscription[/] [italic](both are required)[/]
@@ -832,7 +838,8 @@ class ImportExamples:
         self.update_variables = clibatch_update_variables
         self.add_variables = clibatch_update_variables.replace("update variables", "add variables")
         self.update_devices = clibatch_update_aps.replace("update aps", "update devices")
-        self.assign_subscriptions = clibatch_assign_subscriptions
+        self.migrate_devs_by_site = clibatch_migrate_devs_by_site
+        self.migrate_devices = clibatch_add_devices.replace("batch add devices", "migrate")
 
     def __getattr__(self, key: str):
         if key != "__iter__" and key not in self.__dict__.keys():  # pragma: no cover
@@ -897,3 +904,15 @@ dev_options:          # --- Developer Options ---
   # There are also hidden command line flags supported globally for these options
   # --debug-limit --sanitize --capture-raw
 """
+
+@dataclass
+class Emoji:
+    warn: str = "[dark_orange3]\u26a0[/] "  # ⚠
+    info: str = "[deep_sky_blue3]\u2139[/] "  # ℹ
+
+@dataclass
+class CLIStrings:
+    glp: str = "[green]GreenLake[/]"
+
+emoji = Emoji()
+cli_strings = CLIStrings()

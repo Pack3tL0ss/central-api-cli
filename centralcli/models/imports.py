@@ -4,13 +4,13 @@ import asyncio
 import time
 from typing import Any, Dict, Generator, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator, PrivateAttr
 
-from centralcli import cache, utils
+from centralcli import utils
 from centralcli.render import Spinner
 
 from ..cache import Cache, CacheInvDevice, CacheInvMonDevice, CacheSub
-from ..constants import SiteStates, state_abbrev_to_pretty
+from ..constants import SiteStates, state_abbrev_to_pretty, possible_sub_keys
 from .common import MpskStatus
 
 
@@ -64,7 +64,8 @@ class ImportSites(RootModel):
             if _country.isdigit():  # Data from large customer had country as '1' for some sites
                 _country = ""
 
-            if not _country and data.get("state") and data["state"].upper() in [kk.upper() for k, v in state_abbrev_to_pretty.items() for kk in [k, v]]:
+            state = data.get("state") or data.get("site_address", {}).get("state")  # we accept a flat or nested format for the import
+            if not _country and state and state.upper() in [kk.upper() for k, v in state_abbrev_to_pretty.items() for kk in [k, v]]:
                 return "United States"
             if _country.upper() in ["USA", "US"]:
                 return "United States"
@@ -132,7 +133,7 @@ class ImportMACs(RootModel):
 
 
 class BySubId():
-    def __init__(self, cache_sub: CacheSub, devices: list[ImportSubDevice] = None):
+    def __init__(self, cache_sub: CacheSub, devices: list[ImportDevice] = None):
         self.cache_sub = cache_sub
         self.devices = devices or []
 
@@ -160,43 +161,60 @@ class BySubId():
     def is_overrun(self) -> bool:
         return len(self.devices) > self.cache_sub.available
 
-
-class _ImportSubDevice(BaseModel):
+class _ImportDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
-    tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAG", "TAGS"))
-    archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE"))
-    subscription: Optional[str] = Field(alias=AliasChoices("subscription", "license", "services", "SUBSCRIPTION"))
+    mac: Optional[str] = Field(None, alias=AliasChoices("mac", "mac_address", "Mac Address", "macAddress", "MAC"))  # Optional only needed for add
+    tags: Optional[dict[str, str]] = Field(None, alias=AliasChoices("tags", "tag", "TAGS", "TAG", "Tags", "Tag"))
+    archived: Optional[bool] = Field(None, alias=AliasChoices("archived", "archive", "ARCHIVED", "ARCHIVE", "Archived"))
+    subscription: Optional[str] = Field(None, alias=AliasChoices(*possible_sub_keys))
+    group: Optional[str] = Field(None, alias=AliasChoices("group", "group_name"))
 
     @field_validator("subscription")
     @classmethod
     def _normalize_subscription(cls, v: str) -> str:
-        return v.lower().replace("_", "-")
+        return v if v is None else v.lower().replace("_", "-")
+
+    @field_validator("mac")
+    @classmethod
+    def _normalize_mac(cls, v: str) -> str:
+        return v and utils.Mac(v).cols.upper()
 
     @field_validator("tags", mode="before")
     @classmethod
     def _convert_csv_tags(cls, v: str | dict[str, str]) -> dict[str, str]:
+        tags = None
         if isinstance(v, str):
-            v = v.replace(",", " ")
-            return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
+            # v = v.replace(",", " ")  # HACK  need to make more elegant and build common helper for parsing from args and from csv...
+            # return dict(map(lambda pair: map(str.strip, pair.split(":")), v.split()))
+            v = [item for item in list(map(lambda part:part.strip('{}"\'[]').rstrip("'"), str(v).replace(",", " ").replace("=", ":").replace(": ", ":").replace(" :", ":").replace(":'", ":").split())) if item]
+            tags = {}
+            for i in v:
+                if ":" in i:
+                    key, value = i.split(":")
+                    tags[key] =value
+                else:
+                    tags[i] = ""
 
-        return v
+        return tags or v
 
-class ImportSubDevice(_ImportSubDevice):
+class ImportDevice(_ImportDevice):
+    _cache: Cache = PrivateAttr(None)
     _sub_object: CacheSub | None = None
     _sub_fetched: bool = False
     _inv_object: CacheInvDevice | None = None
     _inv_fetched: bool = False
 
-    def __init__(self, **kwargs):
+    def __init__(self, cache: Cache, **kwargs):
+        ImportDevice._cache = cache
         super().__init__(**kwargs)
 
     @property
-    def sub(self):
+    def sub(self) -> CacheSub:
         if self.subscription is None:
             return None
         if not self._sub_object:
-            self._sub_object = cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
+            self._sub_object = self._cache.get_sub_identifier(self.subscription, silent=True, best_match=True)
             self._sub_fetched = True
 
         return self._sub_object
@@ -207,18 +225,18 @@ class ImportSubDevice(_ImportSubDevice):
             return False
         return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
-    async def _get_inv_object(self) -> CacheInvDevice | None:
-        inv_dev = cache.InvDB.search(cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
-        if inv_dev is None and cache.responses.inv is None:
-            return cache.get_inv_identifier(self.serial, exit_on_fail=False)
+    def _get_inv_object(self, serials: list[str] | None = None) -> CacheInvDevice | None:
+        inv_dev = self._cache.InvDB.search(self._cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
+        if not inv_dev and self._cache.responses.inv is None:
+            return self._cache.get_inv_identifier(self.serial, serial_numbers=tuple(serials), exit_on_fail=False, silent=True)
         self._inv_fetched = True
-        self._inv_object = None if inv_dev is None else CacheInvDevice(inv_dev[0])
+        self._inv_object = None if not inv_dev else CacheInvDevice(inv_dev[0])
         return self._inv_object
 
     @property
     def inv(self) -> CacheInvDevice | None:
         if not self._inv_fetched:
-            self._inv_object = asyncio.run(self._get_inv_object())
+            self._inv_object = self._get_inv_object()
         return self._inv_object
 
     @property
@@ -271,11 +289,12 @@ class ImportSubDevice(_ImportSubDevice):
     def get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
         return asyncio.run(self._get_confirm_msg(tags_override=tags_override, skipped=skipped))
 
-class ImportSubDevices(RootModel):
-    root: list[ImportSubDevice]
+class ImportDevices(RootModel):
+    root: list[ImportDevice]
 
-    def __init__(self, cache: Cache, data: list[Dict[str, Any]]) -> None:
-        super().__init__([ImportSubDevice(cache=cache, **s) for s in data])
+    def __init__(self, cache: Cache, data: list[dict[str, Any]]) -> None:
+        self._cache = cache
+        super().__init__([ImportDevice(cache=cache, **s) for s in data])
 
     def __iter__(self):
         return iter(self.root)
@@ -306,19 +325,23 @@ class ImportSubDevices(RootModel):
         return "\n".join([dev.get_confirm_msg(skipped=True) for dev in self.not_assigned_devs])
 
     @property
-    def by_serial(self) -> dict[str, ImportSubDevice]:
+    def by_serial(self) -> dict[str, ImportDevice]:
         return {dev.serial: dev for dev in self.root}
+
+    @property
+    def has_subs(self) -> bool:
+        return any([True for dev in self.root if dev.subscription is not None])
 
     @property
     def has_tags(self) -> bool:
         return any([True for dev in self.root if dev.tags])
 
     @property
-    def not_assigned_devs(self) -> list[ImportSubDevice]:
+    def not_assigned_devs(self) -> list[ImportDevice]:
         return [dev for dev in self.root if not dev.assigned]
 
     @property
-    def assigned_devs(self) -> list[ImportSubDevice]:
+    def assigned_devs(self) -> list[ImportDevice]:
         return [dev for dev in self.root if dev.assigned]
 
     def ids_by_tags(self) -> Generator[tuple[dict[str, str], list[str]], None, None]:
@@ -334,26 +357,24 @@ class ImportSubDevices(RootModel):
         for tag_hash, ids in ret.items():
             yield hash_to_tags[tag_hash], ids
 
-    def get(self, serial: str, default: Any = None) -> ImportSubDevice | Any:
+    def get(self, serial: str, default: Any = None) -> ImportDevice | Any:
         return self.by_serial.get(serial, default)
 
-    async def get_inv_objects(self) -> list[CacheInvDevice | None]:
-        # tasks = [asyncio.create_task(lambda: dev.inv) for dev in self.root]
-        tasks = [asyncio.create_task(dev._get_inv_object()) for dev in self.root]
-        # return [await t for t in tasks]
-        return await asyncio.gather(*tasks)
+    def get_inv_objects(self) -> list[CacheInvDevice | None]:
+        return [dev._get_inv_object(serials=[d.serial for d in self.root]) for dev in self.root]
+
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
-        subs: set[CacheSub] = set(cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root)
+        subs: set[CacheSub] = set(self._cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root if dev.subscription)
         out_dict = {sub.id: BySubId(sub) for sub in subs}
         start = time.perf_counter()
         with Spinner(f"Gathering [green]GreenLake[/] device_ids from cache for [cyan]{len(self)}[/] devices found in import") as spinner:
-            inv_devs = asyncio.run(self.get_inv_objects())  # TODO if import has id field spot check a few to see that the id matches up with the serial in the cache, then assume all id fields are good... no need to lookup all of them
+            inv_devs = self.get_inv_objects()  # TODO if import has id field spot check a few to see that the id matches up with the serial in the cache, then assume all id fields are good... no need to lookup all of them
         duration = round(time.perf_counter() - start, 3)
         spinner.succeed(f"[cyan]{len(self)}[/] device_ids fetched in {duration}s.  Avg: {round(duration / len(self), 3)}")
 
         for inv_dev, dev in zip(inv_devs, self.root):
-            if inv_dev is None or inv_dev.id is None:
+            if inv_dev is None or inv_dev.id is None or dev.sub is None:
                 continue
             if assigned and inv_dev.assigned:
                 out_dict[dev.sub.id].append(dev)
@@ -366,7 +387,7 @@ class ImportSubDevices(RootModel):
         _additional_subs = {}
         for sub_id in out_dict:
             if len(out_dict[sub_id].devices) > out_dict[sub_id].cache_sub.available:
-                this_subs: list[CacheSub] = cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
+                this_subs: list[CacheSub] = self._cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
                 if len(utils.listify(this_subs)) > 1:
                     devs = out_dict[sub_id].devices
                     exact_matches = [devs.pop(devs.index(d)) for d in devs if d.exact_sub]

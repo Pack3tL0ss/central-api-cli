@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 import pendulum
+from pydantic import BaseModel
 
 TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
 
@@ -44,7 +45,7 @@ class DateTime():
         return bool(self.ts and self.ts > 0)
 
     def __len__(self) -> int:
-        return len(self.ts)
+        return len(str(self.ts))
 
     def __lt__(self, other) -> bool:
         return True if self.ts is None else bool(self.ts < other)
@@ -85,7 +86,7 @@ class DateTime():
 
     @property
     def is_expired(self) -> bool:
-        return self.ts >= pendulum.now(tz="UTC").timestamp()
+        return self.ts <= pendulum.now(tz="UTC").timestamp()
 
     @property
     def expiration(self) -> str:
@@ -154,9 +155,10 @@ class DateTime():
                 if word.startswith("minute"):
                     minute = value
                 elif word.startswith("second"):
-                    if minute:
-                        if minute > 30:
-                            words = words.replace(f"{minute}m", f"{minute + 1}m")
+                    if minute and minute > 30:
+                        words = words.replace(f"{minute}m", f"{minute + 1}m")
+                    else:  # pragma: no cover
+                        ...
                     continue
             words = f'{words} {value}{list(word)[0]}'
 
@@ -200,12 +202,6 @@ class DateTime():
         Returns:
             str: Date as string in format: 'Jan 08 7:59:00 PM' or 'Jan 08 07:59:00 PM' if pad_hour=True
         """
-        if isinstance(self.ts, str):
-            try:
-                self.ts = float(self.ts)
-            except TypeError:
-                return self.ts
-
         return "" if self.ts is None else pendulum.from_timestamp(self.ts, tz=self.tz).format(f"MMM DD {'h' if not self.pad_hour else 'hh'}:mm:ss A")
 
     @property
@@ -221,15 +217,13 @@ class DateTime():
 class Encoder(JSONEncoder):
     """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
-    def default(self, obj):
+    def default(self, obj: DateTime | Path | BaseModel):
         if isinstance(obj, DateTime) or isinstance(obj, Path):
             return str(obj)
-        elif hasattr(obj, "as_dict"):
-            return obj.as_dict
         elif hasattr(obj, "model_dump"):
             return obj.model_dump()
         else:
-            return obj
+            return obj    # pragma: no cover
 
 class ShowInterfaceFilters:
     def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):

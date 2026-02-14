@@ -3,49 +3,53 @@
 from __future__ import annotations
 
 import asyncio
+import binascii
+import string
 import sys
 import time
-import string
-import binascii
 import urllib
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
+from functools import cached_property
 from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
+from time import sleep
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
-from functools import cached_property
 
 import pendulum
 import typer
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
+from rich.box import HORIZONTALS
 from rich.console import Console
 from rich.markup import escape
 from rich.progress import track
-from rich.traceback import install
 from rich.table import Table
-from rich.box import HORIZONTALS
-from pydantic import BaseModel
+from rich.traceback import install
 
 from centralcli import config, log, render, utils
+from centralcli.cache import CacheInvMonDevice, CacheSite
+from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
-from centralcli.constants import dynamic_antenna_models, flex_dual_models, APIAction, MacFormat
+from centralcli.constants import APIAction, GroupDevTypes, MacFormat, dynamic_antenna_models, flex_dual_models
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
+from centralcli.strings import emoji
 from centralcli.utils import ToBool
 
 from . import api_clients
 from .client import BatchRequest, Session
-from .cnx.api import GreenLakeAPI
+from .cache import CacheDevice
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
-from .models.imports import ImportSubDevices
+from .models.imports import ImportDevices
 from .response import Response
 from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
-    from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
+    from centralcli.cache import Cache, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
     from centralcli.typedefs import ImportType, LogType, SendConfigTypes
 
 install(show_locals=True)
@@ -55,12 +59,11 @@ MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will
 
 api = api_clients.classic
 
-
-class VendorDetails(BaseModel):
-    oui: str
-    companyName: str
-    companyAddress: str
-    countryCode: str
+@dataclass
+class BuiltRequests:
+    requests: list[BatchRequest]
+    confirm_msgs: list[str] = None
+    warnings: list[str] = None
 
 class BlockDetails(BaseModel):
     blockSize: int
@@ -70,10 +73,6 @@ class MacDetails(BaseModel):
     wiresharkNotes: str
     isValid: bool
 
-class Vendor(BaseModel):
-    vendor_details: VendorDetails
-    block_details: BlockDetails
-    mac_details: MacDetails
 
 class Convert:
     def __init__(self, mac: str, fuzzy: bool = False):
@@ -124,7 +123,7 @@ class Convert:
 
     @property
     def url(self) -> str:
-        return urllib.parse.quote_plus(self.cols)  # type: ignore
+        return urllib.parse.quote_plus(self.cols)
 
     def __len__(self):
         return len(self.clean)
@@ -156,7 +155,7 @@ class Convert:
 
 
 class Mac(Convert):
-    def __init__(self, mac: str | bytes, vendor_lookup: bool = False, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
+    def __init__(self, mac: str | bytes, fuzzy: bool = False, mac_range: int = None, range_format: MacFormat = MacFormat.cols, bssids: bool = False, num_bssids: int = 16, tablefmt: str = None, show_mac_info: bool = False):
         if isinstance(mac, bytes):
             mac: str = binascii.hexlify(mac).decode('utf-8')
         super().__init__(mac, fuzzy=fuzzy)
@@ -169,15 +168,6 @@ class Mac(Convert):
         self.num_bssids = num_bssids
         self.tablefmt = tablefmt or "table"
         self._show_mac_info = show_mac_info
-
-        if vendor_lookup:
-            if config.lookup_configured:
-                # TODO each attribute has lower <8 spaces> upper as a single string.  refactor so each has own attr
-                self.vendor = asyncio.run(self.get_vendor(self.clean.split()[0]))
-            else:
-                self.vendor = f"  Vendor Lookup Not Possible please configure macaddress.io:api_key in {config.file}"
-        else:
-            self.vendor: Vendor = None
 
     def __bool__(self):
         return self.ok
@@ -219,9 +209,6 @@ class Mac(Convert):
             title = f"Mac Address Details for {self.cols}"
             line = f'[dark_olive_green2]{"-" * 52}[/]'
             out_str = render.rich_capture("\n".join([line, f"[magenta]{title:^52}[/]", line, *mac_info]) + "\n")
-
-            if self.vendor:
-                out_str += f"\n\n{self.vendor}"
 
             if self.mac_range:
                 console = Console(emoji=False)
@@ -338,6 +325,10 @@ class PreConfig:
     config: str
     request: BatchRequest
 
+class GLPAction(str, Enum):
+    ADD = "add"
+    UPDATE = "update"
+
 
 class CLICommon:
     def __init__(self, workspace: str = "default", cache: Cache = None, raw_out: bool = False):
@@ -422,7 +413,7 @@ class CLICommon:
             return workspace
 
         # dev commands that change files, we don't need to verify the workspace.
-        if sys.argv[1:] and sys.argv[1] == "dev":
+        if sys.argv[1:] and sys.argv[1] == "dev" and "cache-del" not in str(sys.argv):
             return workspace
 
         # cencli test method requires --ws when using non default, we do not honor forget_account_after
@@ -433,18 +424,16 @@ class CLICommon:
             else:
                 return config.default_workspace
 
-        workspace = workspace or config.default_workspace  # workspace only has value if --ws flag is used.
+        _workspace = workspace or config.default_workspace  # workspace only has value if --ws flag is used.
 
-        if default:  # They used the -d flag
+        if default or workspace == "default":  # They used the -d flag or --ws default
             render.econsole.print(":information:  [bright_green]Using default central workspace[/]\n",)
             if config.sticky_workspace_file.is_file():
                 config.sticky_workspace_file.unlink()
-            if workspace in config.defined_workspaces:
-                return workspace
             return config.default_workspace
 
         # -- // sticky last account messaging account is loaded in config.py \\ --
-        elif workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
+        elif _workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
             if config.last_workspace:
                 # last account messaging.
                 if config.forget is not None:
@@ -455,37 +444,37 @@ class CLICommon:
                             config.sticky_workspace_file.unlink()
 
                     else:
-                        workspace = config.last_workspace
-                        msg = self.WorkSpaceMsg(workspace)
+                        _workspace = config.last_workspace
+                        msg = self.WorkSpaceMsg(_workspace)
                         if not config.last_workspace_msg_shown:
                             render.econsole.print(msg.previous_will_forget)
-                            config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
+                            config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
                         else:
                             render.econsole.print(msg.previous_short)
 
                 else:
-                    workspace = config.last_workspace
-                    msg = self.WorkSpaceMsg(workspace)
+                    _workspace = config.last_workspace
+                    msg = self.WorkSpaceMsg(_workspace)
                     if not config.last_workspace_msg_shown:
                         render.econsole.print(msg.previous)
-                        config.update_last_workspace_file(workspace, config.last_cmd_ts, True)
+                        config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
                     else:
                         render.econsole.print(msg.previous_short)
 
-        elif workspace in config.defined_workspaces:
-            if workspace == (env.workspace or ""):
-                msg = self.WorkSpaceMsg(workspace)
+        elif _workspace in config.defined_workspaces:
+            if _workspace == (env.workspace or ""):
+                msg = self.WorkSpaceMsg(_workspace)
                 render.econsole.print(msg.envvar)
             elif config.forget is not None and config.forget > 0:
-                render.econsole.print(self.WorkSpaceMsg(workspace).initial)
+                render.econsole.print(self.WorkSpaceMsg(_workspace).initial)
             # No need to print account msg if forget is set to zero
 
         if config.valid:
-            return workspace
+            return _workspace
         else:  # -- Error messages config invalid or account not found in config --
             _def_msg = False
             render.econsole.print(
-                f":warning:  [bright_red]Error:[/] The specified workspace: [cyan]{config.workspace}[/] is not defined in the config @\n"
+                f":warning:  [bright_red]Error:[/] The specified workspace: [cyan]{workspace}[/] is not defined in the config @\n"
                 f"  {config.file}\n"
             )
 
@@ -496,7 +485,7 @@ class CLICommon:
                     f"--ws|--workspace flag or [cyan]{env_var.workspace}[/] environment variable.\n"
                 )
 
-            if workspace != "default":
+            if _workspace != "default":
                 if config.defined_workspaces:
                     render.econsole.print(f"[bright_green]The following workspaces are defined[/] [cyan]{'[/], [cyan]'.join(config.defined_workspaces)}[reset]\n", emoji=False)
                     if not _def_msg:
@@ -714,6 +703,33 @@ class CLICommon:
 
             raise ValueError("get_time_range_caption() requires start when end is provided.  Use verify_time_range with end_offset to set a default when not provided by user")
 
+    def get_filtered_devices_w_inventory(self, refresh: bool = True, site: CacheSite = None, group: CacheGroup = None, not_group: CacheGroup = None, dev_type: GroupDevTypes = None, not_dev_type: GroupDevTypes = None, site_import: Path = None) -> list[dict[str, Any]]:
+        resp = self.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=not refresh)
+        if not resp:
+            log.error("Aborted.  Attempt to update the cache failed", caption=True)
+            render.display_results(resp, exit_on_fail=True)
+
+        if site or group:
+            data = resp.output.copy()
+            if site:
+                data = [d for d in data if (d.get("site") or "") == site.name]
+            if group:
+                data = [d for d in data if (d.get("group_name", d.get("group")) or "") == group.name]
+            if not_group:
+                data = [d for d in data if (d.get("group_name", d.get("group")) or "") != not_group.name]
+
+            if dev_type:
+                data = [d for d in data if (d.get("type") or "") == dev_type]
+            elif not_dev_type:
+                data = [d for d in data if (d.get("type") or "") != not_dev_type]
+        elif site_import:
+            site_data = self._get_import_file(site_import, import_type="sites", text_ok=True)
+            cache_sites = [self.cache.get_site_identifier(s["name"]) for s in site_data]
+            data = [d for s in cache_sites for d in resp.output if (d.get("site") or "") == s.name]
+        else:
+            raise TypeError("missing 1 required argument.  At least one of group, site, or site_import is required.")
+
+        return data
 
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
@@ -742,10 +758,11 @@ class CLICommon:
 
         devices = []
         for sub, dev in data.items():
-            if not utils.is_resource_id(sub):
+            if not utils.is_resource_id(sub) and config.glp.ok:  # No sub cache pre glp support  classic API expects sub name
                 sub_obj: CacheSub = self.cache.get_sub_identifier(sub)
                 sub = sub_obj.id
-            inv_devs = [self.cache.get_combined_inv_dev_identifier(d) for d in utils.listify(dev)]
+            inv_devs = [self.cache.get_combined_inv_dev_identifier(d, retry_dev=False) for d in utils.listify(dev)]
+            # devices += [{"serial": d.serial, "mac": d.mac, "subscription": sub} for d in inv_devs]
             devices += [{"serial": d.serial, "subscription": sub} for d in inv_devs]
 
         return devices
@@ -757,7 +774,7 @@ class CLICommon:
                 data = config.get_file_data(import_file, text_ok=text_ok)
             except Exception as e:
                 log.exception(e)
-                self.exit(repr(e))
+                self.exit(f"{repr(e)} while attempting to import data from {import_file}")
 
         if not data:
             self.exit(f"[bright_red]ERROR[/] {import_file.name} not found or empty.")
@@ -775,13 +792,15 @@ class CLICommon:
             elif utils.is_serial(list(data.keys())[0]):  # accept yaml/json keyed by serial for devices
                 if import_type == "variables":
                     data = list(data.values())
-                else:
+                else:  # devices by serial
                     data = [{"serial": k, **v} for k, v in data.items()]
-        elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):
+        elif text_ok and isinstance(data, list) and all([isinstance(d, str) for d in data]):  # list of str txt file or single col csv
             if import_type == "devices" and utils.is_serial(data[-1]):  # spot check the last key to ensure it looks like a serial
-                data = [{"serial": s} for s in data if not s.lower().startswith("serial")]
-            if import_type == "labels":
-                data = [{"name": label} for label in data if not label.lower().startswith("label")]
+                data = [{"serial": s} for s in data if s != "" and not s.lower().startswith("serial")]
+            elif import_type == "labels":
+                data = [{"name": label} for label in data if label != "" and not label.lower().startswith("label")]
+            elif import_type == "sites":
+                data = [{"name": v} for v in data if v != "" and not any([v.lower().startswith("name"), v.lower().startswith("site") and "name" in v.lower()])]
 
         data = utils.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
                                                             # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
@@ -1058,7 +1077,7 @@ class CLICommon:
 
         return resp
 
-    def validate_license_type(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+    def validate_subscription(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
         """validate device add import data for valid subscription name.
 
         Args:
@@ -1066,39 +1085,40 @@ class CLICommon:
 
         Returns:
             Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating the license doesn't appear to be valid
-                The data is the same as what was provided, with the key changed to 'license' if they used 'services' or 'subscription'
+                The data is the same as what was provided, with the key changed to "subscription" ('services' or 'license' will be converted if found)
         """
-        _final_sub_key = "subscription"
-        sub_key = list(set([k for d in data for k in d.keys() if k in ["license", "services", "subscription"]]))
-        sub_key = None if not sub_key else sub_key[0]
+        data = utils.normalize_device_sub_field(data)
         warn = False
-        if not sub_key:
-            return data, warn
-
         already_warned = []
-        for d in data:
-            if d.get(sub_key):
+
+        for row, d in enumerate(data, start=1):
+            if d.get("subscription"):
                 for idx in range(2):
                     try:
-                        sub = self.cache.get_sub_identifier(d[sub_key], best_match=True)
-                        d[sub_key] = sub.api_name
-                        if sub_key != _final_sub_key:
-                            del d[sub_key]
+                        if not config.glp.ok:  # No sub cache pre glp support
+                            if d['subscription'].lower().replace("-", "_") not in self.cache.license_names:
+                                raise ValueError()  # caught below
+                            else:
+                                d['subscription'] = d['subscription'].lower().replace("-", "_")
+                                break
+
+                        _ = self.cache.get_sub_identifier(d['subscription'], best_match=True)  # Only validating it exists value is kept as entered for migrate flow
+                        # d['subscription'] = sub.id
                         break
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
-                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] [red]not found[/] in list of valid licenses.\n:arrows_clockwise: Refreshing subscription/license name cache.')
+                            render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["subscription"]}[/] [red]not found[/] in list of valid subscriptions.\n:arrows_clockwise: Refreshing subscription/license name cache.')
                             resp = api.session.request(self.cache.refresh_license_db)  # TOGLP
                             if not resp:
                                 render.display_results(resp, exit_on_fail=True)
                         else:
                             warn = True
-                            if d[sub_key] not in already_warned:
-                                already_warned += [d[sub_key]]
-                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d[sub_key]}[/] does not appear to be a valid license type.")
+                            if d['subscription'] not in already_warned:
+                                already_warned += [d['subscription']]
+                                render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{d['subscription']}[/] (item/row {row}) does not appear to be a valid subscription type.")
         return data, warn
 
-    def validate_retain_config(self, data: List[Dict[str, Any]]) -> tuple[list[dict[str, Any]], bool]:
+    def validate_retain_config(self, data: List[Dict[str, Any]], migrate: bool = True) -> tuple[list[dict[str, Any]], bool]:
         """validate device import data, warn if retain_config is set for CX.
 
         During initial add of device retain_config does not apply.  Once the device has checked in (unprovisioned group) it
@@ -1106,6 +1126,7 @@ class CLICommon:
 
         Args:
             data (List[Dict[str, Any]]): The data from the import
+            migrate (bool, optional): Indicates this is part of a migration, where warning are expected.
 
         Returns:
             Tuple[List[Dict[str, Any]], bool]: Tuple with the data, and a bool indicating if a warning should occur indicating retain_config
@@ -1127,16 +1148,22 @@ class CLICommon:
                 d["group"] = d["retain_config"] = None
 
         if warn_devs:
-            warn_devs_str = "\n".join(warn_devs)
-            render.econsole.print(
-                "[dark_orange3]\u26a0[/] [magenta]retain_config[/] is specified for some devices in import, along with a group to pre-provision the device to. "
-                "[magenta]retain_config[/] is valid for [cyan]cencli batch move devices[/].  When initially adding a device [magenta]retain_config[/] is [red]not supported[/]. "
-                "To retain the config, the device should [bold red]NOT[/] be pre-provisioned to a group. It should check-in to the unprovisioned group, then it can be "
-                "moved to the desired group with the [magenta]retain_config[/] option (The same import file can be used for both).\n\n"
-                f"[bright_green]As a result.  The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored. "
-                f"{'These devices' if len(warn_devs) > 1 else 'This device'} will [red]not[/] be pre-provisioned to a group.\n"
-                f"{warn_devs_str}\n", emoji=False
-            )
+            warn_devs_str = "\n  ".join(warn_devs)
+            if not migrate:
+                render.econsole.print(
+                    "[dark_orange3]\u26a0[/]  Ignoring [cyan]group[/] for CX devices with [green]retain_config[/] specified.\n"
+                    "[green]retain_config[/] is specified for some devices in import, along with a group to pre-provision the device to. "
+                    "[green]retain_config[/] is valid for [cyan]cencli batch move devices[/].  When initially adding a device [green]retain_config[/] is [red]not supported[/]. "
+                    "To retain the config, the device should [bold red]NOT[/] be pre-provisioned to a group. It should check-in to the unprovisioned group, then it can be "
+                    "moved to the desired group with the [green]retain_config[/] option (The same import file can be used for both).\n\n"
+                    f"[bright_green]As a result. The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored. "
+                    f"{'These devices' if len(warn_devs) > 1 else 'This device'} will [red]not[/] be pre-provisioned to a group.\n"
+                    f"  {warn_devs_str}\n", emoji=False
+                )
+            else:
+                render.econsole.print("\n[deep_sky_blue]:information:[/]  [magenta]Migration[/] Pre-provisioning CX devices to group will not be done to prevent configuration from being overriden.")
+                render.econsole.print(f"The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored.\n{warn_devs_str}\n", emoji=False)
+                render.econsole.print("[dim italic]Once devices have come online in the new environment, use [cyan]cencli batch move devices MIGRATION_FILE[/] to move the devices to the final site, along with any CX switches to the final group (with the retain_config option)[/]")
 
         return data, bool(warn_devs)
 
@@ -1156,40 +1183,14 @@ class CLICommon:
                 self.exit()
         return ok
 
-    # TOGLP
-    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: bool = False) -> List[Response]:
-        # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
-        data: List[Dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices")
-        if not data:
-            self.exit("No data/import file")
-
-        _reqd_cols = ["serial", "mac"]
-        self.verify_required_fields(
-            data, required=_reqd_cols, optional=['group', 'subscription'], example_text='cencli batch add devices --show-example'
-        )
-        data, warn = self.validate_license_type(data)
-        data, warn = self.validate_retain_config(data)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
-        word = "Adding" if not warn and yes else "Add"
-
-        confirm_devices = ['|'.join([f'[bright_green]{k}[/]:[cyan]{v}[/]' for k, v in d.items() if v or isinstance(v, bool)]) for d in data]
-        confirm_str = utils.summarize_list(confirm_devices, pad=2, color=None,)
-        file_str = "import file" if not import_file else f"[cyan]{import_file.name}[/]"
-        render.console.print(f'{len(data)} Devices found in {file_str}')
-        render.console.print(confirm_str.lstrip("\n"), emoji=False)
-        render.console.print(f'\n{word} {len(data)} devices found in {file_str}')
-        if warn:
-            msg = f":warning:  Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}"
-            render.econsole.print(msg)
-
-        resp = None
-        warn = warn if not env.is_pytest else False  # bypass confirmation for test runs
-        render.confirm(yes=not warn and yes)
+    def batch_add_devices_classic(self, data: list[dict[str, Any]] | None = None) -> List[Response]:
         resp: list[Response] = api.session.request(api.platform.add_devices, device_list=data)
-        # if any failures occured don't pass data into update_inv_db.  Results in API call to get inv from Central
+
         _data = None if not all([r.ok for r in resp]) else data
+        passed = [r for r in resp if r.ok]
         update_func = self.cache.refresh_inv_db
         kwargs = {}
-        if _data:
+        if _data:  # if any failures occured don't pass data into update_inv_db.
             try:
                 _data = Inventory(_data).cache_dump()
                 kwargs = {"data": _data}
@@ -1198,16 +1199,123 @@ class CLICommon:
                 log.info(f"Performing full cache update after batch add devices as import_file data validation failed. {repr(e)}", show=True)
                 _data = None
 
-        cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
-        with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
-            time.sleep(3)
-            spin.update('Performing full device cache update after device edition.')
-            time.sleep(2)
+        if passed:  # Update inv then dev db as long as any adds passed
+            cache_res = [api.session.request(update_func, **kwargs)]  # This starts it's own spinner
+            with render.Spinner("Allowing time for devices to populate before updating dev cache.") as spin:
+                time.sleep(3)
+                spin.update('Performing full device cache update after device edition.')
+                time.sleep(2)
 
-        # always perform full dev_db update as we don't know the other fields.
-        cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
+            # always perform full dev_db update as we don't know the other fields.
+            cache_res += [api.session.request(self.cache.refresh_dev_db)]  # This starts it's own spinner
 
         return resp or Response(error="No Devices were added")
+
+    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False) -> List[Response]:
+        import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)  # replaces subscription with global subscrition override for each dev if provided
+
+        confirm_msg = []
+        if import_devs.has_subs and not self.cache.responses.sub:
+            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+
+        # glp_api = GreenLakeAPI(config.glp.base_url)
+        glp_api = api_clients.glp
+        add_data = [{k: v for k, v in dev.items() if k != "subscription"} for dev in import_devs.model_dump()]  # strip the subscription from the add, as it's whatever the user put in the import.  We send it in the update below where it is flipped to the necessary subscription.id
+        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=add_data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
+        if any([r.exit_code == 1 for r in add_resp]):  # exit_code 1 from devices.add_devices indicates iventory call has already been attempted, add failed.
+            return add_resp
+
+        # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
+        serial_numbers = [d["serial"] for d in data]
+        for _ in range(3):
+            inv_devs = [self.cache.get_inv_identifier(s, serial_numbers=tuple(serial_numbers), exit_on_fail=False, silent=True) for s in serial_numbers]
+            # inv_resp = asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
+            # if inv_resp.ok and len(inv_resp) == len(serial_numbers):
+            if None not in inv_devs:
+                break
+
+            with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for device updates after device addition"):
+                sleep(3)
+
+        # if not inv_resp or not inv_resp.output:  # None of the serials were found after add
+        #     sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
+        #     log.error(f"Unable to perform subscription/tag updates due to failure fetching device_ids. {sfx}", caption=True, log=True)
+        #     return [*add_resp, inv_resp]
+        # elif len(inv_resp) != len(serial_numbers):
+        #     inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
+        #     missing = [s for s in serial_numbers if s not in inv_resp_serials]
+        #     log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)
+        #     log.warning(f"{len(missing)} will not have subscription or tags assigned.")
+        missing = [serial_numbers[idx] for idx, v in enumerate(inv_devs) if v is None]
+        if missing:
+            # log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)  # we already log in add_devices
+            log.warning(f"{len(missing)} devices will not have subscription or tags assigned as they not found in [green]GreenLake[/].", show=True, log=True, caption=True)
+
+        update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate)  # confirmation is done in batch_add_devices
+
+        # pre-provision devices to groups / classic API
+        to_group, group_resp = {}, []
+        [utils.update_dict(to_group, d["group"], d["serial"]) for d in data if "group" in d and d["group"]]
+        if to_group:
+            api = api_clients.classic
+            group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
+            group_resp = api.session.batch_request(group_reqs)
+
+        return [*add_resp, *update_resp, *group_resp]
+
+
+    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
+        yes = yes if yes is not None else 0
+        # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
+        data: list[dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
+        if not data:
+            self.exit("No data/import file")
+
+        _reqd_cols = ["serial", "mac"]
+        self.verify_required_fields(
+            data, required=_reqd_cols, optional=['group', 'subscription', 'tags'], example_text='cencli batch add devices --show-example'
+        )
+        data, warn = self.validate_subscription(data)
+        data, retain_warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
+        all_keys = utils.all_keys(data, with_value=True)
+
+        file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
+        file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
+        render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
+        confirm_data = [d if d.get("type", "") != "cx" or d.get("group") is not None else {**d, "group": "[dark_olive_green2]unprovisioned[/]"} for d in data]
+        render.console.print(f'   {utils.summarize_data(confirm_data, pad=3).lstrip()}\n', emoji=False)
+        if subscription:
+            sub = self.cache.get_sub_identifier(subscription, best_match=True)
+            render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub}[/]')
+        elif "subscription" in all_keys:
+            render.console.print('[dim italic]Devices will be assigned subscriptions based on subscriptions found in the import.[/]')
+        else:  # pragma: no cover
+            ...
+
+        if tags or "tags" in all_keys:
+            render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/green][/]')
+        if "group" in all_keys:
+            render.econsole.print('[dim italic]Devices with a group specified will be pre-provisioned to the group[/]')
+        if "site" in all_keys:
+            render.econsole.print(f'{emoji.warn} [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
+
+        if "group" in all_keys and not retain_warn:
+            render.econsole.print(
+                f'\n{emoji.warn} [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
+                '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
+                '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
+            )
+
+        warn = warn or retain_warn
+        if warn and not migrate:
+            render.econsole.print(f"{emoji.warn} Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
+
+        warn = warn if not env.is_pytest and not yes > 1 else False  # bypass confirmation for test runs or
+        render.confirm(yes=(not warn or migrate) and yes)
+        if config.glp.ok:
+            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, migrate=migrate)
+        else:
+            return self.batch_add_devices_classic(data)
 
     # TODO this has not been tested validated at all
     # TODO adapt to add or delete based on param centralcli.delete_label needs the label_id from the cache.
@@ -1221,11 +1329,11 @@ class CLICommon:
             already_exists = [d["name"] for d in data if d["name"] in self.cache.label_names]
             if already_exists:
                 if idx == 0:
-                    render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
+                    render.econsole.print(f"{emoji.warn} [cyan]{len(already_exists)}[/] labels from import already exist according to the cache, ensuring cache is current.")
                     _ = api.session.request(self.cache.refresh_label_db)
                 else:
                     skip_txt = utils.summarize_list(already_exists)
-                    render.econsole.print(f"[dark_orange3]:warning:[/]  The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
+                    render.econsole.print(f"{emoji.warn} The Following Labels will be [red]skipped[/] as they already exist in Central.\n{skip_txt}\n")
                     data = [label for label in data if label["name"] not in self.cache.label_names]
 
         if not data:
@@ -1244,10 +1352,69 @@ class CLICommon:
             cache_data = Labels([r.output for r in resp if r.ok])
             _  = api.session.request(self.cache.update_label_db, data=cache_data.model_dump())
         except Exception as e:
-            log.exception(f'Exception during label cache update in batch_add_labels]\n{e}')
-            render.econsole.print(f'[dark_orange3]:warning:[/]  [bright_red]Cache Update Error[/]: {e.__class__.__name__}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
+            log.exception(f'Exception {e.__class__.__name__} during label cache update in batch_add_labels')
+            render.econsole.print(f'{emoji.warn} [bright_red]Cache Update Error[/]: {repr(e)}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
 
         return resp
+
+    def batch_archive_unarchive_devices(self, import_file: Path, yes: bool = None, operation: Literal["archive", "unarchive"] = "archive"):
+        data = self._get_import_file(import_file, "devices", text_ok=True)
+        data = [{k if not k.lower().startswith("serial") else "serial": v for k, v in dev.items()} for dev in data]  # TODO pydantic validator in models.imports
+        self.verify_required_fields(data, required=["serial"])
+
+        if config.glp.ok:
+            return self.batch_archive_unarchive_devices_glp(data, yes=yes, operation=operation)
+        else:
+            return self.batch_archive_unarchive_devices_classic(data, yes=yes, operation=operation)
+
+
+    def batch_archive_unarchive_devices_glp(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
+        devs = []
+        serials = [d["serial"] for d in data]
+        for d in data:
+            dev = self.cache.get_inv_identifier(d["serial"], exit_on_fail=False, silent=True, serial_numbers=tuple(serials))
+            if not dev:
+                render.econsole.print(f"[dark_orange3]\u26a0[/]  [red]Skipping[/] [cyan]{d['serial']}[/].  Not found in [green]GreenLake[/] Inventory", emoji=False)
+            else:
+                devs += [dev]
+        if not devs:
+            self.exit("No devices found to process")
+
+        archive = operation == "archive"
+        _word = "device" if len(devs) == 1 else f"[bright_green]{len(devs)}[/] devices"
+        render.econsole.print(f"[{'red' if archive else 'green'}]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}", emoji=False)
+        render.confirm(yes if yes is not None else operation == "unarchive")  # No confirmation necessary for unarchive
+        api = api_clients.glp
+        res = api.session.request(api.devices.update_devices, [d.id for d in devs], archive=archive)
+        render.display_results(res, tablefmt="action")
+        update_data = [{**self.cache.inventory_by_serial[serial], "archived": archive} for serial in (d.serial for d in devs)]
+        api.session.request(self.cache.update_inv_db, update_data)
+
+    def batch_archive_unarchive_devices_classic(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
+        serials = [x.get("serial") or x.get("serial_num") for x in data]
+
+        render.econsole.print(f"[red]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] [bright_green]{len(serials)}[/] devices found in import file")
+        if operation == "archive":
+            render.confirm(yes)
+            res = api.session.request(api.platform.archive_devices, serials)
+        else:
+            res = api.session.request(api.platform.unarchive_devices, serials)
+
+        if res:
+            self._render_classic_archive_unarchive_result(res, operation=operation)
+        else:
+            render.display_results(res, tablefmt="action", exit_on_fail=True)
+
+    def _render_classic_archive_unarchive_result(self, res: Response, operation: Literal["archive", "unarchive"]) -> None:
+        caption = res.output.get("message")
+        if res.get("succeeded_devices"):
+            title = f"Devices successfully {operation}d."
+            data = [utils.strip_none(d) for d in res.get("succeeded_devices", [])]
+            render.display_results(data=data, title=title, caption=caption)
+        if res.get("failed_devices"):
+            title = f"These devices failed to {operation}."
+            data = [utils.strip_none(d) for d in res.get("failed_devices", [])]
+            render.display_results(data=data, title=title, caption=caption)
 
     class SiteMoves:
         def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
@@ -1345,7 +1512,7 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            render.econsole.print(f"\u2139  [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [italic grey42](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [dim italic](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
                             _skip = True
 
                     # Determine if device is in inventory only determines use of pre-provision group vs move to group
@@ -1353,10 +1520,11 @@ class CLICommon:
                         req_dict = pregroup_mv_reqs
                         msg_dict = pregroup_mv_msgs
                         if retain_config:
-                            render.econsole.print(f'[bright_red]\u26a0[/]  {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
-                            render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                            render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                             _skip = True
+                            if idx == 0:
+                                render.econsole.print(f'{emoji.warn} {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
+                                render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+                                render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
                     else:
                         req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
                         msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
@@ -1400,12 +1568,12 @@ class CLICommon:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         elif now_site == to_site.name:
-                            render.econsole.print(f"[deep_sky_blue3]\u2139[/]  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
                     elif not has_connected:
                         if idx == 0:
                             cache_dev = self._check_update_dev_db(cache_dev)
                         else:
-                            render.econsole.print(f"[deep_sky_blue3]\u2139[/]  [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [italic grey42](Device must connect to Central before site can be assigned)[reset]", emoji=False)
+                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](Device must connect to Central before site can be assigned)[reset]", emoji=False)
                     elif idx != 0:
                         site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
                         site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
@@ -1457,11 +1625,14 @@ class CLICommon:
 
         return MoveData(mv_reqs=batch_reqs, mv_msgs=label_ass_msgs, action_word="assigned", move_type="label")
 
+    # FIXME after doing a move from import_file including 1 swich and 2 APs where the switch needed both done, but the APs had the group ignored.  Only the switch
+    # reflected both the group and site.  The AP was moved to the site, but the cache was not updated to reflect that.
+    # to recreate "cencli migrate devices kfc --site Barn --not-group bridge --not-type gw -d" then "cencli batch move <migrate file> --ws kfc"
     def device_move_cache_update(
             self,
             mv_resp: List[Response],
-            serials_by_site: Dict[str: List[str]] = None,
-            serials_by_group: Dict[str: List[str]] = None,
+            serials_by_site: dict[str, list[str]] = None,
+            serials_by_group: dict[str, list[str]] = None,
         ) -> None:
         serials_by_site = serials_by_site or {}
         serials_by_group = serials_by_group or {}
@@ -1641,12 +1812,12 @@ class CLICommon:
         if len(reqs) > 1 and not yes:
             render.econsole.print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-        if render.confirm(yes):
-            resp = api.session.batch_request(reqs)
-            render.display_results(resp, tablefmt="action")
-            doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-            if doc_ids:
-                api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
+        render.confirm(yes)
+        resp = api.session.batch_request(reqs)
+        render.display_results(resp, tablefmt="action")
+        doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
+        if doc_ids:
+            api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
 
     def batch_delete_labels(
             self,
@@ -1688,12 +1859,12 @@ class CLICommon:
         if len(reqs) > 1 and not yes:
             render.econsole.print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
-        if render.confirm(yes):
-            resp = api.session.batch_request(reqs)
-            render.display_results(resp, tablefmt="action")
-            doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
-            if doc_ids:
-                api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
+        render.confirm(yes)
+        resp = api.session.batch_request(reqs)
+        render.display_results(resp, tablefmt="action")
+        doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
+        if doc_ids:
+            api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
 
     def show_archive_results(self, arch_resp: List[Response]) -> None:
         def summarize_arch_res(arch_resp: List[Response]) -> None:
@@ -1722,7 +1893,7 @@ class CLICommon:
             summarize_arch_res(arch_resp[0:2])
 
 
-    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
+    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice | CacheInvMonDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
         for dev in set(cache_devs):
             if dev.generic_type == "switch" and dev.swack_id is not None:
@@ -1794,8 +1965,86 @@ class CLICommon:
 
         return doc_ids
 
-    # TOGLP
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False,) -> List[Response]:
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, migrate: bool = False) -> List[Response]:
+        if config.glp.ok and not any([ui_only, cop_inv_only]):
+            return self.batch_delete_devices_glp(data, yes=yes, migrate=migrate)  # Note glp delete flow only deletes from GLP inventory not ui
+        return self.batch_delete_devices_classic(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+
+
+    def batch_delete_devices_glp(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, migrate: bool = False) -> List[Response]:
+        api = api_clients.glp
+        all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
+        devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]  # retry_dev false means if the cache is outdated ui deletes may not occur for devs not in mon cache
+        if None in devs:
+            render.econsole.print(f"[dark_orange3]:warning:[/]  Skipping {devs.count(None)} devices not found in [green]GreenLake[/]")
+            devs = [d for d in devs if d is not None]
+            if not devs:
+                if migrate:
+                    return [Response(output=f"No devices provided were found in [cyan]{config.workspace}[/] workspace [green]GreenLake[/] inventory.  No deletes to process.")]
+                else:
+                    self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
+        word = "device" if len(devs) == 1 else f"{len(devs)} devices"
+        render.econsole.print(f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
+        render.econsole.print(
+            "\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
+            "\nUse [cyan]cencli batch archive devices ...[/] to archive devices, that's the closest thing possible to really deleting them."
+            "\n[italic]Archive also removes the association with Aruba Central, and clears any subscription assignments."
+        )
+
+        render.confirm(yes)
+        glp_resp: list[Response] = api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
+        success_devs = [dev for r in glp_resp for dev in r.async_success_devices]
+        if success_devs:
+            inv_cache_devs = [self.cache.get_inv_identifier(d.id) for d in devs if d.id in success_devs]
+            cache_update_data = [{**dict(dev), "services": None, "subscription_key": None, "subscription_expires": None, "assigned": False} for dev in inv_cache_devs]
+            asyncio.run(self.cache.update_inv_db(cache_update_data))
+
+        mon_resp, mon_doc_ids = [], []
+        cache_mon_devs = [d for d in devs if d.status is not None]
+        if cache_mon_devs:
+            # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
+            mon_del_reqs = delayed_mon_del_reqs = []
+            mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+
+            if mon_del_reqs:
+                mon_resp = api_clients.classic.session.batch_request(mon_del_reqs)
+                mon_doc_ids += self._get_mon_doc_ids(mon_resp)
+            if delayed_mon_del_reqs:
+                log.info(f"{len(delayed_mon_del_reqs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offline.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
+
+            # Cache Updates
+            if mon_doc_ids:
+                asyncio.run(self.cache.update_dev_db(mon_doc_ids, remove=True))
+
+        return [*glp_resp, *mon_resp]
+
+    def _verify_mon_dev_is_up(self, devs: list[CacheDevice]) -> list[CacheDevice]:
+        """Used to verify the status of devices found in cache is up to date
+
+        This is needed when deleting devices from monitoring UI.  Any Devices that show
+        up in cache, but are slated for delete are validated using per device refresh.
+
+        Args:
+            devs (list[CacheDevice]): List of CacheDevice objects to verify
+
+        Returns:
+            list[CacheDevice]: List of CacheDevice Objects
+        """
+        update_serials = [dev.serial for dev in devs if dev.status == "Up"]
+        if not update_serials:
+            return devs
+
+        batch_reqs = [
+            BatchRequest(self.cache.refresh_dev_db, dev_type=dev.generic_type, serial=dev.serial)
+            for dev in devs if dev.status == "Up"
+        ]
+        _ = api.session.batch_request(batch_reqs)  # we get the updated value from the cache no need to parse result
+        with render.Spinner(":floppy_disk: Fetching updated devices after cache update."):
+            by_serial = {**{dev.serial: dev for dev in devs}, **{serial: CacheDevice(self.cache.devices_by_serial[serial]) for serial in update_serials}}
+
+        return list(by_serial.values())
+
+    def batch_delete_devices_classic(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
 
@@ -1848,6 +2097,7 @@ class CLICommon:
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
         mon_del_reqs = delayed_mon_del_reqs = []
         if not cop_inv_only:
+            cache_mon_devs = self._verify_mon_dev_is_up(cache_mon_devs)
             mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
 
         # cop only delete devices from GreenLake inventory
@@ -1858,8 +2108,8 @@ class CLICommon:
         # warn about devices that were not found
         if (mon_del_reqs or delayed_mon_del_reqs or cop_del_reqs) and not_found_devs:
             not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
-            render.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
-            render.econsole.print("[grey42 italic]They will be skipped[/]\n")
+            render.econsole.print(f"\n{emoji.warn} The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+            render.econsole.print("[dim italic]They will be skipped[/]\n")
 
         if ui_only:
             _total_reqs = len(mon_del_reqs)
@@ -1873,10 +2123,12 @@ class CLICommon:
                 self.exit(f"[cyan]--ui-only[/] provided, but only applies to devices that are offline, {len(delayed_mon_del_reqs)} device{'s are' if len(delayed_mon_del_reqs) > 1 else ' is'} online.  Nothing to do. Exiting...")
             self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
 
-        sin_plural = f"[cyan]{len(cache_found_devs)}[/] devices" if len(cache_found_devs) > 1 else "device"
-        confirm_msg += [f"\n[dark_orange3]\u26a0[/]  [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
+        cache_down_devs = [c for c in cache_mon_devs if c.status.lower() == 'down']
+        confirm_devs = cache_found_devs if not ui_only else cache_down_devs
+        sin_plural = f"[cyan]{len(confirm_devs)}[/] devices" if len(confirm_devs) > 1 else "device"
+        confirm_msg += [f"{emoji.warn} [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
         if ui_only:
-            confirmation_devs = utils.summarize_list([c.summary_text for c in cache_mon_devs if c.status.lower() == 'down'], max=40, color=None)
+            confirmation_devs = utils.summarize_list(cache_down_devs, max=40, color=None, pad=3).lstrip("\n")
             if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
                 render.econsole.print(
                     f"[cyan]{len([c for c in cache_mon_devs if c.status.lower() == 'up'])}[/] of the [cyan]{len(cache_mon_devs)}[/] found devices are currently [bright_green]online[/]. [dim italic]They will be skipped.[/]\n"
@@ -1886,10 +2138,10 @@ class CLICommon:
             if not mon_del_reqs:
                 self.exit("No devices found to remove from UI. [red]Exiting[/]...")
             else:
-                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len([c for c in cache_mon_devs if c.status.lower() == 'down'])}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
+                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len(cache_down_devs)}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
-            confirmation_list = valid_serials if force or cop_inv_only else [d.summary_text for d in cache_found_devs]
-            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan')]
+            confirmation_list = valid_serials if force or cop_inv_only else cache_found_devs
+            confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan').lstrip("\n")]
 
         if _total_reqs > 1:
             confirm_msg += [f"\n[italic dark_olive_green2]Will result in {_total_reqs} additional API Calls."]
@@ -1922,72 +2174,131 @@ class CLICommon:
         if cop_del_reqs:  # pragma: no cover  Currently do not test CoP
             batch_resp += api.session.batch_request(cop_del_reqs)
 
-        if batch_resp:
-            render.display_results(batch_resp, tablefmt="action")
-
         # Cache Updates
         if mon_doc_ids:
             api.session.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
         if inv_doc_ids:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
-    def batch_assign_subscriptions(self, data: list[dict[str, Any]] | dict[str, Any], *, tags: dict[str, str] = None, subscription: str = None, yes: bool = False,) -> List[Response]:
-        # tags = None if not tags else {k: v if v.lower() not in ["none", "null"] else None for k, v in tags.items()}
-        if subscription:
-            sub_keys = ["subscription", "license", "services"]
-            sub_key = [k for k in sub_keys if k.lower() in map(str.lower, data[0].keys())] or "subscription"
-            _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
-            data = [{**{k: v for k, v in inner.items() if k != sub_key}, "subscription": _sub.id} for inner in data]
+        return batch_resp
 
-        glp_api = GreenLakeAPI()
-        try:
-            _data = ImportSubDevices(self.cache, data)
-        except ValidationError as e:
-            self.exit(utils.clean_validation_errors(e))
 
-        devs_by_sub_id = _data.serials_by_subscription_id(assigned=True)
+    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> BuiltRequests:
+        api = api_clients.glp
+        tags = tags or {}
+        ret_dict = {}
+        hash_to_tags = {}
         confirm_msg = []
         batch_reqs = []
+        for dev in devices:
+            if not dev.exists:
+                continue
+            this_tags = dev.tags or {}
+            combined_tags = {**tags, **this_tags}
+            if combined_tags:
+                tag_hash = hash(str(combined_tags))
+                ret_dict = utils.update_dict(ret_dict, tag_hash, [dev.glp_id])
+                if tag_hash not in hash_to_tags:
+                    hash_to_tags[tag_hash] = combined_tags
+
+        _empty_str = "''"
+        for tag_hash, ids in ret_dict.items():
+            _tags: dict = hash_to_tags[tag_hash]
+            _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v or _empty_str}' for k, v in _tags.items()])
+            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(ids)}[/] [bright_green]devices[/bright_green]:\n{_tag_msg}"]
+            # api = GreenLakeAPI()
+            api = api_clients.glp
+            batch_reqs += [BatchRequest(api.devices.update_devices, device_ids=ids, tags=_tags)]
+
+        return BuiltRequests(batch_reqs, confirm_msgs=confirm_msg)
+
+    def _build_glp_sub_reqs(self, import_devs: ImportDevices, *, assigned: bool = None) -> BuiltRequests:
+        glp_api = api_clients.glp
+        devs_by_sub_id = import_devs.serials_by_subscription_id(assigned=assigned)
+        confirm_msg = [""]
+        sub_reqs = []
         for sub_id, res in devs_by_sub_id.items():
             if not res.devices:
                 continue
 
+            # TODO need to do validation and skip devices that are already assigned to the sub with the most remaining time.
             csub: CacheSub = res.cache_sub
-            # confirm_msg += [res.get_confirm_msg()]
-            confirm_msg += [f"\n[deep_sky_blue1]\u2139[/]  [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
+            confirm_msg += [f"{emoji.info} [dark_olive_green2]Assigning[/] {csub.summary_text}... [magenta]To[/magenta] [cyan]{len(res)}[/] [magenta]devices found in import[/magenta]"]
             if len(res.devices) > csub.available:
                 confirm_msg[-1] = confirm_msg[-1].rstrip()
-                confirm_msg += [f"[dark_orange3]\u26a0[/]  # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
-            batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id, tags=tags)]
+                confirm_msg += [f"{emoji.warn} # of devices provided ({len(res)}) exceeds remaining qty available ({csub.available}) for {csub.name} subscription."]
+            sub_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=res.ids, subscription_ids=sub_id)]
 
-        if tags:
-            _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in tags.items()])
-            confirm_msg += [f"\n[bright_green]The following tags will be assigned to[/] [cyan]{len(_data)}[/] [bright_green]devices [dim italic]from import[/][/bright_green]:\n{_tag_msg}"]
+        return BuiltRequests(sub_reqs, confirm_msgs=confirm_msg)
 
-        if _data.has_tags:
-            for _tags, _ids in _data.ids_by_tags():
-                _tag_msg = '\n'.join([f'  [magenta]{k}[/]: {v}' for k, v in _tags.items()])
-                confirm_msg += [f"\n[bright_green]The following {'additional ' if tags else ''}tags will be assigned to[/] [cyan]{len(_ids)}[/] [bright_green]devices [dim italic]based on data defined in import[/][/bright_green]:\n{_tag_msg}"]
-                batch_reqs += [BatchRequest(glp_api.devices.update_devices, device_ids=_ids, tags=_tags)]
 
-        if _data.not_assigned_devs:
+    def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False, action: GLPAction = GLPAction.UPDATE) -> ImportDevices:
+        data = utils.normalize_device_sub_field(data)
+        if subscription:  # if they provide subscription via --sub flag. It overrides anything found in the import file (or adds it if it doesn't exist)
+            _sub: CacheSub = self.cache.get_sub_identifier(subscription, best_match=True)
+            data = [{**inner, "subscription": _sub.id} for inner in data]
+
+        if sub_required and not subscription:
+            self.verify_required_fields(data, ["subscription"], exit_on_fail=True)
+
+        try:
+            _data = ImportDevices(self.cache, data)
+            if action == GLPAction.ADD:
+                self.verify_required_fields(data, required=["mac"], exit_on_fail=True)  # same pydantic model used for add and update.  mac is not required for update but is for add so model has it as optional
+        except ValidationError as e:
+            self.exit(utils.clean_validation_errors(e))
+
+        return _data
+
+    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False, migrate: bool = False) -> list[Response]:
+        _data = self._prep_glp_add_update_data(data, subscription=subscription, sub_required=sub_required)
+        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=not migrate)
+        confirm_msg = sub_req_obj.confirm_msgs
+        sub_reqs = sub_req_obj.requests
+
+        if sub_reqs and not self.cache.responses.sub:
+            confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
+
+        tag_reqs = []
+        if tags or _data.has_tags:
+            tag_req_info = self._build_tag_reqs(_data, tags=tags)
+            confirm_msg += tag_req_info.confirm_msgs
+            tag_reqs = tag_req_info.requests
+
+        if _data.not_assigned_devs and not migrate:
             confirm_msg += [
-                "\n[dark_orange3]\u26a0[/]  Some devices have been skipped as they don't exist or are not associated with Aruba Central app in [green]GreenLake[/]",
+                f"\n{emoji.warn} Some updates will be skipped as the device either doesn't exist in [green]GreenLake[/] inventory or is not associated with Aruba Central app [dark_orange3]\u26a0[/]",
                 _data.warning_skip_not_assigned,
-                "\n[deep_sky_blue1]\u2139[/]  Use [cyan]cencli batch add devices ...[/] to add devices to Aruba Central."
-            ]  # \u26a0 == :warning:, \u2139 = :information:
+                f"\n{emoji.info} [italic]Use [cyan]cencli batch add devices ...[/] to add devices to [green]GreenLake[/].[/italic]"
+            ]
 
-        if not self.cache.responses.sub:
-            confirm_msg += ["\n[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
-
-        render.econsole.print("\n".join(confirm_msg), emoji=False)
+        batch_reqs = [*sub_reqs, *tag_reqs]
         if not batch_reqs:
+            render.econsole.print("The following devices were skipped as they do not appear to be assigned to Aruba Central", _data.warning_skip_not_assigned, emoji=False, sep="\n")
             self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
+
+        if not migrate:
+            confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
+        render.econsole.print("\n".join(confirm_msg), emoji=False)
         render.confirm(yes) # aborts here if they don't confirm
+        glp_api = api_clients.glp
         batch_res = glp_api.session.batch_request(batch_reqs)
 
-        return batch_res
+        # cache update
+        sub_res = batch_res[:len(sub_reqs)]
+        update_ids = []
+        try:
+            for res in sub_res:
+                if res.ok:
+                    update_ids += [d.get("id") for d in res.output["async operation response"].get("result", {}).get("succeededDevices", [{}])]
+            if update_ids:
+                update_import_devs = [d for d in _data if d.glp_id in update_ids]
+                update_data = [{**self.cache.inventory_by_serial[d.serial], "services": d.sub.name, "subscription_key": d.sub.key, "subscription_expires": d.sub.end_date} for d in update_import_devs]
+                _ = glp_api.session.request(self.cache.update_inv_db, update_data)
+        except Exception as e:  # pragma: no cover
+            log.exception(f"{repr(e)} while attempting Inventory cache update after subscription assignment in clicommon.batch_update_glp_devices", caption=True, log=True)
 
+        return batch_res
 
     def _build_update_ap_reqs(self, data: List[Dict[str, Any]]) -> APRequestInfo:
         altitude_by_serial, ap_env_by_serial, batch_reqs, requires_reboot = {}, {}, [], {}
@@ -2105,7 +2416,7 @@ class CLICommon:
         if req_info.skipped:
             _cnt = len(req_info.skipped)
             render.econsole.print(f"\nThe following {_cnt} APs were skipped as no updates applied to those models:")
-            if _cnt > 12:
+            if _cnt > 12:  # pragma: no cover
                 render.econsole.print(f"    [dim italic]Summary showing 12 of the {_cnt} skipped devices.")
             render.econsole.print(req_info.skipped_summary)
 
@@ -2129,7 +2440,7 @@ class CLICommon:
         self.exit(code=0 if all([r.ok for r in [*batch_resp, *reboot_resp]]) else 1)
 
     @staticmethod
-    def get_banner_from_user() -> Path:
+    def get_banner_from_user() -> Path:  # pragma: no cover requires tty
         banner_text = utils.get_multiline_input("[bright_green]Paste desired banner text into terminal[/]...")
         print()  # move cursor past ^D line
         temp_file = config.cache_dir / ("banner" if "{{" not in banner_text else "banner.j2")
@@ -2210,31 +2521,6 @@ class CLICommon:
             with log.log_file.open("a") as file:
                 print(Traceback(), file=file)
             self.exit(repr(e))
-
-    def parse_var_value_list(self, var_value: list[str, str], *, error_name: str = "variables") -> dict[str, str]:
-        vars, vals, get_next = [], [], False
-        for var in var_value:
-            var = var.rstrip(",")
-            if var == '=':
-                continue
-            if '=' not in var:
-                if get_next:
-                    vals += [var]
-                    get_next = False
-                else:
-                    vars += [var]
-                    get_next = True
-            else:
-                _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
-                vars += [_[0]]
-                vals += [_[1]]
-                get_next = False
-
-        if len(vars) != len(vals):
-            self.exit(f"Something went wrong parsing {error_name}.  Unequal length for {error_name} vs values.")
-
-        return {k: v for k, v in zip(vars, vals)}
-
 
 if __name__ == "__main__":
     pass

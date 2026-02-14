@@ -7,23 +7,23 @@ So to test handling of invalid arguments to the library methods we need to test 
 """
 
 from enum import Enum
-from pathlib import Path
-from typing import Callable
+from collections.abc import Callable
+from typing import Any
 
 import pytest
+from click.exceptions import Exit
 from typer.testing import CliRunner
 
-from centralcli import utils, common, api_clients
+from centralcli import api_clients, cache, cleaner, common, utils, log
+from centralcli.objects import DateTime
 from centralcli.cache import api
 from centralcli.cli import app
-from centralcli.constants import ShowArgs, arg_to_what
+from centralcli.constants import ShowArgs, arg_to_what, lib_to_api
 from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
-from click.exceptions import Exit
-
 
 from . import capture_logs, config, test_data
-from ._test_data import test_ap_ui_group_template, test_cert_file
+from ._test_data import test_ap_ui_group_template, test_cert_file, test_sw_template
 
 runner = CliRunner()
 
@@ -67,11 +67,16 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"group": "cencli_test_group2", "name": "cencli_test_template", "payload": Path(test_data["template"]["template_file"]).read_text(), "device_type": "sw"},
             {
                 "group": "cencli_test_group2",
                 "name": "cencli_test_template",
-                "payload": Path(test_data["template"]["template_file"]).read_text().encode("utf-8"),
+                "payload": test_sw_template.read_text(),
+                "device_type": "sw"
+            },
+            {
+                "group": "cencli_test_group2",
+                "name": "cencli_test_template",
+                "payload": test_sw_template.read_text().encode("utf-8"),
                 "device_type": "sw",
             },
         ],
@@ -105,6 +110,23 @@ if config.dev.mock_tests:
         ]
         resp = api.session.request(api.configuration.replace_per_ap_config, test_data["test_devices"]["ap"]["serial"], clis=clis)
         assert resp.ok
+
+
+    @pytest.mark.parametrize(
+        "_,fixture,func,kwargs,exception",
+        [
+            [1, "ensure_old_config", cache.refresh_inv_db, {"archived": True}, ValueError]
+        ],
+    )
+    def test_cache(_: int, fixture: str | list[str], func: Callable, kwargs: dict[str, Any], exception: Exception, request: pytest.FixtureRequest):
+        if fixture:
+            [request.getfixturevalue(f) for f in utils.listify(fixture)]
+        if exception:
+            with pytest.raises(exception):
+                resp = api.session.request(func, **kwargs)
+        else:
+            resp = api.session.request(func, **kwargs)
+            assert resp.status == 200
 
 else:  # pragma: no cover
     ...
@@ -228,7 +250,6 @@ def test_configuration_classic(_: int, func: Callable, kwargs: dict[str, str], e
         assert pass_condition(resp)
 
 
-
 @pytest.mark.parametrize(
     "_,func,kwargs,expected_exception",
     [
@@ -295,8 +316,8 @@ def test_remove_label_from_devices_fail():
         {"device_list": [{"mac": "invalid"}]},  # device_list invalid mac
         {
             "device_list": [
-                {"serial": "US1234567", "mac": "aa:bb:cc:dd:ee:ff", "license": "advanced_ap"},  # missing serial
-                {"mac": "aa:bb:cc:dd:ee:f1", "license": "advanced_ap"},
+                {"serial": "US1234567", "mac": "aa:bb:cc:dd:ee:ff", "license": "advanced_ap"},
+                {"mac": "aa:bb:cc:dd:ee:f1", "subscription": "advanced_ap"},  # missing serial
             ]
         },
     ],
@@ -307,7 +328,8 @@ def test_add_devices_fail(kwargs: dict[str, str | bool]):
     except ValueError:
         ...  # Test Passes
     else:  # pragma: no cover
-        raise AssertionError(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}\n{resp}")
+        log.inspect(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs = }", resp)
+        raise AssertionError(f"test_add_devices_fail should have raised a ValueError due to invalid params, but did not.  {kwargs =}\n{resp = }")
 
 
 @pytest.mark.parametrize(
@@ -511,9 +533,23 @@ def test_clicommon(idx: int, func: Callable, kwargs: dict, pass_condition: Calla
 
 
 @pytest.mark.parametrize(
+    "idx,func,kwargs,pass_condition",
+    [
+        [1, cleaner.get_event_logs, {"data": [{"id": "soemid", "timestamp": 1768622316000, "description": "some description"}, {}], "cache_update_func": cache.update_event_db}, lambda r: str(r[0]["time"]).count(":") == 2],
+    ]
+)
+def test_cleaner(idx: int, func: Callable, kwargs: dict, pass_condition: Callable):
+    resp = func(**kwargs)
+    try:
+        assert pass_condition(resp)
+    except AssertionError as e:  # pragma: no cover
+        log.inspect(f"{env.current_test}-{idx} FAILED.  {repr(e)}", resp)
+
+
+@pytest.mark.parametrize(
     "idx,func,kwargs,pass_condition,exception",
     [
-        [1, api_clients.glp.devices.get_glp_devices, {"sort_by": "archived", "reverse": True}, lambda r: r.ok, None],
+        [1, api_clients.glp.devices.get_devices, {"sort_by": "archived", "reverse": True}, lambda r: r.ok, None],
     ]
 )
 def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Callable, exception: Exception | None):
@@ -527,3 +563,26 @@ def test_glp_devices(idx: int, func: Callable, kwargs: dict, pass_condition: Cal
     else:  # pragma: no cover
         resp = api_clients.glp.session.request(func, **kwargs)
         assert pass_condition(resp)
+
+
+# Test properties that are not currently used, but we want to keep them for future use.
+def test_constants_unused():
+    assert "cx" in lib_to_api.valid_str
+    assert "cx" in lib_to_api.valid
+    assert arg_to_what("client", cmd="notexist") == "clients"
+
+@pytest.mark.parametrize(
+    "idx,ts1,ts2",
+    [
+        [1, 1768622334000, 1768622333000],
+    ]
+)
+def test_datetime_unused(idx: int, ts1: int, ts2: int):
+    dt1 = DateTime(ts1)
+    dt2 = DateTime(str(ts2))
+    assert dt1.is_expired
+    assert dt1 >= dt2
+    assert dt2 <= dt1
+    assert len(dt1) < len(str(ts1))  # converted to seconds
+    assert lambda: dt2.log
+

@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import logging
+import sys
 from functools import partial
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from time import sleep
-from typing import Any
+from typing import Any, Literal
 
+from rich import inspect as _inspect
 from rich.console import Console
 
 from . import env, utils
+from .constants import PYTEST_EXPECTED_EXCEPTIONS
 
 console = Console(emoji=False, markup=False)
 econsole = Console(stderr=True)
@@ -31,6 +34,7 @@ PYCENTRAL_SILENT_EXIT = [
     "Central Login Step3 failed with error"
 ]
 
+LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET", "critical", "error", "warning", "info", "debug", "notset"]
 
 class MyLogger:
     def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None):
@@ -69,7 +73,7 @@ class MyLogger:
             format=fmtStr,
             datefmt=dateStr,
             handlers=[
-                RotatingFileHandler(self.log_file.absolute(),  maxBytes=250000, backupCount=5,),
+                RotatingFileHandler(self.log_file.absolute(),  maxBytes=900_000, backupCount=5,),
             ],
         )
         return logging.getLogger(self.log_file.stem)
@@ -154,6 +158,8 @@ class MyLogger:
 
             if i not in _logged:  # prevents errant duplicates.
                 if log:
+                    if level == "exception" and env.is_pytest:  # Don't log tracebacks for expected exceptions during test runs
+                        exc_info = exc_info if (sys.exc_info()[0] not in PYTEST_EXPECTED_EXCEPTIONS.values()) else False
                     getattr(self._log, level)(self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:
@@ -172,6 +178,15 @@ class MyLogger:
         if caption:
             msgs = [line for m in msgs for line in str(m).splitlines()]
             self._caption = [*self._caption, *[f"{warning_emoji if level not in ['info', 'debug'] else ''}{m}" for m in msgs]]
+
+    def inspect(self, msgs: str | list[str], obj: object, *, level: LogLevel = "error", title: bool = None, show: bool = False):
+        self.log_print(msgs, level=level)
+        console = Console(record=True, emoji=False)
+        obj = utils.unlistify(obj)
+        console.begin_capture()
+        _inspect(obj, console=console, title=title, methods=True)
+        res = console.end_capture()
+        self.log_print(f"inspection of {repr(obj)}\n{res}", level=level, show=show)
 
     @property
     def level_name(self) -> str | int:  # pragma: no cover

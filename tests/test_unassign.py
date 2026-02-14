@@ -42,3 +42,5 @@ def test_unassign_label_multi(ensure_cache_label1):
     assert result.exit_code == 0
     assert "200" in result.stdout
     assert test_data["switch"]["serial"].upper() in result.stdout
+
+# test_unassign_subscription is in glp_classic file

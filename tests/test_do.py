@@ -1,14 +1,15 @@
 from typing import Callable
 
 import pytest
+import sys
 from typer.testing import CliRunner
 
-from centralcli import common, utils
+from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, config, test_data, at_str
-from ._test_data import test_device_file, test_j2_file
+from ._test_data import test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file, test_ap_ui_group_template, test_ap_ui_group_variables
 
 runner = CliRunner()
 
@@ -20,27 +21,11 @@ def test_add_device_missing_mac():
     assert "required" in result.stdout
 
 
-def test_archive(ensure_inv_cache_test_ap: None):
-    result = runner.invoke(app, ["archive", test_data["test_devices"]["ap"]["mac"], "-y"])
-    capture_logs(result, "test_archive")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-
-
-def test_archive_multi(ensure_cache_batch_devices: None):
-    devices = common._get_import_file(test_device_file, import_type="devices")
-    serials = [dev["serial"] for dev in devices[::-1]][0:2]
-    result = runner.invoke(app, ["archive", *serials, "-y"])
-    capture_logs(result, "test_archive_multi")
-    assert result.exit_code == 0
-    assert "succeeded" in result.stdout
-
-
 @pytest.mark.parametrize(
     "idx,args",
     [
-        [1, (test_data["j2_template"],)],
-        [2, (test_data["j2_template"], test_data["j2_variables"])],
+        [1, (str(test_ap_ui_group_template),)],
+        [2, (str(test_ap_ui_group_template), str(test_ap_ui_group_variables))],
     ]
 )
 def test_convert_template(idx: int, args: tuple[str]):
@@ -71,6 +56,7 @@ def test_convert_template_too_many_var_file_matches(ensure_cache_j2_var_yaml: No
     assert "Too many matches" in result.stdout
 
 
+# TODO need test and response for gw move to hit 500 response branch in configuration.move_devices_to_group
 def test_move_pre_provision(ensure_cache_group1: None, ensure_inv_cache_test_ap: None):
     result = runner.invoke(app, ["move", test_data["test_devices"]["ap"]["serial"], "group", "cencli_test_group1", "-y"])
     capture_logs(result, "test_move_pre_provision")
@@ -301,8 +287,9 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
         [
-            [1, (test_data["ap"]["name"], test_data["switch"]["name"], "-s"), lambda r: "⚠" in r],  # -s is ignored for both (AOS10/switch)
-            [2, (test_data["aos8_ap"]["name"], "-s"), lambda r: "200" in r],
+            [1, (test_data["ap"]["name"], test_data["switch"]["name"], "-S"), lambda r: "⚠" in r],  # -s is ignored for both (AOS10/switch)
+            [2, (test_data["ap"]["name"],), lambda r: "200" in r],
+            [3, (test_data["aos8_ap"]["name"], "--swarm"), lambda r: "200" in r],
         ]
     )
     def test_reboot(idx: int, args: tuple[str], pass_condition: Callable):
@@ -327,7 +314,7 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "_,fixture,args",
+        "idx,fixture,args",
         [
             [1, "ensure_dev_cache_test_ap", ("device", test_data["ap"]["serial"], test_data["test_devices"]["ap"]["serial"], "10.7.1.0-beta_91138")],
             [2, "ensure_dev_cache_test_ap", ("device", test_data["test_devices"]["ap"]["serial"], "10.7.1.0-10.7.1.0-beta_91138")],
@@ -337,19 +324,20 @@ if config.dev.mock_tests:
             [6, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-beta_91138", "--in", "10m")],
             [7, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.1.0-10.7.1.0-beta_91138")],
             [8, None, ("group", test_data["upgrade_group"], "--dev-type", "ap", "10.7.2.2_94048")],
-            [9, None, ("group", test_data["upgrade_group"], "--dev-type", "ap")],
+            [9, None, ("group", test_data["upgrade_group"], "--dev-type", "ap",)],
             [10, None, ("group", test_data["template_switch"]["group"], "--dev-type", "sw", "16.11.0027", "--model", "2930F")],
             [11, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688")],
             [12, None, ("swarm", test_data["aos8_ap"]["name"],)],
-            [13, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-8.13.1.0-beta_93688", "--in", "1h")],
-            [14, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688", "--at", at_str)],
+            [13, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-beta_93688")],
+            [14, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-8.13.1.0-beta_93688", "--in", "1h")],
+            [15, None, ("swarm", test_data["aos8_ap"]["name"], "8.13.1.0-93688", "--at", at_str)],
         ]
     )
-    def test_upgrade(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+    def test_upgrade(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
         result = runner.invoke(app, ["upgrade",  *args, "-y"])
-        capture_logs(result, "test_upgrade_ap")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
@@ -429,9 +417,11 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
 
 
-    def test_assign_subscription_by_key():
+    @pytest.mark.parametrize("idx,fixture", [[1, "ensure_assign_dev_no_sub"], [2, "ensure_assign_dev_sub"]])
+    def test_assign_subscription_by_key(idx: int, fixture: Callable, request: pytest.FixtureRequest):
+        request.getfixturevalue(fixture)
         result = runner.invoke(app, ["assign", "subscription", test_data["subscription"]["key"], test_data["subscription"]["assign_to_device"]["serial"], "-y"])
-        capture_logs(result, "test_assign_subscription_by_key")
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "202" in result.stdout
 
@@ -498,9 +488,17 @@ if config.dev.mock_tests:
         assert "400" in result.stdout
 
 
-    def test_rename_site(ensure_cache_site4: None):
-        result = runner.invoke(app, ["rename", "site",  "cencli_test_site4", "cencli_test_site40", "--yes"])
-        capture_logs(result, "test_rename_site")
+    @pytest.mark.parametrize(
+        "idx,fixture,args",
+        [
+            [1, "ensure_cache_site3", ("cencli_test_site3", "cencli_test_site30")],
+            [2, "ensure_cache_site4", ("cencli_test_site4", "cencli_test_site40")],
+        ]
+    )
+    def test_rename_site(idx: int, fixture: Callable, args: tuple[str], request: pytest.FixtureRequest):
+        request.getfixturevalue(fixture)
+        result = runner.invoke(app, ["rename", "site",  *args, "--yes"])
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "address" in result.stdout
 
@@ -520,53 +518,37 @@ if config.dev.mock_tests:
 
 
     @pytest.mark.parametrize(
-        "fixture,args,pass_condition",
+        "idx,args,pass_condition",
         [
-            [
-                [
-                    "ensure_inv_cache_test_switch",
-                    "ensure_inv_cache_test_ap",
-                    "ensure_inv_cache_test_stack",
-                    "ensure_dev_cache_test_switch",
-                    "ensure_dev_cache_test_ap",
-                    "ensure_dev_cache_test_stack",
-                    "ensure_cache_group1",
-                    "ensure_cache_site1",
-                ],
-                (test_data["test_devices"]["switch"]["serial"], *[sw["serial"] for sw in test_data["test_devices"]["stack"]], test_data["test_devices"]["ap"]["serial"]),
-                lambda r: "200" in r
-            ]
+            [1, ("--dir", str(test_gen_bssid_file.parent),), lambda r: "," in r],  # do --dir first else out files are included in dir run
+            [2, ("--file", str(test_gen_bssid_xlsx_file), "--out", f"{str(test_gen_bssid_xlsx_file.parent)}/delme.csv"), lambda r: "," in r],
+            [3, ("--file", str(test_gen_bssid_file)), lambda r: "," in r],
+            [4, (str(test_gen_bssid_file),), lambda r: "," in r],
+            [5, ("685134C6D46B",), lambda r: "radio" in r],
         ]
     )
-    def test_delete_devices(fixture: str | list[str] | None, args: list[str], pass_condition: Callable, request: pytest.FixtureRequest):
-        if fixture:
-            [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        else:  # pragma: no cover
-            ...
-        result = runner.invoke(app, ["delete", "device", *args, "-y"])
-        capture_logs(result, "test_delete_devices")
+    def test_generate_bssids(idx: int, args: list[str], pass_condition: Callable):
+        result = runner.invoke(app, ["generate", "bssids", *args])
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
 
     @pytest.mark.parametrize(
-        "fixture,args",
+        "idx,args,pass_condition",
         [
-            ["ensure_inv_cache_test_ap", (test_data["test_devices"]["ap"]["serial"],)],
-            ["ensure_cache_batch_devices", ("from_import",)],
-            [None, ("US18CEN103", "US18CEN112")],  # this passes as it reuses real response, but these serials don't exist in cache.
+            [1, ("show", "gateways"), lambda r: "Populating" in r and "Cache" in r],
+            [2, ("show", "--help"), lambda r: "Usage" in r],
+            [3, ("show", "last"), lambda r: "Previous Output" in r],
         ]
     )
-    def test_unarchive(fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
-        if fixture:
-            request.getfixturevalue(fixture)
-        if "from_import" in args:
-            devices = common._get_import_file(test_device_file, import_type="devices")
-            args = [dev["serial"] for dev in devices[::-1]][0:2]
-        result = runner.invoke(app, ["unarchive", *args])
-        capture_logs(result, "test_unarchive")
+    def test_no_cache_and_do_load_pycentral(ensure_no_cache, idx: int, args: tuple[str], pass_condition: Callable):
+        sys.argv = ["cencli", *args]
+        result = runner.invoke(app, args)
+        capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
-        assert "succeeded" in result.stdout
+        assert pass_condition(result.stdout)
+
 
 else:  # pragma: no cover  Coverage shows untested branch without this
     ...

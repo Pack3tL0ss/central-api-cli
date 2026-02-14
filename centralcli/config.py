@@ -18,6 +18,7 @@ from rich.prompt import Confirm, Prompt
 from tablib.exceptions import UnsupportedFormat
 
 from .constants import CLUSTER_URLS
+from .utils import ToBool
 from .environment import env
 from .models.config import ConfigData
 from .typedefs import JSON_TYPE
@@ -178,7 +179,7 @@ class CentralURLs(Mapping):  # pragma: no cover  used in first run wizard which 
 clusters = CentralURLs()
 
 
-def _get_config_file(cwd: Path) -> Path:
+def _get_config_file(cwd: Path) -> Path | None:
     dirs = [
         Path().home() / ".config" / "centralcli",
         Path().home() / ".centralcli",
@@ -202,7 +203,7 @@ class SafeLineLoader(yaml.SafeLoader):
         """Annotate a node with the first line it was seen."""
         last_line: int = self.line
         node: yaml.nodes.Node = super().compose_node(parent, index)
-        node.__line__ = last_line + 1  # type: ignore
+        node.__line__ = last_line + 1
         return node
 
 
@@ -252,8 +253,9 @@ def _include_yaml(loader: SafeLineLoader, node: yaml.nodes.Node) -> JSON_TYPE:
 
 class Config:
     example_link = EXAMPLE_LINK
+    glp_client = None
 
-    def __init__(self, base_dir: Path = None):
+    def __init__(self, base_dir: Path = None, *, workspace: str = None):
         #  We don't know if it's completion at this point cli is not loaded.  BASH will hang if first_run wizard is started. Updated in cli.py all_commands_callback if completion
         self.is_completion = env.is_completion
         self.valid_suffix = VALID_EXT
@@ -315,7 +317,7 @@ class Config:
         self.forget: int | None = self.data.get("forget_ws_after", self.data.get("forget_account_after"))
         self.default_workspace = "default"  # if they still use old `central_info` it is transformed to `default` in ConfigData model
         self.last_workspace, self.last_cmd_ts, self.last_workspace_msg_shown, self.last_workspace_expired = self.get_last_workspace()
-        self._workspace = self.get_workspace_from_args()
+        self._workspace = workspace or self.get_workspace_from_args()
         self.set_attributes()
         self.snow = None  # snow proxy is deprecated
 
@@ -362,7 +364,7 @@ class Config:
         return len(self.data) > 0 and self.workspace in self.data
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data)  # pragma: no cover
 
     @property
     def workspace(self) -> str:
@@ -372,6 +374,8 @@ class Config:
     def workspace(self, workspace: str):  # pragma: no cover
         self._workspace = workspace
         self.set_attributes()
+        from .cache import Cache
+        Cache.set_config(self)
 
     @property
     def closed_capture_file(self) -> Path:
@@ -384,6 +388,10 @@ class Config:
     @property
     def workspaces(self) -> dict[str, Any]:
         return self.data.get("workspaces", {})
+
+    @property
+    def cluster(self) -> str:
+        return self.workspace_object.cluster
 
     @property
     def is_cop(self):
@@ -406,11 +414,11 @@ class Config:
         )
 
     @property
-    def tok_file(self) -> Path:
+    def tok_file(self) -> Path | None:
         return Path(self.cache_dir / f'tok_{self.classic.customer_id}_{self.classic.client_id}.json') if self.classic.ok else None
 
     @property
-    def cnx_tok_file(self) -> Path:
+    def cnx_tok_file(self) -> Path | None:
         return Path(self.cache_dir / f'cnx_tok_{self._normalized_workspace}_{self.classic.client_id}.json') if self.classic.client_id else None
 
     @property
@@ -469,6 +477,13 @@ class Config:
             return self.data.get(key, default)
 
         return default
+
+    def _mock(self, glp_ok: bool = False) -> None:  # used for testing to force commands to use classic API endpoints
+        self.is_old_cfg = not glp_ok
+        if glp_ok:
+            self.set_attributes()  # HACK not sure why this was necessary.
+        else:
+            self.glp.ok = glp_ok
 
     def get_last_workspace(self) -> tuple[str | None, float | None, bool | None]:
         """Gathers contents of last_workspace returns tuple with values.
@@ -541,6 +556,7 @@ class Config:
                                 print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
                                 sys.exit(1)
                         import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)
+                        import_data = [{k: v if str(v).lower() not in ["true", "false"] else ToBool(v).value for k, v in inner.items()} for inner in import_data]
                         if not model:
                             return import_data
                     elif text_ok:
@@ -552,7 +568,7 @@ class Config:
                             "Provide valid file with format/extension [.json/.yaml/.yml/.csv]!"
                         )
             except Exception as e:
-                e.add_note(f'Unable to load data from {import_file} due to error above')
+                print(f'Unable to load data from {import_file}: {repr(e)}', file=sys.stderr)
                 raise e
 
             if isinstance(import_data, list):
@@ -632,7 +648,7 @@ class Config:
 
             return workspace_dict
 
-    def first_run(self) -> str:  # pragma: no cover
+    def first_run(self):  # pragma: no cover
         """Method to collect configuration from user when no config file exists.
 
         Returns:

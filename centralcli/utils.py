@@ -7,10 +7,12 @@ import json
 import logging
 import os
 import string
+import subprocess as sp
 import sys
 import urllib.parse
 from datetime import datetime
 from enum import Enum
+from itertools import chain
 from pathlib import Path
 from random import choice
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
@@ -24,9 +26,13 @@ from rich.color import ANSI_COLOR_NAMES
 from rich.console import Console
 from rich.pretty import pprint
 
-from centralcli.typedefs import StrOrURL, StrEnum
+from centralcli.typedefs import StrEnum, StrOrURL
 
 if TYPE_CHECKING:
+    from multidict import CIMultiDictProxy
+
+    from centralcli.cache import CentralObject
+
     from .typedefs import PrimaryDeviceTypes
 
 # removed from output and placed at top (provided with each item returned)
@@ -48,7 +54,7 @@ class ToBool:
             return True
 
     def __bool__(self) -> bool:
-        return self.value
+        return bool(self.value)
 
     @property
     def ok(self) -> bool:
@@ -153,6 +159,11 @@ class Mac(Convert):
         return list(map(case_func, [getattr(mac, mac_format.value.lower()) for mac in mac_objects]))
 
 
+class VarValueSource(str, Enum):
+    VARIABLES = "variables"
+    TAGS = "tags"
+
+
 class Utils:
     def __init__(self):
         self.Mac = Mac
@@ -196,10 +207,10 @@ class Utils:
         return True if res_id and len(res_id) == 36 and res_id.count("-") == 4 else False
 
     @overload
-    def listify(self, var: str | Sequence[str]) -> Sequence[str]: ...
+    def listify(self, var: str | list[str]) -> list[str]: ...
 
     @overload
-    def listify(self, var: PrimaryDeviceTypes | Sequence[PrimaryDeviceTypes]) -> Sequence[str]: ...
+    def listify(self, var: PrimaryDeviceTypes | list[PrimaryDeviceTypes]) -> list[PrimaryDeviceTypes]: ...
 
     @overload
     def listify(self, var: int | Sequence[int]) -> Sequence[int]: ...
@@ -208,10 +219,13 @@ class Utils:
     def listify(self, var: dict | Sequence[dict]) -> Sequence[dict]: ...
 
     @overload
-    def listify(self, var: tuple) -> Sequence: ...
+    def listify(self, var: tuple) -> tuple: ...
 
     @overload
-    def listify(self, var: list) -> Sequence: ...
+    def listify(self, var: list) -> list: ...
+
+    @overload
+    def listify(self, var: list, flatten: bool) -> list[Any]: ...
 
     @overload
     def listify(self, var: None) -> None: ...
@@ -295,12 +309,19 @@ class Utils:
 
         return contents
 
+    @staticmethod
     @overload
     def strip_none(data: dict, strip_empty_obj: Optional[bool]) -> dict: ...
 
+    @staticmethod
     @overload
     def strip_none(data: list, strip_empty_obj: Optional[bool]) -> list: ...
 
+    @staticmethod
+    @overload
+    def strip_none(data: list) -> list: ...
+
+    @staticmethod
     @overload
     def strip_none(data: None, strip_empty_obj: Optional[bool]) -> None: ...
 
@@ -330,7 +351,28 @@ class Utils:
             return data
 
     @staticmethod
-    def strip_no_value(data: list[dict] | dict[dict], aggressive: bool = False) -> list[dict] | dict[dict]:
+    def _strip_no_value_from_dicts(data: list[dict[str, Any]], aggressive: bool = False) -> list[dict[str, Any]]:
+        no_val_strings = ["Unknown", "NA", "None", "--", "-", ""]
+        no_strip_types = (bool, int) if not aggressive else (bool,)
+        if aggressive:
+            return [
+                {
+                    k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, no_strip_types) and not v)]
+                } for inner in data
+            ]
+
+        no_val: List[List[str]] = [
+            [k for k, v in inner.items() if (not isinstance(v, no_strip_types) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
+            for inner in data
+        ]
+        if no_val:
+            common_keys: set = set.intersection(*map(set, no_val))  # common keys that have no value
+            data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
+
+        return data
+
+
+    def strip_no_value(self, data: list[dict] | dict[str, dict], aggressive: bool = False) -> list[dict] | dict[str, dict]:
         """strip out any columns that have no value in any row
 
         Accepts either list of dicts, or a dict where the value for each key is a dict
@@ -343,55 +385,43 @@ class Utils:
         Returns:
             List[dict] | Dict[dict]: processed data
         """
-        no_val_strings = ["Unknown", "NA", "None", "--", ""]
         if isinstance(data, list):
-            if aggressive:
-                return [
-                    {
-                        k: v for k, v in inner.items() if k not in [k for k in inner.keys() if (isinstance(v, str) and v in no_val_strings) or (not isinstance(v, bool) and not v)]
-                    } for inner in data
-                ]
-
-            no_val: List[List[str]] = [
-                [k for k, v in inner.items() if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)]
-                for inner in data
-            ]
-            if no_val:
-                common_keys: set = set.intersection(*map(set, no_val))  # common keys that have no value
-                data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
-
+            data = self._strip_no_value_from_dicts(data, aggressive=aggressive)
         elif isinstance(data, dict) and all(isinstance(d, dict) for d in data.values()):
-            if aggressive:
-                return {k:
-                    {
-                        sub_k: sub_v for sub_k, sub_v in v.items() if k not in [k for k in v.keys() if (isinstance(sub_v, str) and sub_v in no_val_strings) or (not isinstance(sub_v, bool) and not sub_v)]
-                    }
-                    for k, v in data.items()
-                }
-            # TODO REFACTOR like above using idx can be problematic with unsorted data where keys may be in different order
-            no_val: List[List[int]] = [
-                [
-                    idx
-                    for idx, v in enumerate(data[id].values())
-                    if (not isinstance(v, bool) and not v) or (isinstance(v, str) and v and v in no_val_strings)
-                ]
-                for id in data
-            ]
-            if no_val:
-                common_keys: set = set.intersection(*map(set, no_val))
-                data = {id: {k: v for idx, (k, v) in enumerate(data[id].items()) if idx not in common_keys} for id in data}
+            values = self._strip_no_value_from_dicts(list(data.values()), aggressive=aggressive)
+            data = {k: v for k, v in zip(data.keys(), values)}
         else:
-            log.error(
+            log.info(
                 f"utils.strip_no_value recieved unexpected type {type(data)}. Expects list[dict], or dict[dict]. Data was returned as is."
             )
 
         return data
 
+    @overload
+    def all_keys(self, data: list[dict[str, Any]], with_value: Literal[False]) -> set[str]: ...  # pragma: no cover
+
+    @overload
+    def all_keys(self, data: list[dict[str, Any]], with_value: Literal[True]) -> list[str]: ...  # pragma: no cover
+
+    def all_keys(self, data: list[dict[str, Any]], with_value: bool = False) -> set[str] | list[str]:
+        if not with_value:
+            return {key for key in chain.from_iterable(data)}
+        else:
+            return list(chain.from_iterable(self.strip_no_value(data, aggressive=True)))
+
+    def format_table(self, data: list[dict[str, Any]], key_order: list[str] = None) -> list[dict[str, Any]]:
+        """Given a list of dicts return a list of dicts, ensuring each dict has the same set of keys."""
+        _all_keys = self.all_keys(data)
+        all_keys = _all_keys if not key_order else [*[k for k in key_order if k in _all_keys], *[k for k in _all_keys if k not in key_order]]
+        return [{k: d.get(k) for k in all_keys} for d in data]
+
     @staticmethod
     def color(
         text: str | bool | List[str],
         color_str: str = "bright_green",
+        *,
         pad_len: int = 0,
+        dim: bool = None,
         italic: bool = None,
         bold: bool = None,
         blink: bool = None,
@@ -410,6 +440,7 @@ class Utils:
                 color for each item in the list.
                 Default: bright_green
             pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
+            italic (bool, optional): Wheather to apply dim format to text.
             italic (bool, optional): Wheather to apply italic to text.
                 Default False if str is provided for text True if bool is provided.
             bold (bool, optional): Wheather to apply bold to text. Default None/False
@@ -421,25 +452,23 @@ class Utils:
             italic = True if italic is None else italic
             text = str(text)
 
-        def get_color_str(color: str):
-            if color == "random":
-                color = choice(list([c for c in ANSI_COLOR_NAMES.keys() if "black" not in c]))
+        def _get_color_str(_color: str):  # , _dim: bool = False, _italic: bool = False, _bold: bool = False, _blink: bool = False):
+            if _color == "random":
+                _color = choice(list([c for c in ANSI_COLOR_NAMES.keys() if "black" not in c and "red" not in c]))
 
-            if not any([italic, bold, blink]):
-                return color
-
-            _color = color if not italic else f"italic {color}"
-            _color = color if not bold else f"bold {color}"
-            _color = color if not blink else f"blink {color}"
+            _color = _color if not blink else f"blink {_color}"
+            _color = _color if not italic else f"italic {_color}"
+            _color = _color if not bold else f"bold {_color}"
+            _color = _color if not dim else f"dim {_color}"
 
             return _color
 
         if isinstance(text, str):
-            color = get_color_str(color_str)
+            color = _get_color_str(color_str)
             text = f"{' ' if pad_len else '':{pad_len or 1}}[{color}]{text}[/]"
             return text if not pad_len else text.lstrip()  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
         elif isinstance(text, (list, set)) and all([isinstance(x, str) for x in text]):
-            colors = [get_color_str(color_str) for _ in range(len(text))]
+            colors = [_get_color_str(color_str) for _ in range(len(text))]
             text = [f"{' ' if pad_len else '':{pad_len or 1}}[{c}]{t}[/]" for t, c in zip(text, colors)]
             text = text if pad_len else [t.lstrip() for t in text]  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
             return sep.join(text)
@@ -449,6 +478,15 @@ class Utils:
     @staticmethod
     def chunker(seq: Iterable, size: int):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
+
+    @staticmethod
+    def normalize_device_sub_field(data: list[dict[str,  str]], *, word_sep: Literal["-", "_"] = None) -> list[dict[str, str]]:
+        possible_sub_keys = ["license", "services", "subscription"]
+        if not word_sep:
+            return [{k if k.lower() not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
+
+        from_char = "_" if word_sep == "-" else "-"
+        return [{k if k.lower() not in possible_sub_keys else "subscription": v if k not in possible_sub_keys else (v and v.replace(from_char, word_sep)) for k, v in dev.items()} for dev in data]
 
 
     @staticmethod
@@ -607,7 +645,7 @@ class Utils:
         return from_time, to_time
 
     @staticmethod
-    def summarize_list(items: List[str, StrEnum], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
+    def summarize_list(items: list[str | StrEnum | CentralObject], max: int = 6, pad: int = 4, sep: str = '\n', color: str | None = 'cyan', italic: bool = False, bold: bool = False, use_enum_name: bool = False) -> str:
         if not items:
             return ""
 
@@ -621,6 +659,7 @@ class Utils:
             fmt = ""
             item_sep = "...".rjust(pad + 3)
 
+        items = [item if not hasattr(item, "summary_text") else getattr(item, "summary_text") for item in items]
         enum_attr = "value" if not use_enum_name else "name"
         items = [item if not hasattr(item, enum_attr) else getattr(item, enum_attr) for item in items]
         items = [f'{"" if not pad else " " * pad}{fmt}{item}{"[/]" if fmt else ""}' for item in items]
@@ -636,6 +675,38 @@ class Utils:
             confirm_str = sep.join(items)
 
         return confirm_str
+
+    def summarize_data(self, data: list[dict[str, str | int | bool]], max: int = 12, pad: int = 2, sep: str = '\n') -> str:
+        """Given a list of dicts with undetermined keys/fields, return a string summarizing those values.
+
+        Args:
+            data (list[dict[str, str | int | bool]]): The data to be summarized.
+            pad (int, optional): Amount of padding to prepend to each line.
+
+        Returns:
+            str: summary of each dict, 1 line per dict.
+        """
+        ignore_fields = ["ignore", "retired"]
+        out_list = [
+            '|'.join(
+                [
+                    f'[green]{k}[/]:[cyan]{v}[/]' if k != 'status' else f'[{"red" if v.lower() == "down" else "bright_green"}]{v}[/]'  for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))
+                ]
+            )
+            for d in data
+        ]
+        # out = self.summarize_list(list(map(lambda line: f"{' ':<{pad}}{line}\n", out_list)), max=max, pad=pad, sep=sep)
+        out = self.summarize_list(out_list, max=max, pad=pad, sep=sep)
+        return out
+
+    @staticmethod
+    def get_mock_append(method: Literal["GET", "POST", "PUT", "PATCH", "DELETE"], json_data: Any, headers: CIMultiDictProxy[str] = None) -> str | None:
+        """mock_key is for testing w/ mock responses."""
+        mock_key_append = None
+        if method == "POST" and (headers is None or headers.get("Location")) and isinstance(json_data, dict):  # indicates this is a GLP device add, when called with no headers it's for a mock response lookup
+            mock_key_append = json_data and json_data.get("serialNumber", json_data.get("id"))
+            mock_key_append = mock_key_append and f":{mock_key_append}"
+        return mock_key_append
 
     @staticmethod
     def older_than(ts: int | float | datetime, time_frame: int, unit: Literal["days", "hours", "minutes", "seconds", "weeks", "months"] = "days", tz: str = "UTC") -> bool:
@@ -663,7 +734,7 @@ class Utils:
         return ''.join([line for line in str(exc).splitlines(keepends=True) if not line.lstrip().startswith("For further")])
 
     @staticmethod  # HACK # REQUESTS still using requests/prepared to build the multi-part form data, as have not been able to get it to work with aiohttp
-    def build_multipart_form_data(url: StrOrURL, method: str = "POST", *, files: dict, params: dict[str, str] = None, base_url: StrOrURL = None) -> dict[str, bytes, dict[str, str]]:
+    def build_multipart_form_data(url: StrOrURL, method: str = "POST", *, files: dict, params: dict[str, str] = None, base_url: StrOrURL = None) -> dict[str, bytes | dict[str, str]]:
         import requests
         req_url = f"{base_url or ''}{url}"
         req = requests.Request(method, url=req_url, params=params, files=files)
@@ -684,15 +755,58 @@ class Utils:
 
         return phone
 
-if __name__ == "__main__":
-    utils = Utils()
-    x = ["[dark_orange2]:warning:[/] This is a test.", "[bright_green]:recycle:[/]This is also a test"]
-    from centralcli import cache
-    from centralcli.cache import CacheDevice
-    cache_devs = [CacheDevice(d) for d in cache.devices]
-    y = [*x, *[d.rich_help_text for d in cache_devs]]
-    console = Console()
+    @staticmethod
+    def open_file_with_editor(filename: str | Path):  # pragma: no cover  requires tty
+        filename = filename if isinstance(filename, Path) else Path(filename)
+        if not filename.is_file():
+            Console(stderr=True).print(f"Unable to open {filename}.  Not found")
+            return
 
-    console.print(f"{utils.summarize_list(y, color=None, max=40, emoji=False)}")
+        args = []
+        if sys.platform.startswith("win"):
+            editor = "notepad.exe"
+        elif sys.platform == "darwin": # macOS
+            editor = "open"
+            args = ["-t"]  # '-t' for the default text editor, '-e' opens with TextEdit
+        else: # Linux/Unix
+            # use EDITOR env var fallback to 'editor' (which typically links to nano or vim)
+            editor = os.environ.get('EDITOR', 'editor')
+
+        # Launch the editor process and wait for it to close
+        sp.Popen([editor, *args, str(filename)] + args).wait()
+
+    @staticmethod
+    def parse_var_value_list(var_value: list[str], *, source: VarValueSource = VarValueSource.TAGS) -> dict[str, str]:
+        # GLP tags are a key value pair, but you can just have a single str by setting the key to something with an empty str as the value.
+        if "=" not in str(var_value) and source == VarValueSource.TAGS:
+            tags = [t.strip().rstrip(",") for t in var_value]
+            return {t: "" for t in tags}
+
+        vars, vals, get_next = [], [], False
+        for var in var_value:
+            var = var.rstrip(",")
+            if var == '=':
+                continue
+            if '=' not in var:
+                if get_next:
+                    vals += [var]
+                    get_next = False
+                else:
+                    vars += [var]
+                    get_next = True
+            else:
+                _ = var.replace(" = ", "=").replace("'", "").strip().split('=')
+                vars += [_[0]]
+                vals += [_[1]]
+                get_next = False
+
+        if len(vars) != len(vals):
+            econsole = Console(stderr=True)
+            econsole.print(f"[dark_orange3]\u26a0[/]  Something went wrong parsing {source.value}.  Unequal length for {source.value} vs values.", emoji=False)
+            raise typer.Exit(1)
+
+        return {k: v for k, v in zip(vars, vals)}
+
+if __name__ == "__main__":
     ...
 

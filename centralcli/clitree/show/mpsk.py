@@ -45,7 +45,7 @@ def named(
     enabled: bool = typer.Option(None, "-E", "--enabled", help="Show enabled named MPSKs", show_default=False, rich_help_panel="Filtering Options",),
     disabled: bool = typer.Option(None, "-D", "--disabled", help="Show disabled named MPSKs", show_default=False, rich_help_panel="Filtering Options",),
     csv_import: bool = typer.Option(False, "--import", help=f"Output named MPSKs using format required for import into Cloud-Auth [dim italic]implies --csv[/] {render.help_block('ssid', 'requires')}", show_default=False, rich_help_panel="Formatting",),
-    verbose: int = common.options.verbose,
+    verbose: int = common.options.get("verbose", help="Verbosity: Include the psk and mpsk-id in output"),
     sort_by: SortNamedMpskOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,

@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "9.2.3"
+version = "9.3.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -236,3 +236,17 @@ docstring-code-format = false
 # This only has an effect when the `docstring-code-format` setting is
 # enabled.
 docstring-code-line-length = "dynamic"
+
+[tool.ty.rules]
+invalid-return-type = "ignore"
+not-subscriptable = "ignore"
+invalid-parameter-default = "ignore"
+invalid-argument-type = "ignore"
+invalid-assignment = "ignore"
+possibly-missing-attribute = "ignore"
+no-matching-overload = "ignore"
+unsupported-operator = "ignore"
+unresolved-attribute = "ignore"
+invalid-method-override = "ignore"
+not-iterable = "ignore"
+invalid-exception-caught = "ignore"

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 import tablib
 import typer
-from pydantic import RootModel, ValidationError
+from pydantic import ValidationError
 from rich.markup import escape
 
 from centralcli import cleaner, common, log, render, utils
@@ -30,33 +30,34 @@ def batch_add_cloudauth(import_file: Path, upload_type: CloudAuthUploadTypes = "
 
     render.econsole.print(f"Upload{'' if not yes else 'ing'} [bright_green]{len(data)}[/] [cyan]{upload_type.upper()}s[/] defined in [cyan]{import_file.name}[/] to Cloud-Auth{f' for SSID: [cyan]{ssid.name}[/]' if upload_type == 'mpsk' else ''}")
     # cloudauth accepts csv files
-    if upload_type in ["mpsk", "mac"]:
-        if upload_type == "mac":
-            Model = ImportMACs
-            upload_fields = {
-                "mac": "Mac Address",
-                "name": "Client Name"
-            }
-        else:
-            Model = ImportMPSKs
-            upload_fields = {
-                "name": "Name",
-                "role": "Client Role",
-                "status": "Status"
-            }
-            if "mpsk" in map(str.lower, data[0].keys()):
-                log.warning("MPSK can not be configured, this API only supports generation of random MPSKs, not user specified MPSKs.  It will fail if MPSK column is provided in the import.  Elliminating MPSK column.", show=True, caption=True)
+    if upload_type == "mac":
+        Model = ImportMACs
+        upload_fields = {
+            "mac": "Mac Address",
+            "name": "Client Name"
+        }
+    elif upload_type == "mpsk":
+        Model = ImportMPSKs
+        upload_fields = {
+            "name": "Name",
+            "role": "Client Role",
+            "status": "Status"
+        }
+        if "mpsk" in map(str.lower, data[0].keys()):  # pragma: no cover
+            log.warning("MPSK can not be configured, this API only supports generation of random MPSKs, not user specified MPSKs.  It will fail if MPSK column is provided in the import.  Elliminating MPSK column.", show=True, caption=True)
+    else:  # pragma: no cover
+        raise ValueError(f"Invalid upload_type {upload_type}, Valid values 'mac', 'mpsk'")
 
-        try:
-            data = Model(data)
-        except ValidationError as e:
-            common.exit(utils.clean_validation_errors(e))
+    try:
+        data = Model(data)
+    except ValidationError as e:
+        common.exit(utils.clean_validation_errors(e))
 
-        data: RootModel = data.model_dump()
-        # CACHE cache update after successful upload
+    data = data.model_dump()
+    # CACHE cache update after successful upload
 
-        # We use a uniform set of logical field headers/spacing/case. Need to convert to the random 💩 used by Central
-        data = [{upload_fields[k]: mpsk[k] for k in mpsk} for mpsk in data]
+    # We use a uniform set of logical field headers/spacing/case. Need to convert to the random 💩 used by Central
+    data = [{upload_fields[k]: mpsk[k] for k in mpsk} for mpsk in data]
 
     ds = tablib.Dataset().load(json.dumps(data), format="json")
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".csv") as tmp_file:
@@ -68,10 +69,10 @@ def batch_add_cloudauth(import_file: Path, upload_type: CloudAuthUploadTypes = "
         render.econsole.print(f"\nContents of file prepped for upload ({str(tmp_path)}):")
         render.econsole.print(tmp_path.read_text())
 
-    if render.confirm(yes):
-        resp = api.session.request(api.cloudauth.upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
-        tmp_path.unlink()
-        log.debug(f"CloudAuth Temp file ({tmp_path}) deleted")
+    render.confirm(yes)
+    resp = api.session.request(api.cloudauth.upload, upload_type=upload_type, file=tmp_path, ssid=None if not ssid else ssid.name)
+    tmp_path.unlink()
+    log.debug(f"CloudAuth Temp file ({tmp_path}) deleted")
 
     return resp
 
@@ -97,13 +98,7 @@ def sites(
         common.exit(render._batch_invalid_msg("cencli batch add sites [OPTIONS] [IMPORT_FILE]"))
 
     resp = common.batch_add_sites(import_file, yes=yes)
-    if resp.ok:
-        try:
-            resp.output = cleaner.sites(resp.output)
-        except Exception as e:  # pragma: no cover
-            log.error(f"Error cleaning output of batch site addition {repr(e)}", caption=True, log=True)
-
-    render.display_results(resp, title="Batch Add Sites",)
+    render.display_results(resp, title="Batch Add Sites", cleaner=cleaner.sites)
 
 
 @app.command()
@@ -136,7 +131,15 @@ def groups(
 def devices(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    yes: bool = common.options.yes,
+    _tags: list[str] = typer.Argument(None, metavar="", hidden=True),  # HACK because list[str] does not work for typer.Option
+    tags: list[str] = common.options.get("tags", hidden=not common.cache.config.glp.ok),
+    sub: str = common.options.get(
+        "subscription",
+        help="Assign this subscription to [bright_green]all[/] devices found in import [red italic](overrides subscription in import if defined)[/]",
+        autocompletion=common.cache.sub_completion,
+        hidden=not common.cache.config.glp.ok
+    ),
+    yes: int = common.options.yes_int,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
@@ -152,7 +155,10 @@ def devices(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch add devices [OPTIONS] [IMPORT_FILE]"))
 
-    resp = common.batch_add_devices(import_file, yes=yes)
+    _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
+    tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags])
+
+    resp = common.batch_add_devices(import_file, tags=tag_dict, subscription=sub, yes=yes)
     if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:  # pragma: no cover # TOGLP will add to tests once adjusted to use GLP
         log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True, log=True)
         log.info(f"Use [cyan]cencli batch verify devices {import_file}[/] to check status of license assignment.", caption=True)
@@ -233,13 +239,8 @@ def macs(
         "\nUse [cyan]cencli show cloud-auth upload[/] to see the status of the import.\n"
         "Use [cyan]cencli show cloud-auth registered-macs[/] to see all registered macs."
     )
-    if resp.ok:
-        try:
-            resp.output = cleaner.cloudauth_upload_status(resp.output)
-        except Exception as e:  # pragma: no cover
-            log.error(f"Error cleaning output of cloud auth mac upload {repr(e)}", caption=True, log=True)
 
-    render.display_results(resp, tablefmt="action", title="Batch Add MACs (cloud-auth)", caption=caption)
+    render.display_results(resp, tablefmt="action", title="Batch Add MACs (cloud-auth)", caption=caption, cleaner=cleaner.cloudauth_upload_status)
 
 
 @app.command()
@@ -270,7 +271,7 @@ def mpsk(
         f"Use [cyan]cencli show mpsk named {ssid.name} -v[/] to determine the randomly generated MPSKs[/dim italic]"
     ]
 
-    render.display_results(resp, tablefmt="action", title="Batch Add MPSK", caption=caption)
+    render.display_results(resp, tablefmt="action", title="Batch Add MPSK", caption=caption, cleaner=cleaner.cloudauth_upload_status)
 
 @app.callback()
 def callback():

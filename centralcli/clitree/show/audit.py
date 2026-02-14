@@ -230,6 +230,10 @@ def logs(
                 body = f'  body:\n    {"    ".join(body.splitlines(keepends=True))}'
                 other = "\n".join([f"{k}: {str(v)}" for k, v in resp.output.items() if k != "body"])
                 resp.output = f"{other}\n{body}"
+            else:  # pragma: no cover
+                ...
+        else:  # pragma: no cover
+            ...
         render.display_results(resp, tablefmt="action")
     else:
         tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="rich" if not verbose else "yaml")

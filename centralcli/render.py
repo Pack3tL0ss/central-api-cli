@@ -14,7 +14,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union, Callable
 
 import typer
 import yaml
@@ -846,7 +846,7 @@ def _sort_results(
         if not all([sort_by in d for d in data]):
             sort_msg = [
                     f":warning:  [dark_orange3]Sort Error: [cyan]{sort_by}[reset] does not appear to be a valid field",
-                    "Valid Fields: {}".format(", ".join([f'{k.replace(" ", "-")}' for k in data[0].keys()]))
+                    "Valid Fields: {}".format(", ".join([f'{str(k).replace(" ", "-")}' for k in data[0].keys()]))
             ]
         else:
             try:
@@ -906,6 +906,25 @@ def _update_captions(caption: List[str] | str, resp: Response | List[Response] =
 
     return caption, rl_str
 
+
+def _clean_output(data: list[dict] | list[str] | dict | None, cleaner: Callable, **cleaner_kwargs) -> list[dict] | list[str] | dict | None:
+    with Spinner("Cleaning Output..."):
+        _start = time.perf_counter()
+        try:
+            data = cleaner(data, **cleaner_kwargs)
+        except Exception as e:  # pragma: no cover
+            log.error(f"Error cleaning output with {cleaner.__name__}... {repr(e)}", show=True, log=True)
+        _duration = time.perf_counter() - _start
+        log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
+        return data
+
+
+def render_title(title: str, bar_color: str = "green") -> Text:
+    _title = Text.from_markup(f"[dodger_blue2]{title}[/]")
+    _lines = f"[{bar_color}]{'─' * len(_title)}[/]"
+    return Text.from_markup("\n".join([_lines, _title.markup, _lines]))
+
+
 def _display_results(
     data: Union[List[dict], List[str], dict, None] = None,
     tablefmt: str = "rich",
@@ -922,7 +941,7 @@ def _display_results(
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
     min_width: int = 40,
-    cleaner: callable = None,
+    cleaner: Callable = None,
     **cleaner_kwargs,
 ):
     if not data:  # pragma: no cover
@@ -930,13 +949,8 @@ def _display_results(
         return
     data = utils.listify(data)
 
-    if cleaner and not raw_out:
-        with Spinner("Cleaning Output..."):
-            _start = time.perf_counter()
-            data = cleaner(data, **cleaner_kwargs)
-            data = utils.listify(data)
-            _duration = time.perf_counter() - _start
-            log.debug(f"{cleaner.__name__} took {_duration:.2f} to clean {len(data)} records")
+    if cleaner and data and not raw_out:
+        data = utils.listify(_clean_output(data, cleaner, **cleaner_kwargs))
 
     data, caption = _sort_results(data, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, caption=caption)
 
@@ -969,7 +983,7 @@ def _display_results(
     if isinstance(outdata.tty, Text):
         emoji = ":cd:" not in outdata  # HACK prevent :cd: often found in MAC addresses from being rendered as 💿
         if pager and tty and len(outdata) > tty.rows:
-            with console.pager:
+            with console.pager():
                 console.print(outdata, emoji=emoji)
         else:
             console.print(outdata, emoji=emoji)
@@ -1009,7 +1023,7 @@ def display_results(
     full_cols: Union[List[str], str] = [],
     fold_cols: Union[List[str], str] = [],
     min_width: int = 40,
-    cleaner: callable = None,
+    cleaner: Callable = None,
     **cleaner_kwargs,
 ) -> None:
     """Output Formatted API Response to display and optionally to file
@@ -1073,8 +1087,10 @@ def display_results(
             conditions = [len(resp) > 1, tablefmt in ["action", "raw", "clean"], r.ok and not r.output, not r.ok, (isinstance(r.raw, dict) and str(r.raw.get("success")).capitalize() == "False")]
             if any(conditions):
                 if isinstance(title, list) and len(title) == len(resp):
-                    print(title[idx])
+                    print(render_title(title[idx], bar_color="green" if r.ok else "red"))
                 else:
+                    if title and tablefmt == "action" and idx == 0:
+                        print(render_title(title, bar_color="green" if r.ok else "red"))
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
                     print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
@@ -1084,20 +1100,20 @@ def display_results(
                 # raw output (unformatted response from Aruba Central API GW)
                 if tablefmt in ["raw", "clean"]:
                     status_code = f"[{fg}]status code: {r.status}[/{fg}]"
-                    print(r.url)
-                    print(status_code)
+                    econsole.print(r.url)
+                    econsole.print(status_code)
                     if not r.ok:
-                        print(r.error)
+                        econsole.print(r.error)
 
                     if tablefmt == "clean":
                         typer.echo_via_pager(r.output) if pager else typer.echo(r.output)
                     else:
-                        print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
+                        econsole.print("[bold cyan]Unformatted response from Aruba Central API GW[/bold cyan]")
                         plain_console = Console(color_system=None, emoji=False)
                         if config.dev.sanitize:  # pragma: no cover
                             r.raw = json.loads(Output().sanitize_strings(json.dumps(r.raw), config=config))
                         if pager:  # pragma: no cover
-                            with plain_console.pager:
+                            with plain_console.pager():
                                 plain_console.print(r.raw)
                         else:
                             plain_console.print(r.raw)
@@ -1111,14 +1127,19 @@ def display_results(
                     # and formatted contents of any payload. example below
                     # status code: 201
                     # Success
+                    if r.ok and r.output and cleaner and cleaner.__name__ != "simple_kv_formatter":  # We send select action responses through cleaner when they pass
+                        r.output = _clean_output(r.output, cleaner, **cleaner_kwargs)
                     console.print(r, emoji=False)
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
-                if rl_str and idx + 1 == len(resp):  # FIXME caption does not print if there is no rl str with this logic
+                if idx + 1 == len(resp):
+                    rl_str = rl_str or ""
+                    # renove all left padding from caption, better for most action outputs.  Will be reformmated below for other scenarios
+                    caption = "".join(map(str.lstrip, caption.splitlines(keepends=True)))
                     if caption.replace(rl_str, "").lstrip():
                         _caption = f"\n{caption.replace(rl_str, '').rstrip()}" if r.output else f'  {unstyle(caption.replace(rl_str, "")).strip()}'
                         if not r.output:  # Formats any caption directly under Empty Response msg
-                            _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[grey42 italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
+                            _caption = "\n  ".join(f"{'  ' if idx == 0 else ''}[dim italic]{line.strip()}[/]" for idx, line in enumerate(_caption.splitlines()))
                         econsole.print(_caption, end="")
                     econsole.print(f"\n{rl_str}")
 
@@ -1144,8 +1165,8 @@ def display_results(
                     **cleaner_kwargs
                 )
 
-        if exit_on_fail and not all([r.ok for r in resp]):
-            sys.exit(1)
+        if exit_on_fail and any([r.exit_code for r in resp]):
+            raise typer.Exit(1)
 
     elif data:
         _display_results(

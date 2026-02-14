@@ -26,7 +26,7 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
 
 from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
 from centralcli.caas import CaasAPI
-from centralcli.cache import CacheDevice, CentralObject
+from centralcli.cache import CacheDevice, CacheInvDevice, CentralObject
 from centralcli.client import BatchRequest
 from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
@@ -39,7 +39,6 @@ from centralcli.constants import (
     DevTypes,
     DhcpArgs,
     EventDevTypeArgs,
-    GenericDeviceTypes,
     GenericDevTypes,
     InsightSeverity,
     LicenseTypes,
@@ -79,8 +78,8 @@ from centralcli.constants import (
 )
 from centralcli.models.cache import Device
 from centralcli.objects import DateTime, ShowInterfaceFilters
-from centralcli.response import CombinedResponse, Response
-from centralcli.strings import cron_weekly
+from centralcli.response import BatchResponse, Response
+from centralcli.strings import cron_weekly, emoji
 
 from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
 
@@ -104,7 +103,7 @@ app.add_typer(bandwidth.app, name="bandwidth")
 
 
 api = api_clients.classic
-glp_api = api_clients.glp
+
 
 class Counts:
     def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
@@ -113,7 +112,7 @@ class Counts:
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
 
-def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[Dict[str: Dict[str: int]]] | None:
+def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[dict[str, dict[str, int]]] | None:
     """parse response data to determine switch counts by switch type
 
     Args:
@@ -165,8 +164,9 @@ def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
     up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
     return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
 
-def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, verbosity: int = 0) -> str:
-    inventory_only = False  # toggled while building cnt_str if no devices have status (meaning called from show inventory)
+def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, has_filters: bool = False) -> str:
+    # This is only for captions from monitoring UI, potentially with inventory data.  Inventory only resp is
+    # has_filters only applies to devices w/ inventory details it squelches the not on devs lacking a name inventory response caption is done in refresh_inv_db
     if not dev_type:
         if inventory:  # cencli show inventory -v or cencli show all --inv
             status_by_type = _get_counts_with_inv(resp.output)
@@ -205,8 +205,6 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
         _cnt_str = _cnt_str + ", ".join(
             [f'{_get_inv_msg(status_by_type[t], t)}' for t in status_by_type]
         )
-        if "(" not in _cnt_str:
-            inventory_only = True
     else:
         _cnt_str = ", ".join([f'[{"bright_green" if not status_by_type[t]["down"] else "red"}]{t}[/]: [cyan]{status_by_type[t]["total"]}[/] ([bright_green]{status_by_type[t]["up"]}[/]:[red]{status_by_type[t]["down"]}[/])' for t in status_by_type])
 
@@ -221,7 +219,7 @@ def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: 
             log.exception(f"Exception occured in _build_caption\n{e}", exc_info=True)
 
     caption = f"[reset]{'Counts' if not status else f'{status.capitalize()} Devices'}: {_cnt_str}"
-    if inventory and not inventory_only:
+    if inventory and not has_filters:
         caption = f"{caption}\n [italic green3]Devices lacking name/status are in the inventory, but have not connected to central.[/]"
     return caption
 
@@ -266,10 +264,10 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
 # TODO expand params into available kwargs
-def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, verbosity: int = 0,):
+def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, assigned: bool = None, archived: bool = None, has_filters: bool = False):
     if include_inventory:
-        resp = common.cache.get_devices_with_inventory(status=status)
-        caption = _build_device_caption(resp, inventory=True, verbosity=verbosity)
+        resp = common.cache.get_devices_with_inventory(assigned=assigned, archived=archived, status=status)
+        caption = _build_device_caption(resp, inventory=True, has_filters=has_filters)
     else:
         if common.cache.responses.dev:  # pragma: no cover
             log.error("DEV NOTE: _get_details_for_all_devices.  common.cache.responses.dev already has value.", show=True, caption=True, log=True)
@@ -289,49 +287,50 @@ def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[Cac
 
 
 def _get_details_for_specific_devices(
-        devices: List[CentralObject],
+        devices: list[str],
         dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
-        do_table: bool = False
-    ) -> Tuple[Response | List[Response], str]:
+        tabular_output: bool = False
+    ) -> Tuple[BatchResponse, str]:
         caption = None
 
         # Build requests
-        br = BatchRequest
-        devs = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
         dev_types = [dev.type for dev in devs]
-        reqs = [br(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
         # Fetch results from API
-        batch_res = api.session.batch_request(reqs)
+        batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
         if include_inventory:  # Combine results with inventory results
-            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
-            for r, dev in zip(batch_res, devs):
+            _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
+            for r, dev in zip(batch_resp.responses, devs):
                 if r.ok:
                     r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
                 else:
-                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.reason}", caption=True)
+                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
 
-        _update_cache_for_specific_devices(batch_res, devs)
+        _update_cache_for_specific_devices(batch_resp.responses, devs)
 
-        if do_table and len(dev_types) > 1:
-            _output = [r.output for r in batch_res]
-            resp = batch_res[-1]
-            resp.output = _output
-            resp.output = resp.table
+        if tabular_output and len(dev_types) > 1 and len(batch_resp.passed) > 1:
+            _output = [r.output for r in batch_resp.passed]
+            batch_resp.display = batch_resp.last
+            batch_resp.display.output = _output
+            batch_resp.display.output = batch_resp.display.table
             caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
-        else:
-            resp = batch_res
+        # else:
+        #     resp = batch_resp.responses
 
         if "cx" in dev_types:
             caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
 
-        return resp, caption
+        return batch_resp, caption
 
 # TODO break this into multiple functions
 def show_devices(
     devices: str | Iterable[str] = None,
     dev_type: Literal["all", "ap", "gw", "cx", "sw", "switch"] = None,
+    assigned: bool = None,
+    archived: bool = None,
     include_inventory: bool = False,
     verbosity: int = 0,
     outfile: Path = None,
@@ -375,31 +374,42 @@ def show_devices(
     }
 
     params = {k: v for k, v in params.items() if v is not None}
+    filter_params = {k: v for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"]}
     if dev_type is None:
         dev_type = None if devices else "all"
     elif dev_type != "all":
         dev_type = lib_to_api(dev_type)
 
     default_tablefmt = "rich" if not verbosity else "yaml"
+    exit_code = 0
 
     if devices:  # cencli show devices <device iden>
-        verbosity = verbosity or 99  # specific device implies verbose output vertically
+        verbosity = verbosity or 99  # specific device implies verbose output vertically, this is set for cleaner
         default_tablefmt = "yaml"
-        resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, do_table=do_table)
+        batch_resp, caption = _get_details_for_specific_devices(devices, dev_type=dev_type, include_inventory=include_inventory, tabular_output=do_table or do_csv)
+        resp = batch_resp.display or batch_resp.responses
+        exit_code = batch_resp.exit_code
+        if (do_table or do_csv) and batch_resp.failed and len(batch_resp.passed) <= 1:  # override tabular output if failures occured otherwise too many cols for horiz display
+            log.warning("Output switched to vertical due to failures")
+            do_table = do_csv = False
     elif dev_type == "all":  # cencli show all | cencli show devices
-        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, verbosity=verbosity)
+        resp, caption = _get_details_for_all_devices(params=params, include_inventory=include_inventory, status=status, has_filters=bool(filter_params))
     else:  # cencli show switches | cencli show aps | cencli show gateways | cencli show inventory [cx|sw|ap|gw] ... (with any params, but no specific devices)
         resp = api.session.request(common.cache.refresh_dev_db, dev_type=dev_type, **params)
         if include_inventory:
-            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+            _ = api.session.request(common.cache.refresh_inv_db, dev_type=dev_type, assigned=assigned, archived=archived)
             resp = common.cache.get_devices_with_inventory(no_refresh=True, device_type=dev_type, status=status)
 
-        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, verbosity=verbosity)
+        caption = None if not resp.ok or not resp.output else _build_device_caption(resp, inventory=include_inventory, dev_type=dev_type, status=status, has_filters=bool(filter_params))
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default=default_tablefmt)
+
+    # Build title
     title_sfx = [
-        f"{k}: {v}" for k, v in params.items() if k not in ["calculate_client_count", "show_resource_details", "calculate_ssid_count"] and v
-    ] if not include_inventory else ["including Devices from Inventory"]
+        f"{k}: {v}" for k, v in filter_params.items()
+    ]
+    if include_inventory:
+        title_sfx += ["including Devices from Inventory" if not filter_params else "including Inventory details"]
     title = "Device Details" if not dev_type else f"{what_to_pretty(dev_type)} {', '.join(title_sfx)}".rstrip()
 
     # With inventory needs to be serial because inv only devs don't have a name yet.  Switches need serial appended so stack members are unique.
@@ -424,8 +434,10 @@ def show_devices(
         cleaner=cleaner.get_devices,
         verbosity=verbosity,
         output_format=tablefmt,
-        version=version
+        version=version,
+        filter_params=filter_params,
     )
+    common.exit(code=exit_code)
 
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     if not resp.output.get("logo"):
@@ -457,7 +469,7 @@ def all_(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.with_inv,
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -506,7 +518,7 @@ def devices(
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include devices in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.with_inv,
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -547,7 +559,7 @@ def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
     dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {common.help_block('--group', help_type='requires')}[/]"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {common.help_block('--site', help_type='requires')}", show_default=False,),
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include aps in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.get("with_inv", help="Include aps in Inventory that have yet to connect"),
     group: str = common.options.group,
     site: str = common.options.site,
     label: str = common.options.label,
@@ -660,7 +672,7 @@ def gateways_(
     up: bool = typer.Option(False, "--up", help="Filter by gateways that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by gateways that are Down", show_default=False),
     version: str = common.options.version,
-    with_inv: bool = typer.Option(False, "-I", "--inv", help="Include gateways in Inventory that have yet to connect", show_default=False,),
+    with_inv: bool = common.options.get("with_inv", help="Include gateways in Inventory that have yet to connect"),
     verbose: int = common.options.verbose,
     sort_by: SortDevOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -692,11 +704,10 @@ def stacks(
     switches: List[str] = typer.Argument(None, help="List of specific switches to pull stack details for", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_switch_completion, show_default=False,),
     group: str = common.options.group,
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
-    state: StatusOptions = typer.Option(None, hidden=True),  # alias for status, both hidden to simplify as they can use --up or --down
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
     down: bool = typer.Option(False, "--down", help="Filter by devices that are Down", show_default=False),
     version: str = common.options.version,
-    verbose: int = common.options.verbose,
+    verbose: int = common.options.get("verbose", hidden=True),
     sort_by: SortStackOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -751,6 +762,7 @@ def inventory(
         show_default=False,
     ),
     key: str = typer.Option(None, help="Show all devices assigned to a specific subscription [dim](key)[/]", autocompletion=cache.sub_completion),
+    assigned: bool = typer.Option(None, help=f"Show devices Assigned to a service (Aruba Central) or devices lacking an assignment.  {common.help_block('show all')}", show_default=False, hidden=not config.glp.ok),
     verbose: int = common.options.verbose,
     sort_by: SortInventoryOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
@@ -773,20 +785,22 @@ def inventory(
         verbose -= 1
 
         show_devices(
-            dev_type=dev_type, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, assigned=assigned, archived=archived, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
-        )
-        common.exit(code=0 if all([r.ok for r in api.session.requests if r.status != 401 and not r.url.startswith("/oauth2")]) else 1)
+        )  # will display results and exit here
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
-    _api = glp_api or api
-    if key and dev_type == "all":
+    _api = api_clients.glp or api
+    if key and config.glp.ok and dev_type == "all":  # sub cache added with glp support
         sub: CacheSub = cache.get_sub_identifier(key)
         key = sub.key
         dev_type = ShowInventoryArgs(sub.type)
 
-    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type)
+    if assigned is not None:
+        word = "with" if assigned else "[red]lacking[/]"
+        title = f"{title} {word} service assignment"
+    resp = _api.session.request(common.cache.refresh_inv_db, dev_type=dev_type, assigned=assigned)
 
     render.display_results(
         resp,
@@ -802,14 +816,15 @@ def inventory(
         sub=sub,
         key=key
     )
+    common.exit(code=0 if (not config.glp.ok or common.cache.responses.sub) else 1)
 
 
-# TODO break into seperate command group if we can still all show subscription without an arg to default to details
+# TODO break into seperate command group if we can still all show subscription without an arg to default to details see show wids
 @app.command()
 def subscriptions(
     what: SubscriptionArgs = typer.Argument(SubscriptionArgs.details),
     dev_type: GenericDevTypes = typer.Option(None, help="Filter by device type", show_default=False,),
-    service: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license type", autocompletion=cache.sub_completion, show_default=False),
+    sub_name: LicenseTypes = typer.Option(None, "--type", help="Filter by subscription/license name,  [dim italic]i.e. advanced-ap[/]", autocompletion=cache.sub_completion, show_default=False),
     sort_by: SortSubscriptionOptions = common.options.sort_by,
     reverse: bool = common.options.reverse,
     do_json: bool = common.options.do_json,
@@ -831,37 +846,37 @@ def subscriptions(
     set_width_cols = None
     _cleaner_kwargs = {}
     caption = None
-    _api = glp_api or api
-    if what == "details":
-        resp = _api.session.request(cache.refresh_sub_db, sub_type=service, dev_type=dev_type)
-        title = "[green]GLP[/] Subscription Details" if glp_api else "Subscription Details"
-        if resp.ok:
-            _cleaner = cleaner.get_subscriptions
-            set_width_cols = {"name": {"min": 39}}
-            if sort_by:
-                _cleaner_kwargs["default_sort"] = False
-            if not glp_api:  # pragma: no cover
-                try:
-                    _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
-                    _ok_cnt = len(resp.output) - _expired_cnt
-                    caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
-                except Exception as e:
-                    log.exception(f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response\n{e}")
-                    caption = f"{e.__class__.__name__} occured while gathering counts from get_subscriptions response"
 
-    elif what == "auto":
+    if what == "auto":  # Classic API Only  # TOGLP
         resp = api.session.request(api.platform.get_auto_subscribe)
         if resp and "services" in resp.output:
             _auto_subs = [s for s in resp.output["services"] if s != "dm"]
             resp.output = {"auto-sub": "No Subscription types have auto-subscribe enabled"} if not _auto_subs else [{"services": _auto_subs}]
         title = "Services with auto-subscribe enabled"
-    elif what == "stats":
+    elif what == "stats":  # Classic API Only  # TOGLP
         resp = api.session.request(api.platform.get_subscription_stats)
         title = "Subscription Stats"
     elif what == "names":
         resp = api.session.request(common.cache.refresh_license_db)
         title = "Valid Subscription/License Names"
         set_width_cols = {"name": {"min": 39}}
+    else:  # what == "details":
+        _api = api_clients.glp or api
+        resp = _api.session.request(cache.refresh_sub_db, sub_type=sub_name, dev_type=dev_type)
+        title = "Subscription Details ([green]GreenLake[/])"
+        if resp.ok:
+            _cleaner = cleaner.get_subscriptions
+            set_width_cols = {"name": {"min": 39}}
+            if sort_by:
+                _cleaner_kwargs["default_sort"] = False
+            if not config.glp.ok:
+                try:
+                    _expired_cnt = len([s for s in resp.output if s.get("status", "") == "EXPIRED"])
+                    _ok_cnt = len(resp.output) - _expired_cnt
+                    caption = f"[magenta]Subscription counts[/] Total: [cyan]{len(resp.output)}[/], [green]Valid[/]: [cyan]{_ok_cnt}[/], [red]Expired[/]: [cyan]{_expired_cnt}[/]"
+                except Exception as e:  # pragma: no cover
+                    log.exception(f"{repr(e)} occured while gathering counts from get_subscriptions response\n{e}")
+                    caption = f"{repr(e)} occured while gathering counts from get_subscriptions response"
 
     render.display_results(
         resp,
@@ -928,67 +943,25 @@ def swarms(
 
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
-class ParsedCombinedResp:
-    def __init__(self, dev_type: GenericDeviceTypes, passed: List[Response], failed: List[Response], output: List[Dict[str, Any]], raw: Dict[str, Any], elapsed: float, verbosity: int = 0):
-        self.dev_type = dev_type
-        self.passed = passed
-        self.failed = failed
-        self.output = output
-        self.raw = raw
-        self.elapsed = elapsed
-        self.verbosity = verbosity
-
-    @property
-    def to_dict(self) -> dict:
-        return {"response": self.response._response, "output": self.clean, "raw": self.raw, "elapsed": self.elapsed}
-
-    @property
-    def clean(self):
-        _clean = sorted(
-            [inner for r in self.output for inner in cleaner.show_interfaces(r, dev_type=self.dev_type, verbosity=self.verbosity, by_interface=False)],
-            key=lambda d: d["device"]
-        )
-        return cleaner.ensure_common_keys(_clean)
-
-    @property
-    def response(self):
-        return sorted(self.passed or self.failed, key=lambda r: r.rl)[0]
-
-def parse_interface_responses(dev_type: GenericDeviceTypes, responses: List[Response], verbosity: int = 0) -> ParsedCombinedResp:
-    _failed = [r for r in responses if not r.ok]
-    _passed = responses if not _failed else [r for r in responses if r.ok]
-
-    if _failed:
-        try:
-            log.warning(f"Incomplete output!! {len(_failed)} calls failed.  Devices: {utils.color([r.url.path.split('/')[-2:][0] for r in _failed])}. [cyan]cencli show logs --cencli[/] for details.", caption=True)
-        except Exception:  # pragma: no cover
-            log.warning("Incomplete output, failures occured, see log")
 
 
-    output = [r.output for r in _passed]
-    raw = {r.url.path: r.raw for r in [*_passed, *_failed]}
-    elapsed = sum(r.elapsed for r in _passed)
-
-    parsed = ParsedCombinedResp(dev_type, passed=_passed, failed=_failed, output=output, raw=raw, elapsed=elapsed, verbosity=verbosity)
-    return {**parsed.to_dict}
-
-def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str]]:
-    if isinstance(data, dict) and "ethernets" in data:  # single AP output
-        data = data["ethernets"]
-
+def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str], int]:
+    exit_code = 0
     try:
         filtered = data
         filter_caption = None
         if filters.slow:
             filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) < 1000]
-            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [bright_magenta]{len(filtered)}[/]"
+            filter_caption = f"Slow Interfaces (link speed < 1Gbps): [spring_green1]{len(filtered)}[/]"
         elif filters.fast:
             filtered = [d for d in data if d.get("status", "") == "Up" and int(d.get("speed", d.get("link_speed"))) >= 2500]
-            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [bright_magenta]{len(filtered)}[/]"
+            filter_caption = f"Fast Interfaces (link speed >= 2.5Gbps/SmartRate): [spring_green1]{len(filtered)}[/]"
         elif filters.up:
             filtered = [d for d in data if d.get("status", "") == "Up"]
         elif filters.down:
             filtered = [d for d in data if d.get("status", "") == "Down"]
+        else:  # pragma: no cover  filters checked before send here, but still prefer it explicit here.
+            ...
 
         if not filtered:
             log.warning("Filters resulted in no results. Showing unfiltered output", caption=True)
@@ -998,10 +971,11 @@ def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters,
             caption = [c if not c.lstrip().startswith("Counts:") else f"{c} {filter_caption}" for c in caption]
 
     except Exception as e:  # pragma: no cover
-        log.exception(f"{e.__class__.__name__} in do_interface_filters\n{e}")
-        log.warning(f"{e.__class__.__name__} while attempting to filter output.  Please report issue on GitHub", caption=True)
+        exit_code = 1
+        log.exception(f"{repr(e)} in do_interface_filters")
+        log.warning(f"{repr(e)} while attempting to filter interface output.  Please report issue on GitHub.", caption=True)
 
-    return data, caption
+    return data, caption, exit_code
 
 
 # TODO define sort_by fields
@@ -1089,7 +1063,7 @@ def interfaces(
             title_sfx = f" in site {site.name}"
         if group:
             devs = [d for d in devs if d.group == group.name]
-            title_sfx = f" and group {group.name}" if site else f" in group {group.name}"
+            title_sfx = f"{title_sfx} and group {group.name}" if site else f" in group {group.name}"
 
         if not devs:
             common.exit(f"Combination of filters resulted in no {lib_to_gen_plural(dev_type)} to process")
@@ -1113,15 +1087,32 @@ def interfaces(
         render.econsole.print(f"[dark_orange3]:warning:[/]  This operation will result in {len(batch_reqs)} additional API calls")
         render.confirm(yes)
 
-    batch_resp = api.session.batch_request(batch_reqs)
+    batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
+    if not batch_resp.passed:  # all failed
+        return render.display_results(batch_resp.responses, tablefmt="action")
 
     # We need to include name and dev_type from cache for multi-device listings (not included in payload of all the interface endpoints)
-    if len(batch_resp) > 1:
-            for d, r in zip(devs, batch_resp):
-                if r.ok:
-                    r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in utils.listify(r.output)]
+    skip_failed = []
+    # if len(batch_resp) > 1:
+    for d, r in zip(devs, batch_resp.responses):
+        if r.ok:
+            if "member_port_detail" in r.output:  # vsf stack
+                normal_ports = [p for mbr in r.output["member_port_detail"] for p in mbr["ports"]]
+                stack_ports = [{**{k: "--" if k not in p else p[k] for k in normal_ports[0].keys()}, "type": "STACK PORT"} for sw in r.output["member_port_detail"] for p in sw.get("stack_ports", [])]
+                iface_list = cleaner.sort_interfaces([*normal_ports, *stack_ports])
+            else:
+                iface_list = utils.listify(r.output)
+                _ethernets = [iface for i in iface_list if "ethernets" in i for iface in i["ethernets"]]  # AP interfaces are in "ethernets" key of monitoring ap details endpoint response
+                iface_list = _ethernets or iface_list
 
-    resp = batch_resp[0] if len(batch_resp) == 1 else CombinedResponse(batch_resp, lambda responses: parse_interface_responses(dev_type, responses=responses, verbosity=verbose,))
+
+            r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in iface_list]
+        else:
+            skip_failed += [f"  {d.summary_text}|[red]{r.error}[/]"]
+
+    if skip_failed:
+        log.warning(f"Incomplete output!! {len(skip_failed)} calls failed.  Skipped Devices:", caption=True)
+        [log.info(skip_msg, caption=True) for skip_msg in skip_failed]
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich" if not verbose else "yaml")
     title = f"{filters.title_sfx}Interfaces for all {lib_to_gen_plural(dev_type)}{title_sfx}" if len(devs) > 1 else f"{devs[0].name} {filters.title_sfx}Interfaces"
@@ -1129,50 +1120,54 @@ def interfaces(
     caption = []
     min_width = None
     if dev_type == "switch":
-        if "sw" in [d.type for d in devs] and resp.ok:
-            dev_type = dev_type if len(batch_resp) > 1 else "sw"  # So single device cleaner gets specific dev_type
-            caption = ["[deep_sky_blue1]\u2139[/]  Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]  # \u2139 = :information:
-        if "cx" in [d.type for d in devs] and resp.ok:
-            caption = ["[deep_sky_blue1]\u2139[/]  [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
+        dev_types = [d.type for d in devs]
+        if len(dev_types) > 1 and tablefmt in cleaner.TABULAR_FORMATS:
+            batch_resp.output = utils.format_table(batch_resp.output)  # so a combined listing including cx and sw have correct dimensions for tabular display
+        if "sw" in dev_types:
+            caption = [f"{emoji.info} Native VLAN for trunk ports not shown for aos-sw as not provided by the API"]
+        if "cx" in dev_types:
+            caption = [f"{emoji.info} [dim italic]L3 interfaces for CX switches will show as Access/VLAN 1 as the L3 details are not provided by the API[/dim italic]"]
             min_width = 106
-
-    if resp:
-        try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
-            ifaces = resp.output if "ethernets" not in resp.output else resp.output["ethernets"]
-            ifaces = utils.listify(ifaces)  # listify as individual dev response is a dict, vs List for multi-device
-            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i["status"] is None]))
+    try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
+        ifaces = batch_resp.output
+        if not ifaces:  # Device that's been down for some time, I've seen an API response with no payload
+            caption = [f"{emoji.warn} No interfaces returned, Empty payload in API response."]
+        else:
+            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i.get("status") is None]))
             if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
                 word = "devices" if len(_invalid_payload) > 1 else "device"
-                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status", caption=True, log=True)
-                ifaces = [i for i in ifaces if i["status"] is not None]
+                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status, or an empty list.", caption=True, log=True)
+                ifaces = [i for i in ifaces if i.get("status") is not None]
 
             up_ifaces = [i["status"].lower() for i in ifaces].count("up")
             down_ifaces = len(ifaces) - up_ifaces
 
             caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
-        except Exception as e:  # pragma: no cover
-            log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
+    except Exception as e:  # pragma: no cover
+        log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
 
-        if filters:
-            resp.output, caption = do_interface_filters(resp.output, filters=filters, caption=caption)
+    exit_code = batch_resp.exit_code
+    if filters:
+        batch_resp.output, caption, exit_code = do_interface_filters(batch_resp.output, filters=filters, caption=caption)
 
     # TODO cleaner returns a Dict[dict] assuming "vsx enabled" is the same bool for all ports put it in caption and remove from each item
     render.display_results(
-        resp,
+        batch_resp.display or batch_resp.responses,
         tablefmt=tablefmt,
         title=title,
         caption=caption,
         pager=pager,
         outfile=outfile,
-        sort_by=sort_by,
+        sort_by=None if verbose else sort_by or "device",
         reverse=reverse,
         output_by_key=None,
-        group_by=None if len(batch_resp) <= 1 else "device",
+        group_by=None if (len(batch_resp) <= 1 or sort_by and sort_by != "device") else "device",
         min_width=min_width,
-        cleaner=cleaner.show_interfaces if len(batch_resp) == 1 else None,  # Multi device listing is ran through cleaner already
+        cleaner=cleaner.show_interfaces,
         verbosity=verbose,
         dev_type=dev_type,
     )
+    common.exit(code=exit_code)
 
 
 @app.command()
@@ -1287,7 +1282,7 @@ def vlans(
     obj: CacheDevice | CacheSite = common.cache.get_identifier(dev_site, qry_funcs=("dev", "site"), swack=True)
     if obj.is_site:
         resp = api.session.request(api.topo.get_site_vlans, obj.id)
-    elif obj.is_dev:
+    else:  # obj.is_dev:
         if obj.generic_type == "switch":
             if obj.swack_id:
                 iden = obj.swack_id
@@ -1358,17 +1353,20 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
     cfg_resp = api.session.request(caas.show_config, group=dev.group, dev_mac=dev.mac)
     if not cfg_resp.ok:
         log.error(f"Unable to provide additional DHCP reservation details as call to fetch config failed: {cfg_resp.error}", caption=True)
+        resp.exit_code = 1
         return resp
 
     cfg_resp.output = cfg_resp.output.get("config", cfg_resp.output)
     dhcp_res_lines = [line for line in cfg_resp.output if line.lstrip().startswith("ip dhcp reserved hardware-address")]
     if not dhcp_res_lines:
+        log.warning(f"Unable to provide additional DHCP reservation details call to fetch gw config {cfg_resp.error}, but no dhcp reservation lines were found.", caption=True)
+        resp.exit_code = 1
         return resp
 
     res_by_mac = {r["mac"]: r for r in reservations}
     for line in dhcp_res_lines:
         match = re.match("ip dhcp reserved hardware-address (.*) ip-address (.*) hostname (.*)", line)
-        if match:
+        if match:  # pragma: no cover
             mac, ip, hostname = map(str.strip, match.groups())
             if mac in res_by_mac and res_by_mac[mac].get("ip", "err") == ip:
                 res_by_mac[mac]["client_name"] = hostname
@@ -1469,26 +1467,23 @@ def upgrade(
 
     devs: List[CentralObject] = [common.cache.get_dev_identifier(dev, swack=True,) for dev in devices]
     kwargs_list = [{"swarm_id" if dev.type == "ap" else "serial": dev.swack_id if dev.type == "ap" else dev.serial} for dev in devs]
-    batch_reqs: List[BatchRequest] = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
-    batch_resp: List[Response] = api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True)
-    failed = [r for r in batch_resp if not r.ok]
-    passed = [r for r in batch_resp if r.ok]
+    batch_reqs = [BatchRequest(api.firmware.get_upgrade_status, **kwargs) for kwargs in kwargs_list]
+    batch_resp = BatchResponse(api.session.batch_request(batch_reqs, continue_on_fail=True, retry_failed=True))
 
-    if passed:
-        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, passed)]
-        rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
-        resp = passed[-1]
-        resp.rl = rl[0]
-        resp.output = combined_out
-        if failed:
-            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
-    else:
-        resp = batch_resp
+    if batch_resp.passed:
+        combined_out = [{"name": dev.name, "serial": dev.serial, "site": dev.site, "group": dev.group, **r.output} for dev, r in zip(devs, batch_resp.responses) if r.ok]
+        # rl = [r.rl for r in sorted(batch_resp, key=lambda x: x.rl)]
+        # resp = passed[-1]
+        # resp.rl = rl[0]
+        batch_resp.output = combined_out
+        if batch_resp.failed:
+            batch_resp.display.exit_code = 1
+            _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in batch_resp.failed]
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
     render.display_results(
-        resp,
+        batch_resp.display or batch_resp.responses,
         tablefmt=tablefmt,
         title="Upgrade Status",
         pager=pager,
@@ -2013,7 +2008,6 @@ def config_(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
         help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
-        show_default=False,
     ),
     device: str = typer.Argument(
         None,
@@ -2102,17 +2096,17 @@ def config_(
     elif do_ap or (device and device.generic_type == "ap"):
         func = api.configuration.get_ap_config
         if device:
-            if device.generic_type == "ap":
-                args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
-                if ap_env:
-                    func = api.configuration.get_per_ap_config
-                    args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
-                elif not device.is_aos10:
-                    render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.        else:
-            else:
+            if device.generic_type != "ap":
                 common.exit(f"Invalid input: --ap option conflicts with {device.name} which is a {device.generic_type}")
+
+            args = [device.swack_id]  # We populate swack_id in cache with serial for AOS10, so this works regardless of AOS8 (requires swarm_id) or AOS10 (requires serial)
+            if ap_env:
+                func = api.configuration.get_per_ap_config
+                args = [device.serial]  # in case it's an AOS8 IAP, get_per_ap_config needs serial number not swarm id
+            elif not device.is_aos10:
+                render.econsole.print(f"[yellow]:information:[/]  Showing config for the swarm {device.name} is associated with.")  # TODO log.info(... , caption=True) ... does not print when showing config, ideally this would be at end.
     else:
-        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")
+        common.exit("Command Logic Failure, Please report this on GitHub.  Failed to determine appropriate function for provided arguments/options")  # pragma: no cover
 
     if not device:
         args = [group.name]
@@ -2139,7 +2133,7 @@ def token(
     tokens: dict[str, str] = api.session.auth.getToken()
     if tokens:
         if common.workspace != "default":
-            print(f"Account: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
+            print(f"WorkSpace: [cyan]{common.workspace}")  # pragma: no cover  Test runs only run against default workspace
         print(f"Access Token: [cyan]{tokens.get('access_token', 'ERROR')}")
 
 
@@ -2191,8 +2185,10 @@ def routes(
     )
 
 
-def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]):
-    out, failed, passed = [], [], []
+def _combine_wlan_properties_responses(groups: List[str], responses: List[Response]) -> Response | list[Response]:
+    """returns Response as long as any requests passed.  If all requests failed, returns a list of responses"""
+    out, passed = [], []
+    failed: list[Response] = []
     for group, res in zip(groups, responses):
         if res.ok:
             passed += [res]
@@ -2211,7 +2207,13 @@ def _combine_wlan_properties_responses(groups: List[str], responses: List[Respon
 
     return resp
 
-
+# TODO break this into sep function, this made my head hurt.
+# multiple options.
+# show wlans with no flags:  should grab the summary (get_wlans) / else block below
+# show wlans -v: should get_full_wlan_list but isn't really verbose from the cleaners standpoint, we still want it to use rich
+#   and display horizontal. -vv to show more fields (cleaner verbosity 1), and -vvv to see all fields
+# Would also be good to fetch monitoring get_wlans output and combine those details with get_full_wlan_list, however the client count
+#   is the only additional info it provides.  Globally unless you specify group or swarm_id
 @app.command()
 def wlans(
     name: str = typer.Argument(None, metavar="[WLAN NAME]", help="Get Details for a specific WLAN", show_default=False,),
@@ -2243,7 +2245,9 @@ def wlans(
     title = "WLANs (SSIDs)" if not name else f"Details for SSID {name}"
     if (site or label) and any([group, swarm, verbose]):
         common.exit("Invalid combination of options.  [cyan]--site[/] & [cyan]--label[/] can not be combined with [cyan]-v[/] [dim](verbose)[/], [cyan]--group[/], or [cyan]--swarm[/]")
-    if len([p for p in {site, label, group, swarm} if p]) > 1:
+
+    filter_names = [k for k, v in {"site": site, "label": label, "group": group, "swarm": swarm}.items() if v]
+    if len(filter_names) > 1:
         common.exit("Invalid combination of options.  You can only specify one of [cyan]--group[/], [cyan]--swarm[/], [cyan]--label[/], [cyan]--site[/] options.")
 
     if group:
@@ -2275,32 +2279,63 @@ def wlans(
         "calculate_client_count": True,
     }
 
-    # TODO # FIXME specifying WLAN name ... is ignored if verbose
-    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+    caption = []
+    verbose_caption = []
+    group_by = None
+    pfx = "" if not name else f"Showing [green]1[/] ([cyan]{name}[/]) of "
     if group:  # Specifying the group implies verbose (same # of API calls either way.)
         resp = api.session.request(api.configuration.get_full_wlan_list, group)
-        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in group [cyan]{group}[/]"
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in group [cyan]{group}[/]"]
     elif swarm:
         resp = api.session.request(api.configuration.get_full_wlan_list, swarm)
-        caption = None  if not resp else f"[green]{len(resp.output)}[/] SSIDs configured in swarm associated with [cyan]{_dev.name}[/]"
-        render.display_results(resp, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, tablefmt=tablefmt, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
+        caption = None if not resp else [*caption, f"{pfx}[green]{len(resp.output)}[/] WLANs configured in swarm associated with [cyan]{_dev.name}[/]"]
     elif verbose:
-        _ = api.session.request(common.cache.refresh_group_db)  # TODO what if there is a failure during group_db update?
-        ap_groups = [g["name"] for g in common.cache.groups if "ap" in g["allowed_types"] and not g["wlan_tg"]]
-        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, group) for group in ap_groups]
+        _ = api.session.request(common.cache.refresh_group_db)
+        ap_group_names = [g.name for g in cache.ap_ui_groups]
+        batch_req = [BatchRequest(api.configuration.get_full_wlan_list, g) for g in ap_group_names]
         batch_resp = api.session.batch_request(batch_req)
-        resp = _combine_wlan_properties_responses(ap_groups, batch_resp)
+        resp = _combine_wlan_properties_responses(ap_group_names, batch_resp)
+        if resp.ok:
+            ssid_names = [wlan["essid"] for r in utils.listify(resp) if r.ok for wlan in r.output if "essid" in wlan]
+            unique_names = utils.unique(ssid_names)
+            caption = None if not ssid_names else [*caption, f"{pfx}[green]{len(ssid_names)} [dim italic]({len(unique_names)} unique SSIDs) across {len(ap_group_names)} AP groups."]
 
-        group_by = "group" if not sort_by else None
-        render.display_results(resp, sort_by=sort_by, group_by=group_by, reverse=reverse, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
-    else:
+            group_by = "group" if not sort_by else None
+            if not name:
+                title = "All WLANs (SSIDs) by group"
+                verbose = min(0, verbose - 1)
+                verbose_caption += [f"{emoji.info} Use [cyan]-vv[/] to see additional fields. [cyan]-vvv[/] to see all fields."]
+    else:  # Summary response using get_wlans endpoint
         resp = api.session.request(api.monitoring.get_wlans, **params)
-        caption = None
-        if resp and not name:
-            caption = [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
+        caption = []
+        if resp:
+            if not name:
+                caption += [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
             caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
-        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_wlans)
+        tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
+        render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, exit_on_fail=True, cleaner=cleaner.get_wlans)
+        return
+
+    if name and resp.ok:
+        found = None
+        for field in {"essid", "name"}:
+            found = [w for w in resp.output if w.get(field, "") == name]
+            if found:
+                if not verbose:
+                    verbose_caption += ["Use [cyan]-v[/] to see all fields."]
+                verbose = max(1, verbose + 1)
+                resp.output = found
+                break
+        if not found:
+            verbose = 0
+            verbose_caption.insert(0, f"{emoji.warn} WLAN Profile or SSID with name {name}, was [bold red]NOT FOUND[/].  Showing all found SSIDs")
+
+    if verbose and not name:
+        verbose_caption += ["verbose output.  Use [cyan]-vv[/] to see all fields."]
+    caption = [*verbose_caption, *caption]
+
+    tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml" if verbose else "rich")
+    render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, group_by=group_by, output_by_key=["name", "ssid"], cleaner=cleaner.get_full_wlan_list, verbosity=verbose, format=tablefmt)
 
 
 @app.command()
@@ -2445,7 +2480,7 @@ def clients(
         title = f"Details for client [cyan]{_client.name}[/]|[cyan]{_client.mac}[/]|[cyan]{_client.ip}[/]"
         verbose = verbose or 1
     elif device:
-        dev: CacheDevice = common.cache.get_dev_identifier(device)
+        dev: CacheDevice = common.cache.get_dev_identifier(device, swack=True)
         kwargs["client_type"] = "wireless" if dev.type == "ap" else "wired"
         if dev.generic_type == "switch" and dev.swack_id:
             kwargs["stack_id"] = dev.swack_id
@@ -2495,6 +2530,7 @@ def clients(
         kwargs["network"] = ssid
         if "Wired Clients" in title:
             log.info(f"[cyan]--ssid[/] [bright_green]{ssid}[/] flag ignored for wired clients", caption=True, log=False)
+            del kwargs["network"]
         else:
             title = f"{title} (WLAN client filtered by those connected to [cyan]{ssid}[/])" if title.lower() == "all clients" else f"{title} connected to [cyan]{ssid}[/]"
 
@@ -2599,10 +2635,8 @@ def tunnels(
     resp = api.session.request(api.monitoring.get_gw_tunnels, dev.serial, timerange=time_range.value)
     caption = None
     if resp:
-        if resp.output.get("total"):
-            caption = f'Tunnel Count: {resp.output["total"]}'
-        if resp.output.get("tunnels"):
-            resp.output = resp.output["tunnels"]
+        caption = f'Tunnel Count: {resp.output.get("total", "?")}'
+        resp.output = resp.output["tunnels"]
 
     tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table, default="yaml")
 
@@ -3075,10 +3109,12 @@ def hook_proxy(
             if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
                 for flag in p.cmdline()[::-1]:
                     if flag.startswith("-"):
-                        continue
+                        continue  # pragma: no cover
                     elif flag.isdigit():
                         port = flag
                         break
+                    else:  # pragma: no cover
+                        ...
                 return p.pid, port
 
     if what == "logs":
@@ -3110,15 +3146,25 @@ def archived(
     workspace: str = common.options.workspace,
 ) -> None:
     """Show archived devices"""
-    # TODO GLP API ... get_glp_devices ... add filter query param and test with filter=archived=true
-    resp = api.session.request(api.platform.get_archived_devices)
-    if resp.raw and "devices" in resp.raw:
-        plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
-        caption = f"Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else None  #  Should not happen but if it does the cleaner keeps the item in the dicts
-
+    _cleaner = None
+    caption = None
+    if config.glp.ok:
+        api = api_clients.glp
+        resp = api.session.request(common.cache.refresh_inv_db, archived=True)
+        if resp:
+            resp.output = utils.strip_no_value(resp.output)  # removes subscription fields
+            _cleaner = cleaner.get_device_inventory
+    else:
+        api = api_clients.classic
+        resp = api.session.request(api.platform.get_archived_devices)  # TOGLP For now sticking with this call as it would be faster in large environments vs
+        _cleaner = cleaner.get_archived_devices
+        if resp.raw and "devices" in resp.raw:
+            plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
+            caption = f"Counts: {len(resp)} Archived devices."
+            caption = f"{caption} Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else caption  #  Should not happen but if it does the cleaner keeps the item in the dicts
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_archived_devices)
+    render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner)
 
 
 # TODO verbosity 1 to cleaner
@@ -3418,7 +3464,7 @@ def bssids(
     resp = api.session.request(api.monitoring.get_bssids, **kwargs)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     if not ssid:
-        caption += [f"[deep_sky_blue3]\u2139[/]  If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+        caption += [f"{emoji.info} If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
     title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
 
     render.display_results(
@@ -3557,7 +3603,10 @@ def cron(
     )
 
 
-def _get_cencli_config(all_workspaces: bool = False) -> None:
+def _get_cencli_config(*, all_workspaces: bool = False, brief: bool = False) -> None:
+    out = {}
+    caption = None
+
     omit = ["deprecation_warnings", "webhook", "snow", "valid_suffix", "is_completion", "forget", "cwd", "last_account_msg_shown", "last_account_expired", "wss_key", "classic", "cnx", "glp", "workspace_config", "base_url", "central_info", "limit", "dev", "base_dir", "sanitize", "workspace_object", "_normalized_workspace"]
     if not config.is_old_cfg:
         omit += ["is_old_cfg"]
@@ -3569,18 +3618,21 @@ def _get_cencli_config(all_workspaces: bool = False) -> None:
     defined_workspaces = out.pop("defined_workspaces", [])
     current_workspace = out.pop("_workspace", "[red]ERROR[/]")
     out = {**out, "defined_workspaces": ", ".join(defined_workspaces), "current_workspace": f"[bright_green]{current_workspace}[/]"}
-    workspaces: Dict[str, Any] = out.pop("data", {}).get("workspaces", {})
 
     dev_options = config.dev.model_dump(exclude_none=True, exclude_defaults=True, exclude_unset=True)
     if dev_options:  # pragma: no cover
         out = {**out, "dev_options": dev_options}
 
-    if all_workspaces:
+    workspaces: dict[str, Any] = out.pop("data", {}).get("workspaces", {})
+
+    caption = None if brief else f"[italic]{emoji.info} Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
+
+    if brief:
+        out = {config.workspace: workspaces.get(config.workspace, {}), "cache file": config.cache_file}
+    elif all_workspaces:
         out = {"workspaces": workspaces,  **out}
     else:
         out = {**out, config.workspace: workspaces.get(config.workspace, {})}
-
-    caption = f"[italic][deep_sky_blue3]:information:[/]  Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     render.display_results(data=out, stash=False, caption=caption, tablefmt="yaml")
 

@@ -1,10 +1,49 @@
+# future annotations does not work here, need to use Union to support py < 3.10
 import os
-from typing import Dict, List, Literal, Optional, Sequence, TypedDict, Union  # future annotations does not work here, need to use Union to support py < 3.10
+from functools import lru_cache
+from typing import Callable, Dict, List, Literal, Optional, Sequence, TypedDict, TypeVar, Union, ParamSpec
 
 from yarl import URL
 
 # We use Union as using | operator results in linter throwing "Variable not allowed in type annotation"
 
+P = ParamSpec("P")
+T = TypeVar("T")
+
+# The decorator is used as a type hint for the wrapper function
+def typed_lru_cache(func: Callable[P, T]) -> Callable[P, T]:
+    return lru_cache()(func) # Use lru_cache with arguments
+
+
+
+
+# Define type variables for function signature preservation
+# F = TypeVar('F', bound=Callable[..., Any])
+
+# def typed_lru_cache(maxsize: int = 128, typed: bool = False) -> Callable[P, T]:
+#     """
+#     A wrapper for lru_cache that converts lists/dicts to tuples/frozensets,
+#     ensuring they are hashable, and maintains proper typing.
+#     """
+#     def decorator(func: F) -> F:
+#         @lru_cache(maxsize=maxsize, typed=typed)
+#         def wrapper(*args: Any, **kwargs: Any) -> Any:
+#             # Convert mutable args to immutable alternatives
+#             new_args = tuple(
+#                 tuple(arg) if isinstance(arg, list) else arg for arg in args
+#             )
+#             new_kwargs = {
+#                 k: tuple(v) if isinstance(v, list) else v for k, v in kwargs.items()
+#             }
+#             return func(*new_args, **new_kwargs)
+
+#         # Maintain original function's docstring, name, and typing
+#         return wraps(func)(wrapper)
+
+#     return decorator
+
+
+StrOrPath = str | os.PathLike
 StrOrURL = Union[str, URL]
 StrPath = Union[str, os.PathLike[str]]
 Method = Literal['GET', 'POST', 'PUT', 'DELETE']
@@ -45,7 +84,7 @@ CloudAuthTimeWindow = Literal["3h", "1d", "1w", "1M", "3M"]
 ClientType = Literal["wired", "wireless"]
 JSON_TYPE = Union[List, Dict, str]
 
-class CacheSiteDict(TypedDict):
+class CacheSiteDict(TypedDict):  # pragma: no cover used for typing for CacheSite payload
     name: str
     id: int
     address: Optional[str]
@@ -61,6 +100,9 @@ class UnsetType:
     def __repr__(self):
         return "UNSET"  # pragma: no cover
 
+    def __bool__(self):
+        return False  # pragma: no cover
+
 UNSET = UnsetType()
 
 # These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
@@ -72,12 +114,12 @@ class Self:
         self.serial: str  # pragma: no cover
 
 try:
-    from typing import Self  # noqa
+    from typing import Self  # type: ignore # noqa
 except ImportError:  # pragma: no cover
     ...
 
 
 try:
-    from enum import StrEnum
+    from enum import StrEnum  # type: ignore
 except ImportError:  # pragma: no cover
     from stringenum import StrEnum as StrEnum  # type: ignore # backport StrEnum functionality pre 3.11

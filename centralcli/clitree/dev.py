@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+import asyncio
+from enum import Enum
 
 import shutil
 from functools import partial
 from pathlib import Path
 
 import typer
+from rich import print
 
 from centralcli import common, config, render
+from centralcli.environment import env
+from centralcli.strings import emoji
 from centralcli.typedefs import StrPath
 from centralcli.constants import HelpObject
 
@@ -253,8 +258,8 @@ def colors(
     console.print(table)
 
 
-@app.command()
-def emoji(
+@app.command("emoji")
+def emoji_(
     debug: bool = common.options.debug,
     filter: str = typer.Option(None, "-e", "--emoji", help="Display only emoji with this value in the name", show_default=False,),
     unicode: bool = typer.Option(False, "-u", help="show unicode characters"),
@@ -338,7 +343,7 @@ def clear_raw(
     else:
         render.econsole.print(f":wastebasket:  [red]Delet{'ing' if yes else 'e'}[/] active capture file [cyan italic]{config.capture_file.name}[/]{sfx}")
         if not yes:
-            render.econsole.print(f"  [italic][dark_orange3]:warning:[/]  This will delete the file.  Use [cyan]-b[/]|[cyan]--bak[/] option to stash (rename) the file to [cyan]{bak_file.name}[/][/italic]")
+            render.econsole.print(f"  [italic]{emoji.warn} This will delete the file.  Use [cyan]-b[/]|[cyan]--bak[/] option to stash (rename) the file to [cyan]{bak_file.name}[/][/italic]")
         func = config.capture_file.unlink
 
     render.confirm(yes)
@@ -389,7 +394,145 @@ def help_text(
                 render.console.print(obj.summary_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
 
     show(None if not cache_object else [c.value for c in cache_object])
-    ...
+
+class CacheArgs(str, Enum):
+    devices = "devices"
+    inventory = "inventory"
+    sites = "sites"
+    groups = "groups"
+# full list in constants.CacheArgs
+
+@app.command()
+def cache_del(
+    cache_table: CacheArgs = typer.Argument(..., help="Cache to remove item from", show_default=False),
+    query_str: str = typer.Argument(..., help="The query string to search the cache for, for the record to remove", show_default=False),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Remove an item from the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Remove an item from the cache"""
+    from centralcli import cache
+    lookups = {
+        CacheArgs.devices: (cache.get_dev_identifier, cache.update_dev_db),
+        CacheArgs.inventory: (cache.get_inv_identifier, cache.update_inv_db),
+        CacheArgs.sites: (cache.get_site_identifier, cache.update_site_db),
+        CacheArgs.groups: (cache.get_group_identifier, cache.update_group_db),
+    }
+    qry_func, update_func = lookups.get(cache_table, (None, None))
+    if not qry_func:
+        common.exit(f"cache-del for {cache_table} not implemented yet.")
+    _match = qry_func(query_str, retry=False)
+    if _match is None:
+        common.exit(f"{emoji.info} [cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.  Nothing to delete.", code=0)
+    if env.is_pytest:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]mock[/] [dim](pytest)[/] workspace.[/italic]\n")
+    elif config.workspace != config.default_workspace:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]{config.workspace}[/] workspace.[/italic]\n")
+    render.console.print(f"{emoji.warn} [bold red]Remov{'ing' if yes else 'e'}[/] {_match.summary_text} from [spring_green1]{cache_table.name}[/] cache.", emoji=False)
+    render.confirm(yes)
+    cache_resp = asyncio.run(update_func(_match.doc_id, remove=True))
+    render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
+    common.exit(int(not cache_resp))
+
+
+@app.command()
+def cache_update(
+    cache_table: CacheArgs = typer.Argument(..., help="Cache to remove item from", show_default=False),
+    query_str: str = typer.Argument(..., help="The query string to search the cache for, for the record to Update", show_default=False),
+    key: str = typer.Argument(..., help="The key field to update", show_default=False),
+    value: str = typer.Argument(..., help="The value to update the key field with", show_default=False),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Update an item in the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Update an item in the cache"""
+    if key == "status":
+        value = value.capitalize()
+    from centralcli import cache
+    lookups = {
+        CacheArgs.devices: (cache.get_dev_identifier, cache.update_dev_db),
+        CacheArgs.inventory: (cache.get_inv_identifier, cache.update_inv_db),
+        CacheArgs.sites: (cache.get_site_identifier, cache.update_site_db),
+        CacheArgs.groups: (cache.get_group_identifier, cache.update_group_db),
+    }
+    qry_func, update_func = lookups.get(cache_table, (None, None))
+    if not qry_func:
+        common.exit(f"cache-update for {cache_table} not implemented yet.")
+    _match = qry_func(query_str, retry=False)
+    if _match is None:
+        common.exit(f"{emoji.info} [cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.  Nothing to Update.", code=0)
+    if not hasattr(_match, key):
+        common.exit(f"[cyan]{key}[/] does not appear to be an attribute of [cyan]{cache_table.value}[/] cache.")
+    if getattr(_match, key) == value:
+        common.exit(f"{emoji.info} [cyan]{_match.summary_text}[/]\n   Already has desired value [bold green]{value}[/] for [cyan]{key}[/]. No Update necessary.", code=0, emoji=False)
+
+    if env.is_pytest:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]mock[/] [dim](pytest)[/] workspace.[/italic]\n")
+    elif config.workspace != config.default_workspace:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]{config.workspace}[/] workspace.[/italic]\n")
+
+    render.console.print(f"{emoji.warn} [bold green]Updat{'ing' if yes else 'e'}[/] {_match.summary_text} from [spring_green1]{cache_table.name}[/] cache.\n   [bold green]Update[/] [cyan]{key}[/] --> [green]{value}[/]", emoji=False)
+    render.confirm(yes)
+    update_data = {**dict(_match), key: value}
+    cache_resp = asyncio.run(update_func(update_data))
+    render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
+    common.exit(int(not cache_resp))
+
+
+@app.command()
+def ws_change(
+    workspace_list: list[str] = typer.Argument(
+        None,
+        help="A list of workspaces to verify workspace changes within a CLI session (command)",
+        autocompletion=common.cache.workspace_completion,
+        show_default=False,
+    ),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Remove an item from the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Test mid command workspace switching functionality"""
+    from centralcli.clitree.show.show import _get_cencli_config
+
+
+    for idx, (ws, serial) in enumerate(zip([config.workspace, "kfc", "ge"], ["CNR4LHJ08G", "CNC7J0T11X", "CNGFJ0TJX5"])):
+        if idx > 0:
+            config.workspace = ws
+
+        print(render.render_title(f"{'Starting ' if idx == 0 else ''}Workspace [bright_green]{config.workspace} Config[/]"))
+        _get_cencli_config(brief=True)
+
+        from centralcli import api_clients
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} Classic API info[/]"))
+        render.display_results(data=api_clients.classic.session.auth.central_info, tablefmt="yaml")
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP API info[/]"))
+        glp_data = {
+            "token info": api_clients.glp.session.auth.token_info,
+            "central info": api_clients.glp.session.auth.central_info,
+        }
+        render.display_results(data=glp_data, tablefmt="yaml")
+
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP Cache Inventory refresh test call using serial# {serial}[/]"))
+        resp = api_clients.glp.session.request(common.cache.refresh_inv_db, serial_numbers=(serial,))
+        print(resp._response.request_info.headers["authorization"])
+        render.display_results(resp, title="glp API test call", exit_on_fail=False)
+
+        print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP direct Inventory test call using serial# {serial}[/]"))
+        resp = api_clients.glp.session.request(api_clients.glp.devices.get_devices, serial_numbers=(serial,))
+        print(resp._response.request_info.headers["authorization"])
+        print(resp.output[0].get("id") or resp.error)
+
+        if idx != 2:
+            render.pause()
+
 
 
 @app.callback(no_args_is_help=True)

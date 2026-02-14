@@ -33,8 +33,8 @@ class WidsItem(BaseModel):
 
     @field_serializer("first_seen", "last_seen")
     @classmethod
-    def pretty_dt(cls, dt: datetime) -> DateTime:
-        return DateTime(dt.timestamp(), "mdyt")
+    def pretty_dt(cls, dt: datetime | None) -> DateTime:
+        return DateTime(dt and dt.timestamp(), "mdyt")
 
 
 class Wids(RootModel):

@@ -10,7 +10,7 @@ from rich.markup import escape
 from centralcli import cache, common, config, log, render, utils
 from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
 from centralcli.client import BatchRequest
-from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, kick, refresh, rename, test, ts, unassign, update, upgrade, generate
+from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, generate, kick, migrate, refresh, rename, test, ts, unassign, update, upgrade
 from centralcli.clitree import dev as clidev
 from centralcli.clitree.batch import batch
 from centralcli.clitree.delete import delete
@@ -18,6 +18,7 @@ from centralcli.clitree.set import set as cliset
 from centralcli.clitree.show import show
 from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, LicenseTypes, ResetArgs, StartArgs, do_load_pycentral, iden_meta
 from centralcli.environment import env
+from centralcli.strings import emoji
 
 try:
     import psutil
@@ -52,6 +53,7 @@ app.add_typer(check.app, name="check",)
 app.add_typer(cancel.app, name="cancel",)
 app.add_typer(convert.app, name="convert",)
 app.add_typer(generate.app, name="generate",)
+app.add_typer(migrate.app, name="migrate", hidden=True)
 app.add_typer(clidev.app, name="dev", hidden=True)
 
 
@@ -105,7 +107,7 @@ def move(
         show_default=False,
         help="Reset group membership.  (move to the defined default group)",
     ),
-    cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move"),
+    cx_retain_config: bool = common.options.cx_retain_config,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -183,7 +185,6 @@ def bounce(
 def remove(
     devices: list[str] = common.arguments.get("devices", autocompletion=common.cache.remove_completion),
     site: str = common.arguments.get("site", metavar="[site <SITE>]", autocompletion=common.cache.remove_completion),
-    # site: str = common.arguments.get("site", default=None, metavar="[site <SITE>]", help=f"Site to remove device from {render.help_block('Remove from current site based on Cache')}", autocompletion=common.cache.remove_completion),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -219,8 +220,8 @@ def remove(
 
 @app.command()
 def reboot(
-    devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
-    swarm: bool = typer.Option(False, "-s", "--swarm", help="Reboot the swarm [dim italic](IAP cluster)[/] associated with the provided device (AP)."),
+    devices: list[str] = common.arguments.devices,
+    swarm: bool = common.options.get("swarm", help="Reboot the swarm [dim italic](IAP cluster)[/] associated with the provided device (AP)."),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -228,7 +229,7 @@ def reboot(
 ) -> None:
     """Reboot devices or swarms
 
-    Use --swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
+    Use -S|--swarm to reboot the swarm associated with the specified device (The device can be any AP in the swarm)
     """
     devs: list[CacheDevice] = [common.cache.get_dev_identifier(dev, swack=True) for dev in devices]
 
@@ -512,7 +513,7 @@ def stop(
     else:
         common.exit("WebHook Proxy is not running.", code=0)
 
-@app.command(short_help="Archive devices", hidden=False)
+@app.command()
 def archive(
     devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion),
     yes: bool = common.options.yes,
@@ -520,20 +521,14 @@ def archive(
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
 ) -> None:
-    """Archive devices.  This has less meaning/usefulness with the transition to GreenLake.
+    """Archive devices ([green]GreenLake[/])."""
+    if config.glp.ok:
+        return common.batch_archive_unarchive_devices_glp([{"serial": d} for d in devices], yes=yes, operation="archive")
 
-    cencli archive <devices>, followed by cencli unarchive <devices> removes any subscriptions
-    and the devices assignment to the Aruba Central App in GreenLake.
-
-    Archive removes the GreenLake assignment, but the device can't be added to a different account
-    until it's unarchived.
-
-    Just use cencli deleve device ... or cencli batch delete devices
-    """
     _emsg = ""
     _msg = "[bright_green]Archive devices[/]:"
     serials = []
-    cache_devs: list[CacheDevice| CacheInvDevice] = [common.cache.get_dev_identifier(dev, silent=True, include_inventory=True, exit_on_fail=False) for dev in devices]
+    cache_devs = [common.cache.get_combined_inv_dev_identifier(dev, silent=True, retry_dev=False, exit_on_fail=False) for dev in devices]
     for dev_in, cache_dev in zip(devices, cache_devs):
         if cache_dev:
             _msg = f"{_msg}\n    {cache_dev.rich_help_text}"
@@ -548,8 +543,11 @@ def archive(
     render.econsole.print(_msg, _emsg, sep="\n", emoji=False)
     render.confirm(yes)
     resp = api.session.request(api.platform.archive_devices, serials)
-    render.display_results(resp, tablefmt="action")
-    # CACHE update. for glp inv cache which stores archive status
+    if resp:
+        common._render_classic_archive_unarchive_result(resp, "archive")
+    else:
+        render.display_results(resp, tablefmt="action")
+    # CACHE verify impact of archive on classic cache and update accordingly.  Believe archived devices do not show up in inv cache.
 
 
 
@@ -564,26 +562,24 @@ def unarchive(
 
     Remove previously archived devices from archive.
 
-    Specify device by serial.  (archived devices will not be in Inventory cache for name lookup)
+    Specify device by serial.
+    :information:  [italic]If [green]GreenLake[/] is not configured in the config archived devices will not be in Inventory.  So device argument must be serial numbers.
     """
+    if config.glp.ok:
+        return common.batch_archive_unarchive_devices_glp([{"serial": s} for s in serials], yes=True, operation="unarchive")
+
     _serials: list[CacheDevice | CacheInvDevice | str] = [common.cache.get_dev_identifier(dev, silent=True, retry=False, include_inventory=True, exit_on_fail=False) or dev for dev in serials]
 
-    _msg = "[bright_green]Unarchive devices[/]:"
-    if _serials and any([isinstance(d, CentralObject) for d in _serials]):
-        if len(_serials) > 1:
-            _dev_msg = '\n    '.join([dev if not isinstance(dev, CentralObject) else dev.rich_help_text for dev in _serials])
-            _msg = f"{_msg}\n    {_dev_msg}\n"
-        else:
-            dev = _serials[0]
-            _msg = f"{_msg} {dev if not isinstance(dev, CentralObject) else dev.rich_help_text}"
-        _serials: list[str] = [d if not isinstance(d, CentralObject) else d.serial for d in _serials]
-    else:
-        _dev_msg = '\n    '.join(_serials)
-        _msg = f"{_msg}\n    {_dev_msg}\n"
+    word = "device" if len(_serials) == 1 else f"{len(_serials)} devices"
+    _msg_devs = utils.summarize_list(_serials).lstrip('\n')
+    _msg = f"[bright_green]Unarchiving {word}[/]:\n{_msg_devs}\n"
     render.econsole.print(_msg, emoji=False)
 
-    resp = api.session.request(api.platform.unarchive_devices, _serials)
-    render.display_results(resp, tablefmt="action")
+    resp = api.session.request(api.platform.unarchive_devices, [d if not isinstance(d, CentralObject) else d.serial for d in _serials])
+    if resp:
+        common._render_classic_archive_unarchive_result(resp, "unarchive")
+    else:
+        render.display_results(resp, tablefmt="action")
     # CACHE update. for glp inv cache which stores archive status
 
 
@@ -705,10 +701,12 @@ def all_commands_callback(ctx: typer.Context, **kwargs):  # pragma: no cover  te
         common.version_callback(ctx)
         common.exit(code=0)
     if default:
-        if ("--ws" in sys.argv or "--workspace" in sys.argv) and workspace != config.default_workspace:
-            ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
-            render.econsole.print(f":warning:  Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
-            workspace = config.default_workspace
+        ws_flag = "--ws" if "--ws" in sys.argv else "--workspace"
+        if ws_flag in sys.argv:
+            workspace = workspace or sys.argv[sys.argv.index(ws_flag) + 1]
+            if workspace != config.default_workspace:
+                render.econsole.print(f"{emoji.warn} Both [cyan]-d[/] and [cyan]{ws_flag}[/] flag used.  Honoring [cyan]-d[/], ignoring workspace [cyan]{workspace}[/]")
+                workspace = config.default_workspace
         common.workspace_name_callback(ctx, workspace=config.default_workspace, default=True)
     else:
         common.workspace_name_callback(ctx, workspace=workspace)

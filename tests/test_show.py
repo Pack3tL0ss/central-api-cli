@@ -10,7 +10,8 @@ from centralcli import cache, utils
 from centralcli.cli import api, app
 from centralcli.environment import env
 
-from . import capture_logs, clean_mac, config, test_data, end_2_days_ago, now_str, start_180_days_ago
+from . import capture_logs, clean_mac, config, end_2_days_ago, now_str, start_180_days_ago, test_data
+from ._test_data import gw_group_config_file
 
 runner = CliRunner()
 
@@ -36,6 +37,8 @@ def test_check_fw_available():
         [7, None, ("--severity", "info"), lambda r: "API" in r],
         [8, None, ("--end", end_2_days_ago), lambda r: "API" in r],
         [9, None, ("--past", "180d"), lambda r: "API" in r and "--past" in r],  # warning --past exceeds max days allowed
+        [10, None, ("--dev", test_data["gateway"]["name"]), lambda r: "API" in r],
+        [11, None, ("--site", test_data["gateway"]["site"]), lambda r: "API" in r],
     ]
 )
 def test_show_alerts(_: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -74,28 +77,23 @@ def test_show_aps_dirty_missing_group():
     assert "group" in result.stdout.lower()
 
 
-def test_show_archived():
-    result = runner.invoke(app, ["show", "archived"],)
-    capture_logs(result, "test_show_archived")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition,expect_failure",
+    "idx,fixture,args,pass_condition,expect_failure",
     [
-        [None, (), lambda r: "All" in r, False],
-        [None, (test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "ignored" in r, False],  # -S --dev --group flags are ignored
-        [None, ("-S", "--dev", test_data["aos8_ap"]["name"]), lambda r: "API" in r, False],  # aos8
-        [None, ("-S", "--dev", test_data["ap"]["name"]), lambda r: "AOS10" in r, False],  # test with aos10, swarm is only valid for AOS8...
-        [None, ("--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r, False],  # --group flag is ignored
-        [None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
-        ["ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
-        [None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
-        [None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
+        [1, None, (), lambda r: "All" in r, False],
+        [2, None, (test_data["client"]["wireless"]["mac"], "-S", "--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "ignored" in r, False],  # -S --dev --group flags are ignored
+        [3, None, (test_data["client"]["wireless"]["mac"],), lambda r: "TX" in r, False],
+        [4, None, ("-S", "--dev", test_data["aos8_ap"]["name"]), lambda r: "API" in r, False],  # aos8
+        [5, None, ("--dev", test_data["aos8_ap"]["name"]), lambda r: "TX" in r, False],  # aos8
+        [6, None, ("-S", "--dev", test_data["ap"]["name"]), lambda r: "AOS10" in r, False],  # test with aos10, swarm is only valid for AOS8...
+        [7, None, ("--dev", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r, False],  # --group flag is ignored
+        [8, None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
+        [9, "ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
+        [10, None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
+        [11, None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
     ]
 )
-def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
+def test_show_bandwidth_client(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["show", "bandwidth", "client", *args],)
@@ -109,21 +107,35 @@ def test_show_bandwidth_client(fixture: str | None, args: tuple[str], pass_condi
     [
         [1, ("switch", test_data["switch"]["mac"]), lambda r: "TX" in r],
         [2, ("switch", test_data["switch"]["mac"], "--uplink"), lambda r: "TX" in r],
-        [3, ("switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]), lambda r: "TX" in r],
-        [4, ("ap", test_data["ap"]["name"]), lambda r: "TX" in r],
-        [5, ("ap", "--ssid", "ignored"), lambda r: "--ssid" in r and "TX" in r],
-        [6, ("ap", "--band", "5"), lambda r: "--band" in r and "TX" in r],
-        [7, ("ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r and "TX" in r],
-        [8, ("ap", test_data["aos8_ap"]["name"], "--swarm"), lambda r: "TX" in r],
-        [9, ("uplink", test_data["gateway"]["name"]), lambda r: "TX" in r],
-        [10, ("uplink", test_data["gateway"]["name"], "--yaml"), lambda r: "TX" in r],
-        [11, ("uplink", test_data["switch"]["name"]), lambda r: "TX" in r],
+        [3, ("switch", test_data["switch"]["mac"], "--uplink", "--yaml"), lambda r: "API" in r],
+        [4, ("switch", test_data["switch"]["mac"], test_data["switch"]["test_ports"][-1]), lambda r: "TX" in r],
+        [5, ("ap", test_data["ap"]["name"]), lambda r: "TX" in r],
+        [6, ("ap", "--ssid", "ignored"), lambda r: "--ssid" in r and "TX" in r],
+        [7, ("ap", "--band", "5"), lambda r: "--band" in r and "TX" in r],
+        [8, ("ap", test_data["ap"]["name"], "--group", test_data["ap"]["group"]), lambda r: "--group" in r and "TX" in r],
+        [9, ("ap", test_data["aos8_ap"]["name"], "--swarm"), lambda r: "TX" in r],
+        [10, ("uplink", test_data["gateway"]["name"]), lambda r: "TX" in r],
+        [11, ("uplink", test_data["gateway"]["name"], "--yaml"), lambda r: "TX" in r],
+        [12, ("uplink", test_data["switch"]["name"]), lambda r: "TX" in r],
     ]
 )
 def test_show_bandwidth(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "bandwidth", *args],)
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, ("switch", test_data["switch"]["mac"]), lambda r: "API" in r],
+    ]
+)
+def test_show_bandwidth_fail(idx: int, args: list[str], pass_condition: Callable):
+    result = runner.invoke(app, ["show", "bandwidth", *args],)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
@@ -191,9 +203,11 @@ def test_show_bssids(idx: int, args: tuple[str], pass_condition: Callable, expec
 # Output here will not be the same during mocked test run as it is outside of tests
 # API returns csv, the Response.output attribute is converted in cloudauth.get_registered_macs()
 # to list of dicts.  This is not done in the cleaner like most others. (To make the library more friendly when used outside CLI)
-def test_show_cloud_auth_registered_macs():
-    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", "--sort", "mac"],)
-    capture_logs(result, "test_show_cloud_auth_registered_macs")
+@pytest.mark.parametrize("idx,sort_by", [[1, "mac"], [2, None]])
+def test_show_cloud_auth_registered_macs(idx: int, sort_by: str | None):
+    args = [] if not sort_by else ["--sort", sort_by]
+    result = runner.invoke(app, ["show", "cloud-auth", "registered-macs", *args],)
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "MAC" in result.stdout
 
@@ -285,51 +299,16 @@ def test_show_insights_too_many_filters():
 
 
 @pytest.mark.parametrize(
-    "_,args,pass_condition,test_name_append",
-    [
-        [1, ("--key", "EC5C0481E85EB4DB79"), lambda r: "mac" in r, None],
-        [2, ("--sub",), lambda r: "mac" in r, None],
-        [3, ("--no-sub",), lambda r: "mac" in r, None],
-        [4, (), lambda r: "fetch subscription details failed" in r, "failed_sub_call"],
-        [5, ("-v",), lambda r: "mac" in r, None],
-    ]
-)
-def test_show_inventory(_: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    if test_name_append:  # pragma: no cover
-        env.current_test = f"{env.current_test}_{test_name_append}"
-    result = runner.invoke(app, ["show", "inventory", *args],)
-    capture_logs(result, "test_show_inventory")
-    assert result.exit_code == 0
-    assert pass_condition(result.stdout)
-
-
-@pytest.mark.parametrize(
-    "_,args,pass_condition,test_name_append",
-    [
-        [1, (), lambda r: "500" in r, None],
-    ]
-)
-def test_show_inventory_fail(_: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
-    if test_name_append:  # pragma: no cover
-        env.current_test = f"{env.current_test}_{test_name_append}"
-    else:  # pragma: no cover
-        ...
-    result = runner.invoke(app, ["show", "inventory", *args],)
-    capture_logs(result, "test_show_inventory_fail", expect_failure=True)
-    assert result.exit_code == 1
-    assert pass_condition(result.stdout)
-
-
-@pytest.mark.parametrize(
-    "_,args,pass_condition",
+    "idx,args,pass_condition",
     [
         [1, (test_data["ap"]["name"], "--up"), lambda r: "mac" in r],
-        [2, ("--site", test_data["ap"]["site"], "--sort", "utilization"), lambda r: "mac" in r and "band" in r],
+        [2, (test_data["ap"]["name"], "--band", "5"), lambda r: "mac"],
+        [3, ("--site", test_data["ap"]["site"], "--sort", "utilization"), lambda r: "mac" in r and "band" in r],
     ]
 )
-def test_show_radios(_: int, args: tuple[str], pass_condition: Callable):
+def test_show_radios(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "radios", *args],)
-    capture_logs(result, "test_show_radios")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -440,31 +419,51 @@ def test_show_gateway_by_name():
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
         [1, None, ("all",), lambda r: "mac" in r and "serial" in r],
-        [2, None, ("all", "-v"), lambda r: "mac" in r and "serial" in r and "uptime" in r],
-        [3, None, ("all", "--inv", "--up"), lambda r: "Counts" in r],
-        [4, "ensure_cache_label1", ("all", "--label", "cencli_test_label1"), lambda r: "API" in r],
-        [5, None, ("aps", "--site", test_data["ap"]["site"]), lambda r: "API" in r],
-        [6, None, ("aps", "--inv"), lambda r: "Counts" in r],
-        [7, None, ("aps", "--debug", "--table"), lambda r: "site" in r and "status" in r],
-        [8, None, ("devices", "all", "--up"), lambda r: "API" in r],
-        [9, None, ("gateways", "--down", "--table"), lambda r: "name" in r and "API" in r],
-        [10, None, ("switches", "--inv"), lambda r: "Counts" in r],
-        [11, None, ("switches", "--up", "--sort", "ip"), lambda r: "API" in r],
-        [12, None, ("switches", "--group", test_data["switch"]["group"]), lambda r: "API" in r],
-        [13, None, ("switches", test_data["switch"]["name"], "--debug"), lambda r: "site" in r and "status" in r],
-        [14, None, ("switches", test_data["switch"]["name"], "--inv"), lambda r: "site" in r and "status" in r],
+        [2, None, ("all", "--status", "up"), lambda r: "mac" in r and "serial" in r],
+        [3, None, ("all", "-v"), lambda r: "mac" in r and "serial" in r and "uptime" in r],
+        [4, None, ("all", "--inv", "--up"), lambda r: "Counts" in r],
+        [5, "ensure_cache_label1", ("all", "--label", "cencli_test_label1"), lambda r: "API" in r],
+        [6, None, ("devices", "all", "--up"), lambda r: "API" in r],
+        [7, None, ("devices", "all", "--status", "up"), lambda r: "API" in r],
+        [8, None, ("devices", test_data["ap"]["name"], test_data["switch"]["serial"], "--table"), lambda r: "common to all" in r],
+        [9, None, ("aps", "--site", test_data["ap"]["site"], "--status", "up"), lambda r: "API" in r],
+        [10, None, ("aps", "--inv"), lambda r: "Counts" in r],
+        [11, None, ("aps", "--up", "--table"), lambda r: "site" in r and "status" in r],
+        [12, None, ("aps", "-V", "-8.1"), lambda r: "site" in r and "status" in r],
+        [13, None, ("gateways", "--down", "--table"), lambda r: "name" in r and "API" in r],
+        [14, None, ("gateways", "--status", "up", "--table"), lambda r: "name" in r and "API" in r],
+        [15, None, ("switches", "--inv"), lambda r: "Counts" in r],
+        [16, None, ("switches", "--status", "up", "--sort", "ip"), lambda r: "API" in r],
+        [17, None, ("switches", "--group", test_data["switch"]["group"], "--up"), lambda r: "API" in r],
+        [18, None, ("switches", test_data["switch"]["mac"], "--debug"), lambda r: "site" in r and "status" in r],
+        [19, None, ("switches", test_data["switch"]["ip"], "--inv"), lambda r: "site" in r and "status" in r],
 
     ]
 )
-def test_show_devices(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+def test_show_devices(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["show", *args])
-    capture_logs(result, "test_show_devices")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
+    assert pass_condition(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "idx,fixture,args,pass_condition",
+    [
+        [1, None, ("devices", test_data["ap"]["name"], test_data["switch"]["serial"], "--table", "--inv"), lambda r: "Unable to show" in r],
+    ]
+)
+def test_show_devices_fail(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:  # pragma: no cover
+        request.getfixturevalue(fixture)
+    result = runner.invoke(app, ["show", *args])
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
+    assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
@@ -476,63 +475,36 @@ def test_show_devices(_: int, fixture: str | None, args: tuple[str], pass_condit
     ]
 )
 def test_show_devices_cnx(idx: int, args: tuple[str], pass_condition: Callable):
-    result = runner.invoke(app, ["test", "command"])
-    capture_logs(result, f"{env.current_test}{idx}")
+    result = runner.invoke(app, ["test", "command", *args])
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
 
-def test_show_device_by_name():
-    result = runner.invoke(app, ["show", "devices", test_data["switch"]["name"], "--debug"],)
-    capture_logs(result, "test_show_device_by_name")
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
+@pytest.mark.parametrize(
+    "idx,args,pass_condition,exit_code,test_name_append",
+    [
+        [1, ("clients", test_data["dhcp_gateway"]["serial"], "--no-res"), lambda r: "API" in r, 0, None],
+        [2, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "API" in r, 0, None],
+        [3, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "⚠" in r, 1, "no_res_in_config"],
+        [4, ("clients", test_data["dhcp_gateway"]["name"], "-v"), lambda r: "API" in r, 0, "no_res"],
+        [5, ("pools", test_data["dhcp_gateway"]["ip"]), lambda r: "API" in r, 0, None],
+    ]
+)
+def test_show_dhcp(idx: int, args: tuple[str], pass_condition: Callable, exit_code: int, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["show", "dhcp", *args],)
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
+    assert pass_condition(result.stdout)
 
 
-def test_show_device_by_ip():
-    result = runner.invoke(app, ["show", "devices", test_data["ap"]["ip"], "--debug"],)
-    capture_logs(result, "test_show_device_by_ip")
-    assert result.exit_code == 0
-    assert "model" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_show_device_by_mac():
-    result = runner.invoke(app, ["show", "devices", test_data["gateway"]["mac"], "--debug"],)
-    capture_logs(result, "test_show_device_by_mac")
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_show_device_by_serial():
-    result = runner.invoke(app, ["show", "devices", test_data["switch"]["serial"], "--debug"],)
-    capture_logs(result, "test_show_device_by_serial")
-    assert result.exit_code == 0
-    assert "site" in result.stdout
-    assert "status" in result.stdout
-
-
-def test_show_dhcp_clients_gw():
-    result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["serial"], "--no-res"],)
-    capture_logs(result, "test_show_dhcp_clients_gw")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_dhcp_clients_gw_verbose():
+def test_show_dhcp_clients_gw_verbose_fail_config_call():
     result = runner.invoke(app, ["show", "dhcp", "clients", test_data["dhcp_gateway"]["name"], "-v"],)
-    capture_logs(result, "test_show_dhcp_clients_gw_verbose")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
-
-
-def test_show_dhcp_pools_gw():
-    result = runner.invoke(app, ["show", "dhcp", "pools", test_data["dhcp_gateway"]["ip"]],)
-    capture_logs(result, "test_show_dhcp_pools_gw")
-    assert result.exit_code == 0
-    assert "API" in result.stdout
+    capture_logs(result, env.current_test, expect_failure=True)
+    assert result.exit_code == 1
+    assert "⚠  Unable to provide additional DHCP reservation details" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -540,12 +512,12 @@ def test_show_dhcp_pools_gw():
     [
         [1, (test_data["gateway"]["name"],), lambda r: test_data["gateway"]["name"] in r and "API" in r],
         [2, ("--group", test_data["gateway"]["group"].swapcase(), "--gw"), lambda r: "API" in r and "Counts" in r],
-        [3, (test_data["ap"]["name"], "-v"), lambda r: "name" in r and "API" in r],
+        [3, (test_data["ap"]["name"], "-v"), lambda r: "status" in r and "API" in r],
         [4, (test_data["ap"]["name"], "--down", "--group", "ingored"), lambda r: "name" in r and "⚠" in r],  # --group is ignored given device is provided
         [5, ("--site", test_data["ap"]["site"], "--ap", "--fast", "--slow"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --fast and --slow both being used
         [6, ("--site", test_data["ap"]["site"], "--ap", "--up", "--down"), lambda r: test_data["ap"]["name"][0:6] in r and "⚠" in r],  # ⚠ is for warning regarding --up and --down both being used
         [7, ("--site", test_data["ap"]["site"], "--ap", "--down", "--fast"), lambda r: "API" in r and "⚠" in r],  # ⚠ is for warning regarding --down and --fast both being used
-        [8, (test_data["switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],
+        [8, (test_data["template_switch"]["name"], "--up", "--table"), lambda r: "vlan" in r and "status" in r],  # need a switch that is not cx to hit all branches
         [9, (test_data["switch"]["name"], "--slow", "--table"), lambda r: "vlan" in r and "status" in r],
         [10, (test_data["switch"]["ip"], "--fast", "--table"), lambda r: "vlan" in r and "status" in r],
         [11, ("--group", test_data["switch"]["group"].swapcase(), "--switch"), lambda r: "API" in r and "Counts" in r],
@@ -558,24 +530,28 @@ def test_show_interfaces(idx: int, args: tuple[str], pass_condition: Callable):
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
+    assert "while trying to get counts from interface output" not in result.stdout  # Exception extracting counts for caption
+    assert "Error cleaning output" not in result.stdout
 
 
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition,test_name_append",
+    "idx,fixture,args,pass_condition,test_name_append",
     [
-        [None, ("--ap", "--gw"), lambda r: "⚠" in r and "one of" in r.lower(), None],
-        [None, (), lambda r: "⚠" in r and "one of" in r.lower(), None],
-        ["ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "⚠" in r and "Combination" in r, None],
-        ["ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "500" in r, "cache_refresh"],
+        [1, None, ("--ap", "--gw"), lambda r: "⚠" in r and "one of" in r.lower(), None],
+        [2, None, (), lambda r: "⚠" in r and "one of" in r.lower(), None],
+        [3, "ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "⚠" in r and "Combination" in r, None],
+        [4, "ensure_cache_group2", ("--ap", "--group", "cencli_test_group2"), lambda r: "500" in r, "cache_refresh"],
+        [5, None, ("--ap", "--group", test_data["ap"]["group"]), lambda r: "calls failed" in r, "partial"],
+        [6, None, ("--ap", "--group", test_data["ap"]["group"]), lambda r: "Response" in r, "all_iface_calls"],
     ]
 )
-def test_show_interfaces_fail(fixture: str | None | list[str], args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest, test_name_append: str | None):
+def test_show_interfaces_fail(idx: int, fixture: str | None | list[str], args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest, test_name_append: str | None):
     if fixture:
         request.getfixturevalue(fixture)
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, ["show", "interfaces", *args],)
-    capture_logs(result, "test_show_interfaces_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
@@ -790,6 +766,27 @@ def test_show_ospf(args: list[str], pass_condition: Callable):
     assert pass_condition(result.stdout)
 
 
+@pytest.mark.parametrize(
+    "idx,args",
+    [
+        [1, ("database", test_data["gateway"]["name"],)],
+        [2, ("interfaces", test_data["gateway"]["name"])],
+        [3, ("neighbors", test_data["gateway"]["name"])],
+        [4, ("area", test_data["gateway"]["name"])],
+    ]
+)
+def test_show_ospf_fail(idx: int, args: tuple[str]):
+    result = runner.invoke(app, [
+            "show",
+            "ospf",
+            *args
+        ]
+    )
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Response" in result.stdout
+
+
 def test_show_overlay_routes_advertised():
     result = runner.invoke(app, [
             "show",
@@ -918,20 +915,20 @@ def test_show_last():
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        (["--past", "5d"], lambda r: "Empty Response" in r or ("audit" in r and "id" in r)),
-        (["1"], lambda r: "Empty Response" in r or "API" in r),
-        (["audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa"], lambda r: "Empty Response" in r or "API" in r),
-        (["--all"], lambda r: "Empty Response" in r or "API" in r),
-        (["--dev", test_data["ap"]["serial"], "-vv"], lambda r: "Empty Response" in r or "API" in r),
-        (["--dev", test_data["ap"]["name"], "--group", "ignored"], lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)),
-        (["--group", test_data["ap"]["group"],], lambda r: "Empty Response" in r or "API" in r),
+        [1, ("--past", "5d"), lambda r: "Empty Response" in r or ("audit" in r and "id" in r)],
+        [2, ("1",), lambda r: "Empty Response" in r or "API" in r],
+        [3, ("audit_trail_2025_8,AZjC-zcQEfpkmc__0HZa",), lambda r: "Empty Response" in r or "API" in r],
+        [4, ("--all",), lambda r: "Empty Response" in r or "API" in r],
+        [5, ("--dev", test_data["ap"]["serial"], "-vv"), lambda r: "Empty Response" in r or "API" in r],
+        [6, ("--dev", test_data["ap"]["name"], "--group", "ignored"), lambda r: "ignored" in r and ("Empty Response" in r or "API" in r)],
+        [7, ("--group", test_data["ap"]["group"]), lambda r: "Empty Response" in r or "API" in r],
     ]
 )
-def test_show_audit_logs(args: list[str], pass_condition: Callable):
+def test_show_audit_logs(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "audit", "logs", *args],)
-    capture_logs(result, "test_show_audit_logs")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -945,7 +942,7 @@ def test_show_audit_logs_invalid(args: list[str]):
     assert "⚠" in result.stdout
 
 
-@pytest.mark.parametrize("args", [("-n", "5"), ("-vv",)])
+@pytest.mark.parametrize("args", [("-n", "5"), ("-vv",), ("-v",)])
 def test_show_audit_acp_logs(args: tuple[str]):
     result = runner.invoke(app, ["show", "audit", "acp-logs", *args],)
     capture_logs(result, "test_show_audit_acp_logs")
@@ -961,15 +958,17 @@ def test_show_audit_acp_logs(args: tuple[str]):
         [3, ("--dev", test_data["switch"]["name"], "--start", "11/1/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --start ignored due to --past
         [4, ("--group", test_data["ap"]["group"], "--end", "12/31/2025", "--past", "30m"), lambda r: "description" in r and "ignored" in r],  # --end flag ignored due to --past
         [5, ("1", "--past", "30m"), lambda r: "299" in r],
-        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],
+        [6, ("-a", "--client", test_data["client"]["wireless"]["mac"]), lambda r: "200" in r],  # need 2 tests by mac and by other iden to hit all branches
         [7, ("-a", "--client", test_data["client"]["wireless"]["name"]), lambda r: "200" in r],
         [8, ("self",), lambda r: "INFO" in r],
         [9, ("pytest",), lambda r: "INFO" in r],
+        [10, ("-n", "50"), lambda r: "API" in r],
+        [11, (), lambda r: "API" in r],
     ]
 )
 def test_show_logs(idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "logs", *args,])
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -996,23 +995,23 @@ def test_show_mpsk_networks():
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args,pass_condition,test_name_append",
+    "idx,fixture,args,pass_condition,test_name_append",
     [
         [1, None, (), lambda r: "API" in r, None],
         [2, "ensure_cache_mpsk_network", (), lambda r: "API" in r, "multiple_mpsk_nets"],
-        [3, None, (test_data["mpsk_ssid"],), lambda r: "API" in r, None],
+        [3, None, (test_data["mpsk_ssid"], "-v"), lambda r: "API" in r, None],
         [4, None, ("-E",), lambda r: "disabled" not in r, None],
         [5, None, ("-D",), lambda r: "enabled" not in r, None],
         [6, None, ("--import",), lambda r: "ssid argument is required" in r, None],
     ]
 )
-def test_show_mpsk_named(_: int, fixture: str | None, args: list[str], pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
+def test_show_mpsk_named(idx: int, fixture: str | None, args: list[str], pass_condition: Callable, test_name_append: str | None, request: pytest.FixtureRequest):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["show", "mpsk", "named", *args],)
-    capture_logs(result, env.current_test)
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -1044,15 +1043,18 @@ def test_show_switch_vlans_by_name():
     assert "pvid" in result.stdout
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        (["--up", "--group", test_data["vsf_switch"]["group"]], lambda r: "API" in r),
-        ([test_data["vsf_switch"]["mac"]], lambda r: "API" in r),
+        [1, ("--up", "--group", test_data["vsf_switch"]["group"]), lambda r: "API" in r],
+        [2, (test_data["vsf_switch"]["mac"],), lambda r: "API" in r],
+        [3, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"], "--group", test_data["vsf_switch"]["group"]), lambda r: "API" in r],  # we specify the same switch x2 to hit a different logical branch
+        [4, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"]), lambda r: "API" in r],  # we specify the same switch x2 to hit a different logical branch
+        [5, (test_data["vsf_switch"]["mac"], test_data["vsf_switch"]["name"], "--down"), lambda r: "o stacks matched" in r],  # No data matches filter
     ]
 )
-def test_show_stacks(args: list[str], pass_condition: Callable):
+def test_show_stacks(ensure_cache_vsf_stack, idx: int, args: list[str], pass_condition: Callable):
     result = runner.invoke(app, ["show", "stacks", *args],)
-    capture_logs(result, "test_show_stacks")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -1083,21 +1085,26 @@ def test_get_floor_details():
 
 cmac = test_data["client"]["wireless"]["mac"]
 @pytest.mark.parametrize(
-    "idx,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
-        [1, ("--table",), lambda r: "name" in r and "mac" in r],
-        [2, ("--table", "-w", "--band", "6"), lambda r: "name" in r and "mac" in r],
-        [3, ("-w",), lambda r: "name" in r and "mac" in r],
-        [4, ("--wired", "--table"), lambda r: "vlan" in r and "mac" in r],
-        [5, ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
-        [6, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
-        [7, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
-        [8, ("--failed", "--past", "1w"), lambda r: "past 1 week" in r and "API" in r],
+        [1, None, ("--table", "--sort", "last-connected"), lambda r: "name" in r and "mac" in r],
+        [2, "ensure_cache_label1", ("--table", "-w", "--label", "cencli_test_label1"), lambda r: "name" in r and "mac" in r],
+        [3, None, ("--table", "--band", "6", "--site", test_data["ap"]["site"]), lambda r: "name" in r and "mac" in r],
+        [4, None, ("--table", "-w", "--band", "6", "--group", test_data["ap"]["group"]), lambda r: "name" in r and "mac" in r],
+        [5, None, ("-w", "--ssid", "BoilerUp"), lambda r: "name" in r and "mac" in r],
+        [6, None, ("--wired", "--table", "--ssid", "ignored"), lambda r: "vlan" in r and "mac" in r and "ignored" in r],
+        [7, "ensure_cache_vsf_stack", ("--dev", test_data["vsf_switch"]["name"], "--sort", "last-connected"), lambda r: "API" in r],
+        [8, None, (cmac,), lambda r: f'mac {clean_mac(cmac)}' in clean_mac(r)],
+        [9, None, ("--dev", test_data["ap"]["name"], "--site", test_data["ap"]["site"]), lambda r: "ignored" in r and "API" in r],  # --site ignored
+        [10, None, ("--dev", test_data["ap"]["name"]), lambda r: "API" in r],  # --site ignored
+        [11, None, ("--failed", "--past", "1w"), lambda r: "past 1 week" in r and "API" in r],
     ]
 )
-def test_show_clients(idx: int, args: tuple[str], pass_condition: Callable):
+def test_show_clients(idx: int, fixture: str, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+    if fixture:
+        [request.getfixturevalue(f) for f in utils.listify(fixture)]
     result = runner.invoke(app, ["show", "clients", *args],)
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
@@ -1132,7 +1139,7 @@ def test_show_denylisted():
 @pytest.mark.parametrize(
     "_,fixture,args,pass_condition",
     [
-        [1, None, (test_data["gateway"]["group"], "--gw", "--out", f"{Path(__file__).parent.parent / 'config' / '.cache' / 'test_runner_gw_grp_config'}",), lambda r: "mgmt-user" in r and "!" in r],
+        [1, None, (test_data["gateway"]["group"], "--gw", "--out", str(gw_group_config_file),), lambda r: "mgmt-user" in r and "!" in r],
         [2, None, (test_data["gateway"]["group"], "--gw"), lambda r: "mgmt-user" in r],
         [3, None, (test_data["gateway"]["name"],), lambda r: "firewall" in r],
         [4, None, (test_data["ap"]["group"], "--ap"), lambda r: "rule any any" in r],
@@ -1215,13 +1222,13 @@ def test_show_config_sw_ui():
     assert "Troubleshooting" in result.stdout
 
 
-
 @pytest.mark.parametrize(
     "idx,args",
     [
         [1, (test_data["switch"]["ip"], "-p"),],
         [2, (test_data["switch"]["ip"], "1/1/6"),],
         [3, (test_data["template_switch"]["serial"],)],
+        [4, (test_data["template_switch"]["serial"], "-v")],
     ]
 )
 def test_show_poe(idx: int, args: tuple[str]):
@@ -1234,6 +1241,24 @@ def test_show_poe(idx: int, args: tuple[str]):
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "API" in result.stdout
+
+
+@pytest.mark.parametrize(
+    "idx,args",
+    [
+        [1, (test_data["switch"]["ip"], "-p"),],
+    ]
+)
+def test_show_poe_fail(idx: int, args: tuple[str]):
+    result = runner.invoke(app, [
+            "show",
+            "poe",
+            *args
+        ]
+    )
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
+    assert result.exit_code == 1
+    assert "Response" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -1262,14 +1287,15 @@ def test_show_portals(args: tuple[str], pass_condition: Callable):
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
         [1, None, (test_data["portal"]["name"], "fake1", "fake2"), lambda r: "too many" in r.lower()],
         [2, "ensure_cache_portal", ("cencli-test", "-L"), lambda r: "unable to download" in r.lower()],
         [3, None, (test_data["portal"]["name"], "-L", "/root"), lambda r: "not writable" in r.lower()],
+        [4, None, (test_data["portal"]["name"], "-L", "/not-a-directory/logo.png"), lambda r: "not found" in r.lower()],
     ]
 )
-def test_show_portal_fail(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
+def test_show_portals_fail(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
     if fixture:
         if not config.dev.mock_tests:  # pragma: no cover
             return
@@ -1280,27 +1306,28 @@ def test_show_portal_fail(_: int, fixture: str | None, args: tuple[str], pass_co
             *args
         ]
     )
-    capture_logs(result, "test_show_portal_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
+# for full test coverage mock response needs a guest with no expiration, a guest that is expired and a guest that has an expiration but is not expired
 @pytest.mark.parametrize(
-    "_,args",
+    "idx,args",
     [
         [1, ()],
         [2, ("-R",)],
         [3, (test_data["portal"]["name"],)],
     ]
 )
-def test_show_guests(_: int, args: tuple[str]):
+def test_show_guests(idx: int, args: tuple[str]):
     result = runner.invoke(app, [
             "show",
             "guests",
             *args
         ]
     )
-    capture_logs(result, "test_show_guests")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert test_data["portal"]["name"] in result.stdout or "Empty Response" in result.stdout
 
@@ -1348,8 +1375,10 @@ def test_show_notifications():
         [2, (test_data["aos8_ap"]["name"], test_data["ap"]["serial"]), False, None, None],
         [3, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
         [4, ("--group", test_data["aos8_ap"]["group"]), False, None, None],
-        [5, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
-        [6, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [5, (), False, None, None],
+        [6, (test_data["aos8_ap"]["name"], "--table"), False, "same_name", lambda r: "swarm name" not in r],
+        [7, (test_data["aos8_ap"]["name"],), True, "fail", lambda r: "500" in r],
+        [8, (test_data["ap"]["name"], test_data["aos8_ap"]["name"],), True, "fail", lambda r: "⚠" in r],  # partial failure
     ]
 )
 def test_show_firmware_swarm(idx: int, args: tuple[str], should_fail: bool, test_name_append: str | None, pass_condition: Callable):
@@ -1396,16 +1425,24 @@ def test_show_firmware_device(args: tuple[str], pass_condition: Callable | None,
     assert "API" in result.stdout
 
 
-def test_show_firmware_device_no_args():
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "--dev-type" in r],
+        [2, (test_data["ap"]["name"], test_data["switch"]["name"]), lambda r: "Response" in r],
+    ]
+)
+def test_show_firmware_device_fail(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "firmware",
             "device",
+            *args
         ]
     )
-    capture_logs(result, "test_show_firmware_device_no_args", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "--dev-type" in result.stdout
+    assert pass_condition(result.stdout)
 
 
 @pytest.mark.parametrize(
@@ -1441,13 +1478,13 @@ def test_show_firmware_list_invalid(args: list[str]):
 
 
 @pytest.mark.parametrize(
-    "fixture,args,pass_condition",
+    "idx,fixture,args,pass_condition",
     [
-        ["ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "No compliance set" in r],
-        [None, ("cx", test_data["switch"]["group"], "--raw"), None],
+        [1, "ensure_cache_group2", ("ap", "cencli_test_group2"), lambda r: "API" in r],
+        [2, None, ("cx",), lambda r: "No compliance set" in r],
     ]
 )
-def test_show_firmware_compliance(fixture: str | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
+def test_show_firmware_compliance(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable | None, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, [
@@ -1457,7 +1494,7 @@ def test_show_firmware_compliance(fixture: str | None, args: tuple[str], pass_co
             *args
         ]
     )
-    capture_logs(result, "test_show_firmware_compliance")
+    capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     if pass_condition:
         assert pass_condition(result.stdout)
@@ -1481,14 +1518,15 @@ def test_show_firmware_compliance_invalid():
 
 
 @pytest.mark.parametrize(
-    "args,should_pass,test_name_update",
+    "idx,args,exit_code,test_name_update",
     [
-        [([test_data["client"]["wireless"]["name"], "--refresh"]), True, None],
-        [([test_data["client"]["wireless"]["mac"]]), True, None],
-        [([test_data["client"]["wireless"]["mac"]]), False, "fail"],
+        [1, (test_data["client"]["wireless"]["name"], "--refresh"), 0, None],
+        [2, (test_data["client"]["wireless"]["mac"],), 0, None],
+        [3, (test_data["client"]["wireless"]["mac"],), 1, "fail"],
+        [4, (test_data["client"]["wireless"]["mac"], "-R"), 1, "fail"],
     ]
 )
-def test_show_roaming(args: list[str], should_pass: bool, test_name_update: None | str):
+def test_show_roaming(idx: int, args: tuple[str], exit_code: int, test_name_update: None | str):
     if test_name_update:
         env.current_test = f"{env.current_test}_{test_name_update}"
     result = runner.invoke(app, [
@@ -1497,8 +1535,8 @@ def test_show_roaming(args: list[str], should_pass: bool, test_name_update: None
             *args
         ]
     )
-    capture_logs(result, env.current_test)
-    assert result.exit_code == 0 if should_pass else 1
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
     assert "API" in result.stdout
 
 
@@ -1604,16 +1642,23 @@ def test_show_swarm_invalid_aos10_ap():
     assert "AOS8" in result.stdout
 
 
-def test_show_token():
+@pytest.mark.parametrize(
+    "idx,args,pass_condition",
+    [
+        [1, (), lambda r: "refresh" in r.lower()],  # Attempting to Refresh Tokens
+        [2, ("--no-refresh",), lambda r: "token" in r.lower()],
+    ]
+)
+def test_show_token(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "token"
         ]
     )
-    capture_logs(result, "test_show_token")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
-    assert "refresh" in result.stdout.lower()  # Attempting to Refresh Tokens
     assert "access" in result.stdout.lower()   # Access Token: ...
+    assert pass_condition(result.stdout)
 
 
 def test_show_upgrade_multi():
@@ -1629,16 +1674,25 @@ def test_show_upgrade_multi():
     assert "API" in result.stdout
 
 
-def test_show_upgrade_no_dev():
-    result = runner.invoke(app, [
-            "show",
-            "upgrade",
-            "status"
-        ]
-    )
-    capture_logs(result, "test_show_upgrade_no_dev", expect_failure=True)
+@pytest.mark.parametrize(
+"idx,args,pass_condition,test_name_append",
+[
+        [1, ("status",), lambda r: "required" in r, None],
+        [2, (test_data["ap"]["name"], test_data["gateway"]["name"]), lambda r: "⚠" in r, "partial"],
+        [3, (test_data["ap"]["name"], test_data["gateway"]["name"]), lambda r: "Response" in r, "all"],
+    ]
+)
+def test_show_upgrade_fail(idx: int, args: tuple[str], pass_condition: Callable, test_name_append: str | None):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
+    result = runner.invoke(app, ["show", "upgrade", *args])
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=True)
     assert result.exit_code == 1
-    assert "required" in result.stdout
+    try:
+        assert pass_condition(result.stdout)
+    except AssertionError as e:  # pragma: no cover
+        capture_logs(result, f"{env.current_test}-{idx}", log_output=True)
+        raise(e)
 
 
 def test_show_uplinks():
@@ -1652,15 +1706,17 @@ def test_show_uplinks():
     assert result.exit_code == 0
     assert "uplink" in result.stdout.lower()
 
-
-def test_show_cloud_auth_upload_mac():
+@pytest.mark.parametrize("mac", [True, False])
+def test_show_cloud_auth_upload(mac: bool):
+    args = [] if mac else ["mpsk"]  # default is mac
     result = runner.invoke(app, [
             "show",
             "cloud-auth",
             "upload",
-        ]  # default is mac
+            *args
+        ]
     )
-    capture_logs(result, "test_show_cloud_auth_upload_mac")
+    capture_logs(result, f"{env.current_test}:{'mac' if mac else 'mpsk'}")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
@@ -1689,20 +1745,20 @@ def test_show_cloud_auth_sessions_authentications(args: tuple[str], pass_conditi
 
 
 @pytest.mark.parametrize(
-    "args,pass_condition",
+    "idx,args,pass_condition",
     [
-        [(), lambda r: "412" in r],
+        [1, ("authentications",), lambda r: "412" in r],
+        [2, ("sessions",), lambda r: "Response" in r],
     ]
 )
-def test_show_cloud_auth_authentications_fail(args: tuple[str], pass_condition: Callable):
+def test_show_cloud_auth_sessions_authentications_fail(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, [
             "show",
             "cloud-auth",
-            "authentications",
             *args
         ]
     )
-    capture_logs(result, "test_show_cloud_auth_authentications_fail", expect_failure=True)
+    capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
@@ -1740,23 +1796,16 @@ def test_show_tunnels():
     assert "API" in result.stdout
 
 
-@pytest.mark.parametrize(
-    "idx,args,pass_condition",
-    [
-        [1, ("--csv",), lambda r: "ounts" in r],
-        [2, ("--sort", "end-date", "-r"), lambda r: "ounts" in r],
-        [3, ("stats",), lambda r: "used" in r],
-        [4, ("names",), lambda r: "advance" in r],
-        [5, ("auto",), lambda r: "API" in r],
-        [6, ("--dev-type", "switch"), lambda r: "ounts" in r],
-        [7, ("--type", "foundation-switch-6200"), lambda r: "foundation-switch-6200" in r.rstrip().splitlines()[-1]],
-    ]
-)
-def test_show_subscriptions(idx: int, args: tuple[str], pass_condition: Callable):  # glp
-    result = runner.invoke(app, ["show", "subscriptions", *args])
-    capture_logs(result, f"{env.current_test}{idx}")
-    assert result.exit_code == 0
-    assert pass_condition(result.stdout)
+def test_show_tunnels_fail():
+    result = runner.invoke(app, [
+            "show",
+            "tunnels",
+            test_data["gateway"]["name"],
+        ]
+    )
+    capture_logs(result, env.current_test, expect_failure=True)
+    assert result.exit_code == 1
+    assert "API" in result.stdout
 
 
 def test_show_vsx(ensure_dev_cache_test_vsx_switch: None):
@@ -1783,32 +1832,35 @@ def test_show_vsx_invalid_sw():
     assert "only valid" in result.stdout
 
 
-def test_show_webhooks():
+@pytest.mark.parametrize("idx,args,exit_code,test_name_append", [[1, (), 0, None], [2, ("--sort", "token-created"), 0, None], [3, (), 1, "fail"]])
+def test_show_webhooks(idx: int, args: tuple[str], exit_code: int, test_name_append: str):
+    if test_name_append:
+        env.current_test = f"{env.current_test}_{test_name_append}"
     result = runner.invoke(app, [
             "show",
             "webhooks",
-            "--sort",
-            "token-created"
+            *args
         ]
     )
-    capture_logs(result, "test_show_webhooks")
-    assert result.exit_code == 0
+    capture_logs(result, f"{env.current_test}-{idx}", expect_failure=bool(exit_code))
+    assert result.exit_code == exit_code
     assert "API" in result.stdout
 
 
 @pytest.mark.parametrize(
-    "_,fixture,args",
+    "idx,fixture,args",
     [
         [1, None, ()],
         [2, None, ("-v",)],
         [3, None, ("--group", test_data["ap"]["group"], "--csv")],
-        [4, None, (test_data["tunneled_ssid"]["ssid"],)],
-        [5, None, ("--swarm", test_data["aos8_ap"]["name"])],
-        [6, None, ("--site", test_data["ap"]["site"])],
-        [7, "ensure_cache_label1", ("--label", "cencli_test_label1")],
+        [4, None, ("--group", test_data["ap"]["group"], "-vv")],
+        [5, None, (test_data["tunneled_ssid"]["ssid"],)],
+        [6, None, ("--swarm", test_data["aos8_ap"]["name"])],
+        [7, None, ("--site", test_data["ap"]["site"])],
+        [8, "ensure_cache_label1", ("--label", "cencli_test_label1")],
     ]
 )
-def test_show_wlans(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
+def test_show_wlans(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, [
@@ -1817,7 +1869,7 @@ def test_show_wlans(_: int, fixture: str | None, args: tuple[str], request: pyte
             *args
         ]
     )
-    capture_logs(result, "test_show_wlans")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert "API" in result.stdout
 

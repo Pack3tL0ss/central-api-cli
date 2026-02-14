@@ -14,7 +14,7 @@ from centralcli.cache import CacheDevice
 from centralcli.constants import iden_meta, lib_to_api
 
 try:
-    from fuzzywuzzy import process  # type: ignore noqa
+    from fuzzywuzzy import process
     FUZZ = True
 except Exception:  # pragma: no cover
     FUZZ = False
@@ -34,7 +34,7 @@ def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, An
     render.display_results(resp, tablefmt="action", exit_on_fail=exit_on_fail)
 
     if not resp:
-        return
+        return  # TODO verify implications of removing exit_on_fail and always letting display_results exit if POST fails here.
 
     complete = False
     while not complete:
@@ -77,8 +77,8 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
         outfile (Path): Optional output to file
         pager (bool): Optional Use Pager
     """
-    dev: CacheDevice = common.cache.get_dev_identifier(device)
-    dev_type = lib_to_api(dev.type, "tshoot")
+    dev: CacheDevice = common.cache.get_dev_identifier(device)  # TODO may need swack=True, then if dev.type == "ap" run command again without swack or check if the orig dev requested is same as vc
+    dev_type = lib_to_api(dev.type, "tshoot")                   # They may get multi-match if dev is stack
     if all(c.isdigit() for c in cmd):  # allows user to enter cmd id from show ts commands output.
         send_cmds_by_id(dev, commands=[int(c) for c in cmd], pager=pager, outfile=outfile, exit_on_fail=True)
     if len(cmd) == 1:
@@ -383,7 +383,7 @@ def ping(
         "cx": 6006,
         "sw": 1036
     }
-    dev = common.cache.get_dev_identifier(device)
+    dev = common.cache.get_dev_identifier(device, swack=True)  # TODO swack=True ... if they select an AP that is not the vc to ping from (is that valid?)  this will return the vc.  May need to repeat get_dev_identifier if dev.type == "ap"
     cmd_id = command_ids[dev.type]
     cmd_args = {"Host": host}
 

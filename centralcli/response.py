@@ -1,32 +1,50 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+from collections.abc import Callable
 
 import json
-from dataclasses import dataclass
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Union
+from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING
 
 from aiohttp import ClientResponse
+import pendulum
 from rich.console import Console
 from yarl import URL
 
 from centralcli import config, log, utils
 from centralcli.environment import env
 from centralcli.exceptions import CentralCliException
+from centralcli.objects import DateTime
 
 from . import render
 
+if TYPE_CHECKING:
+    from collections.abc import KeysView
 
-class RateLimit():
+
+class RateLimit:
     def __init__(self, resp: ClientResponse = None):
         self.total_day, self.remain_day, self.total_sec, self.remain_sec = 0, 0, 0, 0
+        self.total_min, self.remain_min, self.glp_rl_reset = 0, 0, 0
+        self.is_glp = self.is_cnx = False
         if hasattr(resp, "headers"):
             rh = resp.headers
+            self.is_glp = True if "greenlake" in (resp.url.host or "") else False
+            self.is_cnx = True if "X-RateLimit-Limit" in rh else False
+            if self.is_cnx:
+                self.total_sec = int(f"{rh.get('X-RateLimit-Limit', 0)}")
+                self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining', 0)}")
+                self.reset_sec = int(f"{rh.get('X-RateLimit-Reset', 0)}")
+            else:
+                self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
+                self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
             self.total_day = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
             self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
-            self.total_sec = int(f"{rh.get('X-RateLimit-Limit-second', 0)}")
-            self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
+            #glp
+            self.total_min = int(f"{rh.get('ratelimit-limit', 0)}")  # glp
+            self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")  # glp
+            self.glp_rl_reset = int(f"{rh.get('ratelimit-reset', 0)}")  # glp
             self.call_performed = True
         else:
             self.call_performed = False
@@ -40,6 +58,8 @@ class RateLimit():
 
     def __str__(self):
         if self.call_performed:
+            if self.total_min:
+                return f"GLP API Per Minute Rate Limit: {self.remain_min} of {self.total_min} remaining."
             return f"API Rate Limit: {self.remain_day} of {self.total_day} remaining."
         else:
             return "No API call was performed."
@@ -51,27 +71,39 @@ class RateLimit():
         return len(self.__str__())
 
     def __lt__(self, other) -> bool:
-        return True if self.remain_day is None else bool(self.remain_day < other)
+        if not self.is_glp:
+            return True if self.remain_day is None else bool(self.remain_day < other)
+        return bool(self.remain_min < other)
 
     def __le__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day <= other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day <= other)
+        return bool(self.remain_min <= other)
 
     def __eq__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day == other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day == other)
+        return bool(self.remain_min == other)
 
     def __gt__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day > other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day > other)
+        return bool(self.remain_min > other)
 
     def __ge__(self, other) -> bool:
-        return False if self.remain_day is None else bool(self.remain_day >= other)
+        if not self.is_glp:
+            return False if self.remain_day is None else bool(self.remain_day >= other)
+        return bool(self.remain_min >= other)
 
     @property
     def ok(self) -> bool:
-        if self.used_sec + self.remain_sec + self.total_sec == 0:
-            secs_ok = True
-        else:
-            secs_ok = True if self.remain_sec > 0 else False
-        return True if self.remain_day != 0 and secs_ok else False
+        if not self.is_glp:
+            if self.used_sec + self.remain_sec + self.total_sec == 0:
+                secs_ok = True
+            else:
+                secs_ok = True if self.remain_sec > 0 else False
+            return True if self.remain_day != 0 and secs_ok else False
+        return self.remain_min != 0
 
     @property
     def near_sec(self) -> bool:
@@ -83,7 +115,11 @@ class RateLimit():
 
     @property
     def text(self) -> str:
-        full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        if not self.is_glp:
+            full_text = f"{self}\n{' ':16}{self.remain_sec}/sec of {self.total_sec}/sec remaining."
+        else:
+            full_text = f"{self}\n{' ':16}{self.reamin_min}/min of {self.total_min}/min remaining.\nRate Limit will reset in {self.glp_rl_reset} Seconds."
+
         return full_text if self.call_performed else str(self)
 
     @property
@@ -121,7 +157,9 @@ class Response:
         status_code: int = None,
         elapsed: Union[int, float] = None,
         data_key: str = None,
-        caption: str | list[str] = None
+        caption: str | list[str] = None,
+        exit_code: int = None,
+        mock_key_append: str | None = None,
     ):
         """Response Constructor
 
@@ -141,18 +179,24 @@ class Response:
             raw (Any, optional): raw response payload. Defaults to {}.
             status_code (int, optional): Response http status code. Defaults to None.
             elapsed (Union[int, float], optional): Amount of time elapsed for request. Defaults to 0.
-            data_key: (str, optional): The key where the actual data is held in the response, typically a list[dict].
-            caption: (str | list[str], optional): Optional captions to be displayed with the response.
+            data_key (str, optional): The key where the actual data is held in the response, typically a list[dict].
+            caption (str | list[str], optional): Optional captions to be displayed with the response.
+            exit_code (int, optional):  Used to exit CLI with proper exit code, usually when resp is a combined respose w/ partial failure.
+                Defaults to None.  (exit_code is determined by resp status)
+            mock_key_append: (str, optional): Used for testing.  A portion of payload is passed into Response object for the sake
+                of uniquely identifying mock responses.  This value is appended to the key when the response is captured in the mock response file.
         """
         self.rl = RateLimit(response)
         self._response = response
-        self.output = output or {}
+        self.output = {} if output is None else output
         self.raw = raw or {}
         self._ok = ok
         self.method = ""
         self.elapsed = elapsed or 0
         self.data_key = data_key
         self.caption = caption
+        self._exit_code = exit_code
+        self.mock_key_append = mock_key_append  # used to create a more unique key in mock response file when using --capture-raw
         if response is not None:
             self.url = response.url if isinstance(response.url, URL) else URL(response.url)
             self.error = response.reason or ("OK" if response.ok else "ERROR")  # visualrf does not send OK for reason when call is successful
@@ -172,7 +216,7 @@ class Response:
                 else:  # marker is not an int
                     _offset_str = f" {offset_key}: {self.url.query[offset_key]} limit: {self.url.query.get('limit', '?')}"
 
-            _log_msg = f"[{self.status}:{self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
+            _log_msg = f"[{self.status} {self.error}] {self.method}:{self.url.path}{_offset_str} Elapsed: {self.elapsed:.2f}"
             if not self.ok:
                 self.output = self.output or self.error
                 if isinstance(self.output, dict) and ("description" in self.output or "detail" in self.output):
@@ -185,7 +229,7 @@ class Response:
             if error:
                 self.error = error
                 self.output = output or error
-            elif output or isinstance(output, (list, dict)):  # empty list or dict, when used as constructor still ok
+            else:  # empty list or dict, when used as constructor still ok
                 self.error = error or "OK"
 
             self.url = URL(url)
@@ -218,28 +262,34 @@ class Response:
     def dump(self) -> str:  # pragma: no cover
         def _get_body(res):
             if hasattr(res, "_body"):
-                return self._response._body.decode("utf-8")
+                return res._body.decode("utf-8")
             return res.content.decode("utf-8")
 
         def combine_response(url: str, out: dict) -> dict | None:  # TODO add handler to create METHOD key in ok_responses/failed_responses if it doesn't exist.  i.e. failed_responses["DELETE"] currently KeyError if DELETE doesn't exist
-            now = {} if not config.closed_capture_file.exists() else json.loads(config.closed_capture_file.read_text())
-            if env.current_test:
-                key = f"{self.method}_{url}"
+            now = {} if not config.closed_capture_file.exists() else (config.closed_capture_file.read_text() and json.loads(config.closed_capture_file.read_text())) or {}
+            if env.current_test:  # Use of --test <test name> when using --capture-raw will capture and place under a specific test key
+                key = f"{self.method}_{url}{self.mock_key_append or ''}"
+                log.info(f"Prepped new MOCK for {env.current_test}[{key}]")
                 if env.current_test in now:
-                    if key in now[env.current_test]:
-                        now[env.current_test][key] += [out]
-                    else:
-                        now[env.current_test][key] = [out]
-                    return now
+                    return utils.update_dict(now[env.current_test], key, out)
+                    # if key in now[env.current_test]:
+                    #     now[env.current_test][key] += [out]
+                    # else:
+                    #     now[env.current_test][key] = [out]
+                    # return now
                 return {**now, **{env.current_test: {key: [out]}}}
 
-            key = url.replace("/", "_").lstrip("_")
+            key = f'{url.replace("/", "_").lstrip("_")}{self.mock_key_append or ""}'
             pkey = "ok_responses" if self.ok else "failed_responses"
             if pkey in now and self.method in now[pkey] and key in now[pkey][self.method]:
-                log.warning(f"A ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire it to replace it.", show=True, caption=True)
+                log.warning(
+                    f"A{'n' if self.ok else ''} ({pkey.split('_')[0]}) Response for {self.method}: {key} [red]already exists[/] in {config.closed_capture_file.name}.  Use [cyan]--test[/] to capture response for a specific test, or manually remove existing response if desire is to replace it.", show=True, caption=True
+                )
                 return
 
-            return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
+            log.info(f"Prepped new MOCK for {pkey}[{self.method}][{key}]")
+            # return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
+            return {**now, pkey: {**now.get(pkey, {}), self.method: {**now.get(pkey, {self.method: {}})[self.method], key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         out = {
@@ -248,8 +298,8 @@ class Response:
             "method": self.method,
             "status": self.status,
             "content_type": "application/json" if not self._response else self._response.headers.get("Content-Type", "application/json"),
-            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if k.startswith("X-RateLimit")},
-            "body": '',
+            "headers": {} if not self._response else {k: v for k, v in dict(self._response.headers).items() if "ratelimit" in k.lower() or k == "Location"},
+            # "body": '',
             "payload": {}
         }
 
@@ -257,27 +307,28 @@ class Response:
             if self.raw:
                 _ = json.dumps(self.raw)  # This is just to catch any issues with payload so we can fallback to body
                 out["payload"] = self.raw
-            elif self._response:
-                out["body"] = _get_body(self._response)
+            # elif self._response:
+            #     out["body"] = _get_body(self._response)
         except json.JSONDecodeError as e:
             log.exception(f"response.dump() encountered JSONDecodeError\n{e}", show=True)
-            out["body"] = _get_body(self._response)
+            # out["body"] = _get_body(self._response)
+            out["payload"] = _get_body(self._response)
 
         combined_out = combine_response(_url.path_qs, out)
         return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out, indent=2, sort_keys=False))
 
 
     def __bool__(self):
+        if self._ok is not None:
+            return self._ok
+
         if self._response:
             return self._response.ok
 
         if self.error and self.error != "OK":
-            return self._ok or False
+            return False
 
-        if self.output or isinstance(self.output, (list, dict)):
-            return self._ok or True
-
-        raise CentralCliException("Unable to determine success status of Response")
+        return True
 
     @property
     def ok(self):
@@ -287,8 +338,65 @@ class Response:
     def ok(self, ok: bool):
         self._ok = ok
 
+    @property
+    def exit_code(self) -> int:
+        return self._exit_code if self._exit_code is not None else int(not self.ok)
+
+    @exit_code.setter
+    def exit_code(self, code: int):
+        self._exit_code = code
+
+    @property
+    def headers(self) -> Mapping:
+        if self._response is not None:
+            return self._response.headers
+        return {}
+
+    @property
+    def async_status_url(self) -> str | None:
+        return self.headers.get("Location")
+
+    @property
+    def summary(self) -> dict[str, int | str | list | dict]:
+        summary = {
+            "method": self.method,
+            "url": self.url.path_qs,
+            "status code": f"{self.status}:{self.error}",
+        }
+        if self.output:
+            if isinstance(self.output, dict) and self.output.get("sourceResourceUri", "") == "AsyncOperationResource":
+                async_resp_fields = ["status", "startedAt", "endedAt", "result", "error", "resultType"]
+                output = {k.removesuffix("At").replace("Type", "_type"): self.output[k] if not k.endswith("At") else DateTime(pendulum.parse(self.output[k]).timestamp(), "mdyt") for k in async_resp_fields if k in self.output}
+                summary = {**summary, **output}
+            else:
+                summary["output"] = self.output
+        return summary
+
+    @property
+    def async_success_devices(self) -> list[str]:
+        success_devs = self.summary.get("output", {}).get("async operation response", {}).get("result", {}).get("succeededDevices", [{}])
+        return [k for inner in success_devs for k in inner.values()]
+
+    @property
+    def async_failed_devices(self) -> list[str]:
+        failed_devs = self.summary.get("output", {}).get("async operation response", {}).get("result", {}).get("failedDevices", [{}])
+        return [k for inner in failed_devs for k in inner.values()]
+
+    @property
+    def is_already_claimed(self) -> bool:
+        """property used for glp async ops responses to determine if the failure was due to it already being claimed
+
+        During a device add tags won't be processed if the device already exists
+
+        Returns:
+            bool: indicating if the response has devices that failed due to them being already claimed/in GLP
+        """
+        return True if "HPE_GL_ERROR_PRECONDITION_FAILED" in str(self.output) and "already claimed" in str(self.output) else False
+
+
     def __repr__(self):  # pragma: no cover
-        return f"<{self.__module__}.{type(self).__name__} ({self.error}) object at {hex(id(self))}>"
+        _exit_code_str = "" if not self.exit_code else f"|exit code: {self.exit_code}"
+        return f"<{self.__module__}.{type(self).__name__} ({self.error}{_exit_code_str}) object at {hex(id(self))}>"
 
     def __rich__(self):
         fg = "red" if not self.ok else "bright_green"
@@ -307,12 +415,9 @@ class Response:
 
         # indent single line output
         if isinstance(self.output, str) and "{\n" in self.output:
-            if "\n" not in self.output:
-                r = f"  {self.output}"
-            elif "{\n" in self.output:
-                r = "  {}".format(
-                    self.output.replace('\n  ', '\n').replace('\n', '\n  ')
-                )
+            r = "  {}".format(
+                self.output.replace('\n  ', '\n').replace('\n', '\n  ')
+            )
         elif not self.output:
             if self.status not in [201, 202]:
                 emoji = '\u2139' if self.ok else '\u26a0'
@@ -350,13 +455,13 @@ class Response:
             if isinstance(self.output, dict) and "message" in self.output and isinstance(self.output["message"], str) and '\n' not in self.output["message"]:
                 r = r.replace("message: ", "").replace(self.output["message"], f'[red italic]{self.output["message"]}[/]')
 
-        r = self._colorize_output(r)
+        r = self._colorize_output(r).rstrip()
 
         # sanitize sensitive data for demos
         if config.dev.sanitize and config.sanitize_file.is_file():
             r = render.Output().sanitize_strings(r)
 
-        return f"{status_code}{r}"
+        return f"{status_code}{r.rstrip()}\n"
 
     def _colorize_output(self, output: str) -> str:
         re_word = {
@@ -365,13 +470,18 @@ class Response:
             "[red][red]": "[red]",
             "[/][/]": "[/]",
             "[/]fully": "fully",
-            "[/]_": "_"
+            "[/]_": "_",
+            "[red]failed[/]Devices": "[red]failedDevices[/]",
+            "succeeded[/]Devices": "succeededDevices[/]",
+            "HPE_GL_ERROR_PRECONDITION_[red]FAILED[/]": "[red]HPE_GL_ERROR_PRECONDITION_FAILED[/]",
+            "async_operation_response": "[italic dark_olive_green2]async_operation_response[/]",
         }
         green_words = [
             "success_list",
             "succeeded_devices",
             "successfully",
             "success",
+            "SUCCEEDED",
         ]
         red_words = [
             "failed_list",
@@ -454,7 +564,7 @@ class Response:
         if isinstance(self.output, dict):
             return self.output.get(key, default)
 
-    def keys(self) -> list:
+    def keys(self) -> KeysView:
         if isinstance(self.output, dict):
             return self.output.keys()
         elif self.output and isinstance(self.output, (list, tuple)):
@@ -510,12 +620,54 @@ class Response:
         return self.status
 
 
-@dataclass
 class BatchResponse:
-    responses: list[Response]
+    _rl: RateLimit
+    _exit_code: int = 0
+
+    def __init__(self, responses: list[Response], output_formatter: Callable = None, raw_formatter: Callable = None):
+        self.responses = responses
+        self._display_response: Response | None = None
+        self._output_formatter = output_formatter
+        self._raw_formatter = raw_formatter
+        self._output: list[dict] = None
+        BatchResponse._rl = self.last_rl
+        BatchResponse._exit_code = BatchResponse._exit_code or self.exit_code
 
     def __bool__(self):  # pragma: no cover
         return self.ok
+
+    def __len__(self):
+        return len(self.responses)
+
+    def get_output(self) -> list[dict] | None:
+        output = [item for r in self.responses if r.ok for item in utils.listify(r.output)] or None
+        if output and self._output_formatter:
+            output = self._output_formatter(output)
+        return output
+
+    @property
+    def display(self) -> Response | None:
+        if self._display_response is not None:
+            return self._display_response
+        return self.last
+
+    @display.setter
+    def display(self, response: Response):
+        self._display_response = response
+
+    @property
+    def output(self) -> list[dict] | None:
+        if self._output is not None:
+            return self._output
+        else:
+            output = self.get_output()
+            self.display.output = output
+            return output
+
+    @output.setter
+    def output(self, output: list[dict]):
+        self._output = output
+        self.display.output = output
 
     @cached_property
     def elapsed(self) -> float:  # pragma: no cover
@@ -533,7 +685,7 @@ class BatchResponse:
     def last(self):
         last_resp = [*self.failed, *self.passed][-1]
         raw = self.raw
-        resp = Response(last_resp._response, raw=raw)
+        resp = Response(last_resp._response, output=self.get_output(), raw=raw)
         resp.rl = self.last_rl
         return resp
 
@@ -544,7 +696,19 @@ class BatchResponse:
 
     @cached_property
     def raw(self) -> dict[str, Any]:
-        return {res.url.path: res.raw for res in self.responses}
+        if all([r.url.path == "/devices/v1/devices" for r in self.responses]) and all([r.method == "GET" for r in self.responses]):
+            count = sum([r.raw.get("count", 0) or 0 for r in self.responses if r.ok])
+            total = sum([r.raw.get("total", 0) or 0 for r in self.responses if r.ok])
+            items = [dev for r in self.responses for dev in r.raw["items"]]
+            return {"items": items, "count": count, "offset": 0, "total": total}
+
+        raw = {}
+        for idx, res in enumerate(self.responses, start=1):
+            if res.url.path not in raw:
+                raw[res.url.path] = res.raw
+            else:
+                raw[f"{res.url.path}_call_{idx}"] = res.raw
+        return raw
 
     @property
     def ok(self):
@@ -564,23 +728,29 @@ class CombinedResponse(Response):
         elapsed = 0
         raw = {}
         output = []
-        for idx, r in enumerate(_passed or _failed):  # if no requests passed we loop through _failed to retain output {"message": "error message..."}
-            this_output = r.output.copy()
+        output_type = None
+        res_idx = 0
+        for r in _passed or _failed:  # if no requests passed we loop through _failed to retain output {"message": "error message..."}
             this_raw = r.raw.copy()
-            if idx == 0:
-                output = this_output
+            raw[r.url.path] = this_raw
+
+            if not r.output:
+                continue  # skip responses that returned no output as output will always be an empty dict.  Where output with values is likely a list[dict]
+
+            this_output = r.output.copy()
+            if res_idx == 0:
                 output_type = type(r.output)
-                raw = {r.url.path: this_raw}
+                output = this_output
             else:
-                raw[r.url.path] = this_raw
                 if output_type is list:
                     output += this_output
                 elif output_type is dict:
                     output = {**output, **this_output}
                 else:
-                    raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")
+                    raise CentralCliException(f"flatten_resp received unexpected output attribute type {type(r.output)}.  Expected dict or list.")  # pragma: no cover
             if r.elapsed:
                 elapsed += r.elapsed
+            res_idx += 1  # we don't use enumerate so we can skip combining output for devs that returned an empty payload
 
         # failed responses are added to end of raw output
         if _passed:
@@ -624,7 +794,7 @@ class CombinedResponse(Response):
 
         return {"response": resp._response, "output": output, "raw": raw, "elapsed": elapsed}
 
-    def __init__(self, responses: List[Response], combiner_func: callable = flatten_resp):
+    def __init__(self, responses: List[Response], combiner_func: Callable = flatten_resp):
         self.responses = responses
         combined_kwargs: dict = combiner_func(responses)
         super().__init__(**combined_kwargs)

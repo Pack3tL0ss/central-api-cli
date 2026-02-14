@@ -1,10 +1,11 @@
 from __future__ import annotations
+from collections.abc import Callable
 
 import asyncio
 import json
 import sys
 import time
-from functools import cached_property, wraps
+from functools import wraps
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Tuple, Type
@@ -18,7 +19,8 @@ from rich.console import Console
 from rich.markup import escape
 from yarl import URL
 
-from . import cleaner, config, log, utils
+from . import cleaner, config as cfg, log, utils
+from .config import Config
 from .cnx.base import NewCentralBase
 from .constants import STRIP_KEYS, lib_to_api
 from .exceptions import InvalidConfigException
@@ -46,6 +48,7 @@ class LoggedRequests:
         self.status = None
         self.remain_day = None
         self.remain_sec = None
+        self.remain_min = None
 
     def __repr__(self):
         return f"<{self.__module__}.{type(self).__name__} ({self.reason or ('OK' if self.ok else '?')}) object at {hex(id(self))}>"
@@ -57,12 +60,12 @@ class LoggedRequests:
         self.status = response.status
         self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
         self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
-
+        self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")
         return self
 
 
 class BatchRequest:
-    def __init__(self, func: callable, *args, **kwargs) -> None:
+    def __init__(self, func: Callable, *args, **kwargs) -> None:
         """Constructor object for for api requests.
 
         Used to pass multiple requests into CentralApi batch_request method for parallel
@@ -83,44 +86,50 @@ class BatchRequest:
 
 class Session():
     requests: list[LoggedRequests] = []
+    glp_requests: list[LoggedRequests] = []
 
     def __init__(
         self,
         base_url: StrOrURL = None,
         *,
         workspace_name: str = None,
+        config: Config = None,
         aio_session: ClientSession = None,
         silent: bool = True,
         cnx: bool = None
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
-        self.base_url = None if not base_url else base_url.rstrip('/')
-        self.workspace_name = workspace_name  # only used for refresh of tokens in multiple workspaces
+        self.base_url = None if not base_url else str(base_url).rstrip('/')
+        self.config = config or cfg if workspace_name is None else Config(workspace=workspace_name)
+        self.workspace_name = workspace_name or self.config.workspace # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
-        self.ssl = config.ssl_verify
+        self.ssl = self.config.ssl_verify
         self.req_cnt = 0
         self.throttle: int = 0
         self.spinner = Spinner("Collecting Data...")
         self.updated_at = time.monotonic()
         self.rl_log = [f"{self.updated_at - INIT_TS:.2f} [INIT] {type(self).__name__} object at {hex(id(self))}"]
         self.BatchRequest = BatchRequest
-        self.running_spinners: List[str] = []
-        self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and "greenlake" in self.base_url)
+        self.running_spinners: List[str] = []  # TODO this should probably be a class attribute of the Spinner class, which is already a singleton
+        self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and ("greenlake" in self.base_url or ".api.central." in self.base_url))
 
-    @cached_property
+    @property
     def auth(self):
         return self.get_conn_from_file(self.workspace_name) if not self.is_cnx else self.get_glp_conn_from_file()
 
     @classmethod
     def requests_clear(cls):
         cls.requests = []  # used by pytest
+        cls.glp_requests = []
 
     @classmethod
-    def requests_append(cls, requests: LoggedRequests | list[LoggedRequests]):
-        cls.requests += utils.listify(requests)
+    def requests_append(cls, requests: LoggedRequests | list[LoggedRequests], is_cnx: bool = False):
+        if not is_cnx:
+            cls.requests += utils.listify(requests)
+        else:
+            cls.glp_requests +=  utils.listify(requests)
 
-    @staticmethod
-    def get_glp_conn_from_file() -> NewCentralBase:
+    def get_glp_conn_from_file(self) -> NewCentralBase:
         """Creates an instance of NewCentralBase based on config file.
 
         Refer to documentation for correct format of config file.
@@ -132,10 +141,10 @@ class Session():
         Raises:
             InvalidConfigException: If config is not valid.
         """
-        if not config.glp.ok:
-            raise InvalidConfigException(f"{config.file}... Invalid or missing config items for New Central functionality.")
+        if not self.config.glp.ok:
+            raise InvalidConfigException(f"{self.config.file}... Invalid or missing config items for New Central functionality.")
 
-        conn = NewCentralBase(config.glp.token_info)
+        conn = NewCentralBase(self.config.glp.token_info)
 
         return conn
 
@@ -151,13 +160,13 @@ class Session():
         """
         central_info = None
         if workspace_name:
-            central_info = config.workspaces.get(workspace_name, {}).get("classic")
+            central_info = self.config.workspaces.get(workspace_name, {}).get("classic")
 
         # fallback if workspace provided does not exist to prevent issues with autocomplete
-        central_info = central_info or config.central_info
+        central_info = central_info or self.config.central_info
 
-        conn = ArubaCentralBase(central_info, token_store=config.token_store, logger=log, ssl_verify=config.ssl_verify)
-        token_cache = Path(tokenLocalStoreUtil(config.token_store, central_info["customer_id"], central_info["client_id"]))
+        conn = ArubaCentralBase(central_info, token_store=self.config.token_store, logger=log, ssl_verify=self.config.ssl_verify)
+        token_cache = Path(tokenLocalStoreUtil(self.config.token_store, central_info["customer_id"], central_info["client_id"]))
 
         # always create token cache if it doesn't exist and always use it first
         # unless config has been modified more recently, if so,  any tokens in the config will be tried first.
@@ -165,7 +174,7 @@ class Session():
         if token_cache.is_file():
             cache_token = conn.loadToken()
             if cache_token:
-                if token_cache.stat().st_mtime > config.file.stat().st_mtime:
+                if token_cache.stat().st_mtime > self.config.file.stat().st_mtime:
                     conn.central_info["retry_token"] = conn.central_info["token"]
                     conn.central_info["token"] = cache_token
                 else:
@@ -218,27 +227,27 @@ class Session():
         if spin_txt:
             if "retry" in spin_txt:
                 return spin_txt
-            elif "DEFAULT_SPIN_TXT" in spin_txt:
-                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=config.debug)
-
+            if spin_txt == DEFAULT_SPIN_TXT:
+                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=self.config.debug)
 
             self.running_spinners = [*self.running_spinners, spin_txt]
         elif not self.running_spinners:  # pragma: no cover
             return "missing spin text"
 
-
         try:  # reformat for pagination multi-call.  There will be multiple spinners with the same base text w/ Request: <num> after the base text
-            if len(self.running_spinners) > 1 and len(set([x.split("...")[0] for x in self.running_spinners])) == 1 and ":" in self.running_spinners[0]:
-                return f'{self.running_spinners[0].split("...")[0]}... Request:{",".join(x.split(":")[1] for x in self.running_spinners)}'.replace("...,", "...")
-
-        except Exception as e:
-            log.warning(f"DEV NOTE: {e.__class__.__name__} exception in combined spinner update")
+            if len(self.running_spinners) > 1:
+                if len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
+                    pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1].lstrip()
+                    sfx = ",".join(f" {idx}" if ":" not in x else x.split(":")[1] for idx, x in enumerate(self.running_spinners[1:], start=2))
+                    return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx},{sfx}'.replace("...,", "...")
+                else:
+                    return f"{self.running_spinners[0]} [dim italic]Processing {len(self.running_spinners)} requests."
+        except Exception as e:  # pragma: no cover
+            log.exception(f"DEV NOTE: {repr(e)} exception in combined spinner update (Client.Session._get_spin_text)")
 
         return spin_txt if not self.running_spinners else self.running_spinners[0]
 
     async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:  # pragma: no cover
-        if not config.debugv:
-            return
         call_data = {
             "method": method,
             "url": url if self.base_url is None else f"{self.base_url}{url}",
@@ -259,7 +268,7 @@ class Session():
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
-        if config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
+        if self.config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
             end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
@@ -282,9 +291,9 @@ class Session():
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
             log.debug(
-                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if self.req_cnt == 1 and "arubanetworks.com" in url else ""}'
+                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if not self.requests and not self.is_cnx else ""}'  # token msg only displayed on first call if not cnx
             )
-            if config.debugv:
+            if self.config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
 
             headers = self.headers if not headers else {**self.headers, **headers}
@@ -315,7 +324,7 @@ class Session():
                         **kwargs
                     )
                     elapsed = time.perf_counter() - _start
-                    self.requests_append(req_log.update(resp))
+                    self.requests_append(req_log.update(resp), is_cnx=self.is_cnx)
 
                     try:
                         output = await resp.json()
@@ -329,49 +338,37 @@ class Session():
                     except (json.decoder.JSONDecodeError, ContentTypeError):
                         output = raw_output = await resp.text()
 
-                    resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed)
+                    mock_key_append = utils.get_mock_append(method, json_data=json_data, headers=resp.headers)  # for testing w/ mock responses
+                    resp = Response(resp, output=output, raw=raw_output, elapsed=elapsed, mock_key_append=mock_key_append)
 
             except (ClientOSError, ClientConnectorError) as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                log.exception(f'[{method}:{URL(url).path}] {str(e).removesuffix(" [None]")}')
+                resp = Response(error=repr(e), url=_url.path_qs)
             except ContentLengthError as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                log.exception(f'[{method}:{URL(url).path}] {e}')
+                resp = Response(error=repr(e), url=_url.path_qs)
             except Exception as e:
-                log.exception(f'[{method}:{URL(url).path}]{e}')
-                resp = Response(error=str(e.__class__.__name__), output=str(e), url=_url.path_qs)
+                log.exception(f'[{method}:{URL(url).path}] {e}')
+                resp = Response(error=repr(e), url=_url.path_qs)
                 _ += 1
 
-            fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail}\n  {resp.output}"
+            fail_msg = spin_txt_fail if self.silent else f"{spin_txt_fail} [red italic]{resp.error}[/]"
             self.running_spinners = [s for s in self.running_spinners if s != spin_txt_run]
             if not resp:
                 self.spinner.fail(fail_msg) if not self.silent else self.spinner.stop()
                 if self.running_spinners:
                     self.spinner.start(self._get_spin_text(), spinner="dots")
 
-                # TODO need GLP retry here
-                # status code: 401
-                # Access Forbidden
-                # Unformatted response from Aruba Central API GW
-                # {
-                #     'httpStatusCode': 401,
-                #     'errorCode': 'HPE_GL_ERROR_FORBIDDEN',
-                #     'message': 'JWT verification failed, JWT verification failed for claims: Signature has expired',
-                #     'debugId': 'hHtoh-ahwJ6IwMT6Qp3OyhDNBWUB8LpFnWeNH30NkWse-SzdjJ-swA=='
-                # }
-                if "invalid_token" in resp.output:
+                if resp.status == 401:
                     spin_txt_retry =  "(retry after token refresh)"
                     self.refresh_token()
                 elif "errorCode" in resp.raw and "HPE_GL_ERROR" in resp.raw["errorCode"] and "signature has expired" in resp.raw.get("message", "").lower():
                     spin_txt_retry =  "(retry after token refresh)"
                     if hasattr(self.auth, "handle_expired_token"):
                         self.auth.handle_expired_token()
-                elif resp.status == 401 and self.is_cnx:
-                    spin_txt_retry =  "(retry after token refresh)"
-                    self.spinner.start(f"Attempting to Refresh {'' if not self.is_cnx else '[green]GLP[/] '}Token")
-                    self.auth.handle_expired_token()
-                    self.spinner.succeed()
                 elif resp.status == 500:
+                    if url == "/configuration/v1/devices/move" and "group move has been initiated" in resp.output.get("description", ""):
+                        break  # API-FLAW move endpoint returns 500 to indicate success for gw move
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
                     # returns JSON: {'message': 'An unexpected error occurred'}
@@ -382,9 +379,16 @@ class Session():
                 elif resp.status == 504:
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 504: [cyan]Gatewat Time-out[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 504 (Gateway Timeout) from Central API gateway')
-                elif resp.status == 429:  # per second rate limit.
-                    spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
-                    self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
+                elif resp.status == 429:
+                    if "greenlake" in resp.url.host:
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per minute rate limit"
+                        self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/m: {resp.rl.remain_min}: {resp.url.path_qs}"]
+                        self.spinner.update(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit.")
+                        await asyncio.sleep(resp.rl.glp_rl_reset)
+                        # with Spinner(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):
+                    else:  # per second rate limit.
+                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
+                        self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
                 elif resp.status == 418:  # Spot to handle retries for any caught exceptions
                     if resp.error == "ContentLengthError":
@@ -448,8 +452,8 @@ class Session():
         return paged_raw, paged_output
 
     async def api_call(self, url: StrOrURL, data: dict = None, json_data: dict | list = None,
-                       method: str = "GET", headers: dict = {}, params: dict = {}, callback: callable = None,
-                       callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response:
+                       method: str = "GET", headers: dict = {}, params: dict = {}, callback: Callable = None,
+                       callback_kwargs: Any = {}, count: int = None, **kwargs: Any) -> Response | list[Response]:
         """Perform API calls and handle paging
 
         Args:
@@ -471,23 +475,24 @@ class Session():
         params = utils.strip_none(params)
 
         # /routing endpoints use "marker" rather than "offset" for pagination
-        offset_key = "marker" if "marker" in params or "/api/routing/" in url else "offset"
+        offset_key = "marker" if "marker" in params or "/api/routing/" in str(url) else "offset"
 
         # for debugging can set a smaller limit in config or via --debug-limit flag to test paging
-        if params and params.get("limit") and config.dev.limit:
-            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {config.dev.limit}')
-            params["limit"] = config.dev.limit
+        if params and params.get("limit") and self.config.dev.limit:
+            log.info(f'paging limit being overridden by config: {params.get("limit")} --> {self.config.dev.limit}')
+            params["limit"] = self.config.dev.limit
 
         # allow passing of default kwargs (None) for param/json_data, all keys with None Value are stripped here.
         # supports 2 levels beyond that needs to be done in calling method.
-        json_data = utils.strip_none(json_data)
-        if json_data:  # strip second nested dict if all keys = NoneType
-            y = json_data.copy()
-            for k in y:
-                if isinstance(y, dict) and isinstance(y[k], dict):
-                    y[k] = utils.strip_none(y[k])
-                    if not y[k]:
-                        del json_data[k]
+        if self.base_url != self.config.glp.base_url:  # glp endpoints often need to send None/null (remove subs, remove central app)
+            json_data = utils.strip_none(json_data)
+            if json_data:  # strip second nested dict if all keys = NoneType
+                y = json_data.copy()
+                for k in y:
+                    if isinstance(y, dict) and isinstance(y[k], dict):
+                        y[k] = utils.strip_none(y[k])
+                        if not y[k]:
+                            del json_data[k]
 
         # Output pagination loop
         paged_output = None
@@ -514,7 +519,7 @@ class Session():
             # total is provided for some calls with the total # of records available
             # TODO # TOGLP  need to use "next" as pagination field
             # if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + (params.get("limit", 0) * params["next"]) < r.raw["total"]):
-            is_events = True if url.endswith("/monitoring/v2/events") else False
+            is_events = True if str(url).endswith("/monitoring/v2/events") else False
             do_next = do_pagination = False
             if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) if params["next"] in [None, 1] else len(r.output) + (params.get("limit", 0)) * params["next"]) < r.raw["total"]:
                 do_pagination = True
@@ -631,7 +636,7 @@ class Session():
                 token = auth.refreshToken(t)
 
                 # TODO make req_cnt a property that fetches len of requests
-                self.requests_append(LoggedRequests("/oauth2/token", "POST", ok=bool(token)))
+                self.requests_append(LoggedRequests("/oauth2/token", "POST", ok=bool(token)), is_cnx=self.is_cnx)
                 self.req_cnt += 1
 
                 if token:
@@ -658,7 +663,7 @@ class Session():
         This method calls into _refresh_token which performs the API call.
 
         Args:
-            token_data (Union[dict, List[dict]], optional): Dict or list of dicts, where each dict is a
+            token_data (dict | list[dict], optional): Dict or list of dicts, where each dict is a
                 pair of tokens ("access_token", "refresh_token").  If list, a refresh is attempted with
                 each pair in order.  Stops once a refresh is successful.  If no token_data is provided
                 it is collected from cache or config.
@@ -667,6 +672,12 @@ class Session():
         Returns:
             bool: Bool indicating success/failure.
         """
+        if self.is_cnx:
+            self.spinner.start(f"Attempting to Refresh {'' if not self.is_cnx else '[green]GLP[/] '}Token")
+            self.auth.handle_expired_token()
+            self.spinner.succeed()
+            return True  # Exits if it fails
+
         auth = self.auth
         if not token_data:
             token: dict | None = auth.central_info.get("token")
@@ -678,11 +689,11 @@ class Session():
         success = self._refresh_token(token_data, silent=silent)
         if success:
             return True
-        elif not silent:
+        elif silent:
+            return False
+        else:  # pragma: no cover requires tty
             token_data = self.get_token_from_user()
             return self._refresh_token(token_data)
-        else:
-            return False
 
     def get_token_from_user(self) -> dict:  # pragma: no cover  requires tty
         """Handle invalid or expired tokens
@@ -727,12 +738,12 @@ class Session():
 
         return token_data
 
-    async def _request(self, func: callable, *args, **kwargs):
+    async def _request(self, func: Callable, *args, **kwargs):
         # async with ClientSession() as self.aio_session:
         async with self.aio_session:
             return await func(*args, **kwargs)
 
-    def request(self, func: callable, *args, **kwargs) -> Response:
+    def request(self, func: Callable, *args, **kwargs) -> Response:
         """non async to async wrapper for all API calls
 
         Args:
@@ -751,10 +762,10 @@ class Session():
         m_resp: List[Response] = []
         _tot_start = time.perf_counter()
         max_calls_per_chunk = MAX_CALLS_PER_CHUNK
-        if self.base_url == config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
+        if self.base_url == self.config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
             max_calls_per_chunk = 10
 
-        if self.requests: # a call has been made no need to verify first call (token refresh)
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests): # a call has been made no need to verify first call (token refresh)
             chunked_calls = utils.chunker(api_calls, max_calls_per_chunk)
         else:
             resp: Response = await api_calls[0].func(
@@ -765,16 +776,31 @@ class Session():
                 return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
 
             m_resp: List[Response] = utils.listify(resp)
-            chunked_calls = utils.chunker(api_calls[1:], max_calls_per_chunk)
 
-        # Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
+            # if self.is_cnx:
+            #     res = m_resp[-1]
+            #     if res.rl.remain_min > len(api_calls[1:]):
+            #         slice_end = res.rl.remain_min + 1
+            #         if len(api_calls[1:]) < slice_end:
+            #             slice_end = len(api_calls[1:])
+
+            #         chunked_calls = [api_calls[1:][:slice_end]]
+            #         if len(api_calls[1:]) > slice_end:
+            #             chunked_calls += utils.chunker(api_calls[1:][slice_end:], res.rl.total_min)
+            #     else:
+            #         chunked_calls = [api_calls[1:]]
+            # else:
+            chunked_calls: list[BatchRequest] = utils.chunker(api_calls[1:], max_calls_per_chunk)
+
+        # Classic Central API Make calls 6 at a time ensuring timing so that 7 per second limit is not exceeded
         # Doing 7 at a time resulted in rate_limit hits.  some failures result in retries which could cause a rate_limit hit within the chunk
+        # GLP API is per minute with different rate limit per endpoint found in header ratelimit
         for chunk in chunked_calls:
             _start = time.perf_counter()
 
             _calls_per_chunk = len(chunk)
             if chunk != chunked_calls[-1]:
-                chunk += [self.BatchRequest(asyncio.sleep, 1)]
+                chunk += [self.BatchRequest(asyncio.sleep, 1)]  # if not self.is_cnx else 60)]
 
             m_resp += await asyncio.gather(
                 *[call.func(*call.args, **call.kwargs) for call in chunk]
@@ -788,7 +814,8 @@ class Session():
         m_resp = utils.listify(m_resp, flatten=True)
         m_resp = utils.strip_none(m_resp)
 
-        log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
+        if len(api_calls) > 1:
+            log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
 
         self.silent = False
 
@@ -816,16 +843,16 @@ class Session():
         """
         return asyncio.run(self._batch_request(api_calls, continue_on_fail=continue_on_fail, retry_failed=retry_failed))
 
-    def build_url(func):
+    def build_url(func: Callable):
         @wraps(func)
         def wrapper(self: Session, url: StrOrURL, *args, **kwargs):
-            url = url if url.startswith("http") or self.base_url is not None else self.auth.central_info["base_url"] + url
+            url = url if str(url).startswith("http") or self.base_url is not None else self.auth.central_info["base_url"] + url
             return func(self, url, *args, **kwargs)
 
         return wrapper
 
     @build_url
-    async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response:
+    async def get(self, url, params: dict = {}, headers: dict = None, count: int = None, **kwargs) -> Response | list[Response]:
         return await self.api_call(url, params=params, headers=headers, count=count, **kwargs)
 
     @build_url
@@ -837,7 +864,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="POST", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -849,7 +876,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="PUT", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -861,7 +888,7 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="PATCH", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)
 
     @build_url
@@ -873,5 +900,5 @@ class Session():
         json_data: dict | list = None,
         headers: dict = None,
         **kwargs
-    ) -> Response:
+    ) -> Response | list[Response]:
         return await self.api_call(url, method="DELETE", data=payload, json_data=json_data, params=params, headers=headers, **kwargs)

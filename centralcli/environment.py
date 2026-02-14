@@ -2,9 +2,10 @@ from os import environ
 
 
 class EnvVar:
-    def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG"):
+    def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG", dest_workspace: str = "CENCLI_DEST_WORKSPACE"):
         self.workspace = workspace
         self.debug = debug
+        self.dest_workspace = dest_workspace
 
 env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
@@ -15,6 +16,7 @@ class Env:
 
     def __init__(self):
         self.workspace: str = environ.get(env_var.workspace) or environ.get(classic_env_var.workspace)
+        self.dest_workspace = environ.get(env_var.dest_workspace)
 
     @property
     def debug(self) -> bool:
@@ -27,18 +29,18 @@ class Env:
 
     @property
     def is_pytest(self) -> bool:
-        return self._is_pytest
+        return Env._is_pytest
 
     @is_pytest.setter
     def is_pytest(self, value: bool) -> bool:  # pragma: no cover  This only hits outside of pytest runs with --mock flag
         if value:
             environ["PYTEST_VERSION"] = "MOCK_TEST"
-            self._is_pytest = True
+            Env._is_pytest = True
         else:
             del environ["PYTEST_VERSION"]
-            self._is_pytest = False
+            Env._is_pytest = False
 
-        return self._is_pytest
+        return Env._is_pytest
 
     @property
     def current_test(self) -> str | None:  # pragma: no cover only used when capturing responses for tests

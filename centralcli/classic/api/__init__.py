@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from centralcli.classic.api.visualrf import VisualRFAPI
 
-from ... import config
+from ... import config as cfg
 from ...client import Session
 from .aiops import AiOpsAPI
 from .central import CentralAPI
@@ -24,13 +24,24 @@ from .topology import TopologyAPI
 from .troubleshooting import TroubleShootingAPI
 
 if TYPE_CHECKING:  # pragma: no cover
-    from aiohttp.client import ClientSession
+    from ...config import Config
 
     from ...typedefs import StrOrURL
 
+
 class ClassicAPI:
-    def __init__(self, base_url: StrOrURL = None, *, aio_session: ClientSession = None, silent: bool = True):
-        self._session = Session(base_url=base_url or config.classic.base_url, aio_session=aio_session, silent=silent)
+    _by_workspace: dict[str, ClassicAPI] = {}
+
+    def __init__(self, config: Config = None, *, base_url: StrOrURL = None, silent: bool = True):
+        self.config = config or cfg
+        self._session = Session(config=self.config, base_url=base_url or self.config.classic.base_url, silent=silent)
+
+    def __new__(cls, config: Config = None, **kwargs):
+        workspace = config and config.workspace or cfg.workspace
+        if cls._by_workspace.get(workspace) is None:
+            cls._by_workspace[workspace] = super().__new__(cls)
+
+        return cls._by_workspace[workspace]
 
     @property
     def session(self) -> Session:

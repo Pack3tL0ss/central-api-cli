@@ -15,11 +15,12 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file", "dest_workspace"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
     "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band", "banner", "banner_file",
+    "tags", "with_inv", "no_refresh", "cx_retain_config",
 ]
 
 class CLIArgs:
@@ -41,6 +42,13 @@ class CLIArgs:
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.portal: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cache.portal_completion, show_default=False,)
         self.portals: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal_many, autocompletion=cache.portal_completion, show_default=False,)
+        self.dest_workspace: ArgumentInfo = typer.Argument(
+            None,
+            envvar=env_var.dest_workspace,
+            help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] Destination WorkSpace for migration operations",
+            autocompletion=cache.workspace_completion,
+            show_default=False,
+        )
         self.version: ArgumentInfo = typer.Argument(
             None,
             help=f"Firmware Version [dim]{escape('[default: recommended version]')}",
@@ -190,8 +198,12 @@ class CLIOptions:
         self.pager: OptionInfo = typer.Option(False, "--pager", help="Enable Paged Output", rich_help_panel="Common Options",)
         self.ssid: OptionInfo = typer.Option(None, help="Filter/Apply command to a specific SSID", show_default=False)
         self.band: OptionInfo = typer.Option(None, help=f"Show Bandwidth for a specific band [dim]{escape('[ap must be provided]')}[/]", show_default=False)
+        self.tags: OptionInfo = typer.Option(None, "-t", "--tags", help="Tags to be assigned to [bright_green]all[/] imported devices in format [cyan]tagname1 = tagvalue1, tagname2 = tagvalue2[/]", show_default=False,)
         self.banner_file: OptionInfo = typer.Option(None, "--banner-file", help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
         self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
+        self.with_inv: OptionInfo = typer.Option(False, "-I", "--inv", help="Include device details from [green]GreenLake[/] Inventory", show_default=False,)
+        self.no_refresh: OptionInfo = typer.Option(False, "--no-refresh", help=f"Don't refresh the cache.  [dim]{escape('[default: Cache is updated]')}[/]")
+        self.cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move")
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,
@@ -208,7 +220,7 @@ class CLIOptions:
             None,
             "-V",
             "--version",
-            help="Filter by version (fuzzy match).  Prepend [cyan]-[/] to show devices not matching the version. [dim italic]i.e. -10.7.2.1[/]",
+            help="Filter by version (fuzzy match).  Prepend [green1]-[/] to show devices not matching the version. [dim italic green1]i.e. -10.7.2.1[/]",
             show_default=False
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
@@ -268,6 +280,7 @@ class CLIOptions:
         self.in_: OptionInfo = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [dim]{escape('[default: Now]')}[/]", show_default=False,)
         self.reboot: OptionInfo = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device after firmware download [dim]{escape('[default: No reboot if not AP')} [green](APs will reboot regardless)[/green]{escape(']')}[/]")
         self.subscription: OptionInfo = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False)
+
 
     @property
     def start(self) -> OptionInfo:

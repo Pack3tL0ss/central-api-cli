@@ -7,9 +7,10 @@ options.default_venv_backend = "uv"
 @session(
     python=["3.10", "3.11", "3.12", "3.13", "3.14"],
     uv_groups=["test"],
-    uv_extras=["hook-proxy"],
+    uv_extras=["hook-proxy", "xlsx"],
 )
 def test(s: Session) -> None:
+    # s.env["UV_COMPILE_BYTECODE"] = "1"   # don't think this gets us any imrpovements the bytecode will be there after first nox run
     s.run("python", "-m", "pytest")
 
 @session(uv_only_groups=["lint"])
