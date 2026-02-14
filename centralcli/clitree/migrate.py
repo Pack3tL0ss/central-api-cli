@@ -187,22 +187,23 @@ def devices(
         exit_on_fail=False,
         caption=f"Devices will remain in UI use [cyan]cencli batch delete devices {migrate_file} --ui-only[/] to delete from ui after the devices have gone offline."
     )
+
     # update status in monitoring cache so --ui-only delete is possible without cache update
-    real_responses = [r for r in resp if r.status != 299 and "greenlake" in r.url.host]  # 299 is returned (no call performed) when the devices are not found in migrate from workspace, this only happens when retrying w/ a previously used migrate file
-    if real_responses:
-        with render.Spinner(f"Updating device status ([red]Down[/]) in monitoring Cache in [cyan]{config.workspace}[/] workspace."):
-            try:
-                deleted = [d["id"] for r in real_responses if r.ok and r.output.get("async operation response") for d in r.output["async operation response"].get("result", {}).get("succeededDevices", [{}]) if "id" in d]
-                update_data = [{**common.cache.devices_by_serial.get(common.cache.inventory_by_id[_id].serial, {}), "status": "Down"} for _id in deleted]
-                update_data = [d for d in update_data if len(d) > 1]  # inner dict will just be {"status": "Down"} if the dev is not found in dev cache
-                if update_data:
-                    _ = asyncio.run(common.cache.update_dev_db(update_data))
-            except Exception as e:
-                log.exception(f"{repr(e)} during attempt to update device cache with down status after glp device unassignment.")
-                render.econsole.print(
-                    f"{emoji.warn} {repr(e)} occured when updating monitoring cache to reflect [red]Down[/] status after GLP removal in anticipation they will eventually go down.\n"
-                    f"You will have to run [cyan]cencli show all --ws {config.workspace}[/] to refresh the cache, prior to running the [cyan]--ui-only[/] delete command."
-                )
+    # real_responses = [r for r in resp if r.status != 299 and "greenlake" in r.url.host]  # 299 is returned (no call performed) when the devices are not found in migrate from workspace, this only happens when retrying w/ a previously used migrate file
+    # if real_responses:
+    #     with render.Spinner(f"Updating device status ([red]Down[/]) in monitoring Cache in [cyan]{config.workspace}[/] workspace."):
+    #         try:
+    #             deleted = [d["id"] for r in real_responses if r.ok and r.output.get("async operation response") for d in r.output["async operation response"].get("result", {}).get("succeededDevices", [{}]) if "id" in d]
+    #             update_data = [{**common.cache.devices_by_serial.get(common.cache.inventory_by_id[_id].serial, {}), "status": "Down"} for _id in deleted]
+    #             update_data = [d for d in update_data if len(d) > 1]  # inner dict will just be {"status": "Down"} if the dev is not found in dev cache
+    #             if update_data:
+    #                 _ = asyncio.run(common.cache.update_dev_db(update_data))
+    #         except Exception as e:
+    #             log.exception(f"{repr(e)} during attempt to update device cache with down status after glp device unassignment.")
+    #             render.econsole.print(
+    #                 f"{emoji.warn} {repr(e)} occured when updating monitoring cache to reflect [red]Down[/] status after GLP removal in anticipation they will eventually go down.\n"
+    #                 f"You will have to run [cyan]cencli show all --ws {config.workspace}[/] to refresh the cache, prior to running the [cyan]--ui-only[/] delete command."
+    #             )
 
     with render.Spinner(f"Allowing time for {cli_strings.glp} to free up devices for addition to {to_workspace}"):
         sleep(3)

@@ -41,6 +41,7 @@ from centralcli.utils import ToBool
 
 from . import api_clients
 from .client import BatchRequest, Session
+from .cache import CacheDevice
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
 from .models.imports import ImportDevices
@@ -48,7 +49,7 @@ from .response import Response
 from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
-    from centralcli.cache import Cache, CacheDevice, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
+    from centralcli.cache import Cache, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
     from centralcli.typedefs import ImportType, LogType, SendConfigTypes
 
 install(show_locals=True)
@@ -2017,6 +2018,31 @@ class CLICommon:
 
         return [*glp_resp, *mon_resp]
 
+    def _verify_mon_dev_is_up(self, devs: list[CacheDevice]) -> list[CacheDevice]:
+        """Used to verify the status of devices found in cache is up to date
+
+        This is needed when deleting devices from monitoring UI.  Any Devices that show
+        up in cache, but are slated for delete are validated using per device refresh.
+
+        Args:
+            devs (list[CacheDevice]): List of CacheDevice objects to verify
+
+        Returns:
+            list[CacheDevice]: List of CacheDevice Objects
+        """
+        update_serials = [dev.serial for dev in devs if dev.status == "Up"]
+        if not update_serials:
+            return devs
+
+        batch_reqs = [
+            BatchRequest(self.cache.refresh_dev_db, dev_type=dev.generic_type, serial=dev.serial)
+            for dev in devs if dev.status == "Up"
+        ]
+        _ = api.session.batch_request(batch_reqs)  # we get the updated value from the cache no need to parse result
+        with render.Spinner(":floppy_disk: Fetching updated devices after cache update."):
+            by_serial = {**{dev.serial: dev for dev in devs}, **{serial: CacheDevice(self.cache.devices_by_serial[serial]) for serial in update_serials}}
+
+        return list(by_serial.values())
 
     def batch_delete_devices_classic(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
         BR = BatchRequest
@@ -2071,6 +2097,7 @@ class CLICommon:
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
         mon_del_reqs = delayed_mon_del_reqs = []
         if not cop_inv_only:
+            cache_mon_devs = self._verify_mon_dev_is_up(cache_mon_devs)
             mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
 
         # cop only delete devices from GreenLake inventory
