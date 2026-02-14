@@ -11,7 +11,7 @@ from time import sleep
 import pendulum
 import typer
 
-from centralcli import common, config, render, utils, log
+from centralcli import common, config, render, utils
 from centralcli.constants import AllDevTypes
 from centralcli.cache import Cache
 from centralcli.strings import emoji, cli_strings
