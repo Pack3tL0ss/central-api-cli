@@ -531,7 +531,7 @@ def get_clients(
     format = format or "rich" if not verbosity else "yaml"
 
     verbosity_keys = {
-        0:  [
+        0: [
             "name",
             "ip_address",
             "macaddr",
@@ -732,22 +732,22 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
 
     # pre cleaned key values
     verbosity_keys = {
-        0:  [
-                "name",
-                "status",
-                "type",
-                "client_count",
-                "model",
-                "ip_address",
-                "macaddr",
-                "mac",  # get_devices_with_inventory has already cleaned keys
-                "serial",
-                "group_name",
-                "site",
-                "firmware_version",
-                "services",
-                "subscription_key",
-                "subscription_expires",
+        0: [
+            "name",
+            "status",
+            "type",
+            "client_count",
+            "model",
+            "ip_address",
+            "macaddr",
+            "mac",  # get_devices_with_inventory has already cleaned keys
+            "serial",
+            "group_name",
+            "site",
+            "firmware_version",
+            "services",
+            "subscription_key",
+            "subscription_expires",
         ]
     }
     if "services" not in all_keys:  # indicates inventory is part of the listing
@@ -1709,7 +1709,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
     return pretty_data
 
 
-def get_wlans(data: list[dict]) ->  list[dict]:
+def get_wlans(data: list[dict]) -> list[dict]:
     field_order = [
         "essid",
         "security",
