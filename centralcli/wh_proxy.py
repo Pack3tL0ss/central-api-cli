@@ -8,20 +8,19 @@ import json
 import sys
 from datetime import datetime as dt
 from pathlib import Path
-from typing import Literal, Optional
 
 import uvicorn
 from fastapi import FastAPI, Header, Request, Response, status
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 from starlette.requests import Request  # NoQA
 from starlette.responses import FileResponse
 
 from centralcli import MyLogger, cache, config
 from centralcli.client import BatchRequest
 from centralcli.response import Response as APIResponse
+from centralcli.models.webhook import HookResponse, BranchResponse, wh_resp_schema
 
 from .cache import api
 
@@ -75,80 +74,6 @@ print(f"Web Hook Proxy logging to {log_file}")
 #     },
 # }
 # update and pass as param to uvicorn.run to send logs to our file "log_config=LOGGING_CONFIG"
-
-
-class HookResponse(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "OK", "updated": True, }
-        }
-
-
-class HookResponseTooBig(HookResponse):
-    class Config:
-        schema_extra = {
-            "example": {"result": "Content too long", "updated": False}
-        }
-
-
-class HookResponseTokenFail(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "Unauthorized", "updated": False}
-        }
-
-
-class BranchResponse(BaseModel):
-    id: str
-    ok: bool
-    alert_type: str
-    device_id: str
-    state: Literal["Open", "Close"]
-    text: str
-    timestamp: Optional[int]
-
-    class Config:
-        schema_extra = {
-            "example": {
-                    "id": "CNF1234567_init",
-                    "ok": False,
-                    "alert_type": "BH_POLL_UPLK_OR_TUN_DOWN",
-                    "device_id": "CNF1234567",
-                    "state": "Open",
-                    "text": "sdbranch1:7008:uplk_g1694_v3250_inet::vpnc1:uplk_g1694_v3250_inet found to be down at hook proxy startup",
-                    "timestamp": int(dt.now().timestamp())
-            }
-        }
-
-
-# Not Used for now would need to ensure all possible fields
-class WebhookData(BaseModel):
-    id: str
-    timestamp: int
-    nid: int
-    alert_type: str
-    severity: str
-    details: dict
-    description: str
-    setting_id: str
-    state: str
-    webhook: str
-    cluster_hostname: str = None
-    operation: str = None
-    device_id: str = None
-    text: str = None
-
-
-wh_resp_schema = {
-    401: {"model": HookResponseTokenFail},
-    413: {"model": HookResponseTooBig}
-}
 
 
 app = FastAPI(

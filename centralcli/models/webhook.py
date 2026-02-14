@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime as dt
+
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices
-from typing import Optional, List
+from typing import Optional, List, Literal
 
 
 # WebHook Models WebHookDetails no reliable source for all possible fields.
@@ -101,3 +103,59 @@ class WebHook(BaseModel):
     details: Optional[dict] = None  # Prob need to use dict here or allow extra fields
     webhook: Optional[str] = None
     text: Optional[str] = None
+
+
+class HookResponse(BaseModel):
+    result: str
+    updated: bool
+
+    class Config:
+        schema_extra = {
+            "example": {"result": "OK", "updated": True, }
+        }
+
+
+class HookResponseTooBig(HookResponse):
+    class Config:
+        schema_extra = {
+            "example": {"result": "Content too long", "updated": False}
+        }
+
+
+class HookResponseTokenFail(BaseModel):
+    result: str
+    updated: bool
+
+    class Config:
+        schema_extra = {
+            "example": {"result": "Unauthorized", "updated": False}
+        }
+
+
+class BranchResponse(BaseModel):
+    id: str
+    ok: bool
+    alert_type: str
+    device_id: str
+    state: Literal["Open", "Close"]
+    text: str
+    timestamp: Optional[int]
+
+    class Config:
+        schema_extra = {
+            "example": {
+                    "id": "CNF1234567_init",
+                    "ok": False,
+                    "alert_type": "BH_POLL_UPLK_OR_TUN_DOWN",
+                    "device_id": "CNF1234567",
+                    "state": "Open",
+                    "text": "sdbranch1:7008:uplk_g1694_v3250_inet::vpnc1:uplk_g1694_v3250_inet found to be down at hook proxy startup",
+                    "timestamp": int(dt.now().timestamp())
+            }
+        }
+
+
+wh_resp_schema = {
+    401: {"model": HookResponseTokenFail},
+    413: {"model": HookResponseTooBig}
+}
