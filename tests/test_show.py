@@ -90,7 +90,7 @@ def test_show_aps_dirty_missing_group():
         [8, None, ("--group", test_data["ap"]["group"]), lambda r: "TX" in r, False],  # --group flag is ignored
         [9, "ensure_cache_label1", ("--label", "cencli_test_label1"), lambda r: "API" in r, False],
         [10, None, ("-S", "--dev", test_data["gateway"]["name"]), lambda r: "only applies" in r, False],  # -S flag ignored as --dev is a gateway
-        [11, None, ("-S",), lambda r: "--dev" in r, True], # -S but no --dev flag
+        [11, None, ("-S",), lambda r: "--dev" in r, True],  # -S but no --dev flag
     ]
 )
 def test_show_bandwidth_client(idx: int, fixture: str | None, args: tuple[str], pass_condition: Callable, expect_failure: bool, request: pytest.FixtureRequest):
@@ -188,8 +188,8 @@ def test_show_branch_health(args: tuple[str]):
     [
         [1, ("-S",), lambda r: "Ignoring" in r, False],  # also test warning for ignored -S (swarm) without dev
         [2, ("--yaml",), lambda r: "API" in r, False],
-        [3, (test_data["ap"]["name"],),lambda r: "API" in r, False],
-        [4, ("--ssid", "HPE_Aruba"),lambda r: "API" in r, False],
+        [3, (test_data["ap"]["name"],), lambda r: "API" in r, False],
+        [4, ("--ssid", "HPE_Aruba"), lambda r: "API" in r, False],
         [5, ("--group", test_data["ap"]["group"], "--site", test_data["ap"]["site"]), lambda r: "one of" in r, True],  # too many filters
     ]
 )
@@ -236,9 +236,9 @@ def test_show_cluster_ssid_not_exist():
 @pytest.mark.parametrize(
     "pass_condition,test_name_update",
     [
-        [lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code ==0), None],
-        [lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code ==0), None],
-        [lambda res: ("500" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code ==0), "first_call"],
+        [lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code == 0), None],
+        [lambda res: ("API" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code == 0), None],
+        [lambda res: ("500" in res.stdout and res.exit_code == 1) or ("Partial Failure" in res.stdout and res.exit_code == 0), "first_call"],
     ]
 )
 def test_show_all_fail(pass_condition: Callable, test_name_update: str | None):
@@ -632,7 +632,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_show_task_invalid_expired():
         result = runner.invoke(app, ["show", "task", "17580829612345"],)
         capture_logs(result, "test_show_task_invalid_expired")
@@ -810,7 +809,7 @@ def test_show_overlay_routes_advertised():
         [3, ("--site", test_data["ap"]["site"].lower(), "--down")],
     ]
 )
-def test_show_ap_lldp_neighbors(_:int, args: tuple[str]):  #, pass_condition: Callable):
+def test_show_ap_lldp_neighbors(_: int, args: tuple[str]):  # , pass_condition: Callable):
     result = runner.invoke(app, ["show", "aps", "-n", *args],)
     capture_logs(result, "test_show_ap_lldp_neighbors")
     assert result.exit_code == 0
@@ -934,6 +933,8 @@ def test_show_audit_logs(idx: int, args: list[str], pass_condition: Callable):
 
 
 sal = ["show", "audit", "logs"]
+
+
 @pytest.mark.parametrize("args", [[*sal, "999"], [*sal, "not_an_int"]])
 def test_show_audit_logs_invalid(args: list[str]):
     result = runner.invoke(app, args,)
@@ -1042,6 +1043,7 @@ def test_show_switch_vlans_by_name():
     assert "name" in result.stdout
     assert "pvid" in result.stdout
 
+
 @pytest.mark.parametrize(
     "idx,args,pass_condition",
     [
@@ -1084,6 +1086,8 @@ def test_get_floor_details():
 
 
 cmac = test_data["client"]["wireless"]["mac"]
+
+
 @pytest.mark.parametrize(
     "idx,fixture,args,pass_condition",
     [
@@ -1173,9 +1177,9 @@ def test_show_config(_: int, fixture: str | None, args: tuple[str], pass_conditi
 @pytest.mark.parametrize(
     "_,fixture,args,pass_condition",
     [
-        [1 ,None, (test_data["ap"]["group"],), lambda r: "⚠" in r],  # no --ap/--gw for group config
-        [2 ,None, (test_data["ap"]["name"], test_data["switch"]["name"],), lambda r: "⚠" in r],  # multiple devs
-        [3 ,None, (test_data["ap"]["name"], "--gw"), lambda r: "⚠" in r],  # ap dev but --gw flag
+        [1, None, (test_data["ap"]["group"],), lambda r: "⚠" in r],  # no --ap/--gw for group config
+        [2, None, (test_data["ap"]["name"], test_data["switch"]["name"],), lambda r: "⚠" in r],  # multiple devs
+        [3, None, (test_data["ap"]["name"], "--gw"), lambda r: "⚠" in r],  # ap dev but --gw flag
     ]
 )
 def test_show_config_fail(_: int, fixture: str | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -1283,7 +1287,6 @@ def test_show_portals(args: tuple[str], pass_condition: Callable):
         logo_file = Path(args[args.index("--logo") + 1])
         assert logo_file.exists()
         logo_file.unlink()
-
 
 
 @pytest.mark.parametrize(
@@ -1405,7 +1408,7 @@ def test_show_firmware_swarm(idx: int, args: tuple[str], should_fail: bool, test
         [(test_data["ap"]["name"], test_data["switch"]["name"],), lambda r: "⚠" in r, "partial_failure"],  # Partial Failure
         [("--dev-type", "cx"), None, None],
         [("--dev-type", "ap"), None, None],
-        [(test_data["switch"]["name"], "--dev-type", "ap"), lambda r: "--dev-type" in  r, None],  # warning ignore --dev-type
+        [(test_data["switch"]["name"], "--dev-type", "ap"), lambda r: "--dev-type" in r, None],  # warning ignore --dev-type
     ]
 )
 def test_show_firmware_device(args: tuple[str], pass_condition: Callable | None, test_name_append: str | None):
@@ -1469,6 +1472,8 @@ def test_show_firmware_list(args: tuple[str]):
 
 
 sfl = ["show", "firmware", "list"]
+
+
 @pytest.mark.parametrize("args", [sfl, [*sfl, test_data["ap"]["name"], "--swarm-id", "asdf"]])
 def test_show_firmware_list_invalid(args: list[str]):
     result = runner.invoke(app, args)
@@ -1692,7 +1697,7 @@ def test_show_upgrade_fail(idx: int, args: tuple[str], pass_condition: Callable,
         assert pass_condition(result.stdout)
     except AssertionError as e:  # pragma: no cover
         capture_logs(result, f"{env.current_test}-{idx}", log_output=True)
-        raise(e)
+        raise (e)
 
 
 def test_show_uplinks():
@@ -1705,6 +1710,7 @@ def test_show_uplinks():
     capture_logs(result, "test_show_uplinks")
     assert result.exit_code == 0
     assert "uplink" in result.stdout.lower()
+
 
 @pytest.mark.parametrize("mac", [True, False])
 def test_show_cloud_auth_upload(mac: bool):

@@ -282,7 +282,6 @@ def emoji_(
             column_first=True,
         )
 
-
     console.print(columns)
 
 
@@ -395,12 +394,14 @@ def help_text(
 
     show(None if not cache_object else [c.value for c in cache_object])
 
+
 class CacheArgs(str, Enum):
     devices = "devices"
     inventory = "inventory"
     sites = "sites"
     groups = "groups"
 # full list in constants.CacheArgs
+
 
 @app.command()
 def cache_del(
@@ -500,7 +501,6 @@ def ws_change(
     """Test mid command workspace switching functionality"""
     from centralcli.clitree.show.show import _get_cencli_config
 
-
     for idx, (ws, serial) in enumerate(zip([config.workspace, "kfc", "ge"], ["CNR4LHJ08G", "CNC7J0T11X", "CNGFJ0TJX5"])):
         if idx > 0:
             config.workspace = ws
@@ -519,7 +519,6 @@ def ws_change(
         }
         render.display_results(data=glp_data, tablefmt="yaml")
 
-
         print(render.render_title(f"Workspace [bright_green]{config.workspace} GLP Cache Inventory refresh test call using serial# {serial}[/]"))
         resp = api_clients.glp.session.request(common.cache.refresh_inv_db, serial_numbers=(serial,))
         print(resp._response.request_info.headers["authorization"])
@@ -532,7 +531,6 @@ def ws_change(
 
         if idx != 2:
             render.pause()
-
 
 
 @app.callback(no_args_is_help=True)

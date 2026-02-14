@@ -101,7 +101,7 @@ class Session():
         self.silent = silent  # squelches out automatic display of failed Responses.
         self.base_url = None if not base_url else str(base_url).rstrip('/')
         self.config = config or cfg if workspace_name is None else Config(workspace=workspace_name)
-        self.workspace_name = workspace_name or self.config.workspace # only used for refresh of tokens in multiple workspaces
+        self.workspace_name = workspace_name or self.config.workspace  # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
         self.ssl = self.config.ssl_verify
         self.req_cnt = 0
@@ -127,7 +127,7 @@ class Session():
         if not is_cnx:
             cls.requests += utils.listify(requests)
         else:
-            cls.glp_requests +=  utils.listify(requests)
+            cls.glp_requests += utils.listify(requests)
 
     def get_glp_conn_from_file(self) -> NewCentralBase:
         """Creates an instance of NewCentralBase based on config file.
@@ -266,7 +266,7 @@ class Session():
         auth = self.auth
         resp = None
         _url = URL(url).with_query(params)
-        _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  #  Need to cancel [ or rich will eval it as a closing markup
+        _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  # Need to cancel [ or rich will eval it as a closing markup
         end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
         if self.config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
             end_name = "USABCD1234"
@@ -360,10 +360,10 @@ class Session():
                     self.spinner.start(self._get_spin_text(), spinner="dots")
 
                 if resp.status == 401:
-                    spin_txt_retry =  "(retry after token refresh)"
+                    spin_txt_retry = "(retry after token refresh)"
                     self.refresh_token()
                 elif "errorCode" in resp.raw and "HPE_GL_ERROR" in resp.raw["errorCode"] and "signature has expired" in resp.raw.get("message", "").lower():
-                    spin_txt_retry =  "(retry after token refresh)"
+                    spin_txt_retry = "(retry after token refresh)"
                     if hasattr(self.auth, "handle_expired_token"):
                         self.auth.handle_expired_token()
                 elif resp.status == 500:
@@ -514,7 +514,6 @@ class Session():
 
             paged_raw, paged_output = await self.handle_pagination(r, paged_raw=paged_raw, paged_output=paged_output)
 
-
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
             # TODO # TOGLP  need to use "next" as pagination field
@@ -549,7 +548,6 @@ class Session():
                             br(self.exec_api_call, url, data=data, json_data=json_data, method=method, headers=headers, params={**params, "next": i, "limit": _limit}, **kwargs)
                             for i in _next_range
                         ]
-
 
                     batch_res: List[Response] = await self._batch_request(_reqs)
                     failures: List[Response] = [r for r in batch_res if not r.ok]  # A failure means both the original attempt and the retry failed.
@@ -600,7 +598,7 @@ class Session():
         # No errors but the total provided by Central doesn't match the # of records
         try:
             if not url.path.startswith("/topology_external_api/vlans"):  # API-FLAW vlan endpoint total never matches the # of VLANs.  This is a bug
-                if not count and not failures and isinstance(r.raw, dict)  and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:  # pragma: no cover
+                if not count and not failures and isinstance(r.raw, dict) and "total" in r.raw and isinstance(r.output, list) and len(r.output) < r.raw["total"]:  # pragma: no cover
                     log.warning(f"[{r.method}]{r.url.path} Total records {len(r.output)} != the total field ({r.raw['total']}) in raw response", show=True, caption=True, log=True)
         except Exception:
             ...  # r.raw could be bool for some POST endpoints
@@ -765,7 +763,7 @@ class Session():
         if self.base_url == self.config.cnx.base_url and not any([call.args and call.args[0].startswith("http") for call in api_calls]):
             max_calls_per_chunk = 10
 
-        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests): # a call has been made no need to verify first call (token refresh)
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests):  # a call has been made no need to verify first call (token refresh)
             chunked_calls = utils.chunker(api_calls, max_calls_per_chunk)
         else:
             resp: Response = await api_calls[0].func(

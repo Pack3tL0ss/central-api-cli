@@ -14,7 +14,7 @@ from aiohttp.http_exceptions import ContentLengthError
 
 # ------ // Central API Consistent Device Types \\ ------
 lib_dev_idens = ["ap", "cx", "sw", "switch", "gw", "sdwan"]
-generic_lib_dev_idens = ["ap","gw", "switch", "sdwan"]
+generic_lib_dev_idens = ["ap", "gw", "switch", "sdwan"]
 flex_dual_models = ["615", "605H", "605R"]
 dynamic_antenna_models = ["679"]
 LibDevIdens = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]  # NEXT-MAJOR remove on next major release, renamed to LibAllDevTypes
@@ -22,7 +22,7 @@ LibAllDevTypes = Literal["ap", "cx", "sw", "switch", "gw", "sdwan"]
 GenericDeviceTypes = Literal["ap", "gw", "switch", "sdwan"]  # strEnum ok for CLI completion but doesn't enable ide to complete  # TODO make separate one without sdwan and refactor, won't be valid in most places
 SwitchTypes = Literal["cx", "sw"]
 DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
-EventDeviceTypes = Literal["ap","gw", "switch", "client"]
+EventDeviceTypes = Literal["ap", "gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
 ClientType = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
@@ -112,6 +112,7 @@ PYTEST_EXPECTED_EXCEPTIONS = {
     "ContentLengthError": ContentLengthError,
     "JSONDecodeError": JSONDecodeError,
 }
+
 
 class ClusterName(str, Enum):
     internal = "internal"
@@ -210,6 +211,7 @@ class TSDevTypes(str, Enum):
     gw = "gw"
     mas = "mas"
 
+
 class PoEDetectionStatus(Enum):
     NA = 0
     Undefined = 1  # TODO figure out what this status is
@@ -247,6 +249,7 @@ class LLDPCapabilityTypes(Enum):
     Router = 5
     unknown6 = 6
     unknown7 = 7
+
 
 # Not used currently # TODO reference in cleaner
 class SwitchRoles(Enum):
@@ -345,6 +348,7 @@ class SortPortalOptions(str, Enum):
     reg_by_email = "reg-by-email"
     reg_by_phone = "reg-by-phone"
 
+
 class GatewayRole(str, Enum):
     branch = "branch"
     vpnc = "vpnc"
@@ -440,19 +444,23 @@ class RadioBandOptions(str, Enum):  # 5m, 1h, 1d, 1w
     _5 = "5"
     _6 = "6"
 
+
 class DynamicAntMode(str, Enum):
     narrow = "narrow"
     wide = "wide"
+
 
 class APIAction(str, Enum):
     ADD = "ADD"
     UPDATE = "UPDATE"
     REPLACE = "REPLACE"
 
+
 class RadioMode(str, Enum):
     access = "access"
     monitor = "monitor"
     spectrum = "spectrum"
+
 
 class UplinkNames(str, Enum):
     uplink101 = "uplink101"
@@ -460,6 +468,7 @@ class UplinkNames(str, Enum):
     uplink103 = "uplink103"
     uplink104 = "uplink104"
     uplink105 = "uplink105"
+
 
 # Not used ... for reference
 # class RadioNumber(Enum):
@@ -499,6 +508,7 @@ class RefreshWhat(str, Enum):
     cache = "cache"
     token = "token"
     tokens = "tokens"
+
 
 class CancelWhat(str, Enum):
     device = "device"
@@ -1089,6 +1099,7 @@ class SortNamedMpskOptions(str, Enum):
     status = "status"
     mpsk = "mpsk"
 
+
 class SortDevOptions(str, Enum):
     name = "name"
     model = "model"
@@ -1146,6 +1157,7 @@ class SortAlertOptions(str, Enum):
     type = "type"
     description = "description"
     acknowledged = "acknowledged"
+
 
 class SortCertOptions(str, Enum):
     name = "name"
@@ -1369,7 +1381,9 @@ class IdenMetaVars:
         self.guest = "[name|email|phone|id]"
         self.ip_dhcp = "[IP_ADDRESS|'dhcp']"
 
+
 iden_meta = IdenMetaVars()
+
 
 class LogSortBy(str, Enum):
     time = "time"
@@ -1458,6 +1472,7 @@ state_abbrev_to_pretty = {
 # invert
 state_pretty_to_abbrev = dict(map(reversed, state_abbrev_to_pretty.items()))
 
+
 class SiteStates(str, Enum):
     AL = Alabama = "Alabama",
     AK = Alaska = "Alaska",
@@ -1516,6 +1531,7 @@ class SiteStates(str, Enum):
     PR = Puerto_Rico = "Puerto Rico",
     UM = United_States_Minor_Outlying_Islands = "United States Minor Outlying Islands",
     VI = US_Virgin_Islands = "U.S. Virgin Islands"
+
 
 TZDB = Literal[
     "Africa/Abidjan",
@@ -2113,7 +2129,7 @@ TZDB = Literal[
     "Zulu",
 ]
 
-IAP_TZ_NAMES =  Literal[
+IAP_TZ_NAMES = Literal[
     "none",
     "International-Date-Line-West",
     "Coordinated-Universal-Time-11",
@@ -2273,6 +2289,7 @@ IAP_TZ_NAMES =  Literal[
     "Samoa"
 ]
 
+
 class IAPTimeZoneNames(str, Enum):
     none = "none"
     international_date_line_west = "International-Date-Line-West"
@@ -2431,6 +2448,7 @@ class IAPTimeZoneNames(str, Enum):
     magadan = "Magadan"
     nukualofa = "Nukualofa"
     samoa = "Samoa"
+
 
 NO_LOAD_COMMANDS = [
     "show config cencli",

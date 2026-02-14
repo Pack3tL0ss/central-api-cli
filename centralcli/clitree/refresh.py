@@ -68,6 +68,7 @@ def token(
             console.print(f"{':x:' if not success else ':heavy_check_mark:'}  {workspace}")
         console.print(f"\nSuccessfully refreshed tokens for {success_list.count(True)} of {len(success_list)} accounts.")
 
+
 @app.command()
 def cache(
     default: bool = common.options.default,
@@ -110,6 +111,7 @@ def callback():
     Refresh tokens / cache
     """
     pass
+
 
 if __name__ == "__main__":
     app()

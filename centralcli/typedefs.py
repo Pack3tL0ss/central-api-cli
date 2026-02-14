@@ -10,11 +10,10 @@ from yarl import URL
 P = ParamSpec("P")
 T = TypeVar("T")
 
+
 # The decorator is used as a type hint for the wrapper function
 def typed_lru_cache(func: Callable[P, T]) -> Callable[P, T]:
-    return lru_cache()(func) # Use lru_cache with arguments
-
-
+    return lru_cache()(func)  # Use lru_cache with arguments
 
 
 # Define type variables for function signature preservation
@@ -84,6 +83,7 @@ CloudAuthTimeWindow = Literal["3h", "1d", "1w", "1M", "3M"]
 ClientType = Literal["wired", "wireless"]
 JSON_TYPE = Union[List, Dict, str]
 
+
 class CacheSiteDict(TypedDict):  # pragma: no cover used for typing for CacheSite payload
     name: str
     id: int
@@ -96,6 +96,7 @@ class CacheSiteDict(TypedDict):  # pragma: no cover used for typing for CacheSit
     lat: Optional[str]
     devices: int
 
+
 class UnsetType:
     def __repr__(self):
         return "UNSET"  # pragma: no cover
@@ -103,7 +104,9 @@ class UnsetType:
     def __bool__(self):
         return False  # pragma: no cover
 
+
 UNSET = UnsetType()
+
 
 # These typedefs are done this way (the backup manually typed class then try to import the real type) as vscode
 # fails to resolve or learn the attributes for the manual class when it's in the except block
@@ -112,6 +115,7 @@ UNSET = UnsetType()
 class Self:
     def __init__(self):
         self.serial: str  # pragma: no cover
+
 
 try:
     from typing import Self  # type: ignore # noqa

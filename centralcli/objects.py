@@ -83,7 +83,6 @@ class DateTime():
 
         return None if timestamp is None else round(timestamp)
 
-
     @property
     def is_expired(self) -> bool:
         return self.ts <= pendulum.now(tz="UTC").timestamp()
@@ -116,7 +115,6 @@ class DateTime():
         """
         return pendulum.from_timestamp(self.ts, tz=self.tz).to_iso8601_string()
 
-
     @property
     def day_datetime(self) -> str:
         """Render date in day_datetime format
@@ -148,7 +146,7 @@ class DateTime():
             return ""
 
         _words = pendulum.duration(seconds=int(self.ts)).in_words()
-        value_pairs = [(int(_words.split()[idx]), _words.split()[idx + 1])  for idx in range(0, len(_words.split()), 2)]
+        value_pairs = [(int(_words.split()[idx]), _words.split()[idx + 1]) for idx in range(0, len(_words.split()), 2)]
         words, minute = "", None
         for value, word in value_pairs:
             if self.round_to_minute:
@@ -225,6 +223,7 @@ class Encoder(JSONEncoder):
         else:
             return obj    # pragma: no cover
 
+
 class ShowInterfaceFilters:
     def __init__(self, up: bool = False, down: bool = False, slow: bool = False, fast: bool = False):
         self.up = up
@@ -260,7 +259,7 @@ class ShowInterfaceFilters:
     def ok(self) -> bool:
         """Returns a bool indicating if filters are valid
         """
-        valid=True
+        valid = True
         if all([self.up, self.down]):
             valid = False
             self._error += ["[cyan]--up[/] & [cyan]--down[/]"]

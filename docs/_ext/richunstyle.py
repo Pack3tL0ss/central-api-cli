@@ -19,6 +19,7 @@ RICH_MARKUPS = [
 ]
 RICH_INDICATORS = ["[", "]", ":"]
 
+
 def remove_rich_markup(app, domain, objtype, content):
     if "cencli " not in content.source:
         return
@@ -42,8 +43,10 @@ def remove_rich_markup(app, domain, objtype, content):
 
     return content
 
+
 def remove_rich_markup_autodoc(app, what, name, obj, options, lines):
     print(str(obj), type(obj))
+
 
 def remove_rich_markup_click(app, ctx, lines):
     print(str(ctx), type(lines))
@@ -62,6 +65,7 @@ def setup(app) -> None:
         'parallel_write_safe': True,
     }
 
+
 if __name__ == '__main__':
     docdir = Path(__file__).parent.parent
-    main([str(docdir), str(docdir / "_build"), "-v", "-T", "-E", "-n"] )
+    main([str(docdir), str(docdir / "_build"), "-v", "-T", "-E", "-n"])

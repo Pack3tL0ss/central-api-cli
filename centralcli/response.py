@@ -41,7 +41,7 @@ class RateLimit:
                 self.remain_sec = int(f"{rh.get('X-RateLimit-Remaining-second', 0)}")
             self.total_day = int(f"{rh.get('X-RateLimit-Limit-day', 0)}")
             self.remain_day = int(f"{rh.get('X-RateLimit-Remaining-day', 0)}")
-            #glp
+            # glp
             self.total_min = int(f"{rh.get('ratelimit-limit', 0)}")  # glp
             self.remain_min = int(f"{rh.get('ratelimit-remaining', 0)}")  # glp
             self.glp_rl_reset = int(f"{rh.get('ratelimit-reset', 0)}")  # glp
@@ -125,6 +125,7 @@ class RateLimit:
     @property
     def has_value(self) -> bool:
         return self.total_day > 0
+
 
 class Response:
     '''wrapper ClientResponse object
@@ -317,7 +318,6 @@ class Response:
         combined_out = combine_response(_url.path_qs, out)
         return None if not combined_out else config.closed_capture_file.write_text(json.dumps(combined_out, indent=2, sort_keys=False))
 
-
     def __bool__(self):
         if self._ok is not None:
             return self._ok
@@ -392,7 +392,6 @@ class Response:
             bool: indicating if the response has devices that failed due to them being already claimed/in GLP
         """
         return True if "HPE_GL_ERROR_PRECONDITION_FAILED" in str(self.output) and "already claimed" in str(self.output) else False
-
 
     def __repr__(self):  # pragma: no cover
         _exit_code_str = "" if not self.exit_code else f"|exit code: {self.exit_code}"
@@ -518,7 +517,7 @@ class Response:
             self.output[name] = value
 
     def __len__(self):
-        return(len(self.output)) if not isinstance(self.output, str) else 0
+        return (len(self.output)) if not isinstance(self.output, str) else 0
 
     def __getitem__(self, key):
         return self.output[key]
@@ -590,7 +589,6 @@ class Response:
             self.raw["count"] += other.raw["count"]
         if self.url.path == "/monitoring/v2/events":  # events url will change the total on subsequent pagination events could go up or down.
             self.raw["total"] = other.raw["total"]
-
 
         if isinstance(self.output, list) and isinstance(other.output, list):
             self.output += other.output
@@ -719,7 +717,6 @@ class BatchResponse:
         return 0 if self.ok else 1
 
 
-
 class CombinedResponse(Response):
     def flatten_resp(responses: List[Response]) -> Response:
         _failed = [r for r in responses if not r.ok]
@@ -756,7 +753,6 @@ class CombinedResponse(Response):
         if _passed:
             for r in _failed:
                 raw[r.url.path] = r.raw.copy()
-
 
         # for combining device calls, adds consistent "type" to all devices
         def _get_type(data: dict) -> Literal["ap", "gw", "sw", "cx"] | None:

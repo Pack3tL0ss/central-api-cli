@@ -7,6 +7,7 @@ class EnvVar:
         self.debug = debug
         self.dest_workspace = dest_workspace
 
+
 env_var = EnvVar()
 classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
 
@@ -55,5 +56,6 @@ class Env:
         self._cur_test = value
 
         return self._is_pytest
+
 
 env = Env()

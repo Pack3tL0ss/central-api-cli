@@ -58,7 +58,6 @@ def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, An
             else:
                 render.econsole.print(f'{ts_resp.output.get("message", " . ").split(".")[0]}. [cyan]Waiting...[/]')
 
-
         if not complete:  # pragma: no cover requires tty
             render.econsole.print(f'[dark_orange3]:warning:[/] Central is still waiting on response from [cyan]{device.name}[/]')
             if not render.confirm(prompt="Continue to wait/retry?", abort=False):
@@ -67,6 +66,7 @@ def send_cmds_by_id(device: CacheDevice, commands: list[int] | list[dict[str, An
 
     if exit_on_fail:
         common.exit(code=0 if complete else 1)
+
 
 def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: bool,) -> None:
     """Helper command to send troubleshooting output (user provides command) and print results
@@ -108,6 +108,7 @@ def ts_send_command(device: CacheDevice, cmd: list[str], outfile: Path, pager: b
             common.exit(code=1)
         else:
             send_cmds_by_id(dev, commands=cmd_id, pager=pager, outfile=outfile, exit_on_fail=True)
+
 
 @app.command()
 def overlay(
@@ -154,6 +155,7 @@ def overlay(
 
     commands = ids_by_dev_type[dev.type]
     send_cmds_by_id(dev, commands=commands, pager=pager, outfile=outfile)
+
 
 @app.command()
 def clients(

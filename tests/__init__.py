@@ -70,6 +70,7 @@ end_2_days_ago = _2_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 now_str = pendulum.now().to_datetime_string().replace(" ", "T")[0:-3]
 start_180_days_ago = _180_days_ago.to_datetime_string().replace(" ", "T")[0:-3]
 
+
 class NonDefaultWorkspaceException(CentralCliException): ...  # pragma: no cover
 
 
@@ -100,6 +101,7 @@ def clean_mac(mac: str) -> str:
 
 def monkeypatch_terminal_size():
     TestConsole = partial(Console, height=55, width=190)
+
     def get_terminal_size(*args, **kwargs):
         return (190, 55)
     pytest.MonkeyPatch().setattr("rich.console.Console", TestConsole)
@@ -114,12 +116,15 @@ def store_tokens(*args, **kwargs) -> bool:
     log.info("mock store_tokens called.")
     return True
 
+
 def refresh_tokens(_, old_token: dict) -> dict:
     log.info("mock refresh_tokens called.  Simulating token refresh.")
     return old_token
 
+
 def mock_write_file(outfile: Path, outdata: str) -> None:
     econsole.print(f"[cyan]Writing output to {outfile}... [italic green]Done[/]")
+
 
 class MockSleep:
     real_sleep: bool = False
@@ -146,6 +151,7 @@ class MockSleep:
 
 
 mock_sleep = MockSleep()
+
 
 class MockConsoleDimensions():
     def __init__(self, *args, **kwargs):

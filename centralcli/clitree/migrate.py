@@ -32,7 +32,7 @@ def _create_migrate_file(data: list[dict[str, str]], no_cx_retain: bool = False,
     if _has_cx and not no_cx_retain:
         out_data = [{**dev, "retain_config": None if dev["type"] != "cx" else True} for dev in out_data]
     if to_group:
-        out_data = [{**dev, "group": to_group } for dev in out_data]
+        out_data = [{**dev, "group": to_group} for dev in out_data]
 
     timestamp = pendulum.now().format("MMDDYY-HHmmss")
     outfile = config.outdir / f"{'migrate' if not retry else 'retry'}-{timestamp}.csv"
@@ -140,7 +140,7 @@ def devices(
 
     cache_site = None if not site else common.cache.get_site_identifier(site)
     cache_group = None if not group else common.cache.get_group_identifier(group)
-    _not_group  = None if not not_group else common.cache.get_group_identifier(not_group)
+    _not_group = None if not not_group else common.cache.get_group_identifier(not_group)
     warnings = [""]
 
     if cache_site or cache_group or (import_file and import_sites):
@@ -173,7 +173,7 @@ def devices(
         f"[italic]Use [cyan]cencli batch delete devices {migrate_file} --ui-only[/] to delete from ui after the devices have gone offline.[/]"
     ]
 
-    devs = utils.format_table(common._get_import_file(migrate_file, "devices"), key_order = ["name", "serial", "mac", "status", "type", "model", "group", "site", "services"])
+    devs = utils.format_table(common._get_import_file(migrate_file, "devices"), key_order=["name", "serial", "mac", "status", "type", "model", "group", "site", "services"])
     render.console.print(f"Migrat{'ing' if yes else 'e'} the following {len(devs)} device{'s' if len(devs) > 1 else ''} from [cyan]{config.workspace}[/] workspace to [bright_green]{to_workspace}[/] workspace")
     render.console.print(f"  {utils.summarize_data(devs).lstrip()}", emoji=False)
     render.console.print(*conf_caption, *warnings, sep="\n")
@@ -237,7 +237,6 @@ def devices(
         caption += [f":white_check_mark:  Inventory Validation completed successfully. [green]All devices appear as expected[/] in [cyan]{to_workspace}[/] workspace inventory."]
 
     render.display_results([*add_resp, *retry_resp], title=title, tablefmt="action", caption=caption)
-
 
 
 @app.callback()

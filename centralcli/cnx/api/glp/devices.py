@@ -15,11 +15,13 @@ if TYPE_CHECKING:
 
 LEGIT_FAILURES = ["HPE_GL_ERROR_NOT_FOUND"]  # ["result"]["failedDevices"]["errorCode"]
 
+
 class GLPDevice(TypedDict):
     serial: str
     mac: Optional[str]
     subscription: Optional[str]
     tags: Optional[list[dict[str, str]]]
+
 
 class GreenLakeDevicesAPI:
     def __init__(self, session: Session):
@@ -69,8 +71,6 @@ class GreenLakeDevicesAPI:
                 with render.Spinner(f"Allowing more time for {len(retry_reqs)} Async operations to complete..."):
                     await asyncio.sleep(2)
         # TODO this needs a return or error if there are still retrys marked running
-
-
 
     async def get_devices(
             self,

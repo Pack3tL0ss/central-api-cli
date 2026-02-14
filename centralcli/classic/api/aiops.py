@@ -9,6 +9,7 @@ from ...response import Response
 if TYPE_CHECKING:
     from ...client import Session
 
+
 class AiOpsAPI:
     def __init__(self, session: Session):
         self.session = session
@@ -40,7 +41,7 @@ class AiOpsAPI:
         Returns:
             Response: CentralAPI Response object
         """
-        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800) # Now - 3 hours (UTC)
+        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800)  # Now - 3 hours (UTC)
         from_time, to_time = utils.parse_time_options(from_time, to_time, in_milliseconds=True)
         if serial:
             if not device_type:
@@ -78,7 +79,7 @@ class AiOpsAPI:
         Returns:
             Response: CentralAPI Response object
         """
-        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800) # Now - 3 hours (UTC)
+        from_time = from_time or datetime.fromtimestamp(datetime.now(tz=timezone.utc).timestamp() - 10800)  # Now - 3 hours (UTC)
         from_time, to_time = utils.parse_time_options(from_time, to_time, in_milliseconds=True)
         url = f"/aiops/v2/insights/global/id/{insight_id}/export"
 

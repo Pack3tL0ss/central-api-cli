@@ -44,6 +44,7 @@ def stream_reader_factory(  # noqa
     protocol = ResponseHandler(loop=loop)
     return StreamReader(protocol, limit=2 ** 16, loop=loop)
 
+
 def _build_response(
         url: 'Union[URL, str]',
         method: str = hdrs.METH_GET,
@@ -108,6 +109,7 @@ def _build_response(
     # if str(resp.url) == "/cloudauth/api/v3/bulk/mac":
     return resp
 
+
 class TestResponses:
     used_responses: list[int] = []
     missing_mocks: list[str] = []
@@ -140,7 +142,7 @@ class TestResponses:
             _three_hours_ago = now - datetime.timedelta(hours=3)
             three_hours_ago_ts = int(_three_hours_ago.timestamp())
             # Set up Jinja2 environment
-            j2env = Environment(loader=FileSystemLoader(config.closed_capture_file.parent)) # Assuming template is in the same directory
+            j2env = Environment(loader=FileSystemLoader(config.closed_capture_file.parent))  # Assuming template is in the same directory
             template = j2env.get_template(config.closed_capture_file.name)
 
             # Render the template with the dates
@@ -161,7 +163,7 @@ class TestResponses:
         """Calculate hash of dict response - minus rate limit field which is updated with every response."""
         _headers = {k: v for k, v in resp["headers"].items() if k != "X-RateLimit-Remaining-day"}
         _resp = {**resp, "headers": _headers}
-        _hash = abs(hash(f"{'' if not per_test else f'{env.current_test}:'}{str(_resp)}")) #  / 1_000_000
+        _hash = abs(hash(f"{'' if not per_test else f'{env.current_test}:'}{str(_resp)}"))  # / 1_000_000
         return _hash
 
     def _adjust_mock_response(self, res: dict, url_path: str, method: str, per_test: bool = False) -> dict:
@@ -296,7 +298,9 @@ class TestResponses:
             "payload": {"description": f"No Mock Response Found for {key}"}
         }  # pragma: no cover
 
+
 test_responses = TestResponses()
+
 
 @pytest.mark.asyncio
 async def mock_request(session: ClientSession, method: str, url: str, params: dict[str, Any] = None, json: dict[str, Any] = None, **kwargs):

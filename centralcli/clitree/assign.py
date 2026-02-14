@@ -109,7 +109,6 @@ def glp_subscription(
         )
 
 
-
 @app.command(name="label")
 def label_(
     label: str = typer.Argument(..., metavar=iden_meta.label, help="Label to assign to device(s)", autocompletion=common.cache.label_completion, show_default=False,),

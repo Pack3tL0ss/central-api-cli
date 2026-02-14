@@ -216,8 +216,6 @@ def remove(
     api.session.request(common.cache.update_dev_db, data=update_data)
 
 
-
-
 @app.command()
 def reboot(
     devices: list[str] = common.arguments.devices,
@@ -392,6 +390,8 @@ start_help = f"""Start WebHook Proxy Service on this system in the background
 
     [italic]Requires optional hook-proxy component '[bright_green]uv tool install -U centralcli{escape("[hook-proxy]")}[reset]'
     """  # pragma: no cover
+
+
 @app.command(help=start_help, short_help="Start WebHook Proxy", hidden=not hook_enabled)
 def start(
     what: StartArgs = typer.Argument(
@@ -408,6 +408,7 @@ def start(
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
     yes_both = True if yes > 1 else False
     yes = True if yes else False
+
     def terminate_process(pid):
         p = psutil.Process(pid)
         for _ in range(2):
@@ -467,6 +468,7 @@ def stop(
 ) -> None:  # pragma: no cover
     """Stop WebHook Proxy (background process)."""
     svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
+
     def terminate_process(pid):
         with render.Spinner("Terminating Webhook Proxy..."):
             p = psutil.Process(pid)
@@ -513,6 +515,7 @@ def stop(
     else:
         common.exit("WebHook Proxy is not running.", code=0)
 
+
 @app.command()
 def archive(
     devices: list[str] = typer.Argument(..., metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion),
@@ -539,7 +542,6 @@ def archive(
             _msg = f"{_msg}\n    {dev_in}"
             serials += [dev_in]
 
-
     render.econsole.print(_msg, _emsg, sep="\n", emoji=False)
     render.confirm(yes)
     resp = api.session.request(api.platform.archive_devices, serials)
@@ -548,7 +550,6 @@ def archive(
     else:
         render.display_results(resp, tablefmt="action")
     # CACHE verify impact of archive on classic cache and update accordingly.  Believe archived devices do not show up in inv cache.
-
 
 
 @app.command()
@@ -636,6 +637,7 @@ def disable(
 
     resp = api.session.request(api.platform.disable_auto_subscribe, services=services)
     render.display_results(resp, tablefmt="action")
+
 
 @app.command(hidden=True)
 def renew_license(
@@ -737,7 +739,6 @@ def callback(
     """
     if not config.cache_file_ok and do_load_pycentral():
         cache.check_fresh(refresh=True)  # pragma: no cover
-
 
 
 log.debugv(f'[cyan]cencli[/] called with Arguments: {" ".join(sys.argv[1:])}')

@@ -36,8 +36,8 @@ class CsvLexer(RegexLexer):
             * https://stackoverflow.com/a/25508711/298171
     """
 
-    name =       'Csv'
-    aliases =   ['csv', 'comma-separated', 'comma-separated-values']
+    name = 'Csv'
+    aliases = ['csv', 'comma-separated', 'comma-separated-values']
     filenames = ['*.csv']
 
     tokens = {
@@ -102,7 +102,6 @@ class CsvLexer(RegexLexer):
             (r'(.+)', bygroups(Punctuation)),
         ],
     }
-
 
 
 if __name__ == '__main__':

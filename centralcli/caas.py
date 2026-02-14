@@ -181,7 +181,6 @@ class BuildCLI:
 
         return await api.session.get(url)
 
-
     # FIXME
     async def get_config_status(self, serial: str) -> Response:  # pragma: no cover
         """Bad API endpoint.  ignore this.
@@ -193,6 +192,7 @@ class BuildCLI:
         url = "/caas/v1/status/device"
         params = {"serial_num": serial}
         return await api.session.get(url, params=params)
+
 
 class CaasAPI(BuildCLI):
     def __init__(self, data: dict = None, *, file: Path = None) -> None:

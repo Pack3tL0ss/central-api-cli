@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 from __future__ import annotations
 
 import binascii
@@ -68,6 +68,7 @@ class ToBool:
         else:
             return True
 
+
 class MacFormat(str, Enum):
     COLS = "COLS"
     DASHES = "DASHES"
@@ -100,18 +101,18 @@ class Convert:
 
     @property
     def cols(self) -> str:
-        cols = ':'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+        cols = ':'.join(self.clean[i:i + 2] for i in range(0, len(self), 2))
         if cols.strip().endswith(':'):  # handle macs starting with 00 for oobm
             cols = f"00:{cols.strip().rstrip(':')}"
         return cols
 
     @property
     def dashes(self) -> str:
-        return '-'.join(self.clean[i:i+2] for i in range(0, len(self), 2))
+        return '-'.join(self.clean[i:i + 2] for i in range(0, len(self), 2))
 
     @property
     def dots(self) -> str:
-        return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+        return '.'.join(self.clean[i:i + 4] for i in range(0, len(self), 4))
 
     @property
     def dec(self) -> int:
@@ -179,7 +180,6 @@ class Utils:
         out = [item for item in set(_list) if item is not None]
         return out if not sort else sorted(out)
 
-
     @staticmethod
     def is_serial(serial: Union[str, List[str]]) -> bool:
         """Validate the provided str or list of strings appears to be a serial number.
@@ -244,7 +244,6 @@ class Utils:
 
         return _var
 
-
     @staticmethod
     def unlistify(data: Any, replace_underscores: bool = True):
         """Remove unnecessary outer lists.
@@ -276,6 +275,7 @@ class Utils:
         console = Console(emoji=True)
         exit_prompt_text = "[cyan]Ctrl-Z -> Enter[/]" if os.name == "nt" else "[cyan]Ctrl-D[/] [grey42](on an empty line after content)[/]"
         exit_prompt_text = f"Use {exit_prompt_text} to submit.\nType [cyan]{abort_str}[/] or use [cyan]CTRL-C[/] to abort.\n[cyan blink]Waiting for Input...[/]\n"
+
         def _get_multiline_sub(prompt: str = prompt, **kwargs):
             prompt = f"{prompt}\n\n{exit_prompt_text}" if prompt else f"[cyan]Enter/Paste content[/]. {exit_prompt_text}"
             console.print(prompt, **kwargs)
@@ -370,7 +370,6 @@ class Utils:
             data = [{k: v for k, v in inner.items() if k not in common_keys} for inner in data]
 
         return data
-
 
     def strip_no_value(self, data: list[dict] | dict[str, dict], aggressive: bool = False) -> list[dict] | dict[str, dict]:
         """strip out any columns that have no value in any row
@@ -480,14 +479,13 @@ class Utils:
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
 
     @staticmethod
-    def normalize_device_sub_field(data: list[dict[str,  str]], *, word_sep: Literal["-", "_"] = None) -> list[dict[str, str]]:
+    def normalize_device_sub_field(data: list[dict[str, str]], *, word_sep: Literal["-", "_"] = None) -> list[dict[str, str]]:
         possible_sub_keys = ["license", "services", "subscription"]
         if not word_sep:
             return [{k if k.lower() not in possible_sub_keys else "subscription": v for k, v in dev.items()} for dev in data]
 
         from_char = "_" if word_sep == "-" else "-"
         return [{k if k.lower() not in possible_sub_keys else "subscription": v if k not in possible_sub_keys else (v and v.replace(from_char, word_sep)) for k, v in dev.items()} for dev in data]
-
 
     @staticmethod
     def generate_template(template_file: Path | str, var_file: Path | str | None = None, *, config_data: list | dict = None) -> str:
@@ -585,17 +583,17 @@ class Utils:
         return [iface for port in interfaces for p in port.split(",") for iface in expand_range(p)]
 
     @staticmethod
-    def convert_bytes_to_human(size: int | float | Dict[str, int | float] | None, precision: int = 2, throughput: bool = False, speed: bool = False, return_size: Literal['B','KB','MB','GB','TB', 'PB'] = None) -> str | None:
+    def convert_bytes_to_human(size: int | float | Dict[str, int | float] | None, precision: int = 2, throughput: bool = False, speed: bool = False, return_size: Literal['B', 'KB', 'MB', 'GB', 'TB', 'PB'] = None) -> str | None:
         if size is None:
             return size
 
-        def _number_to_human(_size: int | float, precision: int = precision, throughput: bool = throughput, speed: bool = speed, return_size: Literal['B','KB','MB','GB','TB', 'PB'] = return_size) -> str:
+        def _number_to_human(_size: int | float, precision: int = precision, throughput: bool = throughput, speed: bool = speed, return_size: Literal['B', 'KB', 'MB', 'GB', 'TB', 'PB'] = return_size) -> str:
             factor = 1000 if throughput or speed else 1024
-            suffixes=['B','KB','MB','GB','TB', 'PB'] if not speed else ["bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps"]
+            suffixes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] if not speed else ["bps", "Kbps", "Mbps", "Gbps", "Tbps", "Pbps"]
             suffix_idx = 0
             while _size > factor and suffix_idx < 5:
                 suffix_idx += 1  # increment the index of the suffix
-                _size = _size/float(factor)  # apply the division
+                _size = _size / float(factor)  # apply the division
                 if return_size and suffixes[suffix_idx].upper().startswith(return_size.upper()):
                     break
 
@@ -690,7 +688,7 @@ class Utils:
         out_list = [
             '|'.join(
                 [
-                    f'[green]{k}[/]:[cyan]{v}[/]' if k != 'status' else f'[{"red" if v.lower() == "down" else "bright_green"}]{v}[/]'  for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))
+                    f'[green]{k}[/]:[cyan]{v}[/]' if k != 'status' else f'[{"red" if v.lower() == "down" else "bright_green"}]{v}[/]' for k, v in d.items() if k not in ignore_fields and (v or isinstance(v, (bool, int)))
                 ]
             )
             for d in data
@@ -765,10 +763,10 @@ class Utils:
         args = []
         if sys.platform.startswith("win"):
             editor = "notepad.exe"
-        elif sys.platform == "darwin": # macOS
+        elif sys.platform == "darwin":  # macOS
             editor = "open"
             args = ["-t"]  # '-t' for the default text editor, '-e' opens with TextEdit
-        else: # Linux/Unix
+        else:  # Linux/Unix
             # use EDITOR env var fallback to 'editor' (which typically links to nano or vim)
             editor = os.environ.get('EDITOR', 'editor')
 
@@ -806,6 +804,7 @@ class Utils:
             raise typer.Exit(1)
 
         return {k: v for k, v in zip(vars, vals)}
+
 
 if __name__ == "__main__":
     ...

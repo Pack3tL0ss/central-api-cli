@@ -32,7 +32,6 @@ class WidsResponse:
             caption = common.get_time_range_caption(start, end, default="in past 3 hours.")
             self.caption = f"[cyan]{len(response)}[/] [medium_spring_green]{wids_cat.capitalize()}[/] AP{'s' if len(response) != 1 else ''} {caption}"
 
-
     def all_caption(self) -> str:
         caption = ""
         sections = ["rogue", "suspect", "interfering", "neighbor"]
@@ -43,6 +42,7 @@ class WidsResponse:
 
         caption = caption.strip()
         return caption or None
+
 
 def get_wids_response(
     wids_cat: Literal["rogue", "interfering", "suspect", "all"],

@@ -35,7 +35,7 @@ def ensure_not_cache_b4_adds():
     ]
 )
 def test_add_cert(args: tuple[str]):
-    result = runner.invoke(app, ["add", "cert",  "cencli_test", *args, "-Y"])
+    result = runner.invoke(app, ["add", "cert", "cencli_test", *args, "-Y"])
     capture_logs(result, "test_add_cert")
     assert result.exit_code == 0
     assert "201" in result.stdout
@@ -50,7 +50,7 @@ def test_add_cert(args: tuple[str]):
     ]
 )
 def test_add_cert_fail(idx: int, args: tuple[str]):
-    result = runner.invoke(app, ["add", "cert",  "cencli_test", *args])
+    result = runner.invoke(app, ["add", "cert", "cencli_test", *args])
     capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert "⚠" in result.stdout
@@ -69,7 +69,7 @@ def test_add_cert_fail(idx: int, args: tuple[str]):
     ]
 )
 def test_add_groups(idx: int, args: tuple[str]):
-    result = runner.invoke(app, ["add", "group",  *args, "-Y"])
+    result = runner.invoke(app, ["add", "group", *args, "-Y"])
     capture_logs(result, f"{env.current_test}{idx}")
     assert any(
         [
@@ -90,13 +90,13 @@ def test_add_groups(idx: int, args: tuple[str]):
     ]
 )
 def test_add_groups_invalid(args: tuple[str]):
-    result = runner.invoke(app, ["add", "group",  "cencli_test_group_fail", *args, "-Y"])
+    result = runner.invoke(app, ["add", "group", "cencli_test_group_fail", *args, "-Y"])
     capture_logs(result, "test_add_group_invalid_combination_of_dev_types", expect_failure=True)
     result.exit_code == 1
 
 
 def test_add_site_by_address():
-    result = runner.invoke(app, ["add", "site",  "cencli_test_site3", "123 Main St.", "Gallatin", "TN", "37066", "US", "-Y"])
+    result = runner.invoke(app, ["add", "site", "cencli_test_site3", "123 Main St.", "Gallatin", "TN", "37066", "US", "-Y"])
     capture_logs(result, "test_add_site_by_address")
     assert any(
         [
@@ -107,7 +107,7 @@ def test_add_site_by_address():
 
 
 def test_add_site_by_geo():
-    result = runner.invoke(app, ["add", "site",  "cencli_test_site4", "--lat", "36.378545", "--lon", "-86.360740", "-Y"])
+    result = runner.invoke(app, ["add", "site", "cencli_test_site4", "--lat", "36.378545", "--lon", "-86.360740", "-Y"])
     capture_logs(result, "test_add_site_by_geo")
     assert any(
         [
@@ -118,7 +118,7 @@ def test_add_site_by_geo():
 
 
 def test_add_template(ensure_cache_group2: None):
-    result = runner.invoke(app, ["add", "template",  "cencli_test_template", "cencli_test_group2", str(test_sw_template), "--dev-type", "sw", "-Y"])
+    result = runner.invoke(app, ["add", "template", "cencli_test_template", "cencli_test_group2", str(test_sw_template), "--dev-type", "sw", "-Y"])
     capture_logs(result, "test_add_template")
     assert result.exit_code == 0
     assert "201" in result.stdout
@@ -133,14 +133,14 @@ def test_add_template(ensure_cache_group2: None):
     ]
 )
 def test_add_variables(ensure_cache_group2: None, test_file: str):
-    result = runner.invoke(app, ["add", "variables",  str(test_file), "-Y"])
+    result = runner.invoke(app, ["add", "variables", str(test_file), "-Y"])
     capture_logs(result, "test_add_variables")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_add_variables_invalid(ensure_cache_group2: None):
-    result = runner.invoke(app, ["add", "variables",  str(test_invalid_var_file), "-Y"])
+    result = runner.invoke(app, ["add", "variables", str(test_invalid_var_file), "-Y"])
     capture_logs(result, "test_add_variables_invalid", expect_failure=True)
     assert result.exit_code == 1
     assert "Missing" in result.stdout
@@ -171,7 +171,7 @@ def test_add_label(labels: tuple[str]):
 
 
 def test_add_label_duplicate_name(ensure_cache_label1: None):
-    result = runner.invoke(app, ["add", "label",  "cencli_test_label1", "-Y"])
+    result = runner.invoke(app, ["add", "label", "cencli_test_label1", "-Y"])
     capture_logs(result, "test_add_label_duplicate_name", expect_failure=True)
     assert result.exit_code == 1
     assert "already exist" in result.stdout
@@ -185,7 +185,7 @@ def test_add_label_duplicate_name(ensure_cache_label1: None):
     ]
 )
 def test_add_named_mpsk(args: tuple[str]):
-    result = runner.invoke(app, ["add", "mpsk",  test_data["mpsk_ssid"], *args, "-Y"])
+    result = runner.invoke(app, ["add", "mpsk", test_data["mpsk_ssid"], *args, "-Y"])
     capture_logs(result, "test_add_named_mpsk")
     assert result.exit_code == 0
     assert "201" in result.stdout
@@ -254,14 +254,14 @@ def test_add_guest(ensure_no_cache_guest: None, args: tuple[str], pass_condition
         ],
         [
             (
-                test_data["portal"]["name"],  test_data["portal"]["guest"]["name"], "--phone", "615555121"
+                test_data["portal"]["name"], test_data["portal"]["guest"]["name"], "--phone", "615555121"
             ),
             lambda r: "invalid" in r
         ],
     ]
 )
 def test_add_guest_invalid(args: tuple[str], pass_condition: Callable):
-    result = runner.invoke(app, ["add", "guest",  *args, "--yes"])
+    result = runner.invoke(app, ["add", "guest", *args, "--yes"])
     capture_logs(result, "test_add_guest_invalid", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
@@ -276,21 +276,21 @@ def test_add_guest_invalid(args: tuple[str], pass_condition: Callable):
 )
 def test_add_wlan(ensure_cache_group1: None, idx: int, hide: bool):
     args_end = ("--hidden", "--yes") if hide else ("--yes",)
-    result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", f"delme{idx}", "vlan", "110", "psk", "C3ncliR0cks!", *args_end])
+    result = runner.invoke(app, ["add", "wlan", "cencli_test_group1", f"delme{idx}", "vlan", "110", "psk", "C3ncliR0cks!", *args_end])
     capture_logs(result, f"{env.current_test}{idx}")
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_add_wlan_no_psk(ensure_cache_group1: None):
-    result = runner.invoke(app, ["add", "wlan",  "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
+    result = runner.invoke(app, ["add", "wlan", "cencli_test_group1", "delme", "vlan", "110", "--hidden"])
     capture_logs(result, "test_add_wlan_no_psk", expect_failure=True)
     assert result.exit_code == 1
 
 
 if config.dev.mock_tests:
     def test_add_webhook():
-        result = runner.invoke(app, ["add", "webhook",  "cencli_test_webhook", "http://wh.consolepi.com:8123/webhook", "-y"])
+        result = runner.invoke(app, ["add", "webhook", "cencli_test_webhook", "http://wh.consolepi.com:8123/webhook", "-y"])
         capture_logs(result, "test_add_webhook")
         assert result.exit_code == 0
         assert "200" in result.stdout

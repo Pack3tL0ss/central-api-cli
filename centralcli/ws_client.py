@@ -116,6 +116,7 @@ def _decode(data, field_type: FieldType = "ip"):
         log.exception(f"Exception while attempting to decode {field_type} in wss payload.  \n{e}")
         return data
 
+
 async def _clean_mon_data(data: monitoring_pb2.MonitoringInformation):
     # [attr for attr in data.__dir__() if not attr.startswith("_") and not callable(getattr(data, attr)) and getattr(data, attr)]
     inspect(data)
@@ -242,7 +243,7 @@ def get_macs(as_dict, key) -> dict:
     }
     for mkey in mac_keys.keys():
         if mkey == "timestamp":
-            macs =  [DateTime(iface[mkey]) for iface in as_dict[key] if mkey in iface]
+            macs = [DateTime(iface[mkey]) for iface in as_dict[key] if mkey in iface]
         elif mkey in ["deviceId", "associatedDevice"]:
             as_dict = get_devices(as_dict, key=key)
             continue
@@ -250,11 +251,11 @@ def get_macs(as_dict, key) -> dict:
             as_dict = {**as_dict, key: [{k: v if k != "uptime" else DateTime(v, "durwords-short", round_to_minute=True) for k, v in inner.items()} for inner in as_dict[key]]}
             continue
         elif mkey in ["essid", "network"]:
-            macs =  [_decode(iface[mkey], field_type=mkey) for iface in as_dict[key] if mkey in iface]
+            macs = [_decode(iface[mkey], field_type=mkey) for iface in as_dict[key] if mkey in iface]
         elif mkey in ["probeIpAddr"]:
-            macs =  [_decode(iface[mkey], field_type=mac_keys[mkey].split("_")[-1]) for iface in as_dict[key] if mkey in iface]
+            macs = [_decode(iface[mkey], field_type=mac_keys[mkey].split("_")[-1]) for iface in as_dict[key] if mkey in iface]
         else:
-            macs =  [_decode(iface[mkey]["addr"], field_type=mac_keys[mkey].split("_")[-1]) for iface in as_dict[key] if mkey in iface]
+            macs = [_decode(iface[mkey]["addr"], field_type=mac_keys[mkey].split("_")[-1]) for iface in as_dict[key] if mkey in iface]
 
         if macs:
             as_dict[key] = [{k if k != mkey else mac_keys[mkey]: v if k != mkey else mac for k, v in iface.items()} for iface, mac in zip(as_dict[key], macs)]
@@ -267,7 +268,7 @@ def get_ips(as_dict, key) -> dict:
         "ipAddress": "ip",
     }
     for ip_key in ip_keys.keys():
-        ips =  [_decode(iface[ip_key]["addr"]) for iface in as_dict[key] if ip_key in iface]
+        ips = [_decode(iface[ip_key]["addr"]) for iface in as_dict[key] if ip_key in iface]
         if ips:
             as_dict[key] = [{k if k != ip_key else ip_keys[ip_key]: v if k != ip_key else ip for k, v in iface.items()} for iface, ip in zip(as_dict[key], ips)]
 
@@ -330,11 +331,9 @@ def format_pb_data(pb_data: monitoring_pb2.MonitoringInformation) -> dict:
     if pb_data.tunnels:
         as_dict = get_macs(as_dict, "tunnels")
 
-
     as_dict = {"timestamp": DateTime(pb_data.timestamp), **{k: v for k, v in as_dict.items() if k != "timestamp"}}  # Move timestamp to top and format
     del as_dict["customerId"]
     return as_dict
-
 
 
 # TODO base_url will be required once not hardcoded, need to determine if base-url can be determined reliably from central base and provide config option for it.

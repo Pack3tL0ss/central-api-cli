@@ -59,15 +59,18 @@ MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will
 
 api = api_clients.classic
 
+
 @dataclass
 class BuiltRequests:
     requests: list[BatchRequest]
     confirm_msgs: list[str] = None
     warnings: list[str] = None
 
+
 class BlockDetails(BaseModel):
     blockSize: int
     dateCreated: str
+
 
 class MacDetails(BaseModel):
     wiresharkNotes: str
@@ -96,7 +99,7 @@ class Convert:
     def _do_format(mac: str, delim: str = ":", chunk_size: int = 2) -> str:
         for _delim in list('.-:'):
             clean = mac.replace(_delim, '')
-        cols = delim.join(clean[i:i+chunk_size] for i in range(0, len(clean), chunk_size))
+        cols = delim.join(clean[i:i + chunk_size] for i in range(0, len(clean), chunk_size))
         if cols.strip().endswith(delim):  # handle macs starting with 00 for oobm
             cols = f"00:{cols.strip().rstrip(delim)}"
         return cols
@@ -112,7 +115,7 @@ class Convert:
 
     @property
     def dots(self) -> str:
-        return '.'.join(self.clean[i:i+4] for i in range(0, len(self), 4))
+        return '.'.join(self.clean[i:i + 4] for i in range(0, len(self), 4))
 
     @property
     def dec(self) -> int:
@@ -150,8 +153,6 @@ class Convert:
             "radio 1": [self._do_format(m, delim="-") for m in radio_macs[1]],
             "radio 2": [self._do_format(m, delim="-") for m in radio_macs[2]],
         }
-
-
 
 
 class Mac(Convert):
@@ -325,6 +326,7 @@ class PreConfig:
     config: str
     request: BatchRequest
 
+
 class GLPAction(str, Enum):
     ADD = "add"
     UPDATE = "update"
@@ -376,7 +378,7 @@ class CLICommon:
 
         @property
         def forgot(self):
-                return ":information:  Forget option set for workspace, and expiration has passed.  [bright_green]reverting to default workspace\n[/]"
+            return ":information:  Forget option set for workspace, and expiration has passed.  [bright_green]reverting to default workspace\n[/]"
 
         @property
         def will_forget(self):
@@ -695,13 +697,13 @@ class CLICommon:
         return start, _end
 
     @staticmethod
-    def get_time_range_caption(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, default = "in past 3 hours.") -> str:
-            if not end:
-                return default if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
-            if start:
-                return f"from {DateTime(start.timestamp(), 'mdyt')} to {DateTime(end.timestamp(), 'mdyt')}"
+    def get_time_range_caption(start: datetime | pendulum.DateTime | None, end: datetime | pendulum.DateTime = None, default="in past 3 hours.") -> str:
+        if not end:
+            return default if not start else f"in {DateTime(start.timestamp(), 'timediff-past')}"
+        if start:
+            return f"from {DateTime(start.timestamp(), 'mdyt')} to {DateTime(end.timestamp(), 'mdyt')}"
 
-            raise ValueError("get_time_range_caption() requires start when end is provided.  Use verify_time_range with end_offset to set a default when not provided by user")
+        raise ValueError("get_time_range_caption() requires start when end is provided.  Use verify_time_range with end_offset to set a default when not provided by user")
 
     def get_filtered_devices_w_inventory(self, refresh: bool = True, site: CacheSite = None, group: CacheGroup = None, not_group: CacheGroup = None, dev_type: GroupDevTypes = None, not_dev_type: GroupDevTypes = None, site_import: Path = None) -> list[dict[str, Any]]:
         resp = self.cache.get_devices_with_inventory(device_type=dev_type, no_refresh=not refresh)
@@ -1013,7 +1015,6 @@ class CLICommon:
 
         return resp or Response(error="No Groups were added")
 
-
     # TODO # FIXME incossistent return type. other batch_add... methods return a list[Response]  this returns a single combined response
     # for the sake of the output.  Probably best to do the combining elsewhere so the return is consistent
     # complicated further as this can return a list if there are any failures.
@@ -1263,7 +1264,6 @@ class CLICommon:
 
         return [*add_resp, *update_resp, *group_resp]
 
-
     def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
         yes = yes if yes is not None else 0
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
@@ -1350,7 +1350,7 @@ class CLICommon:
         resp = api.session.batch_request(reqs)
         try:
             cache_data = Labels([r.output for r in resp if r.ok])
-            _  = api.session.request(self.cache.update_label_db, data=cache_data.model_dump())
+            _ = api.session.request(self.cache.update_label_db, data=cache_data.model_dump())
         except Exception as e:
             log.exception(f'Exception {e.__class__.__name__} during label cache update in batch_add_labels')
             render.econsole.print(f'{emoji.warn} [bright_red]Cache Update Error[/]: {repr(e)}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
@@ -1366,7 +1366,6 @@ class CLICommon:
             return self.batch_archive_unarchive_devices_glp(data, yes=yes, operation=operation)
         else:
             return self.batch_archive_unarchive_devices_classic(data, yes=yes, operation=operation)
-
 
     def batch_archive_unarchive_devices_glp(self, data: list[dict], yes: bool = None, operation: Literal["archive", "unarchive"] = "archive") -> None:
         devs = []
@@ -1420,7 +1419,7 @@ class CLICommon:
         def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
             self.cache_devs = cache_devs
             self.move: MoveData = MoveData(mv_reqs=site_mv_reqs, mv_msgs=site_mv_msgs, action_word="moved", move_type="site", cache_devs=cache_devs)
-            self.remove: MoveData = MoveData(mv_reqs=site_rm_reqs, mv_msgs=site_rm_msgs, action_word="removed" , move_type="site", cache_devs=cache_devs)
+            self.remove: MoveData = MoveData(mv_reqs=site_rm_reqs, mv_msgs=site_rm_msgs, action_word="removed", move_type="site", cache_devs=cache_devs)
 
         def __str__(self) -> str:
             return "\n".join([*self.remove.msgs, *self.move.msgs])
@@ -1550,7 +1549,6 @@ class CLICommon:
             group_mv_cx_retain_msgs=group_mv_cx_retain_msgs,
             cache_devs=cache_devs
         )
-
 
     def _check_site(self, cache_devs: list[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]]) -> SiteMoves:
         site_rm_reqs, site_rm_msgs = {}, {}
@@ -1725,7 +1723,6 @@ class CLICommon:
             if not cache_devs:
                 self.exit("No devices found")
 
-
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], []
         if do_site:  # TODO switch stack with multiple switches confirmation will show "1 device will be moved...", no doubt the same for swarms.  Better if confirm msg indicated the actual # of devices impacted by the move in these cases
             site_ops = self._check_site(cache_devs=cache_devs, import_data=devices)
@@ -1883,7 +1880,7 @@ class CLICommon:
         if all([r.ok for r in arch_resp[0:2]]) and all([not r.get("failed_devices") for r in arch_resp[0:2]]):
             arch_resp[0].output = arch_resp[0].output.get("message")
             _success_cnt = len(arch_resp[1].output.get("succeeded_devices", []))
-            arch_resp[1].output =  (
+            arch_resp[1].output = (
                 f'  {arch_resp[1].output.get("message", "")}\n'
                 f'  Subscriptions successfully removed for {_success_cnt} device{utils.singular_plural_sfx(_success_cnt)}.\n'
                 '  \u2139  archive/unarchive flushes all subscriptions and disassociates the Central service.'
@@ -1891,7 +1888,6 @@ class CLICommon:
             render.display_results(arch_resp[0:2], tablefmt="action")
         else:
             summarize_arch_res(arch_resp[0:2])
-
 
     def _build_mon_del_reqs(self, cache_devs: List[CacheDevice | CacheInvMonDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
@@ -1919,7 +1915,7 @@ class CLICommon:
         for _try in range(4):
             _word = "more " if _try > 0 else ""
             _prefix = "" if _try == 0 else escape(f"[Attempt {_try + 1}] ")
-            _delay -= (5 * _try) # reduce delay by 5 secs for each loop
+            _delay -= (5 * _try)  # reduce delay by 5 secs for each loop
             for _ in track(range(_delay), description=f"{_prefix}[green]Allowing {_word}time for devices to disconnect."):
                 time.sleep(1)
 
@@ -1969,7 +1965,6 @@ class CLICommon:
         if config.glp.ok and not any([ui_only, cop_inv_only]):
             return self.batch_delete_devices_glp(data, yes=yes, migrate=migrate)  # Note glp delete flow only deletes from GLP inventory not ui
         return self.batch_delete_devices_classic(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
-
 
     def batch_delete_devices_glp(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, migrate: bool = False) -> List[Response]:
         api = api_clients.glp
@@ -2151,7 +2146,7 @@ class CLICommon:
         batch_resp = []
         mon_doc_ids = []
         inv_doc_ids = []
-        render.confirm(yes) # We abort if they don't confirm.
+        render.confirm(yes)  # We abort if they don't confirm.
 
         # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
         # Also monitoring UI delete for any devices currently offline.
@@ -2181,7 +2176,6 @@ class CLICommon:
             api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
 
         return batch_resp
-
 
     def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> BuiltRequests:
         api = api_clients.glp
@@ -2231,7 +2225,6 @@ class CLICommon:
 
         return BuiltRequests(sub_reqs, confirm_msgs=confirm_msg)
 
-
     def _prep_glp_add_update_data(self, data: list[dict[str, Any]], *, subscription: str = None, sub_required: bool = False, action: GLPAction = GLPAction.UPDATE) -> ImportDevices:
         data = utils.normalize_device_sub_field(data)
         if subscription:  # if they provide subscription via --sub flag. It overrides anything found in the import file (or adds it if it doesn't exist)
@@ -2280,7 +2273,7 @@ class CLICommon:
         if not migrate:
             confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
         render.econsole.print("\n".join(confirm_msg), emoji=False)
-        render.confirm(yes) # aborts here if they don't confirm
+        render.confirm(yes)  # aborts here if they don't confirm
         glp_api = api_clients.glp
         batch_res = glp_api.session.batch_request(batch_reqs)
 
@@ -2372,7 +2365,7 @@ class CLICommon:
             return api.session.batch_request(reboot_reqs)
 
     # Header rows used by CAS
-    #DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
+    # DEVICE NAME,SERIAL,MAC,GROUP,SITE,LABELS,LICENSE,ZONE,SWARM MODE,RF PROFILE,INSTALLATION TYPE,RADIO 0 MODE,RADIO 1 MODE,RADIO 2 MODE,DUAL 5GHZ MODE,SPLIT 5GHZ MODE,FLEX DUAL BAND,ANTENNA WIDTH,ALTITUDE,IP ADDRESS,SUBNET MASK,DEFAULT GATEWAY,DNS SERVER,DOMAIN NAME,TIMEZONE,AP1X USERNAME,AP1X PASSWORD
     # CACHE cache update if AP is renamed
     def batch_update_aps(self, data: list | dict, *, yes: bool = False, reboot: bool = False) -> None:
         """Update per-ap-settings (ap env) or set gps altitude by updating ap level config"""
@@ -2467,7 +2460,6 @@ class CLICommon:
             kwargs = {"banner": raw_banner_text}
             conf_msg_banner = raw_banner_text
 
-
         render.econsole.print(f"Update AP banner text for the following {update_word}: {utils.summarize_list([d[iden_field] for d in data])}")
         render.econsole.print(f"[bright_green]With the following banner[/]:\n[reset]{conf_msg_banner}")
         render.confirm(yes)
@@ -2521,6 +2513,7 @@ class CLICommon:
             with log.log_file.open("a") as file:
                 print(Traceback(), file=file)
             self.exit(repr(e))
+
 
 if __name__ == "__main__":
     pass

@@ -19,6 +19,7 @@ sub_help = """Unssign Licenses from devices by serial number(s).
     This can be done in one step using [cyan]assign subscription[/] or [cyan]batch assign subscriptions[/]
 """
 
+
 @app.command("subscription" if not config.glp.ok else "_subscription", hidden=config.glp.ok, help=sub_help)
 def classic_subscription(
     subscription: common.cache.LicenseTypes = typer.Argument(..., help="License type to unassign from device(s).", show_default=False),  # type: ignore
@@ -40,7 +41,6 @@ def classic_subscription(
     # cache updates
     inv_devs = [{**d, "services": None} for d in devices]
     api.session.request(common.cache.update_inv_db, inv_devs)
-
 
 
 @app.command("subscription" if config.glp.ok else "_subscription", hidden=not config.glp.ok, help=sub_help)

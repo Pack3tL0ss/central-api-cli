@@ -100,6 +100,7 @@ def ask(
     Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
     """
     con = rich_console or econsole
+
     def abort():
         con.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
         sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
@@ -129,6 +130,7 @@ class ClusterURLs:
     def __init__(self, classic: str, cnx: str):
         self.classic = classic
         self.cnx = cnx
+
 
 class CentralURLs(Mapping):  # pragma: no cover  used in first run wizard which requires tty
     def __init__(self):
@@ -464,7 +466,7 @@ class Config:
 
     def get(self, key: str, default: Any = None, *, workspace_only: bool = False) -> Any:
         # prefer setting at the workspace config level first
-        #config format v1 (classic)
+        # config format v1 (classic)
         if self.workspace:
             if key in self.data.get(self.workspace, {}):
                 return self.data[self.workspace][key]

@@ -117,9 +117,9 @@ class Inventory(RootModel):
 
         return count_str
 
-
     def cache_dump(self) -> list[dict[str, str | int | bool]]:  # currently no adjustments from model_dump.  use json.loads(self.model_dump_json()) with customer json serializer if adjustments needed in future.
         return self.model_dump()
+
 
 class DeviceStatus(str, Enum):
     Up = "Up"
@@ -472,6 +472,7 @@ class Mpsk(BaseModel):
     ssid: Optional[str] = None  # We add the SSID / MPSK network associated when fetching all Named MPSKs across all SSIDs
     # mpsk: str  #  We don't store the psk in the cache
 
+
 class Mpsks(RootModel):
     root: List[Mpsk]
 
@@ -576,6 +577,7 @@ class Guest(BaseModel):
     def normalize_phone(cls, phone: str) -> str:
         return phone if not phone else phone.lstrip("+")
 
+
 class Guests(RootModel):
     root: List[Guest]
 
@@ -603,9 +605,11 @@ class VisualRFUnits(str, Enum):
     FEET = "FEET"
     METERS = "METERS"
 
+
 class Campus(BaseModel):  # pragma: no cover  Not currently used or needed in the cache
     id: str = Field(alias=AliasChoices("id", "campus_id"))
     name: str = Field(alias=AliasChoices("name", "campus_name"))
+
 
 class Building(BaseModel):
     id: str = Field(alias=AliasChoices("id", "building_id"))
@@ -631,6 +635,7 @@ class Buildings(BaseModel):
 
     def cache_dump(self) -> list[dict[str, str]]:
         return [b.model_dump() for b in self.buildings]
+
 
 class BuildingResponses(RootModel):
     root: Buildings
@@ -688,6 +693,7 @@ class VisualRFFloor(BaseModel):
     floor: Floor
     aps: list[AccessPoint] = Field(alias=AliasChoices("aps", "access_points"))
     access_point_count: int = Field(alias=AliasChoices("ap_count", "access_point_count"))
+
 
 class Floors(RootModel):
     root: list[VisualRFFloor]

@@ -128,7 +128,6 @@ class ExampleSegment:
         max_len = max([len(line.strip()) for line in example_text.splitlines()])
         self.max_len = (max_len if max_len >= 57 else 57) if max_len <= tty.cols else tty.cols
 
-
     def __str__(self):
         return "\n".join(self.list)
 
@@ -150,6 +149,7 @@ class ExampleSegment:
             "",
             # f"{len(self.title)=} {self.first_half=} {self.second_half=} {self.max_len=} {self.end_len=} {[len(line) for line in self.original.splitlines()]}",  # DEBUG
         ]
+
 
 class Example:
     """
@@ -207,6 +207,7 @@ class Example:
 
     def _handle_bools(self, data: tablib.Dataset) -> List[Dict[str, Any]]:
         bool_strings = ["true", "false", "yes", "no"]
+
         def _convert_bool(value: str, expecting_list: bool = False) -> str | bool | int | list:
             if expecting_list:
                 if " " in value:
@@ -239,9 +240,9 @@ class Example:
 
     @property
     def header(self):
-        header =  ["Accepts the following keys (include as header row for csv import):"]
+        header = ["Accepts the following keys (include as header row for csv import):"]
         field_dict = FIELDS[self.action]
-        required_strings =  utils.color(field_dict[self.type]["required"], "red")
+        required_strings = utils.color(field_dict[self.type]["required"], "red")
         header += [f'    {required_strings}']
         # if field_dict[self.type].get("optional"):  # currently all defined have optional fields
         header[-1] = f'{header[-1]}, {utils.color(list(field_dict[self.type]["optional"].keys()), "cyan")} [italic red](red=required)[/]'
@@ -297,7 +298,6 @@ class Example:
         )
 
 
-
 common_add_delete_end = """
 [italic]:information:  Batch add and batch delete operations are designed so the same import file can be used.[/]
 [italic]   The delete operation does not require as many fields, the cli will ignore the fields it does not need.[/]
@@ -345,7 +345,7 @@ USABC1234:
 """
 
 # -- // MOVE DEVICES \\ --
-device_move_data="""
+device_move_data = """
 serial,mac,group,site,label,retain_config
 CN12345678,aabbccddeeff,phl-access,snantx-1201,,false
 CN12345679,aa:bb:cc:00:11:22,phl-access,pontmi-102,label1,false
@@ -366,7 +366,7 @@ clibatch_move_devices = f"""{example.command_text}
 """
 
 # -- // RENAME DEVICES \\ --
-data="""
+data = """
 serial,hostname
 CN12345678,barn.615.ab12
 CN12345679,snantx.655.afb1
@@ -409,7 +409,7 @@ fields = [
     'ant_5_gain',
     'ant_6_gain',
 ]
-data=f"""
+data = f"""
 {','.join(fields)}
 CN12345678,barn.615.ab12,,,,,consolepi.com,2.4,,,,,,,,,,
 CN12345679,snantx.655.afb1,10.0.31.101,255.255.255.0,10.0.31.1,10.0.30.51 10.0.30.52,consolepi.com,,,,,,6,,,,,
@@ -487,7 +487,7 @@ clibatch_add_sites = f"""[italic cyan]cencli batch add sites IMPORT_FILE[/]:
 Accepts the following keys (include as header row for csv import):
     {utils.color(['name'], "red")}, {utils.color(['address', 'city', 'state', 'zipcode', 'country', 'longitude', 'latitude'], "cyan")} [italic red](red=required)[/]
 
-[italic]:information:   Provide address fields, or geo-location ({utils.color(['longitude' ,'latitude'])}) [red]not both[/].
+[italic]:information:   Provide address fields, or geo-location ({utils.color(['longitude', 'latitude'])}) [red]not both[/].
 [italic]   Central will calc long/lat if address is provided,[/]
 [italic]   but does not determine address from long/lat
 
@@ -565,8 +565,11 @@ example = Example(data=data, type="groups", action="add")
 # TODO verify aos10 default. make functional only tested with deploy yaml file need to make work for csv
     # [red]name[/],[cyan]types[/],[cyan]wired-tg[/],[cyan]wlan-tg[/],[cyan]gw-role[/],[cyan]aos10[/],[cyan]gw-config[/],[cyan]ap-config[/],[cyan]gw-vars[/],[cyan]ap-vars[/] [italic red](red=required)[/]
 _default_false = escape("[default: False]")
+
+
 def type_str(_type: str):
     return f"[dim]({_type})[/]"
+
 
 clibatch_add_groups = f"""{example.command_text}
 
@@ -631,7 +634,7 @@ TODO add deploy example
 
 # TODO REMOVE
 # -- // CLASSIC SUBSCRIBE DEVICES \\ --
-data="""serial,license
+data = """serial,license
 CN12345678,foundation_switch_6300
 CN12345679,advanced_ap
 CN12345680,advanced_ap"""
@@ -649,7 +652,7 @@ Requires the following keys (include as header row for csv import):
 """
 
 # -- // VARIABLES \\ --
-data="""_sys_serial,_sys_lan_mac,_sys_hostname,_sys_gateway,_sys_module_command,user_var1,user_var2
+data = """_sys_serial,_sys_lan_mac,_sys_hostname,_sys_gateway,_sys_module_command,user_var1,user_var2
 US12345678,aabbccddeeff,snantx-idf1-sw1,10.0.30.1,type jl728a,value1,value2
 SG12345679,ffee.ddcc.bbaa,snantx-idf1-sw2,10.0.30.1,type jl728a,value1,value2
 TW12345680,01:aa:bb:cc:dd:ee,snantx-idf1-sw3,10.0.30.1,type jl728a,value1,value2"""
@@ -705,7 +708,7 @@ CN12345680
 
 
 # -- // GLP SUBSCRIBE DEVICES \\ --
-data="""serial,subscription
+data = """serial,subscription
 CN12345678,foundation_switch_6300
 CN12345679,0f468bdf-e485-087f-abff-fc881f54373c
 CN12345680,advanced_ap"""
@@ -771,7 +774,7 @@ any subscriptions associated with the serial will be removed.
 """
 
 # -- // ADD MACS (cloud-auth) \\ --
-data="""mac,name
+data = """mac,name
 00:09:B0:75:65:D1,Integra
 00:1B:4F:23:8A:3E,Avaya VoIP
 3C:A8:2A:A6:07:0B,HP Thin Client"""
@@ -789,7 +792,7 @@ Accepts the following keys (include as header row for csv import):
 """
 
 # -- // ADD MPSK (cloud-auth) \\ --  REMOVED MPSK Column does not appear to be supported
-data="""name,role,status
+data = """name,role,status
 wade@example.com,admin_users,enabled
 jerry@example.com,dia,enabled
 stephanie@example.com,general_users,enabled"""
@@ -845,6 +848,7 @@ class ImportExamples:
         if key != "__iter__" and key not in self.__dict__.keys():  # pragma: no cover
             log.error(f"An attempt was made to get {key} attr from ImportExamples which is not defined.")
             return f":warning: [bright_red]Error[/] no str defined for [cyan]ImportExamples.{key}[/]"
+
 
 cron_weekly = """#!/usr/bin/env bash
 
@@ -905,14 +909,17 @@ dev_options:          # --- Developer Options ---
   # --debug-limit --sanitize --capture-raw
 """
 
+
 @dataclass
 class Emoji:
     warn: str = "[dark_orange3]\u26a0[/] "  # ⚠
     info: str = "[deep_sky_blue3]\u2139[/] "  # ℹ
 
+
 @dataclass
 class CLIStrings:
     glp: str = "[green]GreenLake[/]"
+
 
 emoji = Emoji()
 cli_strings = CLIStrings()

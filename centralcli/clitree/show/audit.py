@@ -137,7 +137,7 @@ def acp_logs(
             reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs,  # if not verbose else None,
             cache_update_func=common.cache.update_log_db,  # cache is not updated if -vv if not verbose else None,
-            verbosity = verbose
+            verbosity=verbose
         )
 
 
@@ -255,6 +255,7 @@ def logs(
             cache_update_func=common.cache.update_log_db if not verbose else None,
             caption=caption,
         )
+
 
 @app.callback()
 def callback():

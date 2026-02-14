@@ -42,7 +42,7 @@ def template(
             render.econsole.print(f":x: No variable file found matching template base-name [cyan]{template.stem}[/]")
             render.econsole.print(f"and valid extension: [cyan]{'[/], [cyan]'.join(config.valid_suffix)}[/].")
             raise typer.Exit(1)
-        elif  len(var_file) > 1:
+        elif len(var_file) > 1:
             common.exit(f"Too many matches, found [cyan]{len(var_file)}[/] files with base-name [cyan]{template.stem}[/].")
         else:
             var_file = var_file[0]
@@ -89,6 +89,8 @@ def config_(
 
 
 callback_str = f"Convert j2 Templates{'' if not config.is_old_cfg else ' or convert the cencli config to CFG_VERSION: 2'}"
+
+
 @app.callback(help=callback_str)
 def callback():
     pass

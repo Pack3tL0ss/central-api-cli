@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from ...client import Session
     from ...response import Response
 
+
 class GuestAPI:
     def __init__(self, session: Session):
         self.session = session
@@ -105,7 +106,6 @@ class GuestAPI:
         params = utils.strip_none(params)
 
         return await self.session.get(url, params=params)
-
 
     async def add_guest(
         self,

@@ -36,6 +36,7 @@ PYCENTRAL_SILENT_EXIT = [
 
 LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET", "critical", "error", "warning", "info", "debug", "notset"]
 
+
 class MyLogger:
     def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None):
         self._DEBUG: bool = debug
@@ -55,8 +56,8 @@ class MyLogger:
         self.warning = partial(self.log_print, level="warning")
         self.error = partial(self.log_print, level="error")
         self.exception = partial(self.log_print, level="exception", exc_info=True)
-        self.critical  = partial(self.log_print, level="critical")
-        self.fatal  = partial(self.log_print, level="fatal")
+        self.critical = partial(self.log_print, level="critical")
+        self.fatal = partial(self.log_print, level="fatal")
 
     def __getattr__(self, name: str) -> Any:  # pragma: no cover Exists only as a convenience when debugging
         if hasattr(self, "_log") and hasattr(self._log, name):
@@ -73,7 +74,7 @@ class MyLogger:
             format=fmtStr,
             datefmt=dateStr,
             handlers=[
-                RotatingFileHandler(self.log_file.absolute(),  maxBytes=900_000, backupCount=5,),
+                RotatingFileHandler(self.log_file.absolute(), maxBytes=900_000, backupCount=5,),
             ],
         )
         return logging.getLogger(self.log_file.stem)
@@ -95,10 +96,6 @@ class MyLogger:
                 logs = "".join(lines[len(lines) - idx:])
 
         console.print(logs)
-
-
-
-
 
     def follow(self, pytest: bool = False) -> None:  # pragma: no cover requires a tty
         """generator function that yields new lines in log file"""

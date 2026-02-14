@@ -77,7 +77,6 @@ class CLIFormatter:
 
         return _short_key(key), utils.unlistify(value)
 
-
     @staticmethod
     def strip_no_value(data: List[dict] | Dict[dict], no_val_strings: List[str] = NO_VAL_STRINGS, aggressive: bool = False,) -> List[dict] | Dict[dict]:
         """strip out any columns that have no value in any row
@@ -134,7 +133,6 @@ class CLIFormatter:
             )
 
         return data
-
 
     def simple_kv_formatter(
             self,

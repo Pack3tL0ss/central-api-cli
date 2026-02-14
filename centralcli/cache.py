@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 
 from __future__ import annotations
 
@@ -133,6 +133,7 @@ class CentralObject(MutableMapping):
     @cached_property
     def text(self) -> Text:
         parts = [p for p in self._help_text_parts if p]
+
         def _get_color(idx: int, item: str):
             if idx == 0:
                 return "dark_olive_green2"
@@ -333,7 +334,7 @@ class CacheInvMonDevice(CentralObject):
         data = {**self.inv.data, **mon_data}
 
         super().__init__('dev', data=data)
-        #inventory
+        # inventory
         self.id: str = inventory.data.get("id")  # glp only
         self.serial: str = inventory.data["serial"]
         self.mac: str = inventory.data["mac"]
@@ -381,6 +382,7 @@ class CacheInvMonDevice(CentralObject):
     @property
     def assigned(self) -> bool:
         return bool(self._assigned)
+
 
 # TODO there is some inconsistency as this takes a dict, CacheCert and likely others need the dict unpacked
 class CacheGroup(CentralObject):
@@ -472,6 +474,7 @@ class CacheSite(CentralObject):
     @doc_id.setter
     def doc_id(self, doc_id: int | None):
         self._doc_id = doc_id
+
 
 class CacheLabel(CentralObject):
     db: Table | None = None
@@ -578,7 +581,6 @@ class CacheGuest(CentralObject):
         self.expires: int = data["expires"]
         email_str = None if not self.email or self.email == self.name else f"|[dark_olive_green2]{self.email}[/]"
         self._help_text_parts = [self.name, f"[magenta]portal[/]: [cyan]{self.portal}[/]", self.status, email_str, f"[dim][magenta]id[/]: [cyan]{self.id}[/][/dim]"]
-
 
     @classmethod
     def set_db(cls, db: Table, cache: Cache = None):
@@ -760,7 +762,7 @@ class CacheMpsk(CentralObject):
         self._doc_id = doc_id
 
 
-class CacheCert(CentralObject):  #, Text):
+class CacheCert(CentralObject):  # , Text):
     db: Table | None = None
 
     def __init__(self, name: str, type: CertType, expired: bool, expiration: int | float | DateTime | str, md5_checksum: str, **kwargs):
@@ -1040,6 +1042,7 @@ class CacheFloorPlanAP(CentralObject, Text):
             "floor": self.level
         }
 
+
 class CacheResponses:
     def __init__(
         self,
@@ -1290,7 +1293,7 @@ class Cache:
             self.LicenseDB: Table = self.DevDB.table("licenses")
             self.ClientDB: Table = self.DevDB.table("clients")  # Updated only when show clients is ran
             self.LogDB: Table = self.DevDB.table("logs")  # Only updated when show audit logs is ran.  provide simple index to get details for logs vs the actual log id in form 'audit_trail_2021_2,...'
-            self.EventDB: Table = self.DevDB.table("events") # Only updated when show logs is ran
+            self.EventDB: Table = self.DevDB.table("events")  # Only updated when show logs is ran
             self.HookConfigDB: Table = self.DevDB.table("wh_config")
             self.HookDataDB: Table = self.DevDB.table("wh_data")
             self.MpskNetDB: Table = self.DevDB.table("mpsk_networks")  # Only updated when show mpsk networks is ran or as needed when show named-mpsk <SSID> is ran
@@ -1307,7 +1310,6 @@ class Cache:
                 # self.DevDB.drop_table("applications")
                 self._tables += [self.SubDB, self.SvcDB]
             self.Q: Query = Query()
-
 
     def __call__(self, refresh=False) -> list[Response]:
         if refresh:
@@ -2210,7 +2212,6 @@ class Cache:
         if retry:
             raise typer.Exit(1)
 
-
     def cert_completion(
         self,
         ctx: typer.Context,
@@ -2587,7 +2588,6 @@ class Cache:
 
         for m in out:
             yield m[0], m[1]
-
 
     # FIXME completion doesn't pop args need ctx: typer.Context and reference ctx.params which is dict?
     def send_cmds_completion(
@@ -2988,7 +2988,6 @@ class Cache:
         for m in out:
             yield m
 
-
     @ensure_config
     def dev_gw_switch_site_completion(
         self,
@@ -3000,7 +2999,6 @@ class Cache:
         if self.config.valid:
             yield from self.dev_gw_switch_completion(ctx, incomplete, args=args)
             yield from self.site_completion(ctx, incomplete, args=args)
-
 
     @ensure_config
     def remove_completion(
@@ -3044,7 +3042,6 @@ class Cache:
 
         return raw_data
 
-
     async def _add_update_devices(self, new_data: List[dict], db: Literal["dev", "inv"] = "dev") -> bool:
         # We avoid using upsert as that is a read then write for every entry, and takes a significant amount of time
         new_by_serial = {dev["serial"]: dev for dev in new_data}
@@ -3059,7 +3056,6 @@ class Cache:
 
         # updated_devs_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial.get(serial, {}), **new_by_serial[serial]} for serial in new_by_serial}}
         return await self.update_db(DB, data=list(updated_devs_by_serial.values()), truncate=True)
-
 
     async def update_db(self, db: Table, data: List[Dict[str, Any]] | Dict[str, Any] = None, *, doc_ids: List[int] | int = None, truncate: bool = True,) -> bool:
         """Update Local Cache DB
@@ -3086,7 +3082,6 @@ class Cache:
         with econsole.status(f":wastebasket:  [red]Removing[/] [cyan]{len(doc_ids)}[/] records from [dark_olive_green2]{db.name}[/] cache."):
             db_res = db.remove(doc_ids=doc_ids)
             return self.verify_db_action(db, expected=len(doc_ids), response=db_res, remove=True, elapsed=round(time.perf_counter() - _start_time, 2))
-
 
     # FIXME handle no devices in Central yet exception 837 --> cleaner.py 498
     async def update_dev_db(
@@ -3642,7 +3637,7 @@ class Cache:
 
         resp = await api.configuration.get_all_templates(groups=groups)
         if resp.ok:
-            if len(resp) > 0: # handles initial cache population when none of the groups are template groups
+            if len(resp) > 0:  # handles initial cache population when none of the groups are template groups
                 resp.output = utils.listify(resp.output)
                 template_models = models.Templates(resp.output)
                 resp.output = template_models.model_dump()
@@ -3755,7 +3750,6 @@ class Cache:
                 _ = await self.update_db(self.ClientDB, data=list(data.values()), truncate=True)
         return resp
 
-
     def update_log_db(self, log_data: List[Dict[str, Any]]) -> bool:
         return asyncio.run(self.update_db(self.LogDB, data=log_data, truncate=True))
 
@@ -3798,7 +3792,6 @@ class Cache:
         _data = models.MpskNetworks(data)
         _data = _data.model_dump()
         return await self.update_db(self.MpskNetDB, data=_data, truncate=True)
-
 
     async def refresh_mpsk_networks_db(self) -> Response:
         resp = await api.cloudauth.get_mpsk_networks()
@@ -3876,17 +3869,17 @@ class Cache:
         return await self.update_db(self.PortalDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_portal_db(self) -> Response:
-            resp = await api.guest.get_portals()
-            if not resp.ok:
-                return resp
-
-            self.responses.portal = resp
-
-            portal_model = models.Portals(deepcopy(resp.output))
-            update_data = portal_model.model_dump()
-            _ = await self.update_db(self.PortalDB, data=update_data, truncate=True)
-
+        resp = await api.guest.get_portals()
+        if not resp.ok:
             return resp
+
+        self.responses.portal = resp
+
+        portal_model = models.Portals(deepcopy(resp.output))
+        update_data = portal_model.model_dump()
+        _ = await self.update_db(self.PortalDB, data=update_data, truncate=True)
+
+        return resp
 
     async def update_cert_db(self, data: List[Dict[str, Any]] | List[int], remove: bool = False) -> bool:
         if remove:
@@ -3898,20 +3891,20 @@ class Cache:
         return await self.update_db(self.CertDB, data=list(update_data.values()), truncate=True)
 
     async def refresh_cert_db(self, *, query: str = None) -> Response:
-            resp: Response = await api.configuration.get_certificates(query)
-            if not resp.ok:
-                return resp
-
-            self.responses.cert = resp
-
-            if not query:
-                cert_models = models.Certs(deepcopy(resp.output))
-                update_data = cert_models.model_dump()
-                _ = await self.update_db(self.CertDB, data=update_data, truncate=True)
-            else:
-                _ = await self.update_cert_db(resp.output)
-
+        resp: Response = await api.configuration.get_certificates(query)
+        if not resp.ok:
             return resp
+
+        self.responses.cert = resp
+
+        if not query:
+            cert_models = models.Certs(deepcopy(resp.output))
+            update_data = cert_models.model_dump()
+            _ = await self.update_db(self.CertDB, data=update_data, truncate=True)
+        else:
+            _ = await self.update_cert_db(resp.output)
+
+        return resp
 
     async def update_guest_db(self, data: List[Dict[str, Any]] | List[int], portal_id: str = None, remove: bool = False) -> bool:
         if remove:
@@ -3925,20 +3918,19 @@ class Cache:
         # no cover: stop  add guest uses update_db directly, this would come into play if we add batch add guests
 
     async def refresh_guest_db(self, portal_id: str) -> Response:
-            resp: Response = await api.guest.get_guests(portal_id)
-            if not resp.ok:
-                return resp
-
-            self.responses.guest = resp
-
-            guest_models = models.Guests(portal_id, deepcopy(resp.output))
-            data_by_id = {p.id: p.model_dump() for p in guest_models}
-            update_data = {**{k: v for k, v in self.guests_by_id.items() if v["portal_id"] != portal_id}, **data_by_id}
-            # update_data = guest_models.model_dump()
-            _ = await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
-
+        resp: Response = await api.guest.get_guests(portal_id)
+        if not resp.ok:
             return resp
 
+        self.responses.guest = resp
+
+        guest_models = models.Guests(portal_id, deepcopy(resp.output))
+        data_by_id = {p.id: p.model_dump() for p in guest_models}
+        update_data = {**{k: v for k, v in self.guests_by_id.items() if v["portal_id"] != portal_id}, **data_by_id}
+        # update_data = guest_models.model_dump()
+        _ = await self.update_db(self.GuestDB, data=list(update_data.values()), truncate=True)
+
+        return resp
 
     # TODO cache.groups cache.devices etc change to Response object with data in output.  So they can be leveraged in commands with all attributes
     async def _check_fresh(
@@ -4099,12 +4091,11 @@ class Cache:
         elif query_type == "client":
             fields = {"name", "mac", "ip", "connected_port", "connected_name", "site"}
         elif query_type == "certificate":
-            fields = {"name", "type", "expired", "expiration", "md5_checksum",}
+            fields = {"name", "type", "expired", "expiration", "md5_checksum", }
         elif query_type == "sub":
             fields = {"name", "end_date", "expired", "available", "id"}
         else:  # device
             fields = ("name", "serial", "mac", "type")
-
 
         if isinstance(match[0], models.Client):
             data = [{k: d[k] for k in d.keys() if k in fields} for d in match]
@@ -4380,7 +4371,6 @@ class Cache:
         silent: Optional[bool],
     ) -> CacheDevice: ...  # pragma: no cover
 
-
     @overload
     def get_dev_identifier(
         self,
@@ -4511,7 +4501,6 @@ class Cache:
                 all_match: List[Document] = match.copy()
                 match = [d for d in all_match if d.get("type", "") in dev_type]
 
-
             # no match found initiate cache update
             if retry and not match and self.responses.dev is None:
                 if dev_type and (cache_updated or self.responses.device_type == dev_type):
@@ -4536,7 +4525,7 @@ class Cache:
                         else:
                             _word = " "
                         econsole.print(f":arrows_clockwise: Updating Device{_word}Cache.")
-                        self.check_fresh(refresh=True, dev_type=dev_type, **kwargs )
+                        self.check_fresh(refresh=True, dev_type=dev_type, **kwargs)
                         cache_updated = True  # Need this for scenario when dev_type is the only thing refreshed, as that does not update self.responses.dev
                         if inv_match:
                             continue
@@ -4667,8 +4656,6 @@ class Cache:
             if match and dev_type:
                 all_match: list[Document] = match.copy()
                 match = [d for d in all_match if d.get("type", "") in dev_type]
-
-
 
             # no match found initiate cache update
             if retry and not match and not (self.responses.inv and set(self.responses.device_type or []) == set(dev_type or [])):
@@ -4826,7 +4813,6 @@ class Cache:
             query_str = " ".join(query_str)
         elif not isinstance(query_str, str):
             query_str = str(query_str)
-
 
         if completion and query_str == "":
             return [CacheSite(s) for s in self.sites]
@@ -5677,8 +5663,9 @@ class CacheAttributes:
         self.db = db
         self.cache_update_func = cache_update_func
 
+
 class CacheDetails:
-    def __init__(self, cache = Cache):
+    def __init__(self, cache=Cache):
         self.dev = CacheAttributes(name="dev", db=cache.DevDB, cache_update_func=cache.refresh_dev_db)
         self.site = CacheAttributes(name="site", db=cache.SiteDB, cache_update_func=cache.refresh_site_db)
         self.group = CacheAttributes(name="group", db=cache.GroupDB, cache_update_func=cache.refresh_group_db)

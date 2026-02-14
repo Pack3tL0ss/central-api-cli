@@ -46,6 +46,7 @@ def _serial_to_name(sernum: str | None) -> str | None:
     match = cache.get_dev_identifier(sernum, retry=False, silent=True, exit_on_fail=False)
     return sernum if match is None else match.name
 
+
 def _get_dev_name_from_mac(mac: str, dev_type: LibAllDevTypes | list[LibAllDevTypes] = None, summary_text: bool = False) -> str:
     if mac.count(":") != 5:
         return mac
@@ -98,6 +99,7 @@ vlan_modes = {
     2: "LAG",
     3: "Trunk",
 }
+
 
 class radio_modes(Enum):
     access = 0
@@ -156,11 +158,11 @@ _short_value: dict[str, Callable[[str], str] | str] = {
     "mem_free": _format_memory,
     "firmware_version": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
     "recommended": lambda v: v if not v or len(set(v.split("-"))) == len(v.split("-")) else "-".join(v.split("-")[1:]),
-    "learn_time":  lambda x: DateTime(x, "log"),
-    "last_state_change":  lambda x: DateTime(x, "log"),
+    "learn_time": lambda x: DateTime(x, "log"),
+    "last_state_change": lambda x: DateTime(x, "log"),
     "graceful_restart_timer": lambda x: DateTime(x, "durwords"),
-    "disable_ssid": lambda v: '✅' if not v else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
-    "reserved": lambda v: '✅' if v is True else '❌', # field is changed to "enabled" check: \u2705 x: \u274c
+    "disable_ssid": lambda v: '✅' if not v else '❌',  # field is changed to "enabled" check: \u2705 x: \u274c
+    "reserved": lambda v: '✅' if v is True else '❌',  # field is changed to "enabled" check: \u2705 x: \u274c
     "poe_detection_status": lambda i: PoEDetectionStatus(i).name,
     "reserved_power_in_watts": lambda v: round(v, 2),
     "speed": lambda v: "1000BaseT FD" if v == "1000BaseTFD - Four-pair Category 5 UTP, full duplex mode" else v,
@@ -327,6 +329,7 @@ def short_value(key: str, value: Any):
 
     return short_key(key), utils.unlistify(value)
 
+
 def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None, strip_keys: list[str] = None, strip_null: bool = False, emoji_bools: bool = False, show_false: bool = True, filter: Callable = None) -> list[dict[str, Any]]:
     """Default simple formatter
 
@@ -370,6 +373,7 @@ def simple_kv_formatter(data: list[dict[str, Any]], key_order: list[str] = None,
     ]
 
     return data if not strip_null else utils.strip_no_value(data)
+
 
 def get_archived_devices(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     key_order = [
@@ -512,7 +516,6 @@ def _client_concat_associated_dev(
     if _fingerprint:
         data["fingerprint"] = utils.unlistify(utils.strip_no_value([_fingerprint]))
 
-
     return data
 
 
@@ -589,7 +592,7 @@ def get_clients(
     if format in TABULAR_FORMATS:
         data = utils.format_table(data)
 
-    data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in  TABULAR_FORMATS))
+    data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in TABULAR_FORMATS))
 
     return utils.unlistify(data)  # Needed otherwise can end up with [{}] when no clients connected vs {} which is expected when payload is empty
 
@@ -680,6 +683,7 @@ def sort_result_keys(data: list[dict], order: list[str] = None) -> list[dict]:
 
     return data
 
+
 class FilterRows:
     def __init__(self, version: str = None, group: str = None, site: str = None, status: Literal["Up", "Down"] = None, label: str = None, public_ip: str = None):
         filters = {
@@ -709,8 +713,6 @@ class FilterRows:
             else:
                 matches += [True if wanted in (data[field] or "") else False]
         return all(matches)
-
-
 
 
 def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int = 0, output_format: TableFormat = None, version: str = None, filter_params: dict[str, str] = None) -> list[dict] | dict:
@@ -749,7 +751,7 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
         ]
     }
     if "services" not in all_keys:  # indicates inventory is part of the listing
-        verbosity_keys[0].insert(10, "uptime") # more space if inventory not in listing so provide uptime.
+        verbosity_keys[0].insert(10, "uptime")  # more space if inventory not in listing so provide uptime.
     elif "id" in all_keys and output_format in ["rich", "tabulate"]:  # glp device ids take a lot of space, if format is horizontal nix them
         data = [{k: v for k, v in inner.items() if k != "id"} for inner in data]
 
@@ -784,6 +786,7 @@ def get_devices(data: list[dict[str, Any]] | dict[str, Any], *, verbosity: int =
 
     return data
 
+
 def get_audit_logs(data: list[dict], cache_update_func: Callable = None, verbosity: int = 0) -> list[dict]:
     if verbosity > 1:
         return data  # No formatting with verbosity -vv
@@ -806,7 +809,6 @@ def get_audit_logs(data: list[dict], cache_update_func: Callable = None, verbosi
 
     data = [dict(short_value(k, d.get(k)) for k in field_order) for d in data]
     data = utils.strip_no_value(data)
-
 
     idx, cache_list = 1, []
     for d in data:
@@ -943,7 +945,6 @@ def get_certificates(data: dict[str, Any], valid: bool = None, cert_types: list[
 
         return f"[bright_red]{value}[/]" if value is True else value
 
-
     if data and len(data[0]) != len(short_keys):  # pragma: no cover
         log = logging.getLogger()
         log.error(
@@ -1072,6 +1073,7 @@ def get_dhcp(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     data = utils.strip_no_value(data)
     return data
 
+
 def get_template_details_for_device(data: str, device: CacheDevice) -> str:
     """Convert form-data response to dict
 
@@ -1158,6 +1160,7 @@ def parse_caas_response(data: dict | list[dict[str, Any]]) -> list[str]:
 
     return out
 
+
 def get_all_webhooks(data: list[dict]) -> list[dict]:
     class HookRetryPolicy(Enum):
         none = 0
@@ -1181,6 +1184,7 @@ def get_all_webhooks(data: list[dict]) -> list[dict]:
     ]
 
     return data
+
 
 def get_branch_health(data: list, down: bool = False, wan_down: bool = False) -> list:
     field_order = [
@@ -1229,7 +1233,6 @@ def get_branch_health(data: list, down: bool = False, wan_down: bool = False) ->
     ]
     data = utils.strip_no_value(data)
 
-
     return data
 
 
@@ -1252,7 +1255,7 @@ def get_device_inventory(data: list[dict], sub: bool = None, key: str = None) ->
     data = sorted(utils.strip_no_value(data), key=lambda i: (i.get("services") or "", i["model"]))
 
     if key is not None:
-        data = [{k: v for k, v in d.items()} for d in data if(d["subscription key"] or "") == key]
+        data = [{k: v for k, v in d.items()} for d in data if (d["subscription key"] or "") == key]
     elif sub is not None:
         if sub:
             data = [{k: v for k, v in d.items()} for d in data if d["services"]]
@@ -1281,6 +1284,7 @@ def get_client_roaming_history(data: list[dict]) -> list[dict]:
 
     return data
 
+
 def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose: bool = False) -> list[dict]:
     # Override default behavior of k, v formatter (default which implies rich will use unicode check mark for beta)
     if format != "rich" and "release_status" in data[-1].keys():
@@ -1295,6 +1299,7 @@ def get_fw_version_list(data: list[dict], format: TableFormat = "rich", verbose:
         data = data[0:tty.rows - 12]
 
     return data
+
 
 def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]:
     field_order = [
@@ -1324,6 +1329,7 @@ def get_subscriptions(data: list[dict], default_sort: bool = True) -> list[dict]
     ]
 
     return data
+
 
 def get_portals(data: list[dict],) -> list[dict]:
     field_order = [
@@ -1360,6 +1366,7 @@ def get_portal_profile(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # we strip the logo from the output which is a long image/png;base64 str
     return [{k: v for k, v in p.items() if k != "logo"} for p in data]
 
+
 def get_ospf_neighbor(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[str, Any]]:
     data = utils.listify(data)
 
@@ -1370,6 +1377,7 @@ def get_ospf_neighbor(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict
     ]
 
     return data
+
 
 def get_ospf_interface(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[str, Any]]:
     data = utils.listify(data)
@@ -1387,7 +1395,7 @@ def get_ospf_interface(data: list[dict[str, Any]] | dict[str, Any],) -> list[dic
     return data
 
 
-def sort_interfaces(interfaces: list[dict[str, Any]], interface_key: str= "port_number") -> list[dict[str, Any]]:
+def sort_interfaces(interfaces: list[dict[str, Any]], interface_key: str = "port_number") -> list[dict[str, Any]]:
     try:
         sorted_interfaces = sorted(
             interfaces, key=lambda i: [int(i[interface_key].split("/")[y]) for y in range(i[interface_key].count("/") + 1)]
@@ -1443,9 +1451,9 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
 
     verbosity_keys = {
         0: [
-            "device", # multi device. stripped in combiner
+            "device",  # multi device. stripped in combiner
             "port_number",
-            "name", # ap
+            "name",  # ap
             "vlan",
             "allowed_vlan",
             "vlan_mode",
@@ -1494,7 +1502,7 @@ def show_interfaces(data: list[dict] | dict, verbosity: int = 0, dev_type: DevTy
         _ = [key_order.append(k) for k in all_keys if k not in key_order]  # append any additional keys in payload to end of key_order
         key_order = [k for k in key_order if k in all_keys]  # strip any keys that don't exist for any interfaces
         data = [dict(short_value(k, d.get(k),) for k in key_order if k not in strip_keys) for d in data]
-        data = utils.strip_no_value(data, aggressive=verbosity==1)
+        data = utils.strip_no_value(data, aggressive=verbosity == 1)
 
         # arrange output as dictionary keyed by the interface for verbose listings
         key_field = "port number" if dev_type != "ap" else "name"
@@ -1531,6 +1539,7 @@ def get_switch_poe_details(data: list[dict[str, Any]], verbosity: int = 0, power
 
     return sort_interfaces(data, interface_key="port")
 
+
 def show_ts_commands(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[str, Any]]:
     key_order = [
         "command_id",
@@ -1546,6 +1555,7 @@ def show_ts_commands(data: list[dict[str, Any]] | dict[str, Any],) -> list[dict[
     ]
 
     return data
+
 
 def get_overlay_routes(data: list[dict[str, Any]] | dict[str, Any], format: TableFormat = "rich", simplify: bool = True) -> list[dict[str, Any]]:
     if "routes" in data:  # pragma: no cover
@@ -1607,6 +1617,7 @@ def get_overlay_interfaces(data: list[dict[str, Any]]) -> list[dict[str, Any]]:
         log.error(f'get_overlay_interfaces cleaner threw {repr(e)} trying to get ap name from mac, skipping.', show=True)
 
     return simple_kv_formatter(data)
+
 
 def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int = 0, format: TableFormat = "rich") -> list[dict]:
     # TODO PlaceHolder logic, currently only support verbosity level 0
@@ -1694,7 +1705,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
 
     pretty_data = simple_kv_formatter(pretty_data)
 
-    pretty_data = utils.strip_no_value(pretty_data, aggressive=bool(verbosity and format not in  TABULAR_FORMATS))
+    pretty_data = utils.strip_no_value(pretty_data, aggressive=bool(verbosity and format not in TABULAR_FORMATS))
     return pretty_data
 
 
@@ -1741,6 +1752,7 @@ def cloudauth_upload_status(data: list[dict[str, Any]] | dict[str, Any]) -> dict
         log.exception(e)
 
     return data
+
 
 def cloudauth_get_namedmpsk(data: list[dict[str, Any]], verbosity: int = 0,) -> list[dict[str, Any]]:
     verbosity_keys = {
@@ -1817,6 +1829,7 @@ def get_device_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, An
         "firmware_version",
     ]
     key_order = [*key_order, *[k for k in data[0].keys() if k not in key_order]]
+
     def collapse_status(key: str, value: Any) -> Any:
         if key != "status" or not isinstance(value, dict):
             return value
@@ -1832,7 +1845,6 @@ def get_device_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, An
         del out["aps"]
         del out["aps_count"]
         return out
-
 
     data = [{k: collapse_status(k, v) for k, v in swarm_to_device(inner).items()} for inner in data]
     global _short_key
@@ -1858,6 +1870,7 @@ def get_swarm_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, Any
         "aps_count",
     ]
     key_order = [*key_order, *[k for k in data[0].keys() if k not in [*key_order, *strip_keys]]]
+
     def collapse_status(key: str, value: Any) -> Any:
         if key != "status" or not isinstance(value, dict):
             return value
@@ -1890,8 +1903,10 @@ def get_swarm_firmware_details(data: list[dict[str, Any]]) -> list[dict[str, Any
 
     return simple_kv_formatter(data, key_order=key_order)
 
+
 def show_radios(data: list[dict[str, str | int]], band: RadioBandOptions | None = None) -> list[dict[str, str | int]]:
     key_order = ["name", "macaddr", "radio_name", "status", "channel", "radio_type", "spatial_stream", "mode", "tx_power", "utilization",]  # "band", "index"]
+
     def pretty_mode(mode: int) -> str | int:
         try:
             mode: Enum = radio_modes(mode)
@@ -1987,6 +2002,7 @@ def get_guests(data: list[dict[str, Any]], output_format: TableFormat = "yaml") 
 
     return simple_kv_formatter(data, key_order=key_order, strip_keys=strip_keys, strip_null=output_format == "rich", emoji_bools=output_format == "rich")
 
+
 def show_ai_insights(data: list[dict[str, str | bool | int]], severity: InsightSeverityType = None):
     field_order = [
         "insight_id",
@@ -2006,8 +2022,10 @@ def show_ai_insights(data: list[dict[str, str | bool | int]], severity: InsightS
 
     return simple_kv_formatter(data, key_order=field_order, strip_null=True, emoji_bools=True, show_false=False)
 
+
 def get_dirty_diff(data: list[dict[str, str]],) -> list[dict[str, str]]:
     return [{"ap": f"{item.get('name', 'err-no-name-field')} [dim]({item.get('id', 'err-no-id-field')})[/]", "dirty diff": item["dirty_diff"]} for item in data]
+
 
 def get_denylist_clients(data: dict[str, str | list[str]]) -> list[dict[str, str]]:
     return [

@@ -11,6 +11,7 @@ from ...response import Response
 if TYPE_CHECKING:
     from centralcli.client import Session
 
+
 class DeviceManagementAPI:
     def __init__(self, session: Session):
         self.session = session

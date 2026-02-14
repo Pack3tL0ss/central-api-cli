@@ -111,7 +111,6 @@ if config.dev.mock_tests:
         resp = api.session.request(api.configuration.replace_per_ap_config, test_data["test_devices"]["ap"]["serial"], clis=clis)
         assert resp.ok
 
-
     @pytest.mark.parametrize(
         "_,fixture,func,kwargs,exception",
         [
@@ -570,6 +569,7 @@ def test_constants_unused():
     assert "cx" in lib_to_api.valid_str
     assert "cx" in lib_to_api.valid
     assert arg_to_what("client", cmd="notexist") == "clients"
+
 
 @pytest.mark.parametrize(
     "idx,ts1,ts2",

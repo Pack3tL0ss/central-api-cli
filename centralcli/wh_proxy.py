@@ -76,13 +76,14 @@ print(f"Web Hook Proxy logging to {log_file}")
 # }
 # update and pass as param to uvicorn.run to send logs to our file "log_config=LOGGING_CONFIG"
 
+
 class HookResponse(BaseModel):
     result: str
     updated: bool
 
     class Config:
         schema_extra = {
-            "example": {"result": "OK", "updated": True,}
+            "example": {"result": "OK", "updated": True, }
         }
 
 
@@ -101,6 +102,8 @@ class HookResponseTokenFail(BaseModel):
         schema_extra = {
             "example": {"result": "Unauthorized", "updated": False}
         }
+
+
 class BranchResponse(BaseModel):
     id: str
     ok: bool
@@ -177,6 +180,7 @@ async def redoc_html():
         redoc_js_url="/static/redoc.standalone.js",
     )
 
+
 def _default_response(serial: str) -> dict:
     return {
             "id": f"{serial}_init",
@@ -187,6 +191,7 @@ def _default_response(serial: str) -> dict:
             "text": "No alerts for this gateway.",
             "timestamp": int(dt.now().timestamp())
         }
+
 
 def _hook_response(data: dict) -> dict:
     return {
@@ -270,7 +275,6 @@ def get_current_branch_state():
         }
         for k, v in down_tunnels.items() if v
     ]
-
 
     # TODO hook_data to it's own DB file
     cache.HookDataDB.truncate()
@@ -362,7 +366,6 @@ async def check_cache_entry(data: dict) -> list | None:
         if data["state"] == "Open":
             log.info(f"[WH INGORE ADD] {data['text']} gw already in cache.")
             return
-
 
         res: APIResponse = await api.session._request(api.monitoring.get_gw_tunnels, data["device_id"])
         if not res:

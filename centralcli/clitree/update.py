@@ -250,7 +250,7 @@ def group(
         **kwargs
     )
     render.display_results(resp, tablefmt="action")
-    #CACHE Needs cache update
+    # CACHE Needs cache update
 
 
 config_help = f"""Update group or device level config (ap or gw), or update cencli config.
@@ -262,12 +262,14 @@ If providing a jinja2 template, this command will automatically look for a [cyan
 [cyan]--var-file <PATH>[/] can be used to specify the variable file explicitly.
 
 """
+
+
 @app.command("config", help=config_help)
 def config_(
     group_dev: str = common.arguments.get(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
-        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to update cencli configuration details.",
+        help="Device Identifier, Group Name along with --ap or --gw option, or 'self' to update cencli configuration details.",
         autocompletion=common.cache.group_dev_ap_gw_completion
     ),
     cli_file: Path = typer.Argument(None, help="File containing desired config/template in CLI format.", exists=True, show_default=False,),
@@ -694,7 +696,6 @@ def site(
     api.session.request(common.cache.update_site_db, data=resp.raw)
 
 
-
 @app.command()
 def wlan(
     wlan: str = typer.Argument(..., help="SSID to update", show_default=False,),
@@ -788,7 +789,7 @@ def wlan(
 def guest(
     portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=common.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
-    password: str = typer.Option(None,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    password: str = typer.Option(None,),  # hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
     phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
     email: str = typer.Option(None, help="email of guest", show_default=False,),

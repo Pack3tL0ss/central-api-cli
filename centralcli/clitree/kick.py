@@ -10,6 +10,7 @@ from centralcli.models.cache import Clients
 
 app = typer.Typer()
 
+
 @app.command()
 def all(
     device: str = common.arguments.get(
@@ -74,7 +75,7 @@ def client(
                 render.display_results(client_resp, exit_on_fail=True)
 
             _clients = [CacheClient(c.model_dump()) for c in Clients(client_resp.output)]
-            online_client =  [c for c in _clients if c.last_connected]
+            online_client = [c for c in _clients if c.last_connected]
             if online_client:
                 client = online_client[-1]
             else:
@@ -89,6 +90,7 @@ def client(
         mac=client.mac
     )
     render.display_results(resp, tablefmt="action")
+
 
 @app.callback()
 def callback():

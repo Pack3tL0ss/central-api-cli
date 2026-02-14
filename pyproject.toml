@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "9.3.0"
+version = "9.3.1"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -203,8 +203,9 @@ exclude = ["dashboard", "wh_proxy_service.py"]
 # McCabe complexity (`C901`) by default.
 
 [tool.ruff.lint]
-select = ["E", "F", "W605"]
-ignore = ["E501"]  # ignore line too long
+preview = true
+select = ["E", "F", "W605", "E221", "E222", "E241"]
+ignore = ["E501", "E116"]  # ignore line too long and unexpected indentation for comments
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 # fixable = ["ALL"]

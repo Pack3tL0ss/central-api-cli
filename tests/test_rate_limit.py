@@ -9,6 +9,7 @@ api = api_clients.classic
 
 log.setLevel(logging.DEBUG)
 
+
 def skip_test_rate_limit():
     log._DEBUG = True
     b_reqs = [api.session.BatchRequest(api.monitoring.get_switch_poe_details, test_data["rate_limit_switch"]["serial"], port=f"1/1/{p}") for p in range(1, 49)]
@@ -27,8 +28,9 @@ def skip_test_rate_limit():
         print(f"[bright_red]!![/] Rate Limit Failures {len(rate_limit_failures)}")
     assert len(failed) == len(successful_retries)
     assert len(b_reqs) == len([r for r in api.session.requests if r.ok and "poe_detail" in r.url])
-    assert len (rate_limit_failures) == 0
+    assert len(rate_limit_failures) == 0
     assert len(failed) < 2
+
 
 if __name__ == '__main__':
     skip_test_rate_limit()

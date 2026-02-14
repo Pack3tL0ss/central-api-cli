@@ -92,6 +92,7 @@ def test_remove_test_ap_from_site(ensure_inv_cache_test_ap: None, ensure_dev_cac
     assert result.exit_code == 0
     assert "200" in result.stdout
 
+
 @pytest.mark.parametrize(
     "args",
     [
@@ -124,7 +125,7 @@ def test_blink_wrong_dev_type():
 
 
 def test_bounce_interface():
-    result = runner.invoke(app, ["bounce",  "interface", test_data["switch"]["name"].lower(), test_data["switch"]["test_ports"][0], "-Y", "--debug"])
+    result = runner.invoke(app, ["bounce", "interface", test_data["switch"]["name"].lower(), test_data["switch"]["test_ports"][0], "-Y", "--debug"])
     capture_logs(result, "test_bounce_interface")
     assert result.exit_code == 0
     assert "state:" in result.stdout
@@ -203,7 +204,7 @@ def test_clone_group_fail(idx: int, args: list[str]):
         [4, "ensure_cache_client_not_connected", ("client", "aabb.ccdd.eeff",), "200"],
     ]
 )
-def test_kick(_:int, fixture: str | None, args: list[str], expected: str, request: pytest.FixtureRequest):
+def test_kick(_: int, fixture: str | None, args: list[str], expected: str, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     result = runner.invoke(app, ["kick", *args, "--yes"])
@@ -222,7 +223,7 @@ def test_kick(_:int, fixture: str | None, args: list[str], expected: str, reques
         [5, "ensure_cache_client_not_connected", ("aabb.ccdd.eeff",), "⚠", "not_online"],
     ]
 )
-def test_kick_fail(_:int, fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
+def test_kick_fail(_: int, fixture: str | None, args: list[str], expected: str, test_name_append: str | None, request: pytest.FixtureRequest):
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     if fixture:
@@ -234,7 +235,7 @@ def test_kick_fail(_:int, fixture: str | None, args: list[str], expected: str, t
 
 
 def test_save():
-    result = runner.invoke(app, ["save",  test_data["switch"]["serial"]])
+    result = runner.invoke(app, ["save", test_data["switch"]["serial"]])
     capture_logs(result, "test_save")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -268,12 +269,11 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     @pytest.mark.parametrize(
         "idx,args",
         [
             [1, (test_data["ap"]["serial"], "-s")],  # -s | --swarm only valid for aos8 AP
-            [2, (test_data["aos8_ap"]["name"],)], # aos8 AP without --swarm
+            [2, (test_data["aos8_ap"]["name"],)],  # aos8 AP without --swarm
             [3, (test_data["switch"]["serial"],)],  # command not supported for cx switches
         ]
     )
@@ -282,7 +282,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
@@ -293,25 +292,22 @@ if config.dev.mock_tests:
         ]
     )
     def test_reboot(idx: int, args: tuple[str], pass_condition: Callable):
-        result = runner.invoke(app, ["reboot",  *args, "-y"])
+        result = runner.invoke(app, ["reboot", *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     def test_enable_auto_sub():
-        result = runner.invoke(app, ["enable",  "auto-sub", "advanced-ap", "-y"])
+        result = runner.invoke(app, ["enable", "auto-sub", "advanced-ap", "-y"])
         capture_logs(result, "test_enable_auto_sub")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_disable_auto_sub():
-        result = runner.invoke(app, ["disable",  "auto-sub", "advanced-ap", "-y"])
+        result = runner.invoke(app, ["disable", "auto-sub", "advanced-ap", "-y"])
         capture_logs(result, "test_disable_auto_sub")
         assert result.exit_code == 0
         assert "200" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,fixture,args",
@@ -336,11 +332,10 @@ if config.dev.mock_tests:
     def test_upgrade(idx: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        result = runner.invoke(app, ["upgrade",  *args, "-y"])
+        result = runner.invoke(app, ["upgrade", *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
-
 
     @pytest.mark.parametrize(
         "_,fixture,args",
@@ -356,52 +351,46 @@ if config.dev.mock_tests:
     def test_upgrade_invalid(_: int, fixture: str | None, args: tuple[str], request: pytest.FixtureRequest):
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        result = runner.invoke(app, ["upgrade",  *args, "-y"])
+        result = runner.invoke(app, ["upgrade", *args, "-y"])
         capture_logs(result, "test_upgrade_invalid", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
 
-
     def test_upgrade_group_by_model_invalid():
-        result = runner.invoke(app, ["upgrade",  "group", test_data["upgrade_group"], "--model", "2930F", "--dev-type", "sw", "-y"])
+        result = runner.invoke(app, ["upgrade", "group", test_data["upgrade_group"], "--model", "2930F", "--dev-type", "sw", "-y"])
         capture_logs(result, "test_upgrade_group_by_model_invalid", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
 
     def test_cancel_upgrade_ap():
-        result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["ap"]["serial"], "-y"])
+        result = runner.invoke(app, ["cancel", "upgrade", "device", test_data["ap"]["serial"], "-y"])
         capture_logs(result, "test_cancel_upgrade_ap")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_cancel_upgrade_switch():
-        result = runner.invoke(app, ["cancel", "upgrade",  "device", test_data["switch"]["serial"], "-y"])
+        result = runner.invoke(app, ["cancel", "upgrade", "device", test_data["switch"]["serial"], "-y"])
         capture_logs(result, "test_upgrade_switch")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_cancel_upgrade_swarm():
-        result = runner.invoke(app, ["cancel", "upgrade",  "swarm", test_data["aos8_ap"]["serial"], "-y"])
+        result = runner.invoke(app, ["cancel", "upgrade", "swarm", test_data["aos8_ap"]["serial"], "-y"])
         capture_logs(result, "test_cancel_upgrade_swarm")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_cancel_upgrade_group():
-        result = runner.invoke(app, ["cancel", "upgrade",  "group", test_data["upgrade_group"], "--dev-type", "ap", "-y"])
+        result = runner.invoke(app, ["cancel", "upgrade", "group", test_data["upgrade_group"], "--dev-type", "ap", "-y"])
         capture_logs(result, "test_cancel_upgrade_group")
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_cancel_upgrade_group_no_dev_type():
-        result = runner.invoke(app, ["cancel", "upgrade",  "group", test_data["upgrade_group"], "-y"])
+        result = runner.invoke(app, ["cancel", "upgrade", "group", test_data["upgrade_group"], "-y"])
         capture_logs(result, "test_cancel_upgrade_group_no_dev_type", expect_failure=True)
         assert result.exit_code == 1
         assert "dev-type" in result.stdout
-
 
     @pytest.mark.parametrize(
         "args",
@@ -416,7 +405,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     @pytest.mark.parametrize("idx,fixture", [[1, "ensure_assign_dev_no_sub"], [2, "ensure_assign_dev_sub"]])
     def test_assign_subscription_by_key(idx: int, fixture: Callable, request: pytest.FixtureRequest):
         request.getfixturevalue(fixture)
@@ -425,13 +413,11 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "202" in result.stdout
 
-
     def test_refresh_cache():
         result = runner.invoke(app, ["refresh", "cache"])
         capture_logs(result, "test_refresh_cache")
         assert result.exit_code == 0
         assert "refresh completed" in result.stdout.lower()
-
 
     def test_refresh_cache_fail():
         result = runner.invoke(app, ["refresh", "cache"])
@@ -439,20 +425,17 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "❌" in result.stdout
 
-
     def test_refresh_token():
         result = runner.invoke(app, ["refresh", "token"])
         capture_logs(result, "test_refresh_token")
         assert result.exit_code == 0
         assert "✔" in result.stdout
 
-
     def test_refresh_webhook_token():
-        result = runner.invoke(app, ["refresh", "webhook",  "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
+        result = runner.invoke(app, ["refresh", "webhook", "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
         capture_logs(result, "test_refresh_webhook")
         assert result.exit_code == 0
         assert "secure_token" in result.stdout
-
 
     @pytest.mark.parametrize(
         "new_name,pass_condition",
@@ -462,11 +445,10 @@ if config.dev.mock_tests:
         ]
     )
     def test_rename_ap(ensure_dev_cache_ap: None, new_name: str, pass_condition: Callable):
-        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
+        result = runner.invoke(app, ["rename", "ap", test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, "test_rename_ap")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "new_name,pass_condition",
@@ -475,18 +457,16 @@ if config.dev.mock_tests:
         ]
     )
     def test_rename_ap_fail(ensure_dev_cache_ap: None, new_name: str, pass_condition: Callable):
-        result = runner.invoke(app, ["rename", "ap",  test_data["ap"]["serial"], new_name, "--yes"])
+        result = runner.invoke(app, ["rename", "ap", test_data["ap"]["serial"], new_name, "--yes"])
         capture_logs(result, env.current_test, expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
-
     def test_rename_group(ensure_cache_group3: None):
-        result = runner.invoke(app, ["rename", "group",  "cencli_test_group3", "cencli_test_group30", "--yes"])
+        result = runner.invoke(app, ["rename", "group", "cencli_test_group3", "cencli_test_group30", "--yes"])
         capture_logs(result, "test_rename_group", expect_failure=True)
         assert result.exit_code == 1
         assert "400" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,fixture,args",
@@ -497,11 +477,10 @@ if config.dev.mock_tests:
     )
     def test_rename_site(idx: int, fixture: Callable, args: tuple[str], request: pytest.FixtureRequest):
         request.getfixturevalue(fixture)
-        result = runner.invoke(app, ["rename", "site",  *args, "--yes"])
+        result = runner.invoke(app, ["rename", "site", *args, "--yes"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "address" in result.stdout
-
 
     def test_test_webhook():
         result = runner.invoke(app, ["test", "webhook", "35c0d78e-2419-487f-989c-c0bed8ec57c7"])
@@ -509,13 +488,11 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_reset_overlay_connection():
         result = runner.invoke(app, ["reset", "overlay", test_data["gateway"]["name"], "-y"])
         capture_logs(result, "test_reset_overlay_connection")
         assert result.exit_code == 0
         assert "200" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
@@ -532,7 +509,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,args,pass_condition",

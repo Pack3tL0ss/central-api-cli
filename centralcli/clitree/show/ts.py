@@ -12,7 +12,6 @@ api = api_clients.classic
 app = typer.Typer()
 
 
-
 # TODO --clean... wouldn't that accomplish the same as --raw.  Verify with --raw output is not processed for formatting
 @app.command()
 def results(

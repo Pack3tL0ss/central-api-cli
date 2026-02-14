@@ -118,6 +118,7 @@ def _process_variable_requests(outdir: Path, show: bool = False, pager: bool = F
 
     return BatchResponse([variable_resp])
 
+
 def _process_ap_env_requests(aps: list[CacheDevice], reqs: list[BatchRequest], *, outdir: Path, show: bool = False, pager: bool = False) -> BatchResponse:
         ap_env_res = BatchResponse(api.session.batch_request(reqs))
 
@@ -158,6 +159,7 @@ def _build_group_config_requests(groups: list[str], func: Callable, group_match:
 
     return [BatchRequest(func, group) for group in groups]
 
+
 @dataclass
 class DeviceConfigRequests:  # pragma: no cover
     devs: list[CacheDevice]
@@ -176,11 +178,13 @@ def _build_device_config_requests(dev_type: ExportDevType, groups_with_type: lis
         if devs:
             if dev_type == "ap":
                 func = api.configuration.get_ap_config
+
                 def args_getter(device: CacheDevice) -> tuple:
                     return (device.swack_id,)
             else:
                 caasapi = caas.CaasAPI()
                 func = caasapi.show_config
+
                 def args_getter(device: CacheDevice) -> tuple:
                     return (device.group, device.mac)
 
@@ -204,7 +208,7 @@ def configs(
     do_sw: bool = typer.Option(None, "--sw", help="Export AOS-SW templates. [dim italic](export not available for AOS-SW UI group config)[/]"),
     do_variables: bool = typer.Option(None, "-V", "--variables", help="Export variables associated with devices in Template Groups.", show_default=False,),
     do_switch: bool = typer.Option(None, "--switch", help="Export both CX and AOS-SW templates. [dim italic](export not available for switch UI group config)[/]"),
-    groups_only: bool = typer.Option(None,"-G",  "--groups-only", help="Export Group level configs only, not device level configs."),
+    groups_only: bool = typer.Option(None, "-G", "--groups-only", help="Export Group level configs only, not device level configs."),
     ap_env: bool = typer.Option(False, "-e", "--env", help="Export AP environment settings.  All ap-env settings are exported to a single file. [italic dim]Valid for APs only, [red]ignored[/] if -G|--groups-only specified[/]", show_default=False,),
     show: bool = typer.Option(False, "-s", "--show", help=f"Display configs to terminal along with exporting to filesystem.  {common.help_block('Display only export progress')}"),
     outdir: Path = typer.Option(None, "-D", "--dir", help=f"Specify custom output dir.  {common.help_block(str(config.export_dir))}", show_default=False,),
@@ -324,6 +328,7 @@ def configs(
     render.econsole.print("", BatchResponse._rl, sep="\n")
     common.exit(code=BatchResponse._exit_code)
 
+
 class EvalLocationResponse:
     _responses: list[Response] = []
 
@@ -336,6 +341,7 @@ class EvalLocationResponse:
             resp = [*passed, *failed]
             log.warning(f"[red]Command Aborted[/] due to Failures. [cyan]{len(failed)}[/] API calls failed during attempt to get location from floor plan APIs for all APs.", caption=True, log=True)
             render.display_results(resp, tablefmt="action", exit_on_fail=True)
+
 
 eval_location_response = EvalLocationResponse()
 
@@ -392,7 +398,6 @@ def get_location_for_all_aps(ap_data: dict[str, dict[str, str | list[str]]], upd
         if len(out) < len(ap_data):
             log.warning(f"{len(ap_data) - len(out)} APs were not found in the AP location cache, --no-update option used so cache was not updated.")
         return {ap.serial: ap.location for ap in cache_aps.values() if ap is not None}, None
-
 
 
 def generate_redsky_csv(ap_data: list[dict[str, str]], *, mask: bool = True, pnc: bool = False) -> list[dict[str, str]]:
@@ -518,10 +523,7 @@ def redsky_bssids(
         render.econsole.print(f"\n[dark_orange3]:warning:[/]  The following [cyan]{len(no_loc_aps)}[/] APs do not appear to be placed on a floor plan.  They are not included in the BSSID location mapping output:")
         render.econsole.print("\n".join([f"{ap['name']}: {ap['serial']}" for ap in no_loc_aps]))
 
-    common.exit(code = 0 if bssid_resp.ok else 1)  # any visualrf response failures will lead to exit (eval_location_response)
-
-
-
+    common.exit(code=0 if bssid_resp.ok else 1)  # any visualrf response failures will lead to exit (eval_location_response)
 
 
 @app.callback()

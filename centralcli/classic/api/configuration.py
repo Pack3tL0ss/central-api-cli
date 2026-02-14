@@ -34,6 +34,7 @@ DEFAULT_ACCESS_RULES = {
     ],
 }
 
+
 class ConfigAPI:
     def __init__(self, session: Session):
         self.session = session
@@ -884,7 +885,6 @@ class ConfigAPI:
 
             files = {'template': ('template.txt', template.read_bytes())}
 
-
         device_type = device_type if not hasattr(device_type, "value") else device_type.value
         device_type = constants.lib_to_api(device_type, "template")
 
@@ -1056,7 +1056,6 @@ class ConfigAPI:
 
         return await self.session.post(url, json_data=json_data)
 
-
     async def update_device_template_variables(
         self,
         serial: str,
@@ -1095,7 +1094,6 @@ class ConfigAPI:
         func = self.session.patch if not replace else self.session.put
         return await func(url, json_data=json_data)
 
-
     async def delete_device_template_variables(
         self,
         serial: str,
@@ -1111,7 +1109,6 @@ class ConfigAPI:
         url = f"/configuration/v1/devices/{serial}/template_variables"
 
         return await self.session.delete(url)
-
 
     # >>>> CERTIFICATES <<<<
 
@@ -1906,7 +1903,7 @@ class ConfigAPI:
             if "gps" not in cli_cmds:
                 cli_cmds += ["gps", f"  ap-altitude {float(altitude)}"]
             elif f"  ap-altitude {float(altitude)}" in cli_cmds:
-                return # No change ap-altitude already in existing
+                return  # No change ap-altitude already in existing
             else:
                 cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
                 cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {float(altitude)}")
@@ -1999,7 +1996,7 @@ class ConfigAPI:
             if not existing_banner:
                 cli_cmds += banner
             elif banner == existing_banner:
-                return # No change banner text is as desired
+                return  # No change banner text is as desired
             else:
                 cli_cmds = [line for line in cli_cmds if not line.strip().startswith("banner motd")]
                 cli_cmds += banner
@@ -2056,7 +2053,6 @@ class ConfigAPI:
 
         updated_clis_list = [await self._add_banner_to_config(resp.output, banner=as_dict[iden]) for iden, resp in passed.items()]
 
-
         skipped = [Response(ok=True, error="No CHANGES", output=f"Banner Update skipped for {iden}. desired banner text already exists in current configuration.") for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis is None]
         update_reqs = [BatchRequest(self.session.post, f"{base_url}/{iden}", json_data={"clis": updated_clis}) for (iden, _), updated_clis in zip(passed.items(), updated_clis_list) if updated_clis]
 
@@ -2085,7 +2081,7 @@ class ConfigAPI:
                 raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
 
             if f"cp-cert-checksum {cp_cert_md5}" in cli_cmds:
-                return # No change cp-cert-checksum already as desired
+                return  # No change cp-cert-checksum already as desired
             else:
                 line_index = [idx for idx, line in [(idx, line) for idx, line in enumerate(cli_cmds)] if line.strip().startswith("cp-cert-checksum")]
                 if line_index:
