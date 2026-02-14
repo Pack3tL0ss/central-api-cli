@@ -1130,16 +1130,19 @@ def interfaces(
             min_width = 106
     try:  # TODO can prob move the caption counts to do_interface filters (remove if filters conditional)
         ifaces = batch_resp.output
-        _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i.get("status") is None]))
-        if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
-            word = "devices" if len(_invalid_payload) > 1 else "device"
-            log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status, or an empty list.", caption=True, log=True)
-            ifaces = [i for i in ifaces if i.get("status") is not None]
+        if not ifaces:  # Device that's been down for some time, I've seen an API response with no payload
+            caption = [f"{emoji.warn} No interfaces returned, Empty payload in API response."]
+        else:
+            _invalid_payload = list(set([i["device"] for i in utils.listify(ifaces) if i.get("status") is None]))
+            if _invalid_payload:  # API-FLAW Seen on a 4100i only had 1 interface in list, and all values, including port number where null
+                word = "devices" if len(_invalid_payload) > 1 else "device"
+                log.error(f"API response for {len(_invalid_payload)} {word} ({utils.color(_invalid_payload)}) contains an invalid payload.  It returned a null interface status, or an empty list.", caption=True, log=True)
+                ifaces = [i for i in ifaces if i.get("status") is not None]
 
-        up_ifaces = [i["status"].lower() for i in ifaces].count("up")
-        down_ifaces = len(ifaces) - up_ifaces
+            up_ifaces = [i["status"].lower() for i in ifaces].count("up")
+            down_ifaces = len(ifaces) - up_ifaces
 
-        caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
+            caption += [f"Counts: Total: [cyan]{len(ifaces)}[/], Up: [bright_green]{up_ifaces}[/], Down: [bright_red]{down_ifaces}[/]"]
     except Exception as e:  # pragma: no cover
         log.error(f"{repr(e)} while trying to get counts from interface output", caption=True, log=True)
 
