@@ -106,11 +106,12 @@ api = api_clients.classic
 
 
 class Counts:
-    def __init__(self, total: int, up: int, not_checked_in: int, down: int = None ):
+    def __init__(self, total: int, up: int, not_checked_in: int, down: int = None):
         self.total = total
         self.up = up
         self.inventory = not_checked_in
         self.down = down or total - not_checked_in - up
+
 
 def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[dict[str, dict[str, int]]] | None:
     """parse response data to determine switch counts by switch type
@@ -135,12 +136,14 @@ def _get_switch_counts(data: List[Dict[str, Any]] | None) -> List[dict[str, dict
         for _type in dev_types
     }
 
+
 def _get_counts(data: List[dict], dev_type: DeviceTypes) -> Counts:
     _match_type = [d for d in data if d["type"] == dev_type]
     _tot = len(_match_type)
     _up = len([d for d in _match_type if d.get("status") == "Up"])
     _inv = len([d for d in _match_type if not d.get("status")])
     return Counts(_tot, _up, _inv)
+
 
 def _get_counts_with_inv(data: List[dict]) -> dict:
     """parse combined output attr of inventory and monitoring responses to determine counts by device type.
@@ -159,10 +162,12 @@ def _get_counts_with_inv(data: List[dict]) -> dict:
 
     return status_by_type
 
+
 def _get_inv_msg(data: Dict[str, Any], dev_type: DeviceTypes) -> str:
     inv_str = '' if not data["inventory_only"] else f" Not checked in: [cyan]{data['inventory_only']}[/]"
     up_down_str = '' if data["up"] + data["down"] == 0 else f'([bright_green]{data["up"]}[/]:[red]{data["down"]}[/])'
     return f'[{"bright_green" if not data["down"] else "red"}]{dev_type}[/]: [cyan]{data["total"]}[/] {up_down_str}{inv_str if up_down_str else ""}'
+
 
 def _build_device_caption(resp: Response, *, inventory: bool = False, dev_type: GenericDevTypes = None, status: DeviceStatus = None, has_filters: bool = False) -> str:
     # This is only for captions from monitoring UI, potentially with inventory data.  Inventory only resp is
@@ -263,6 +268,7 @@ def _build_client_caption(resp: Response, wired: bool = None, wireless: bool = N
 
     return f"[reset]{count_text} Use {'[cyan]-v[/] for more details, ' if not verbose else ''}[cyan]--raw[/] for unformatted response."
 
+
 # TODO expand params into available kwargs
 def _get_details_for_all_devices(params: dict, include_inventory: bool = False, status: DeviceStatus = None, assigned: bool = None, archived: bool = None, has_filters: bool = False):
     if include_inventory:
@@ -275,6 +281,7 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
 
     return resp, caption
+
 
 def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[CacheDevice]):
     try:
@@ -291,39 +298,40 @@ def _get_details_for_specific_devices(
         dev_type: Literal["ap", "gw", "cx", "sw"] | None = None,
         include_inventory: bool = False,
         tabular_output: bool = False
-    ) -> Tuple[BatchResponse, str]:
-        caption = None
+) -> Tuple[BatchResponse, str]:
+    caption = None
 
-        # Build requests
-        devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
-        dev_types = [dev.type for dev in devs]
-        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+    # Build requests
+    devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+    dev_types = [dev.type for dev in devs]
+    batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
 
-        # Fetch results from API
-        batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
-        if include_inventory:  # Combine results with inventory results
-            _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
-            for r, dev in zip(batch_resp.responses, devs):
-                if r.ok:
-                    r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
-                else:
-                    log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
+    # Fetch results from API
+    batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
+    if include_inventory:  # Combine results with inventory results
+        _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
+        for r, dev in zip(batch_resp.responses, devs):
+            if r.ok:
+                r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
+            else:
+                log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
 
-        _update_cache_for_specific_devices(batch_resp.responses, devs)
+    _update_cache_for_specific_devices(batch_resp.responses, devs)
 
-        if tabular_output and len(dev_types) > 1 and len(batch_resp.passed) > 1:
-            _output = [r.output for r in batch_resp.passed]
-            batch_resp.display = batch_resp.last
-            batch_resp.display.output = _output
-            batch_resp.display.output = batch_resp.display.table
-            caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
-        # else:
-        #     resp = batch_resp.responses
+    if tabular_output and len(dev_types) > 1 and len(batch_resp.passed) > 1:
+        _output = [r.output for r in batch_resp.passed]
+        batch_resp.display = batch_resp.last
+        batch_resp.display.output = _output
+        batch_resp.display.output = batch_resp.display.table
+        caption = f'{caption or ""}\n  Displaying fields common to all specified devices.  Request devices individually to see all fields.'
+    # else:
+    #     resp = batch_resp.responses
 
-        if "cx" in dev_types:
-            caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
+    if "cx" in dev_types:
+        caption = f'{caption or ""}\n  mem_total for cx devices is the % of memory currently in use.'.lstrip("\n")
 
-        return batch_resp, caption
+    return batch_resp, caption
+
 
 # TODO break this into multiple functions
 def show_devices(
@@ -439,6 +447,7 @@ def show_devices(
     )
     common.exit(code=exit_code)
 
+
 def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
     if not resp.output.get("logo"):
         common.exit(f"Unable to download logo image.  A logo has not been applied to the {resp.output['name']} portal")
@@ -457,6 +466,7 @@ def download_logo(resp: Response, path: Path, portal: CentralObject) -> None:
         common.exit(
             f"Check {file}, write operation indicated no bytes were written.  Use [cyan]cencli show portals {portal.name} --raw[/] to see raw response including logo data."
         )
+
 
 @app.command("all")
 def all_(
@@ -616,6 +626,7 @@ def aps(
             sort_by=sort_by, reverse=reverse, pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml,
             do_table=do_table)
 
+
 @app.command("switches")
 def switches_(
     switches: List[str] = common.arguments.get(
@@ -737,7 +748,7 @@ def stacks(
         if len(devs) == 1:  # if they specify a single switch we use the details call
             func = api.monitoring.get_switch_stack_details
             args = (devs[0].swack_id,)
-        else: # if they specify multiple switches we grab info for all stacks and filter in the cleaner
+        else:  # if they specify multiple switches we grab info for all stacks and filter in the cleaner
             cleaner_kwargs["stack_ids"] = set([d.swack_id for d in devs])
             if group:
                 kwargs = {"group": group.name}
@@ -944,7 +955,6 @@ def swarms(
     render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.simple_kv_formatter)
 
 
-
 def do_interface_filters(data: List[dict] | dict, filters: ShowInterfaceFilters, caption: List[str]) -> Tuple[List[dict] | dict, List[str], int]:
     exit_code = 0
     try:
@@ -1104,7 +1114,6 @@ def interfaces(
                 iface_list = utils.listify(r.output)
                 _ethernets = [iface for i in iface_list if "ethernets" in i for iface in i["ethernets"]]  # AP interfaces are in "ethernets" key of monitoring ap details endpoint response
                 iface_list = _ethernets or iface_list
-
 
             r.output = [{"device": d.name, "_dev_type": d.type, **i} for i in iface_list]
         else:
@@ -1310,6 +1319,7 @@ def vlans(
         cleaner=cleaner.get_vlans
     )
 
+
 def _get_reservation_pool_from_config(cfg_resp: Response, res_by_mac: Dict[str, dict]) -> Dict[str, dict]:
     dhcp_pools = {}
     pvids = {}
@@ -1373,11 +1383,10 @@ def _get_reservation_info_from_config(resp: Response, dev: CacheDevice) -> Respo
 
     try:
         res_by_mac = _get_reservation_pool_from_config(cfg_resp=cfg_resp, res_by_mac=res_by_mac)
-    except Exception as e: # pragma: no cover
+    except Exception as e:  # pragma: no cover
         msg = f"{e.__class__.__name__} while trying to extract reservation info from config in _get_reservation_pool_from_config."
         log.exception(f"{msg}\n{e}")
         log.error(f"{msg}", caption=True)
-
 
     output_by_mac = {r["mac"]: r for r in resp.output}
     combined = {**output_by_mac, **res_by_mac}
@@ -1508,7 +1517,7 @@ def cache_(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ):
     """Show contents/size/record-count in Local Cache.
 
@@ -1575,6 +1584,7 @@ def cache_(
     account_msg = "" if config.workspace in ["central_info", "default"] else f"[italic bright_green]Workspace: {config.workspace}[/] "
     render.console.print(f'{account_msg}[italic dark_olive_green2]Total tables in Cache: [cyan]{len(common.cache)}[/], Cache File Size: [cyan]{common.cache.size}[reset]')
 
+
 def _build_groups_caption(data: List[dict]) -> List[str]:
     if not data:
         return
@@ -1596,6 +1606,7 @@ def _build_groups_caption(data: List[dict]) -> List[str]:
             caption += [", ".join(chunk)]
 
     return caption or _caption
+
 
 @app.command(help="Show groups/details")
 def groups(
@@ -1766,11 +1777,11 @@ def templates(
         title = f"{obj.name.title()} Template"
         if obj.is_dev:  # They provided a dev identifier
             resp = api.session.request(api.configuration.get_variablised_template, obj.serial)
-        else:  #  obj.is_template
+        else:  # obj.is_template
             resp = api.session.request(api.configuration.get_template, group=obj.group, template=obj.name)
     elif group:
         title = "Templates in Group {} {}".format(group.name, ', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
-        resp = api.session.request(api.configuration.get_all_templates_in_group, group.name, **params) # TODO update cache on individual grabs
+        resp = api.session.request(api.configuration.get_all_templates_in_group, group.name, **params)  # TODO update cache on individual grabs
     elif params:  # show templates - Full update and show data from cache
         title = "All Templates {}".format(', '.join([f"[bright_green]{k.replace('_', ' ')}[/]: [cyan]{v}[/]" for k, v in params.items()]))
         resp = api.session.request(api.configuration.get_all_templates, **params)  # Can't use cache due to filtering options
@@ -1869,11 +1880,9 @@ def lldp(
         else:
             devs.append(dev)
 
-
     reqs = {dev: BatchRequest(api.topo.get_ap_lldp_neighbor, dev.serial) for dev in devs if dev.type == "ap"}
     reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_neighbors, dev.serial) for dev in devs if dev.generic_type == "switch" and not dev.swack_id}}
     reqs = {**reqs, **{dev: BatchRequest(api.monitoring.get_cx_switch_stack_neighbors, dev.swack_id) for dev in devs if dev.generic_type == "switch" and dev.swack_id}}
-
 
     batch_resp = api.session.batch_request(list(reqs.values()))
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="yaml")
@@ -1892,13 +1901,14 @@ def lldp(
             r,
             tablefmt=tablefmt,
             title=title,
-            caption = None if dev.type != "sw" else "  [dark_orange3]\u26a0[/]  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]",
+            caption=None if dev.type != "sw" else "  [dark_orange3]\u26a0[/]  [italic dark_olive_green2]AOS-SW only reflects LLDP neighbors that are managed by Aruba Central[/]",
             pager=pager,
             outfile=outfile,
             suppress_rl=idx != len(reqs),
             output_by_key=["port", "localPort"],
             cleaner=cleaner.get_lldp_neighbor,
         )
+
 
 @app.command()
 def certs(
@@ -1942,6 +1952,7 @@ def certs(
     render.display_results(
         resp, tablefmt=tablefmt, title="Certificates", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_certificates, valid=valid, cert_types=cert_types
     )
+
 
 # TODO show task --device  look up task by device if possible
 @app.command()
@@ -2007,7 +2018,7 @@ def config_(
     group_dev: str = common.arguments.get(
         "group_dev",
         metavar=iden_meta.group_dev_cencli,
-        help = "Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
+        help="Device Identifier, Group Name along with --ap or --gw option, or 'self' to see cencli configuration details.",
     ),
     device: str = typer.Argument(
         None,
@@ -2171,7 +2182,6 @@ def routes(
             f'static: {s.get("static")}, dynamic: {s.get("dynamic")}, overlay: {s.get("overlay")} '
         )
 
-
     render.display_results(
         resp,
         tablefmt=tablefmt,
@@ -2206,6 +2216,7 @@ def _combine_wlan_properties_responses(groups: List[str], responses: List[Respon
         _ = [log.warning(f'Partial Failure [cyan]{f.url.name}[/] [red]{f.error}[/]: {f.output.get("description", f.output)}', caption=True) for f in failed]
 
     return resp
+
 
 # TODO break this into sep function, this made my head hurt.
 # multiple options.
@@ -2269,7 +2280,6 @@ def wlans(
         title = f"{title} in swarm associated with {_dev.name}"
         swarm = _dev.swack_id
 
-
     params = {
         "name": name,
         "group": group,
@@ -2311,7 +2321,7 @@ def wlans(
         if resp:
             if not name:
                 caption += [f'[green]{len(resp.output)}[/] SSIDs,  [green]{sum([wlan.get("client_count", 0) for wlan in resp.output])}[/] Wireless Clients.']
-            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])",  "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
+            caption += ["Summary Output, Specify the group ([cyan]--group GROUP[/])", "or use the verbose flag ([cyan]`-v`[/]) for additional details"]
         tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
         render.display_results(resp, tablefmt=tablefmt, title=title, caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, exit_on_fail=True, cleaner=cleaner.get_wlans)
         return
@@ -2353,7 +2363,7 @@ def cluster(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ) -> None:
     """Show Cluster mapped to a given group/SSID."""
     caption = None
@@ -2395,7 +2405,7 @@ def vsx(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ) -> None:
     """Show VSX details for a CX switch
     """
@@ -2467,7 +2477,6 @@ def clients(
         tablefmt = common.get_format(do_json, do_yaml, do_csv, do_table)
         render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile)
         common.exit(code=0 if resp.ok else 1)
-
 
     kwargs = {}
     dev = None
@@ -2612,6 +2621,7 @@ def denylisted(
         cleaner=cleaner.get_denylist_clients if tablefmt in ["rich", "tabulate"] else None
     )
 
+
 @app.command()
 def tunnels(
     gateway: str = typer.Argument(..., metavar=iden_meta.dev, autocompletion=common.cache.dev_gw_completion, case_sensitive=False, show_default=False,),
@@ -2628,7 +2638,7 @@ def tunnels(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ) -> None:
     """Show Branch Gateway/VPNC Tunnel details"""
     dev = common.cache.get_dev_identifier(gateway, dev_type="gw")
@@ -2688,7 +2698,7 @@ def roaming(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ) -> None:
     """Show wireless client roaming history.
 
@@ -2714,7 +2724,6 @@ def roaming(
         title = f'{title} for {utils.color([client.name, mac.cols], sep="|")}'
     else:
         title = f'{title} for {mac.cols}'
-
 
     resp = api.session.request(api.monitoring.get_client_roaming_history, mac.cols, from_time=start, to_time=end)
     caption = None if not resp else f"{len(resp)} roaming events"
@@ -2770,11 +2779,11 @@ def logs(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
     verbose: bool = typer.Option(False, "-v", help="Verbose: Show logs with original field names and minimal formatting (vertically)", rich_help_panel="Formatting",),
 ) -> None:
     """Show device event logs (last 30m by default) or show cencli logs."""
-    title="Device event Logs"
+    title = "Device event Logs"
     pytest = pytest or (event_id and event_id == "pytest")
     if any({cencli, pytest, unused_mocks}) or (event_id and ("cencli".startswith(event_id.lower()) or "self".startswith(event_id.lower()))):  # pragma: no cover
         log.print_file(pytest, show_all=_all, unused_mocks=unused_mocks) if not tail else log.follow(pytest)
@@ -2983,7 +2992,7 @@ def notifications(
     debug: bool = common.options.debug,
     default: bool = common.options.default,
     workspace: str = common.options.workspace,
-    update_cache = common.options.update_cache,
+    update_cache=common.options.update_cache,
 ) -> None:
     """Show alert/notification configuration.
 
@@ -3161,7 +3170,7 @@ def archived(
         if resp.raw and "devices" in resp.raw:
             plat_cust_id = list(set([inner.get("platform_customer_id", "--") for inner in resp.raw["devices"]]))
             caption = f"Counts: {len(resp)} Archived devices."
-            caption = f"{caption} Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else caption  #  Should not happen but if it does the cleaner keeps the item in the dicts
+            caption = f"{caption} Platform Customer ID: {plat_cust_id[0]}" if len(plat_cust_id) == 1 else caption  # Should not happen but if it does the cleaner keeps the item in the dicts
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     render.display_results(resp, tablefmt=tablefmt, title="Archived Devices", caption=caption, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=_cleaner)
@@ -3182,7 +3191,7 @@ def portals(
         "-L", "--logo",
         metavar="PATH",
         help=f"Download logo for specified portal to specified path. [cyan]Portal argument is requrired[/] {common.help_block(f'{Path.cwd()}/<original_logo_filename>')}",
-        show_default = False,
+        show_default=False,
         writable=True,
     ),
     sort_by: SortPortalOptions = common.options.sort_by,
@@ -3240,7 +3249,7 @@ def guests(
 ) -> None:
     """Show Guests configured for a Portal"""
     caption = None
-    title="Guest Users"
+    title = "Guest Users"
     failed = None
     if portal:
         portal: CachePortal = common.cache.get_name_id_identifier("portal", portal)
@@ -3279,7 +3288,8 @@ def guests(
     if failed:
         common.exit()
 
-def _build_radio_caption(data: List[Dict[str, str | int]], group: str = None, site: str = None, label: str = None) -> str |  None:
+
+def _build_radio_caption(data: List[Dict[str, str | int]], group: str = None, site: str = None, label: str = None) -> str | None:
     try:
         two_four_cnt, five_cnt, six_cnt, ap_names = 0, 0, 0, []
         two_four_up_cnt, five_up_cnt, six_up_cnt = 0, 0, 0
@@ -3323,7 +3333,7 @@ def radios(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
     group: str = typer.Option(None, help="Filter by Group", autocompletion=common.cache.group_completion, show_default=False,),
     site: str = typer.Option(None, help="Filter by Site", autocompletion=common.cache.site_completion, show_default=False,),
-    label: str = typer.Option(None, help="Filter by Label", autocompletion=common.cache.label_completion,show_default=False,),
+    label: str = typer.Option(None, help="Filter by Label", autocompletion=common.cache.label_completion, show_default=False,),
     status: StatusOptions = typer.Option(None, metavar="[up|down]", hidden=True, help="Filter by device status"),
     pub_ip: str = typer.Option(None, metavar="<Public IP Address>", help="Filter by Public IP", show_default=False,),
     up: bool = typer.Option(False, "--up", help="Filter by devices that are Up", show_default=False),
@@ -3351,7 +3361,7 @@ def radios(
     group: CacheGroup = None if not group else common.cache.get_group_identifier(group)
     site: CacheSite = None if not site else common.cache.get_site_identifier(site)
     label: CacheLabel = None if not label else common.cache.get_label_identifier(label)
-    title="Radio Details"
+    title = "Radio Details"
     for filter_, filter_name in zip((group, site, label), ("group", "site", "label")):
         title = f"{title}{'' if not filter_ else f' for APs in {filter_name} [cyan]{filter_.name}[/]'}"
     if band:
@@ -3464,7 +3474,7 @@ def bssids(
     resp = api.session.request(api.monitoring.get_bssids, **kwargs)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
     if not ssid:
-        caption += [f"{emoji.info} If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.",  "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
+        caption += [f"{emoji.info} If an SSID is {'blank' if tablefmt in ['rich', 'csv'] else 'null'} the radio is disabled or no SSIDs are enabled for the radio.", "The MAC shown is the radio MAC. The first bssid on the radio will use the radio MAC."]
     title_sfx = "" if not title_sfx else f" for {' & '.join(title_sfx)}"
 
     render.display_results(
@@ -3484,7 +3494,6 @@ def bssids(
         band=band,
         ssid=ssid
     )
-
 
 
 # TODO # FIXME --past 6h returns empty payload despite default of 3h returning insights  --past 1d seems to work fine.
@@ -3551,7 +3560,7 @@ def insights(
     else:
         title = "Global AI Insights"
     title = f"{title} for past {duration.in_words()}"
-    caption="Use [cyan]show insight <id>[/] to see details for an insight."
+    caption = "Use [cyan]show insight <id>[/] to see details for an insight."
 
     resp = api.session.request(api.aiops.get_aiops_insights, start, end, site_id=site_id, client_mac=client_mac, serial=serial, device_type=dev_type)
 
@@ -3565,6 +3574,7 @@ def version(
     """Show current cencli version, and latest available version.
     """
     common.version_callback()
+
 
 @app.command(hidden=os.name != "posix")
 def cron(
@@ -3630,7 +3640,7 @@ def _get_cencli_config(*, all_workspaces: bool = False, brief: bool = False) -> 
     if brief:
         out = {config.workspace: workspaces.get(config.workspace, {}), "cache file": config.cache_file}
     elif all_workspaces:
-        out = {"workspaces": workspaces,  **out}
+        out = {"workspaces": workspaces, **out}
     else:
         out = {**out, config.workspace: workspaces.get(config.workspace, {})}
 

@@ -46,6 +46,7 @@ class NewCentralURLs:
         "SERVICE_MANAGER_BY_REGION": "/service-catalog/v1/per-region-service-managers",
     }
 
+
 urls = NewCentralURLs()  # currently only using Authentication url
 
 
@@ -61,7 +62,6 @@ def _load_token_info(token_info: Path | str | dict[str, dict[str, str]]) -> dict
         raise FileNotFoundError(f"{str(token_info)} File not found.")
 
     return config.get_file_data(token_info)
-
 
 
 class NewCentralBase:
@@ -91,7 +91,6 @@ class NewCentralBase:
         #         access_token = self.token_resp.get("access_token")
         #     else:
         #         access_token = _token
-
 
         # for app in self.token_info:
         #     self.token_info[app]["access_token"] = self.token_info.get("access_token") or access_token
@@ -128,7 +127,6 @@ class NewCentralBase:
         self._access_token = access_token
         return self._access_token
 
-
     def load_token_from_cache(self) -> str | None:
         if config.cnx_tok_file and config.cnx_tok_file.exists():
             token_data = config.get_file_data(config.cnx_tok_file)
@@ -137,10 +135,9 @@ class NewCentralBase:
 
             if "expires" in token_data:
                 if pendulum.now().int_timestamp - 300 > token_data["expires"]:
-                    return # if cached token is within 5 mins of expiration we want to force a refresh
+                    return  # if cached token is within 5 mins of expiration we want to force a refresh
 
             return token_data.get("access_token")
-
 
     def get_access_token(self, app_name: Literal["new_central", "glp"] = "glp") -> str:
         """
@@ -163,7 +160,6 @@ class NewCentralBase:
 
         oauth = OAuth2Session(client=client)
         body = f'grant_type=client_credentials&client_id={client_id}&client_secret={client_secret}'
-
 
         try:
             log.info(f"Attempting to create new token from {app_name}")

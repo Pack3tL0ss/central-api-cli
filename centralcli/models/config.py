@@ -17,7 +17,9 @@ class Defaults:
     account: str = "default"
     config_version: int = 2
 
+
 default = Defaults()
+
 
 def _ensure_base_urls(data: dict) -> Dict[str, Any]:
     if "cluster" in data and data["cluster"] in CLUSTER_URLS:
@@ -31,6 +33,7 @@ def _ensure_base_urls(data: dict) -> Dict[str, Any]:
             data["classic"]["base_url"] = url_dict["classic"]
 
     return data
+
 
 # CNX New Central
 class Glp(BaseModel):

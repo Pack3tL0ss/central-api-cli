@@ -23,6 +23,7 @@ OptionType = Literal[
     "tags", "with_inv", "no_refresh", "cx_retain_config",
 ]
 
+
 class CLIArgs:
     def __init__(self, cache: Cache):
         self.cache = cache
@@ -185,8 +186,8 @@ class CLIOptions:
         self.group_many: OptionInfo = typer.Option(None, help="Filter by Group(s)", metavar=iden_meta.group_many, autocompletion=cache.group_completion, show_default=False,)
         self.site: OptionInfo = typer.Option(None, help="Filter by Site", metavar=iden_meta.site, autocompletion=cache.site_completion, show_default=False,)
         self.site_many: OptionInfo = typer.Option(None, help="Filter by Site(s)", metavar=iden_meta.site_many, autocompletion=cache.site_completion, show_default=False,)
-        self.label: OptionInfo = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion,show_default=False,)
-        self.label_many: OptionInfo = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion,show_default=False,)
+        self.label: OptionInfo = typer.Option(None, help="Filter by Label", metavar=iden_meta.label, autocompletion=cache.label_completion, show_default=False,)
+        self.label_many: OptionInfo = typer.Option(None, help="Filter by Label(s)", metavar=iden_meta.label_many, autocompletion=cache.label_completion, show_default=False,)
         self.debug: OptionInfo = typer.Option(False, "--debug", envvar=env_var.debug, help="Enable Additional Debug Logging", rich_help_panel="Common Options",)
         self.debugv: OptionInfo = typer.Option(False, "--debugv", help="Enable Verbose Debug Logging", rich_help_panel="Common Options",)
         self.do_json: OptionInfo = typer.Option(False, "--json", is_flag=True, help="Output in JSON", show_default=False, rich_help_panel="Formatting",)
@@ -225,7 +226,7 @@ class CLIOptions:
         )
         self.device_many: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev_many, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
         self.device: OptionInfo = typer.Option(None, "--dev", metavar=iden_meta.dev, help="Filter by device", autocompletion=cache.dev_completion, show_default=False,)
-        self.device_type: OptionInfo = typer.Option(None, "--dev-type",help="Filter by Device Type",show_default=False,)
+        self.device_type: OptionInfo = typer.Option(None, "--dev-type", help="Filter by Device Type", show_default=False,)
         self.swarm_device: OptionInfo = typer.Option(None, "-S", "--swarm", metavar=iden_meta.dev, help="Filter by the swarm associated with specified AOS8 IAP", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.swarm: OptionInfo = typer.Option(False, "-S", "--swarm", help="Filter by the swarm associated with the ap specified. [dim italic](device/AP Argument must be provided)[/]", autocompletion=cache.dev_ap_completion, show_default=False,)
         self.sort_by: OptionInfo = typer.Option(
@@ -280,7 +281,6 @@ class CLIOptions:
         self.in_: OptionInfo = typer.Option(None, "--in", help=f"Upgrade device in <delta from now>, where d=days, h=hours, m=mins i.e.: [cyan]3h[/] [dim]{escape('[default: Now]')}[/]", show_default=False,)
         self.reboot: OptionInfo = typer.Option(False, "--reboot", "-R", help=f"Automatically reboot device after firmware download [dim]{escape('[default: No reboot if not AP')} [green](APs will reboot regardless)[/green]{escape(']')}[/]")
         self.subscription: OptionInfo = typer.Option(None, "-s", "--sub", help="Assign subscription(s) to device", show_default=False)
-
 
     @property
     def start(self) -> OptionInfo:
@@ -343,7 +343,7 @@ class CLIOptions:
         click_type: Optional[click.ParamType] = UNSET,
         # Option
         show_default: bool | str = UNSET,
-        prompt: bool |str = UNSET,
+        prompt: bool | str = UNSET,
         confirmation_prompt: bool = UNSET,
         prompt_required: bool = UNSET,
         hide_input: bool = UNSET,
@@ -448,7 +448,6 @@ class CLIOptions:
         args = (combined["default"], *param_decls)
         kwargs_out = {k: v for k, v in combined.items() if k not in ["default", "param_decls"]}
         return typer.Option(*args, **kwargs_out)
-
 
     def __call__(self, timerange: str, include_mins: bool = None):
         self.timerange = timerange

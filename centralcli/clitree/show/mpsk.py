@@ -74,7 +74,7 @@ def named(
         else:
             common.exit("[cyan]--import[/] option is only supported when MPSK ssid is provided")
 
-    title="PSKs"
+    title = "PSKs"
     if ssid:
         ssid: CacheMpsk = common.cache.get_mpsk_network_identifier(ssid)
         title = f"{title} associated with [bright_green]{ssid.name}[/] MPSK Network"
@@ -95,7 +95,6 @@ def named(
         _caption = None if outfile else f"\n{Warnings.no_outfile}"
     else:
         resp = api.session.request(common.cache.refresh_mpsk_db, ssid.id, name=name, role=role, status=status)
-
 
     tablefmt = "csv" if csv_import and ssid else common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
     caption = None if not resp.ok else f"{'' if tablefmt == 'rich' else '  '}Total Named MPSKs for [cyan]{'ALL SSIDs' if not ssid else ssid.name}[/]: [bright_green]{_mpsk_cnt or len(resp)}[/]{_caption or ''}"

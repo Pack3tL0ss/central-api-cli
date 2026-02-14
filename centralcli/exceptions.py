@@ -2,30 +2,39 @@
 class ArubaCentralException(Exception):
     pass
 
+
 class DevException(ArubaCentralException):
     pass
 
+
 class TimeoutException(ArubaCentralException):
     pass
+
 
 # CentralCLI Exceptions
 class CentralCliException(Exception):
     pass
 
+
 class MissingFieldException(CentralCliException):
     pass
+
 
 class MissingRequiredArgumentException(TypeError):
     pass
 
+
 class ImportException(CentralCliException):
     pass
+
 
 class InvalidConfigException(CentralCliException):
     pass
 
+
 class ConfigNotFoundException(CentralCliException):
     pass
+
 
 class WorkSpaceNotFoundException(CentralCliException):
     pass
@@ -35,8 +44,10 @@ class WorkSpaceNotFoundException(CentralCliException):
 class ServiceNowException(Exception):
     pass
 
+
 class RefreshFailedException(ServiceNowException):
     pass
+
 
 class IncidentException(ServiceNowException):
     pass

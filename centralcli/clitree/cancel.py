@@ -12,6 +12,7 @@ from centralcli.constants import CancelWhat, DevTypes, what_to_pretty
 
 app = typer.Typer()
 
+
 @app.command()
 def upgrade(
     what: CancelWhat = common.arguments.what,

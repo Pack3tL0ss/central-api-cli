@@ -154,7 +154,7 @@ def connection(
     caption = None
     if "connection" in resp.output:
         resp.output = resp.output["connection"]
-        caption=_build_caption(resp)
+        caption = _build_caption(resp)
     elif "summary" in resp.output:  # For Mobility GWs this endpoint only shows Overlay for SD-Branch
         resp.output = resp.output["summary"]
         if resp.output.get("admin_status") is False:
@@ -163,7 +163,6 @@ def connection(
                 "Use [cyan]cencli tshoot overlay DEVICE[/] for Mobility GWs/APs"
             ]
             set_width_cols = {"admin status": {"min": 72, "max": 100}}
-
 
     render.display_results(
         resp,
@@ -175,6 +174,7 @@ def connection(
         set_width_cols=set_width_cols,
         cleaner=cleaner.simple_kv_formatter,
     )
+
 
 @app.callback()
 def callback():

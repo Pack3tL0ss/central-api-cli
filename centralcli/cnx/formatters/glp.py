@@ -12,9 +12,11 @@ import pendulum
 
 # TODO add a method to update the caption from the cleaner either a callback or a function call
 
+
 def get_subscriptions(data: List[Dict[str, Any]], verbosity: int = 0) -> List[Dict[str, Any]]:
     if not data:
         return data
+
     def _to_datetime(date: str, format: TimeFormat = "date-string", format_expiration: bool = None) -> DateTime:
         return DateTime(pendulum.from_format(date.rstrip("Z"), "YYYY-MM-DDTHH:mm:ss.SSS").timestamp(), format=format, format_expiration=format_expiration)
 

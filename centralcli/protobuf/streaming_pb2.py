@@ -22,8 +22,6 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
-
-
 DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x0fstreaming.proto\x12\rStreamMessage\"a\n\x08MsgProto\x12\x0f\n\x07subject\x18\x02 \x01(\t\x12\x0c\n\x04\x64\x61ta\x18\x03 \x01(\x0c\x12\x11\n\ttimestamp\x18\x04 \x01(\x03\x12\x13\n\x0b\x63ustomer_id\x18\x05 \x01(\t\x12\x0e\n\x06msp_id\x18\x06 \x01(\tb\x06proto3')
 
 _globals = globals()
@@ -31,6 +29,6 @@ _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
 _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'streaming_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   DESCRIPTOR._loaded_options = None
-  _globals['_MSGPROTO']._serialized_start=34
-  _globals['_MSGPROTO']._serialized_end=131
+  _globals['_MSGPROTO']._serialized_start = 34
+  _globals['_MSGPROTO']._serialized_end = 131
 # @@protoc_insertion_point(module_scope)

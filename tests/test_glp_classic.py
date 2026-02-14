@@ -28,7 +28,7 @@ if config.dev.mock_tests:
         config._mock(glp_ok)
         if fixture:
             request.getfixturevalue(fixture)
-        result = runner.invoke(app, ["add", "device",  *args, "--yes"])
+        result = runner.invoke(app, ["add", "device", *args, "--yes"])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
@@ -39,13 +39,12 @@ if config.dev.mock_tests:
     )
     def test_batch_add_devices(ensure_no_inv_dev_cache_batch_devices, glp_ok: bool):
         config._mock(glp_ok)
-        result = runner.invoke(app, ["batch", "add",  "devices", f'{str(test_device_file)}', "-Y"])
+        result = runner.invoke(app, ["batch", "add", "devices", f'{str(test_device_file)}', "-Y"])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
         assert result.exit_code == 0
         assert "uccess" in result.stdout
         assert "200" in result.stdout  # /platform/device_inventory/v1/devices
         assert "201" in result.stdout  # /configuration/v1/preassign
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,args",
@@ -59,11 +58,10 @@ if config.dev.mock_tests:
     )
     def test_batch_add_fail(idx: int, glp_ok: bool, args: tuple[str]):
         config._mock(glp_ok)
-        result = runner.invoke(app, ["batch", "add",  *args, "-Y"])
+        result = runner.invoke(app, ["batch", "add", *args, "-Y"])
         capture_logs(result, f"{env.current_test}-{idx}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
@@ -88,7 +86,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize(
         "idx,args,pass_condition,test_name_append",
         [
@@ -108,7 +105,6 @@ if config.dev.mock_tests:
         assert result.exit_code <= 1  # classic #2 needs work to return exit code based on partial/sub-call failure
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_show_archived(glp_ok: bool):
         config._mock(glp_ok)
@@ -116,7 +112,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
         assert result.exit_code == 0
         assert "counts" in result.stdout.lower()
-
 
     @pytest.mark.parametrize(
         "idx,args,glp_ok,pass_condition",
@@ -131,7 +126,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
@@ -157,7 +151,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
         [
@@ -173,7 +166,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize(
         "idx,file",
         [
@@ -184,7 +176,7 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_archive(idx, file: str):
-        glp_ok = True if idx % 2 != 0 else False # even numbers are glp calls
+        glp_ok = True if idx % 2 != 0 else False  # even numbers are glp calls
         config._mock(glp_ok)
         result = runner.invoke(app, ["batch", "archive", str(file), "-y"])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}-{idx}")
@@ -195,7 +187,6 @@ if config.dev.mock_tests:
         else:
             assert "Accepted" in result.stdout or "True" in result.stdout
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_batch_archive_fail(glp_ok: bool):
         config._mock(glp_ok)
@@ -204,11 +195,10 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "Response" in result.stdout
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_batch_unarchive(glp_ok: bool):
         config._mock(glp_ok)
-        result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
+        result = runner.invoke(app, ["batch", "unarchive", "--yes", f'{str(test_device_file)}'])
         capture_logs(result, f"{env.current_test}-{'glp' if glp_ok else 'classic'}")
         assert result.exit_code == 0
         if glp_ok:
@@ -217,15 +207,13 @@ if config.dev.mock_tests:
         else:
             assert "Accepted" in result.stdout or "False" in result.stdout
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_batch_unarchive_fail(glp_ok: bool):
         config._mock(glp_ok)
-        result = runner.invoke(app, ["batch", "unarchive",  "--yes", f'{str(test_device_file)}'])
+        result = runner.invoke(app, ["batch", "unarchive", "--yes", f'{str(test_device_file)}'])
         capture_logs(result, "test_batch_unarchive_device_fail", expect_failure=True)
         assert result.exit_code == 1
         assert "Response" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,fixture,glp_ok,args,exit_code,pass_condition",
@@ -249,7 +237,6 @@ if config.dev.mock_tests:
         assert result.exit_code == exit_code
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize(
         "idx,glp_ok,args,pass_condition",
         [
@@ -264,7 +251,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_archive(ensure_inv_cache_test_ap, glp_ok: bool):
         config._mock(glp_ok)
@@ -274,7 +260,6 @@ if config.dev.mock_tests:
         assert "succeeded" or "Accepted" in result.stdout
         assert "⚠" in result.stdout  # "99-not-a-serial" is skipped as it's not a serial number and is not found in inventory/cache
         assert "💿" not in result.stdout
-
 
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_archive_multi(ensure_inv_cache_batch_devices, glp_ok: bool):
@@ -287,7 +272,6 @@ if config.dev.mock_tests:
         assert "succeeded" or "Accepted" in result.stdout
         assert "💿" not in result.stdout
 
-
     @pytest.mark.parametrize("glp_ok", [False, True])
     def test_archive_fail(ensure_inv_cache_test_ap, glp_ok: bool):
         config._mock(glp_ok)
@@ -296,7 +280,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "Response" in result.stdout
         assert "💿" not in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,fixture,args",
@@ -326,7 +309,6 @@ if config.dev.mock_tests:
         else:
             assert "Accepted" in result.stdout or "successfully unarchived" in result.stdout
 
-
     @pytest.mark.parametrize(
         "idx,glp_ok,fixture,args",
         [
@@ -343,7 +325,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "Response" in result.stdout
         assert "🆎" not in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,fixture,args,pass_condition",
@@ -393,7 +374,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     def test_assign_subscription_glp(ensure_cache_subscription_none_available):  # ensure cache sub... ensures the sub is there but with 0 remaining, forces it to hit a branch that log/shows a warning (glp only)
         result = runner.invoke(
             app,
@@ -410,13 +390,12 @@ if config.dev.mock_tests:
         assert "Response" in result.stdout
         assert "⚠" in result.stdout
 
-
     def test_assign_subscription_classic(ensure_old_config):
         result = runner.invoke(
             app,
             [
                 "assign",
-                "_subscription",  #  determination on which should be hidden is performed before we mock non glp config
+                "_subscription",  # determination on which should be hidden is performed before we mock non glp config
                 "advanced-ap",
                 test_data["ap"]["name"],
                 "-Y"
@@ -425,7 +404,6 @@ if config.dev.mock_tests:
         capture_logs(result, env.current_test)
         assert result.exit_code == 0
         assert "Response" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,glp_ok,fixture,args",

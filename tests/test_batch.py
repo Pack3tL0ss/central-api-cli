@@ -39,7 +39,7 @@ runner = CliRunner()
 
 
 def test_batch_add_groups(ensure_cache_group4):  # TODO may need to adjust fixture to remove group4 from cache if it already being there interferes with subsequent tests
-    result = runner.invoke(app, ["batch", "add",  "groups", str(test_group_file), "-Y"])
+    result = runner.invoke(app, ["batch", "add", "groups", str(test_group_file), "-Y"])
     capture_logs(result, "test_batch_add_groups")
     assert result.exit_code == 0
     assert "⚠" in result.stdout  # group4 already exists, so skipped
@@ -55,7 +55,7 @@ def test_batch_add_groups(ensure_cache_group4):  # TODO may need to adjust fixtu
 )
 def test_batch_add_macs(idx: int, file: str, debug: bool, exit_code: int, pass_condition: Callable):
     log.DEBUG = debug
-    result = runner.invoke(app, ["batch", "add",  "macs", file, "-Y"])
+    result = runner.invoke(app, ["batch", "add", "macs", file, "-Y"])
     capture_logs(result, f"{env.current_test}{idx}", expect_failure=bool(exit_code))
     assert result.exit_code == exit_code
     assert pass_condition(result.stdout)
@@ -68,21 +68,21 @@ def test_batch_add_macs(idx: int, file: str, debug: bool, exit_code: int, pass_c
         [2, "ensure_cache_label5", None],
     ]
 )
-def test_batch_add_labels(_:int, fixture: str | None, test_name_append: str | None, request: pytest.FixtureRequest):
+def test_batch_add_labels(_: int, fixture: str | None, test_name_append: str | None, request: pytest.FixtureRequest):
     if fixture:
         request.getfixturevalue(fixture)
     # no cover: start
     if test_name_append:
         env.current_test = f"{env.current_test}_{test_name_append}"
     # no cover: stop
-    result = runner.invoke(app, ["batch", "add",  "labels", str(test_label_file), "-Y"])
+    result = runner.invoke(app, ["batch", "add", "labels", str(test_label_file), "-Y"])
     capture_logs(result, env.current_test)
     assert result.exit_code == 0
     assert "200" in result.stdout
 
 
 def test_batch_delete_labels(ensure_cache_batch_labels):
-    result = runner.invoke(app, ["batch", "delete",  "labels", str(test_label_file), "-Y"])
+    result = runner.invoke(app, ["batch", "delete", "labels", str(test_label_file), "-Y"])
     capture_logs(result, "test_batch_delete_labels")
     assert result.exit_code == 0
     assert "200" in result.stdout
@@ -90,28 +90,28 @@ def test_batch_delete_labels(ensure_cache_batch_labels):
 
 @pytest.mark.parametrize("args", [(str(test_label_file), "--no-devs"), ()])
 def test_batch_delete_labels_invalid(args: tuple[str]):
-    result = runner.invoke(app, ["batch", "delete",  "labels", *args])
+    result = runner.invoke(app, ["batch", "delete", "labels", *args])
     capture_logs(result, "test_batch_delete_labels_invalid", expect_failure=True)
     assert result.exit_code == 1
     assert "⚠" in result.stdout
 
 
 def test_batch_add_mpsk():
-    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
+    result = runner.invoke(app, ["batch", "add", "mpsk", str(test_mpsk_file), "--ssid", test_data["mpsk_ssid"], "-Y"])
     capture_logs(result, "test_batch_add_mpsk")
     assert result.exit_code == 0
     assert "202" in result.stdout
 
 
 def test_batch_add_mpsk_invalid_options():
-    result = runner.invoke(app, ["batch", "add",  "mpsk", str(test_mpsk_file), "-Y"])
+    result = runner.invoke(app, ["batch", "add", "mpsk", str(test_mpsk_file), "-Y"])
     capture_logs(result, "test_batch_add_mpsk_invalid_options", expect_failure=True)
     assert result.exit_code == 1
     assert "Invalid" in result.stdout
 
 
 def test_batch_add_sites():
-    result = runner.invoke(app, ["batch", "add",  "sites", str(test_site_file), "-Y"])
+    result = runner.invoke(app, ["batch", "add", "sites", str(test_site_file), "-Y"])
     capture_logs(result, "test_batch_add_sites")
     assert result.exit_code == 0
     assert "city" in result.stdout or "_DUPLICATE_SITE_NAME" in result.stdout
@@ -127,12 +127,11 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1, ensure_cache_site1, idx: int, args: tuple[str], pass_condition: Callable):
-        result = runner.invoke(app, ["batch", "move",  "devices", *args, "-y"])
+        result = runner.invoke(app, ["batch", "move", "devices", *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,file,pass_condition",
@@ -141,29 +140,26 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_add_variables(idx: int, file: str, pass_condition: Callable):
-        result = runner.invoke(app, ["batch", "add",  "variables", file, "-Y"])
+        result = runner.invoke(app, ["batch", "add", "variables", file, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
 
-
     def test_batch_rename_aps(ensure_dev_cache_no_last_rename_ap):
-        result = runner.invoke(app, ["batch", "rename",  "aps", f'{str(test_rename_aps_file)}', "-Y"])
+        result = runner.invoke(app, ["batch", "rename", "aps", f'{str(test_rename_aps_file)}', "-Y"])
         capture_logs(result, "test_batch_rename_aps")
         assert result.exit_code == 0
         assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
 
-
     @pytest.mark.parametrize("what", ["aps", "ap-banner"])
     def test_batch_update_aps(what: str):
         if what != "ap-banner":
-            result = runner.invoke(app, ["batch", "update",  what, f'{str(test_update_aps_file)}', "-Y"])
+            result = runner.invoke(app, ["batch", "update", what, f'{str(test_update_aps_file)}', "-Y"])
         else:
-            result = runner.invoke(app, ["batch", "update",  "aps", f'{str(test_update_aps_file)}', "--banner-file", str(test_banner_file_j2), "-Y"])
+            result = runner.invoke(app, ["batch", "update", "aps", f'{str(test_update_aps_file)}', "--banner-file", str(test_banner_file_j2), "-Y"])
         capture_logs(result, "test_batch_update_aps")
         assert result.exit_code == 0
         assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
-
 
     @pytest.mark.parametrize(
         "idx,fixtures,args,test_name_append",
@@ -179,11 +175,10 @@ if config.dev.mock_tests:
             [request.getfixturevalue(f) for f in utils.listify(fixtures)]
         if test_name_append:  # pragma: no cover
             env.current_test = f"{env.current_test}_{test_name_append}"
-        result = runner.invoke(app, ["batch", "update",  "ap-banner", *args, "-Y"])
+        result = runner.invoke(app, ["batch", "update", "ap-banner", *args, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout or "299" in result.stdout  # 299 when AP name already matches so no rename required
-
 
     @pytest.mark.parametrize(
         "idx,fixtures,args",
@@ -196,11 +191,10 @@ if config.dev.mock_tests:
     def test_batch_update_ap_banners_fail(idx: int, fixtures: str | list[str] | None, args: tuple[str], request: pytest.FixtureRequest):
         if fixtures:
             [request.getfixturevalue(f) for f in utils.listify(fixtures)]
-        result = runner.invoke(app, ["batch", "update",  "ap-banner", *args, "-Y"])
+        result = runner.invoke(app, ["batch", "update", "ap-banner", *args, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout or "ERROR" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,fixtures,args,pass_condition",
@@ -212,11 +206,10 @@ if config.dev.mock_tests:
     def test_batch_update_variables(idx: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
         if fixtures:  # pragma: no cover
             [request.getfixturevalue(f) for f in utils.listify(fixtures)]
-        result = runner.invoke(app, ["batch", "update",  "variables", *args, "-Y"])
+        result = runner.invoke(app, ["batch", "update", "variables", *args, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,args,pass_condition",
@@ -227,7 +220,7 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_update_variables_fail(idx: int, args: tuple[str], pass_condition: Callable):
-        result = runner.invoke(app, ["batch", "update",  "variables", *args, "-Y"])
+        result = runner.invoke(app, ["batch", "update", "variables", *args, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
@@ -243,7 +236,7 @@ if config.dev.mock_tests:
             [request.getfixturevalue(f) for f in utils.listify(fixtures)]
         if test_name_append:  # pragma: no cover
             env.current_test = f"{env.current_test}_{test_name_append}"
-        result = runner.invoke(app, ["batch", "update",  "devices", *args, "-Y"])
+        result = runner.invoke(app, ["batch", "update", "devices", *args, "-Y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert "202" in result.stdout
@@ -265,14 +258,14 @@ else:  # pragma: no cover
     ]
 )
 def test_batch_move_fail(idx: int, args: tuple[str], pass_condition: Callable):
-    result = runner.invoke(app, ["batch", "move",  *args])
+    result = runner.invoke(app, ["batch", "move", *args])
     capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
     assert result.exit_code == 1
     assert pass_condition(result.stdout)
 
 
 def test_batch_rename_aps_no_args():
-    result = runner.invoke(app, ["batch", "rename",  "aps",])
+    result = runner.invoke(app, ["batch", "rename", "aps",])
     capture_logs(result, "test_batch_rename_aps_no_args", expect_failure=True)
     assert result.exit_code == 1
     assert "Invalid" in result.stdout

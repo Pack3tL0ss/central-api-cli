@@ -111,6 +111,7 @@ class SubCounts:
     def __str__(self):
         return unstyle(self.__rich__())
 
+
 class Subscriptions(BaseModel):
     items: List[Subscription]
     count: int
@@ -174,7 +175,7 @@ class InventoryDevice(BaseModel):
     archived: Optional[bool] = None
     assigned: Optional[bool | None] = Field(None, alias=AliasChoices("assigned", "assignedState"))
     region: Optional[str] = None
-    subscription: list[str] | str| None = None
+    subscription: list[str] | str | None = None
     application: str | None = None
 
     @field_validator("application", mode="before")
@@ -296,6 +297,7 @@ class Inventory(BaseModel):
     @cached_property
     def by_serial(self) -> dict[str, dict[str, Any]]:
         return {s.serial: s.model_dump() for s in self.items}
+
 
 async def get_inventory_with_sub_data(inv_data: Inventory, sub_data: Subscriptions) -> list[dict[str, Any]]:
     return [{"id": devid, **dev_data, **sub_data.get_inv_cache_fields(dev_data["subscription"])} for devid, dev_data in inv_data.by_id.items()]

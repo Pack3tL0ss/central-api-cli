@@ -28,6 +28,8 @@ device_help = f"""Show firmware details for device(s)
 
     :warning:  The APIs used by this command seem to no longer work for Gateways.
     """
+
+
 @app.command(help=device_help)
 def device(
     device: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, autocompletion=common.cache.dev_completion, show_default=False,),
@@ -85,10 +87,13 @@ def device(
         cleaner=cleaner.get_device_firmware_details
     )
 
+
 swarms_help = f"""Show firmware details for swarms
 
     [italic cyan]cencli show {escape('[all|aps|switches|gateways]')}[/] includes the firmware version as well
     """
+
+
 @app.command()
 def swarm(
     device: List[str] = typer.Argument(None, help="Show firmware for the swarm(s) the provided device(s) belongs to", metavar=iden_meta.dev_many, autocompletion=common.cache.dev_ap_completion, show_default=False,),
@@ -139,7 +144,6 @@ def swarm(
             _ = [log.warning(f'Partial Failure {r.url.path} | {r.status} | {r.error}', caption=True) for r in failed]
     else:  # all failed
         resp = batch_resp
-
 
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
@@ -207,6 +211,7 @@ def compliance(
     )
     common.exit(code=0 if any([resp.ok, resp.status == 404]) else 1)
 
+
 @app.command("list")
 def _list(
     device: str = typer.Argument(None, help="Device to get firmware list for", metavar=iden_meta.dev, autocompletion=common.cache.dev_completion, show_default=False,),
@@ -259,7 +264,6 @@ def _list(
         title = f'{title.split(":")[0]} {dev_type.value}'
     elif dev:
         title = f'{title.split("serial")[0]} device [cyan]{dev.name}[/]'
-
 
     resp = api.session.request(api.firmware.get_firmware_version_list, **kwargs)
     caption = None if not resp.ok or verbose or len(resp.output) + 7 <= render.console.height else "\u2139  Showing a single screens worth of the most recent versions, to see full list use [cyan]-v[/] (verbose)"

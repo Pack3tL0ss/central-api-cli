@@ -8,6 +8,7 @@ if TYPE_CHECKING:
     from ...client import Session
     from ...response import Response
 
+
 class TroubleShootingAPI:
     def __init__(self, session: Session):
         self.session = session
@@ -31,7 +32,6 @@ class TroubleShootingAPI:
         }
 
         return await self.session.get(url, params=params)
-
 
     async def start_ts_session(
         self,

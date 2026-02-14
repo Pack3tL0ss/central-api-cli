@@ -18,7 +18,7 @@ def _generate_bssids_from_file(file: Path, out: Path = None, num_bssids: int = 6
     if not file_data:
         common.exit(f"No data found in {file}")
 
-    macs = [Mac(ap["mac"] , bssids=True, num_bssids=6) for ap in file_data]
+    macs = [Mac(ap["mac"], bssids=True, num_bssids=6) for ap in file_data]
     invalid_macs = [(idx, m) for idx, m in enumerate(macs, start=2) if not m.ok]
     if invalid_macs:
         err = "\n".join([f"Mac: {m.orig} on row {row} in invalid." for row, m in invalid_macs])
@@ -84,6 +84,7 @@ def bssids_from_xls(
 
     written = _generate_bssids_from_file(prepped_file, out=bssid_out, num_bssids=num_bssids)
     common.exit(code=0 if written else 1)
+
 
 @app.command()
 def bssids(

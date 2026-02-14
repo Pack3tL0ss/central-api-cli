@@ -4,7 +4,6 @@ from pydantic import BaseModel, Field, ConfigDict, AliasChoices
 from typing import Optional, List
 
 
-
 # WebHook Models WebHookDetails no reliable source for all possible fields.
 class WebHookDetails(BaseModel):
     model_config = ConfigDict(extra="allow")

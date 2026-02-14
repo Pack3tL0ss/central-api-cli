@@ -110,11 +110,13 @@ class ImportMPSKs(RootModel):
     def __len__(self) -> int:
         return len(self.root)
 
+
 # MAC Imports for Cloud Auth
 class ImportMAC(BaseModel):
     model_config = ConfigDict(use_enum_values=True)
     mac: str = Field(alias=AliasChoices("mac", "mac_address", "Mac Address"))
     name: str = Field(alias=AliasChoices("name", "Name", "client_name", "Client Name"))
+
 
 class ImportMACs(RootModel):
     root: List[ImportMAC]
@@ -161,6 +163,7 @@ class BySubId():
     def is_overrun(self) -> bool:
         return len(self.devices) > self.cache_sub.available
 
+
 class _ImportDevice(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, ignored_types=(CacheSub,))
     serial: str = Field(alias=AliasChoices("serial", "SERIAL"))
@@ -192,11 +195,12 @@ class _ImportDevice(BaseModel):
             for i in v:
                 if ":" in i:
                     key, value = i.split(":")
-                    tags[key] =value
+                    tags[key] = value
                 else:
                     tags[i] = ""
 
         return tags or v
+
 
 class ImportDevice(_ImportDevice):
     _cache: Cache = PrivateAttr(None)
@@ -289,6 +293,7 @@ class ImportDevice(_ImportDevice):
     def get_confirm_msg(self, tags_override: bool = False, skipped: bool = False) -> str:
         return asyncio.run(self._get_confirm_msg(tags_override=tags_override, skipped=skipped))
 
+
 class ImportDevices(RootModel):
     root: list[ImportDevice]
 
@@ -346,7 +351,7 @@ class ImportDevices(RootModel):
 
     def ids_by_tags(self) -> Generator[tuple[dict[str, str], list[str]], None, None]:
         ret = {}
-        hash_to_tags  = {}
+        hash_to_tags = {}
         for dev in self.root:
             if dev.tags:
                 tag_hash = hash(str(dev.tags))
@@ -362,7 +367,6 @@ class ImportDevices(RootModel):
 
     def get_inv_objects(self) -> list[CacheInvDevice | None]:
         return [dev._get_inv_object(serials=[d.serial for d in self.root]) for dev in self.root]
-
 
     def serials_by_subscription_id(self, assigned: bool = None) -> dict[str, BySubId]:
         subs: set[CacheSub] = set(self._cache.get_sub_identifier(dev.subscription, silent=True, best_match=True) for dev in self.root if dev.subscription)

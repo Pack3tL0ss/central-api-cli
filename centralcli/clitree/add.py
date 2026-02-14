@@ -45,6 +45,7 @@ class AddGroupArgs(str, Enum):
     group = "group"
     mac = "mac"
 
+
 err_console = Console(stderr=True)
 
 
@@ -158,6 +159,7 @@ def device(
         render.display_results(resp, tablefmt="action", exit_on_fail=True)
         _update_inv_cache_after_dev_add(resp, serial=serial, mac=mac, subscription=subscription)
 
+
 @app.command()
 def group(
     group: str = common.arguments.group,
@@ -243,7 +245,6 @@ def group(
         _msg = f"{_msg}\n\n    [yellow]:information:[/]  [italic]Group will be configured as [bright_green]CNX[/] enabled.  All configuration must be done in CNX ([bright_green]C[/]entral [bright_green]N[/]ext Generation E[bright_green]x[/]perience)"
         _msg = f"{_msg}\n    [dark_orange3]:warning:[/]  [italic]CNX configuration is currently Select Availability, contant your HPE Aruba Networking Account Team for details.[/italic]"
 
-
     econsole.print(f"{_msg}")
 
     render.confirm(yes)
@@ -264,7 +265,7 @@ def group(
         log.warning(f"Group {group} not added to local Cache due to failure response from API.", caption=True)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
     # prep data for cache
-    data={
+    data = {
         'name': group,
         "allowed_types": allowed_types,
         "gw_role": gw_role,
@@ -328,10 +329,9 @@ def wlan(
     render.display_results(resp, tablefmt="action")
 
 
-
 @app.command()
 def site(
-    site_name: str = typer.Argument(... , show_default=False,),
+    site_name: str = typer.Argument(..., show_default=False,),
     address: str = typer.Argument(None, help="street address, (enclose in quotes)", show_default=False,),
     city: str = typer.Argument(None, show_default=False,),
     state: str = typer.Argument(
@@ -387,7 +387,6 @@ def site(
     resp = api.session.request(api.central.create_site, site_name, **address_fields)
     render.display_results(resp, exit_on_fail=True)
     api.session.request(common.cache.update_site_db, data=resp.raw)
-
 
 
 # TODO label can't match any existing label names OR site names.  Add pre-check via cache / cache-update if label already exists with that name ... then error if cache_update confirms it's accurate
@@ -495,7 +494,7 @@ def cert(
     econsole.print("[bright_green]Upload Certificate:")
     _ = [
         econsole.print(f"   {k}: [cyan]{v}[/]") for k, v in kwargs.items()
-        if k not in  ["passphrase", "cert_data"]
+        if k not in ["passphrase", "cert_data"]
     ]
     render.confirm(yes)
     resp = api.session.request(api.configuration.upload_certificate, **kwargs)
@@ -576,6 +575,7 @@ def template(
         add=True
     )
 
+
 def _get_variable_file(var_file: Path) -> dict[str, dict[str, str]]:
     var_data = config.get_file_data(var_file)
 
@@ -625,7 +625,7 @@ def variables(
 def guest(
     portal: str = typer.Argument(..., metavar=iden_meta.portal, autocompletion=common.cache.portal_completion, show_default=False,),
     name: str = typer.Argument(..., show_default=False,),
-    password: str = typer.Option(None, help="Should generally be provided, wrap in single quotes", show_default=False,),  #  hide_input=True, prompt=True, confirmation_prompt=True),
+    password: str = typer.Option(None, help="Should generally be provided, wrap in single quotes", show_default=False,),  # hide_input=True, prompt=True, confirmation_prompt=True),
     company: str = typer.Option(None, help="Company Name", show_default=False,),
     phone: str = typer.Option(None, help="Phone # of guest; Format: +[CountryCode][PhoneNumber]", show_default=False,),
     email: str = typer.Option(None, help="email of guest", show_default=False,),
@@ -689,7 +689,7 @@ def mpsk(
     ssid: str = typer.Argument(..., help="The MPSK SSID to associate the MPSK with", autocompletion=common.cache.mpsk_network_completion, show_default=False,),
     email: str = typer.Argument(..., help=":email:  email address which is used as the name for the MPSK", show_default=False,),
     role: str = typer.Option(..., help="The user role to associate with devices using this PSK", show_default=False,),
-    psk: str = typer.Option(None, help=":warning:  This currently has no impact, PSK is always randomly generated.", show_default=False,  hidden=True,),
+    psk: str = typer.Option(None, help=":warning:  This currently has no impact, PSK is always randomly generated.", show_default=False, hidden=True,),
     #  The PSK/Passphrase, [dim italic]Best to wrap in single quotes.[/] {cli.help_block('Generate Random PSK')}", show_default=False,),
     disable: bool = typer.Option(False, "-D", "--disable", is_flag=True, help="Add MPSK Configuration, but set to [red]disabled[/]", show_default=False,),
     yes: bool = common.options.yes,

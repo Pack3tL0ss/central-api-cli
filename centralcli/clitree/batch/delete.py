@@ -203,6 +203,7 @@ def labels(
     resp = common.batch_delete_labels(data, yes=yes)
     render.display_results(resp, tablefmt="action")
 
+
 @app.callback()
 def callback():
     """Perform batch delete operations"""

@@ -273,6 +273,7 @@ def mpsk(
 
     render.display_results(resp, tablefmt="action", title="Batch Add MPSK", caption=caption, cleaner=cleaner.cloudauth_upload_status)
 
+
 @app.callback()
 def callback():
     """Perform batch add operations."""

@@ -59,7 +59,7 @@ def test_export_redsky_bssids_too_many_filters():
     "idx,fixture,args,expect",
     [
         [1, None, (), None],
-        [2, None, ("-G", "-R", "--show"), "riting"], # -R invalid w/ -G will display warning
+        [2, None, ("-G", "-R", "--show"), "riting"],  # -R invalid w/ -G will display warning
         [3, None, ("--switch",), None],
         [4, None, ("--switch", "-s"), None],
         [5, None, ("--gw", "-s", "--group", test_data["gateway"]["group"]), None],

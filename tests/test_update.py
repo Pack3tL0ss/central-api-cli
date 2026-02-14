@@ -16,18 +16,16 @@ runner = CliRunner()
 
 if config.dev.mock_tests:
     def test_update_ap_same_as_current():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
+        result = runner.invoke(app, ["update", "ap", test_data["mesh_ap"]["serial"], "-a", test_data["mesh_ap"]["altitude"], "-y"])
         capture_logs(result, "test_update_ap_same_as_current")
         assert result.exit_code == 0
         assert "skipped" in result.stdout
 
-
     def test_update_ap_no_change():
-        result = runner.invoke(app, ["update",  "ap", test_data["mesh_ap"]["serial"]])
+        result = runner.invoke(app, ["update", "ap", test_data["mesh_ap"]["serial"]])
         capture_logs(result, "test_upgrade_group_no_change", expect_failure=True)
         assert result.exit_code == 1
         assert "NO CHANGES" in result.stdout.upper()
-
 
     @pytest.mark.parametrize(
         "idx,fixture,args,pass_condition,test_name_append",
@@ -61,13 +59,12 @@ if config.dev.mock_tests:
             env.current_test = f"{env.current_test}_{test_name_append}"
         if fixture:
             [request.getfixturevalue(f) for f in utils.listify(fixture)]
-        result = runner.invoke(app, ["update",  "ap", *args, "-y"])
+        result = runner.invoke(app, ["update", "ap", *args, "-y"])
         capture_logs(result, env.current_test)
         assert result.exit_code == 0
         assert "200" in result.stdout
         if pass_condition:
             assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,fixture,args,pass_condition,test_name_append",
@@ -132,11 +129,10 @@ if config.dev.mock_tests:
             env.current_test = f"{env.current_test}_{test_name_append}"
         if fixture:
             request.getfixturevalue(fixture)
-        result = runner.invoke(app, ["update",  "ap", *args, "-y"])
+        result = runner.invoke(app, ["update", "ap", *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,args",
@@ -147,11 +143,10 @@ if config.dev.mock_tests:
         ]
     )
     def test_update_wlan(idx: int, args: tuple[str]):
-        result = runner.invoke(app, ["update",  "wlan", *args, "-y"])
+        result = runner.invoke(app, ["update", "wlan", *args, "-y"])
         capture_logs(result, f"{env.current_test}{idx}")
         assert result.exit_code == 0
         assert test_data["update_wlan"]["ssid"].upper() in result.stdout.upper()
-
 
     @pytest.mark.parametrize(
         "_,fixture,args,pass_condition,test_name_append",
@@ -167,11 +162,10 @@ if config.dev.mock_tests:
             request.getfixturevalue(fixture)
         if test_name_append:
             env.current_test = f"{env.current_test}_{test_name_append}"
-        result = runner.invoke(app, ["update",  "wlan", *args, "-y"])
+        result = runner.invoke(app, ["update", "wlan", *args, "-y"])
         capture_logs(result, "test_upgrade_wlan_fail", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "fixture,args",
@@ -196,7 +190,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_update_template")
         assert result.exit_code == 0
         assert "200" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,args",
@@ -310,16 +303,15 @@ if config.dev.mock_tests:
         assert "200" in result.stdout
         assert "uccess" in result.stdout
 
-
     @pytest.mark.parametrize(
         "_,args,pass_condition",
         [
-            [1 ,(), lambda r: "⚠" in r],
-            [2 ,("--mb",), lambda r: "⚠" in r],
-            [3 ,("--mo-sw",), lambda r: "⚠" in r],  # --mo-sw without --sw
-            [4 ,("--mo-cx",), lambda r: "⚠" in r],  # --mo-cx without --cx
-            [5 ,("--mo-cx", "--wired-tg"), lambda r: "⚠" in r],  # --mo-cx and tg
-            [6 ,("--aos10", "--mb", "--gw-role", "wlan"), lambda r: "initially added" in r],  # aos10 can only be set when initially adding ap as valid type
+            [1, (), lambda r: "⚠" in r],
+            [2, ("--mb",), lambda r: "⚠" in r],
+            [3, ("--mo-sw",), lambda r: "⚠" in r],  # --mo-sw without --sw
+            [4, ("--mo-cx",), lambda r: "⚠" in r],  # --mo-cx without --cx
+            [5, ("--mo-cx", "--wired-tg"), lambda r: "⚠" in r],  # --mo-cx and tg
+            [6, ("--aos10", "--mb", "--gw-role", "wlan"), lambda r: "initially added" in r],  # aos10 can only be set when initially adding ap as valid type
         ]
     )
     def test_update_group_fail(ensure_cache_group_cloned, _: int, args: tuple[str], pass_condition: Callable):
@@ -336,8 +328,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_update_group_fail", expect_failure=True)
         assert result.exit_code == 1
         assert pass_condition(result.stdout)
-
-
 
     def test_update_gw_group_config(ensure_cache_group_cloned):
         if not gw_group_config_file.is_file():  # pragma: no cover
@@ -359,8 +349,7 @@ if config.dev.mock_tests:
         assert "Global Result:" in result.stdout
         assert "[OK]" in result.stdout
 
-
-    @pytest.mark.parametrize("idx", [1,2])
+    @pytest.mark.parametrize("idx", [1, 2])
     def test_update_site(ensure_cache_site4, idx: int):
         args = ["--new-name", "cencli_test_site40", "-Y"] if idx == 1 else ["-Y"]
         result = runner.invoke(
@@ -380,7 +369,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "API" in result.stdout
 
-
     def test_update_site_no_data(ensure_cache_site4):
         result = runner.invoke(
             app,
@@ -393,7 +381,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_update_site_no_data", expect_failure=True)
         assert result.exit_code == 1
         assert "⚠" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,args",
@@ -420,7 +407,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     def test_update_guest_invalid():
         result = runner.invoke(
             app,
@@ -435,7 +421,6 @@ if config.dev.mock_tests:
         capture_logs(result, "test_update_guest_invalid", expect_failure=True)
         assert result.exit_code == 1
         assert "Invalid" in result.stdout
-
 
     @pytest.mark.parametrize(
         "idx,fixtures,args,test_name_append",
@@ -465,7 +450,6 @@ if config.dev.mock_tests:
         assert result.exit_code == 0
         assert "200" in result.stdout
 
-
     @pytest.mark.parametrize(
         "idx,fixture,args",
         [
@@ -491,15 +475,14 @@ if config.dev.mock_tests:
         assert result.exit_code == 1
         assert "⚠" in result.stdout
 
-
     @pytest.mark.parametrize(
         "idx,fixture,args,expect_failure,pass_condition",
         [
             [1, ["ensure_cache_cert", "ensure_cache_group1"], ("cencli_test", "-G", "cencli_test_group1",), False, lambda r: "200" in r],
             [2, "ensure_cache_cert", ("cencli_test",), True, lambda r: "⚠" in r],  # no group
-            [3, ["ensure_cache_cert", "ensure_cache_group4"], ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r], # invalid group (no aps/gws)
-            [4, ["ensure_cache_cert_same_as_existing", "ensure_cache_group1"], ("cencli_test-existing-cert", "-G", "cencli_test_group1",), True, lambda r: "skipped" in r], # cert same as existing
-            [5, ["ensure_cache_cert_expired", "ensure_cache_group1"], ("cencli-test-expired-cert", "-G", "cencli_test_group1",), True, lambda r: "xpired" in r], # cert expired
+            [3, ["ensure_cache_cert", "ensure_cache_group4"], ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r],  # invalid group (no aps/gws)
+            [4, ["ensure_cache_cert_same_as_existing", "ensure_cache_group1"], ("cencli_test-existing-cert", "-G", "cencli_test_group1",), True, lambda r: "skipped" in r],  # cert same as existing
+            [5, ["ensure_cache_cert_expired", "ensure_cache_group1"], ("cencli-test-expired-cert", "-G", "cencli_test_group1",), True, lambda r: "xpired" in r],  # cert expired
             [6, ["ensure_cache_cert"], ("cencli_test", "all",), False, lambda r: "200" in r],
         ]
     )
@@ -518,7 +501,6 @@ if config.dev.mock_tests:
         capture_logs(result, f"{env.current_test}{idx}", expect_failure=expect_failure)
         assert result.exit_code == (0 if not expect_failure else 1)
         assert pass_condition(result.stdout)
-
 
     @pytest.mark.parametrize(
         "idx,fixture,args,expect_failure,pass_condition",

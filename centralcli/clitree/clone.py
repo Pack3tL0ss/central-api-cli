@@ -45,7 +45,6 @@ def group(
     api.session.request(common.cache.update_group_db, new_data)
 
 
-
 @app.callback()
 def callback():
     """Clone Aruba Central Groups"""

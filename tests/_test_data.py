@@ -40,7 +40,7 @@ caas_commands_invalid = """invalid:
   - invalid2
 """
 
-caas_commands_gateways_data  = """gateways:
+caas_commands_gateways_data = """gateways:
   - mock-gw
 """
 
@@ -61,6 +61,7 @@ caas_file_data = {
     "gateways": caas_commands_gateways_data
 }
 
+
 def get_test_data() -> dict[str, Any]:
     test_file = Path(__file__).parent / 'test_data.yaml'
     if not test_file.is_file():
@@ -75,12 +76,14 @@ def setup_cert_file(cert_path: str, sfx: str = "pem") -> Path:
 
     return test_cert_file
 
+
 def _csv_dump(data: list[dict[str, Any]]) -> str:
     all_keys = list(set([key for d in data for key in d.keys()]))
     data = [{k: d.get(k) for k in all_keys} for d in data]
 
     data = utils.strip_no_value(data)  # Remove columns where all rows have no value
     return "\n".join([",".join(k for k in data[0].keys()), *[",".join(str(v) for v in inner.values()) for inner in data]])
+
 
 def _get_dump_func(sfx: str) -> Callable:
     dump_func = {
@@ -90,6 +93,7 @@ def _get_dump_func(sfx: str) -> Callable:
         "txt": lambda data: "serial\n" + "\n".join([inner["serial"] for inner in data])  # only used for devices as txt file with serial per line
     }
     return dump_func.get(sfx, json.dumps)
+
 
 def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", invalid: bool = False, duplicate: bool = False) -> Path:
     data = test_data["batch"]
@@ -106,7 +110,6 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", i
         data = common._get_import_file(seed_file, import_type=import_type)
     else:
         data = data
-
 
     if invalid:
         if import_type == "devices":
@@ -132,6 +135,7 @@ def setup_batch_import_file(test_data: dict | str, import_type: str = "sites", i
 
     return test_batch_file
 
+
 def _create_test_ap_import_file(test_data: dict[str, str]):
     test_batch_file = TEST_FILE_DIR / "test_runner_subscriptions_test_ap.json"
     _x_ = "{\n"
@@ -146,6 +150,7 @@ def _create_test_ap_import_file(test_data: dict[str, str]):
 
     return test_batch_file
 
+
 def _create_banner_update_import_devices(test_data: dict[str, str]):
     test_batch_file = TEST_FILE_DIR / "test_runner_device_banner_ap_import_file.csv"
     header = ",".join(test_data.keys())
@@ -154,6 +159,7 @@ def _create_banner_update_import_devices(test_data: dict[str, str]):
 
     return test_batch_file
 
+
 def _create_banner_update_import_groups():
     test_batch_file = TEST_FILE_DIR / "test_runner_group_banner_ap_import_file.csv"
     header = "name,"
@@ -161,6 +167,7 @@ def _create_banner_update_import_groups():
     test_batch_file.write_text(f"{header}\n{values},\n")
 
     return test_batch_file
+
 
 def _create_banner_file(template: bool = True):
     if template:
@@ -215,6 +222,7 @@ def setup_j2_file() -> Path:
     )
     return test_j2_file
 
+
 def create_var_file(seed_file, file_type: str = "json", flat: bool = False):
     file_data = config.get_file_data(Path(seed_file))
     out_file = TEST_FILE_DIR / f"test_runner_variables{'_flat' if flat else ''}.{file_type}"
@@ -230,6 +238,7 @@ def create_var_file(seed_file, file_type: str = "json", flat: bool = False):
         out_file.write_text(json.dumps(file_data, indent=2, sort_keys=False))
     return out_file
 
+
 def _create_not_exist_site_file(file: Path, none_exists: bool = False) -> Path:
     site_data = json.loads(file.read_text())
     if not none_exists:
@@ -242,8 +251,10 @@ def _create_not_exist_site_file(file: Path, none_exists: bool = False) -> Path:
     out_file.write_text(json.dumps(site_data, indent=4))
     return out_file
 
+
 def _create_not_exist_device_file(file: Path, none_exists: bool = False) -> Path:
     dev_data = json.loads(file.read_text())
+
     def not_exist_dict(inner: dict) -> dict:
         for key in ["serial", "mac", "name"]:
             if key in inner:
@@ -265,6 +276,7 @@ def _create_not_exist_device_file(file: Path, none_exists: bool = False) -> Path
     out_file.write_text(json.dumps(dev_data, indent=4))
     return out_file
 
+
 def _create_bssid_dir_and_files(xlsx: bool = False) -> Path:
     file = TEST_FILE_DIR / "test_gen_bssid" / f"test_runner_gen_bssids{'' if not xlsx else '_xlsx'}.{'csv' if not xlsx else 'xlsx'}"
     seed_file = Path(test_data["batch"][f"generate_bssids{'' if not xlsx else '_xlsx'}"])
@@ -276,12 +288,14 @@ def _create_bssid_dir_and_files(xlsx: bool = False) -> Path:
 
     return file
 
+
 def _create_test_file_from_source_file(source_file: StrOrPath, dest_file_name: str = None) -> Path:
     source_file = Path(source_file)
     dest_file_name = dest_file_name or f'test_runner_{source_file.name.removeprefix("test_runner_")}'
     dest_file = TEST_FILE_DIR / dest_file_name
 
     return shutil.copy(source_file, dest_file)
+
 
 test_data: dict[str, Any] = get_test_data()
 templates = test_data["test_files"]["templates"]

@@ -9,10 +9,10 @@ if TYPE_CHECKING:
     from ...client import Session
     from ...response import Response
 
+
 class FirmwareAPI:
     def __init__(self, session: Session):
         self.session = session
-
 
     async def get_firmware_version_list(
         self,
@@ -226,7 +226,6 @@ class FirmwareAPI:
         url = "/firmware/v2/upgrade/compliance_version"
         device_type = constants.lib_to_api(device_type, 'firmware')
 
-
         json_data = {
             'device_type': device_type,
             'group': group,
@@ -312,7 +311,6 @@ class FirmwareAPI:
         }
 
         return await self.session.get(url, params=params)
-
 
     async def get_swarm_firmware_details(
         self,

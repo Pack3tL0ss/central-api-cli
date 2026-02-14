@@ -150,7 +150,7 @@ class MonitoringAPI:
             if client_type and client_type != "wireless":
                 raise ValueError(f"Invalid combination of filters.  WLAN only filter provided which conflicts with client type {client_type}")
             client_type = "wireless"
-        if [v for v in  wired_only_params.values() if v is not None]:
+        if [v for v in wired_only_params.values() if v is not None]:
             if client_type and client_type != "wired":
                 raise ValueError(f"Invalid combination of filters.  WIRED only filter provided which conflicts with client type {client_type}")
             client_type = "wired"
@@ -260,7 +260,6 @@ class MonitoringAPI:
             log.error(f"Partial failure.  Wired clients not shown due to error ({wired_resp.status}:{wired_resp.error}), see logs.", caption=True)
 
         return resp
-
 
     async def get_wireless_clients(
         self,
@@ -553,7 +552,7 @@ class MonitoringAPI:
             "site": site,
             'macaddr': mac,
             'cluster_id': cluster_id,
-            'calculate_total': "True",  #  For pagination
+            'calculate_total': "True",  # For pagination
             'sort': sort,
             "offset": offset,
             "limit": limit,
@@ -611,7 +610,7 @@ class MonitoringAPI:
             CombinedResponse: CombinedResponse object.
         """
 
-        dev_types = ["aps", "switches", "gateways"]  if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
+        dev_types = ["aps", "switches", "gateways"] if dev_types is None else [constants.lib_to_api(dev_type, "monitoring") for dev_type in dev_types]
 
         # We always get resource details for switches when cache=True as we need it for the switch_role (standalone/conductor/secondary/member) to store in the cache.
         # We used the switch with an IP to determine which is the conductor in the past, but found scenarios where no IP was showing in central for an extended period of time.
@@ -987,7 +986,7 @@ class MonitoringAPI:
             'bssid': bssid,
             'device_mac': device_mac,
             'hostname': hostname,
-            'device_type':  None if not device_type else constants.lib_to_api(device_type, "event"),
+            'device_type': None if not device_type else constants.lib_to_api(device_type, "event"),
             'sort': sort,
             'site': site,
             'serial': serial,
@@ -1164,7 +1163,6 @@ class MonitoringAPI:
 
         return await self.session.get(url, params=params)
 
-
     async def get_gw_uplinks_details(
         self,
         serial: str,
@@ -1213,7 +1211,6 @@ class MonitoringAPI:
         """
         url = f"/monitoring/v1/gateways/{serial}/uplinks/bandwidth_usage"
         from_time, to_time = utils.parse_time_options(from_time, to_time)
-
 
         params = {
             'uplink_id': uplink_id,

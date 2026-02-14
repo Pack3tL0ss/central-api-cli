@@ -109,6 +109,7 @@ information from the upstream switch (via LLDP) and from the AP itself.[/]
         else:
             return fstr
 
+
 # TODO use get_topo_for_site similar to show aps -n  single call can get neigbor detail for all aps
 def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no cover requires tty
     """Updates provided dict of APs keyed by AP serial number with lldp neighbor info
@@ -129,7 +130,6 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no co
         topo_aps = {dev["serial"]: dev for r in topo_resp if r.ok for dev in r.output["devices"] if dev["role"] == "IAP"}
         ap_connections = {edge["toIf"]["serial"]: edge for r in topo_resp if r.ok for edge in r.output["edges"] if edge["toIf"]["serial"] in topo_aps}
         out = {serial: {**ap_data, "neighborHostName": ap_connections[serial]["fromIf"]["deviceName"], "remotePort": ap_connections[serial]["fromIf"]["name"]} for serial, ap_data in ap_dict.items() if serial in ap_connections}
-
 
     # Any APs that lack a site or lack upstream device info from topo API ... need to fetch neighbor per AP
     lldp_reqs = [br(api.topo.get_ap_lldp_neighbor, serial) for serial in ap_dict if serial not in out]
@@ -153,6 +153,7 @@ def _get_lldp_dict(ap_dict: dict[str, dict[str, Any]]) -> dict:  # pragma: no co
         out = {**out, **by_ap_dict}
 
     return out
+
 
 def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, space: str = None, **kwargs) -> list[dict[str, str]]:  # pragma: no cover requires tty
     need_lldp = False if "%h" not in fstr and "%p" not in fstr else True
@@ -209,7 +210,6 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
         _warn = f"{_warn} 1 to get the aps current settings (all settings need to be provided during the update, only the name changes).\n"
         _warn = f"{_warn} 1 to Update the settings / rename the AP.\n"
         _warn = f"{_warn}\n Current daily quota: [bright_green]{resp.rl.remain_day}[/] calls remaining\n"
-
 
         print(_warn)
         if resp.rl.remain_day < num_calls:
@@ -332,12 +332,11 @@ def get_lldp_names(fstr: str, default_only: bool = False, lower: bool = False, s
     return data
 
 
-
 # TODO finish extraction of uplink commands from commands sent to gw
 # so they can be sent in 2nd request as gw always errors interface doesn't
 # exist yet.
 def _extract_uplink_commands(commands: list[str]) -> tuple[list[str], list[str]]:  # pragma: no cover
-    _start=None
+    _start = None
     uplk_cmds = []
     for idx, c in enumerate(commands):
         if c.lower().startswith("uplink wired"):
@@ -368,7 +367,6 @@ def batch_deploy(import_file: Path, yes: bool = False) -> list[Response]:
     if "devices" in data:
         resp = common.batch_add_devices(import_file, yes=bool(yes))
         render.display_results(resp, tablefmt="action")
-
 
 
 @app.command()
@@ -449,7 +447,7 @@ def verify(
 
         if "subscription" in file_all_keys:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
-            if file_by_serial[s].get("subscription", "null") != (central_by_serial[s]["subscription"] or "null"): # .replace("-", "_").replace(" ", "_")
+            if file_by_serial[s].get("subscription", "null") != (central_by_serial[s]["subscription"] or "null"):  # .replace("-", "_").replace(" ", "_")
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s].get('subscription', 'null')}[/] from import != [bright_green]{central_by_serial[s]['subscription'] or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
                 validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['subscription'] or '[red]No Subscription[/]'}) Assigned.  Matches import file."]
@@ -506,6 +504,7 @@ def verify(
 
     if outfile:
         render.write_file(outfile, typer.unstyle(outdata))
+
 
 @app.command(short_help="Batch Deploy groups, sites, devices... from file", hidden=True)
 def deploy(
@@ -657,7 +656,7 @@ def glp_subscribe(
     render.display_results(resp, tablefmt="action")
 
 
-@app.command()  #TOGLP  Need GLP version
+@app.command()  # TOGLP  Need GLP version
 def unsubscribe(
     import_file: Path = common.arguments.import_file,
     never_connected: bool = typer.Option(False, "-N", "--never-connected", help="Remove subscriptions from any devices in inventory that have never connected to Central", show_default=False),
@@ -805,12 +804,11 @@ def rename(
     render.confirm(yes, prompt="\nProceed with AP rename?")
     resp = api.session.batch_request(calls)
 
-
     render.display_results(resp, tablefmt="action")
     # update dev cache
     if import_file:
         cache_data = [common.cache.get_dev_identifier(r.output) for r in resp if r.ok and r.status != 299]  # responds with str serial number
-        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]}  for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
+        cache_data = [{**dev, "name": data[dev["serial"]]["hostname"]} for dev in cache_data]           # 299 is default, indicates no call was performed, this is returned when the current data matches what's already set for the dev
         api.session.request(common.cache.update_dev_db, data=cache_data)
 
 
@@ -853,7 +851,7 @@ def move(
         print(examples.move_devices)
         return
 
-    import_file = [f for f in import_file if not str(f).startswith("device")] # allow unnecessary 'devices' sub-command
+    import_file = [f for f in import_file if not str(f).startswith("device")]  # allow unnecessary 'devices' sub-command
 
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch move [OPTIONS] [IMPORT_FILE]"))

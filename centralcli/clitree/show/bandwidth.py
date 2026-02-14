@@ -94,7 +94,6 @@ def ap(
     if swarm and dev and dev.is_aos10:
         common.exit(f"[cyan]--swarm[/] is only valid for [bright_green]AOS8[/] IAP clusters [cyan]{dev.name}[/] is an [bright_red]AOS10[/] AP.")
 
-
     params = ["serial", "group", "site", "label", "swarm_id", "band", "network"]
     args = [
         dev if dev is None else dev.serial,
@@ -159,7 +158,6 @@ def switch(
     dev = common.cache.get_dev_identifier(switch, dev_type="switch")
     port = None if port == "All Ports" else port
     start, end = common.verify_time_range(start, end=end, past=past)
-
 
     title = f"Bandwidth Usage [cyan]{dev.name}[/]"
     if uplink:
@@ -262,7 +260,6 @@ def client(
 
     if dev and title == "Bandwidth Usage":
         title = f"{title} for Clients connected to {dev.summary_text}"
-
 
     resp = api.session.request(api.monitoring.get_clients_bandwidth_usage, **kwargs, from_time=start, to_time=end)
 

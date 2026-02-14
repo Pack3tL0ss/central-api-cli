@@ -43,10 +43,12 @@ def init_logs():
 
     return log
 
+
 DEFAULT_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/json"
 }
+
 
 class HookResponse(BaseModel):
     result: str
@@ -54,7 +56,7 @@ class HookResponse(BaseModel):
 
     class Config:
         schema_extra = {
-            "example": {"result": "OK", "updated": True,}
+            "example": {"result": "OK", "updated": True, }
         }
 
 
@@ -73,6 +75,8 @@ class HookResponseTokenFail(BaseModel):
         schema_extra = {
             "example": {"result": "Unauthorized", "updated": False}
         }
+
+
 class BranchResponse(BaseModel):
     id: str
     ok: bool
@@ -127,6 +131,7 @@ app = FastAPI(
     version="1.0",
 )
 
+
 def _default_response(serial: str) -> dict:
     return {
             "id": f"{serial}_init",
@@ -137,6 +142,7 @@ def _default_response(serial: str) -> dict:
             "text": "No alerts for this gateway.",
             "timestamp": int(dt.now().timestamp())
         }
+
 
 def _hook_response(data: dict) -> dict:
     return {
@@ -232,7 +238,6 @@ class Hook2Snow:
             self.created += [res_model.u_servicenow_number]
             _ = await cache.update_hook_data_db(res_model.model_dump())  # TODO should we strip_none here?
 
-
     async def verify_header_auth(self, data: dict, svc: str, sig: str, ts: str, del_id: str):
         """
         This method ensures integrity and authenticity of the data
@@ -259,7 +264,6 @@ class Hook2Snow:
         if sig == signature:
             return True
         return False
-
 
     async def snow_token_refresh(self, refresh_token: str = None) -> bool:
 
@@ -358,7 +362,7 @@ class Hook2Snow:
 
         return {
                 "result": "ok",
-                "updated": True  #  if updated else False
+                "updated": True  # if updated else False
             }
 
     async def startup(self) -> List[WebHook] | None:

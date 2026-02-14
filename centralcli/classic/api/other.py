@@ -79,8 +79,6 @@ class OtherAPI:
 
         return await self.session.get(url, params={} if log_id else params, count=count)
 
-
-
     async def get_branch_health(
         self,
         name: str = None,
@@ -114,8 +112,6 @@ class OtherAPI:
         }
 
         return await self.session.get(url, params=params)
-
-
 
     async def validate_wss_key(
         self,

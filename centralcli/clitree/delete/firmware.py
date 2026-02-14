@@ -10,6 +10,7 @@ from centralcli.constants import DevTypes
 
 app = typer.Typer()
 
+
 @app.command()
 def compliance(
     device_type: DevTypes = typer.Argument(..., show_default=False,),

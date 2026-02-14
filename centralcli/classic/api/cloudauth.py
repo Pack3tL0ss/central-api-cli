@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
     from ...client import Session
 
+
 @overload
 def parse_time_window(time_window: CloudAuthTimeWindow | TimeRange) -> str: ...  # pragma: no cover
 
@@ -323,7 +324,6 @@ class CloudAuthAPI:
 
         return await self.session.get(url, params=params)
 
-
     async def get_authentications(
         self,
         from_time: str = None,
@@ -363,7 +363,6 @@ class CloudAuthAPI:
         }
 
         return await self.session.get(url, params=params)
-
 
     async def get_sessions(
         self,

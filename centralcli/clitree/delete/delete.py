@@ -23,6 +23,7 @@ app.add_typer(firmware.app, name="firmware")
 
 api = api_clients.classic
 
+
 @app.command()
 def cert(
     name: str = typer.Argument(..., autocompletion=common.cache.cert_completion, show_default=False,),
@@ -111,7 +112,6 @@ def portal(
     # cache update
     doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
     api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
-
 
 
 @app.command()
@@ -289,7 +289,6 @@ def guest(
     resp = api.session.request(api.guest.delete_guest, portal_id=portal.id, guest_id=guest.id)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
     _ = api.session.request(common.cache.update_guest_db, guest.doc_id, remove=True)
-
 
 
 @app.callback()

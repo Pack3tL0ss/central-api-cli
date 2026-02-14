@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from ...client import Session
     from ...response import Response
 
+
 class PlatformAPI:
     def __init__(self, session: Session):
         self.session = session

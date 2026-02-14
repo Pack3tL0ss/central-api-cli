@@ -82,6 +82,7 @@ class TTY:
         self._rows, self._cols = self.get_tty_size()
         return self._cols
 
+
 tty = TTY()
 
 
@@ -108,7 +109,7 @@ class Spinner(Status):
         speed: float = 1.0,
         refresh_per_second: float = 12.5,
     ):
-        if not hasattr(self, '_initialized'): # Prevent re-initialization
+        if not hasattr(self, '_initialized'):  # Prevent re-initialization
             super().__init__(status, console=console, spinner=spinner, spinner_style=spinner_style, speed=speed, refresh_per_second=refresh_per_second)
         else:
             self._instance.update(status, spinner=spinner, spinner_style=spinner_style, speed=speed)
@@ -154,6 +155,7 @@ class Spinner(Status):
         exc_tb: Optional[TracebackType],
     ) -> None:
         self.stop()
+
 
 # TODO Partial support for sending rich.Text needs to cleaned up and make all output returned to display_results rich.text, use console.print vs typer.echo in display_results
 # Output class can likely be elliminated and return rich.Text from render.output
@@ -269,17 +271,19 @@ class Output():
         except TypeError:
             return self._file
 
+
 def _batch_invalid_msg(usage: str, provide: str = None) -> str:  # referenced in the batch cli modules
-        usage = escape(usage)
-        provide = provide or "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]"
-        _msg = [
-            "Invalid combination of arguments / options.",
-            provide,
-            "",
-            f"[yellow]Usage[/]: {usage}",
-            f"Use [cyan]{usage.split(' [')[0].split('-')[0].rstrip()} --help[/] for help.",
-        ]
-        return "\n".join(_msg)
+    usage = escape(usage)
+    provide = provide or "Provide [bright_green]IMPORT_FILE[/] or [cyan]--example[/]"
+    _msg = [
+        "Invalid combination of arguments / options.",
+        provide,
+        "",
+        f"[yellow]Usage[/]: {usage}",
+        f"Use [cyan]{usage.split(' [')[0].split('-')[0].rstrip()} --help[/] for help.",
+    ]
+    return "\n".join(_msg)
+
 
 def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this function is mocked
     """Output data to file
@@ -332,6 +336,7 @@ def do_pretty(key: str, value: str) -> str:
     color = "green" if value.lower() == "up" else "red"
     value = "" if value is None else value  # testing error on cop
     return value if key != "status" else f'[b {color}]{value.title()}[/b {color}]'
+
 
 def _do_subtables(data: List[dict], *, tablefmt: str = "rich") -> List[dict]:
     """Parse data and format any values that are dict, list, tuple
@@ -386,6 +391,7 @@ def _do_subtables(data: List[dict], *, tablefmt: str = "rich") -> List[dict]:
         out.append(inner_dict)
     return out
 
+
 def tabulate_output(outdata: List[dict]) -> tuple:
     customer_id = customer_name = ""
     outdata = utils.listify(outdata)
@@ -412,6 +418,7 @@ def tabulate_output(outdata: List[dict]) -> tuple:
         raw_data = table_data = outdata
 
     return raw_data, table_data
+
 
 def build_rich_table_rows(data: List[Dict[str, Text | str]], table: Table, group_by: str) -> Table:
     if not group_by:
@@ -638,6 +645,7 @@ def output(
                 return False if value == "❌" else True
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
+
         def normalize_key_for_csv(key: str) -> str:
             if not isinstance(key, str):
                 return key
@@ -691,7 +699,7 @@ def output(
                                 )
 
     if isinstance(raw_data, str):  # HACK replace first pass is to line up cols but if table is tighter second pass will swap them regardless
-        raw_data = raw_data.replace('✅  ', 'True').replace('❌   ', 'False').replace('✅', 'True').replace('❌', 'False')   #  TODO handle this better
+        raw_data = raw_data.replace('✅  ', 'True').replace('❌   ', 'False').replace('✅', 'True').replace('❌', 'False')   # TODO handle this better
 
     return Output(rawdata=raw_data, prettydata=table_data, config=config, tablefmt=tablefmt)
 
@@ -711,6 +719,7 @@ def ask(
     Handles KeyBoardInterrupt, EoFError, and exits if user inputs "abort".
     """
     con = rich_console or econsole
+
     def abort():
         con.print("\n[dark_orange3]:warning:[/]  [red]Aborted[/]", emoji=True)
         sys.exit(1)  # Needs to be sys.exit not raise Typer.Exit as that causes an issue when catching KeyboardInterrupt
@@ -747,10 +756,12 @@ def confirm(yes: bool = False, *, prompt: str = "\nProceed?", abort: bool = True
 
     return result
 
+
 def pause(prompt: str = "Press Enter to Continue", *, rich_console: Console = None) -> None:  # pragma: no cover
     rich_console = rich_console or econsole
     ask = Prompt(prompt, console=rich_console, password=True, show_default=False, show_choices=False)
     _ = ask()
+
 
 def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     """Accept text or list of text with rich markups and return final colorized text with ascii control chars
@@ -774,6 +785,7 @@ def rich_capture(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     out = console.end_capture()
     return out if len(out.splitlines()) > 1 else out.rstrip()
 
+
 def unstyle(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     """Accept text or list of text.  Removes any markups or ascii color codes from text
 
@@ -791,6 +803,7 @@ def unstyle(text: str | List[str], emoji: bool = False, **kwargs) -> str:
     with console.capture() as cap:
         console.print(text, end="")
     return cap.get()
+
 
 def help_block(default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
     """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.

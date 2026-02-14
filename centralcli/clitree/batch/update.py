@@ -40,7 +40,6 @@ def aps(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch update aps [OPTIONS] [IMPORT_FILE]"))
 
-
     data = common._get_import_file(import_file, "devices")
 
     if banner_file:
@@ -153,6 +152,7 @@ def ap_banner(
     common.batch_update_ap_banner(data, banner_file, group_level=group_level, yes=yes)
     if is_tmp_file:  # pragma: no cover
         banner_file.unlink(missing_ok=True)
+
 
 @app.command()
 def variables(

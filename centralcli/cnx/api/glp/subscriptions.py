@@ -28,7 +28,6 @@ class GreenLakeSubscriptionsAPI:
             query += [f'tier eq \'{sub_type.value.replace("-", "_").upper()}\'']
         query = None if not query else " and ".join(query)
 
-
         params = {
             "filter": query,
             "offset": offset,

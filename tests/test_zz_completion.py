@@ -16,7 +16,7 @@ from . import clean_mac, test_data
 
 runner = CliRunner()
 ctx = Context(Command("cencli reset"), info_name="reset", resilient_parsing=True)
-ctx.params={'what': 'overlay', 'device': None, 'yes': None, 'debug': None, 'default': None, 'account': None}
+ctx.params = {'what': 'overlay', 'device': None, 'yes': None, 'debug': None, 'default': None, 'account': None}
 
 
 # TODO most are hard-coded need to grab from test_data or dynamically from cache
@@ -48,10 +48,12 @@ def test_dev_ap_gw_completion(expected: str, args: list[str]):
         assert len(result) == 1
         assert all([m.lower().startswith(expected[0:-2].lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_group_completion(incomplete: str = ""):
     result = [c for c in cache.group_completion(incomplete)]
     assert len(result) > 0
     assert all(incomplete in c if isinstance(c, str) else c[0] for c in result)
+
 
 def test_group_completion_case_insensitive(incomplete: str = "w"):
     result = [c for c in cache.group_completion(incomplete)]
@@ -228,6 +230,7 @@ def test_client_completion(incomplete: str, params: dict[str, str | bool], expec
     assert len(result) > 0
     assert clean_mac(expected).lower().startswith(clean_mac(incomplete).lower().strip('"\''))
 
+
 @pytest.mark.parametrize("expected,params", [(test_data["ap"]["mac"], {"wireless": None, "wired": None}), (test_data["ap"]["name"], {"wireless": True, "wired": None}), (test_data["switch"]["serial"], {"wireless": None, "wired": True})])
 def test_dev_client_completion(expected: str, params: dict[str, bool | None]):
     ctx = Context(Command("cencli blah blah"), info_name="cencli some command", resilient_parsing=True)
@@ -242,30 +245,36 @@ def test_event_log_completion_pytest(incomplete: str = "pyte"):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_event_log_completion_empty_string(incomplete: str = ""):
     result = list(cache.event_log_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 def test_audit_log_completion(incomplete: str = "1"):
     result = list(cache.audit_log_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([str(m).lower().startswith(incomplete.lower()) for m in list(map(str, result))])
 
+
 def test_audit_log_completion_empty_string(incomplete: str = ""):
     result = list(cache.audit_log_completion(incomplete=incomplete))
     assert len(result) > 0
     assert all([str(m).lower().startswith(incomplete.lower()) for m in list(map(str, result))])
+
 
 def test_portal_completion(incomplete: str = test_data["portal"]["name"]):
     result = list(cache.portal_completion(ctx=ctx, incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_portal_completion_empty_string(incomplete: str = ""):
     result = list(cache.portal_completion(ctx=ctx, incomplete=incomplete))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 @pytest.mark.parametrize(
         "incomplete,args", [
@@ -278,10 +287,12 @@ def test_remove_completion_site(incomplete: str, args: tuple[str]):
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 def test_remove_completion_dev(incomplete: str = test_data["ap"]["site"]):
     result = list(cache.remove_completion(ctx=ctx, incomplete=incomplete, args=("site",)))
     assert len(result) > 0
     assert all([m.lower().startswith(incomplete.lower()) for m in [c if isinstance(c, str) else c[0] for c in result]])
+
 
 @pytest.mark.parametrize("incomplete", ["cencli-test_label1", "110"])
 def test_label_completion(ensure_cache_label1, incomplete: str):
@@ -416,6 +427,7 @@ def test_dev_kwarg_completion(ensure_cache_group1, ensure_cache_site1, idx: int,
     assert len(result) > 0
     assert all([m.lower().replace("-", "_").startswith(incomplete.lower().replace("-", "_")) for m in [c if isinstance(c, str) else c[0] for c in result]])
 
+
 @pytest.mark.parametrize(
     "workspace,args,default,pass_condition",
     [
@@ -435,6 +447,7 @@ def test_workspace_name_callback(workspace: str, args: tuple[str], default: bool
         result = common.workspace_name_callback(ctx, workspace, default=default)
     output = cap.get()
     assert pass_condition(result, output)
+
 
 @pytest.mark.parametrize(
     "query_str,swack,swack_only,pass_condition",

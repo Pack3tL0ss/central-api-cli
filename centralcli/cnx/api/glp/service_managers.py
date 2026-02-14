@@ -28,7 +28,6 @@ class GreenLakeServiceManagerAPI:
             query += [f"status eq '{status_word}'"]
         query = None if not query else " and ".join(query)
 
-
         params = {
             "filter": query,
             "offset": offset,
@@ -48,7 +47,6 @@ class GreenLakeServiceManagerAPI:
         if msp_supported is not None:
             query += [f"mspsupported eq {str(msp_supported).lower()}"]  # Not tested
         query = None if not query else " and ".join(query)
-
 
         params = {
             "filter": query,
@@ -77,7 +75,6 @@ class GreenLakeServiceManagerAPI:
             query += [f"status eq '{status_word}'"]
 
         query = None if not query else " and ".join(query)
-
 
         params = {
             "filter": query,

@@ -14,6 +14,7 @@ from .central.monitoring import MonitoringAPI
 if TYPE_CHECKING:
     from ...typedefs import StrOrURL
 
+
 class GreenLakeAPI:
     _by_workspace: dict[str, GreenLakeAPI] = {}
 
@@ -47,6 +48,7 @@ class GreenLakeAPI:
     @cached_property
     def service_managers(self) -> GreenLakeServiceManagerAPI:
         return GreenLakeServiceManagerAPI(self.session)
+
 
 class CentralAPI:
     _by_workspace: dict[str, CentralAPI] = {}

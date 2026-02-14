@@ -70,7 +70,6 @@ def bulk_edit(
             render.display_results(resp, cleaner=cleaner.parse_caas_response)
 
 
-
 # FIXME
 @app.command(hidden=True)
 def add_vlan(
@@ -139,8 +138,6 @@ def import_vlan(
     render.econsole.print(_msg)
     render.confirm(yes)
     add_vlan(*args, **kwargs)
-
-
 
 
 @app.command("batch")
@@ -353,6 +350,7 @@ def send_cmds(
     ]
     batch_res = api.session.batch_request(_reqs)
     render.display_results(batch_res, cleaner=cleaner.parse_caas_response)
+
 
 @app.callback()
 def callback():

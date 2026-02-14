@@ -166,6 +166,7 @@ def sessions(
         exit_on_fail=True
     )
 
+
 @app.callback()
 def callback():
     """

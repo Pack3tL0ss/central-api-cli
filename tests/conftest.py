@@ -103,12 +103,13 @@ BATCH_DEVICES = [
     }
 ]
 
+
 def pytest_configure(config):
     """
     Installs the rich traceback handler for all uncaught exceptions during pytest runs.
     """
     install(show_locals=True, suppress=[
-        "pytester", # Suppress internal pytest frames
+        "pytester",  # Suppress internal pytest frames
         "pytest",   # Suppress pytest frames
         # Add other modules to suppress if needed, e.g., "my_library"
     ])
@@ -125,7 +126,6 @@ def stash_cache_file():  # pragma: no cover
         shutil.copy(pytest_cache, config.cache_file)
 
 
-
 def restore_cache_file():  # pragma: no cover
     if cache_bak_file.exists():
         log.info(f"Stashing cache from mock test run for later use {cache_bak_file.name.removesuffix('.bak')}")
@@ -134,8 +134,8 @@ def restore_cache_file():  # pragma: no cover
         log.info(f"Restoring real cache from {cache_bak_file} after mock test run")
         cache_bak_file.rename(config.cache_file.parent / config.cache_file.name)
 
-
         return config.cache_file.exists()
+
 
 def _cleanup_mock_cache():
     dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
@@ -196,8 +196,6 @@ def pytest_sessionfinish(session: pytest.Session):
         )
 
 
-
-
 def cleanup_test_items():  # pragma: no cover
     try:
         _cleanup_test_groups()
@@ -209,6 +207,7 @@ def cleanup_test_items():  # pragma: no cover
 
 def do_nothing():
     ...
+
 
 def cleanup_import_files():
     for file in TEST_FILE_DIR.iterdir():
@@ -242,6 +241,7 @@ def teardown():
         return cleanup_test_items()  # pragma: no cover
 
 # -- FIXTURES --
+
 
 @pytest.fixture(scope='session', autouse=True)
 def session_setup_teardown():
@@ -472,7 +472,7 @@ def ensure_no_cache():
 def ensure_inv_cache_batch_devices():
     if config.dev.mock_tests:
         devices = BATCH_DEVICES
-        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev in devices}
         if not cache_devs == devices:
             assert asyncio.run(cache.update_inv_db(data=devices))
     yield
@@ -483,12 +483,12 @@ def ensure_no_inv_dev_cache_batch_devices():
     if config.dev.mock_tests:
         devices = BATCH_DEVICES
         cache_inv_devs_by_serial = {
-            dev["serial"]: cache.inventory_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.inventory_by_serial
+            dev["serial"]: cache.inventory_by_serial[dev["serial"]] for dev in devices if dev["serial"] in cache.inventory_by_serial
         }
         if cache_inv_devs_by_serial:  # pragma: no cover
             assert asyncio.run(cache.update_inv_db(data=[d.doc_id for d in cache_inv_devs_by_serial.values()], remove=True))
         cache_mon_devs_by_serial = {
-            dev["serial"]: cache.devices_by_serial[dev["serial"]] for dev  in devices if dev["serial"] in cache.devices_by_serial
+            dev["serial"]: cache.devices_by_serial[dev["serial"]] for dev in devices if dev["serial"] in cache.devices_by_serial
         }
         if cache_mon_devs_by_serial:  # pragma: no cover
             assert asyncio.run(cache.update_dev_db(data=[d.doc_id for d in cache_mon_devs_by_serial.values()], remove=True))
@@ -591,7 +591,7 @@ def ensure_inv_cache_batch_sub_devices():
                 "archived": False
             },
         ]
-        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev  in devices}
+        cache_devs = {dev["serial"]: cache.inventory_by_serial.get(dev["serial"], {}) for dev in devices}
         if not cache_devs == devices:
             assert asyncio.run(cache.update_inv_db(data=devices))
     yield
@@ -787,7 +787,7 @@ def ensure_dev_cache_test_stack():
 @pytest.fixture(scope="function")
 def ensure_dev_cache_ap():
     if config.dev.mock_tests:
-        cache_data =   {
+        cache_data = {
             "name": "ktcn.605h.5866",
             "status": "Up",
             "type": "ap",
@@ -839,7 +839,6 @@ def ensure_dev_cache_test_ap():
 
     yield
 
-
     if test_data["test_devices"]["ap"]["serial"] in cache.devices_by_serial:
         serial = test_data["test_devices"]["ap"]["serial"]
         assert asyncio.run(cache.update_db(cache.DevDB, doc_ids=[cache.devices_by_serial[serial].doc_id]))
@@ -859,7 +858,6 @@ def ensure_dev_cache_no_last_rename_ap():
         ...
 
     yield
-
 
 
 @pytest.fixture(scope="function")
@@ -1185,11 +1183,11 @@ def _ensure_cache_site2():
             assert asyncio.run(cache.update_site_db(data=sites))
 
 
-
 @pytest.fixture(scope="function")
 def ensure_cache_site2():  # pragma: no cover  Not used by itself currently, but keeping it for consistency so it's available
     _ensure_cache_site2()
     yield
+
 
 @pytest.fixture(scope="function")
 def ensure_cache_site3():
@@ -1240,7 +1238,7 @@ def ensure_cache_site4():
 @pytest.fixture(scope="function")
 def ensure_cache_client_not_connected():
     if config.dev.mock_tests:
-        cache_data =   {
+        cache_data = {
             "mac": "aa:bb:cc:dd:ee:ff",
             "name": "not-connected",
             "ip": "10.0.110.299",
@@ -1265,7 +1263,7 @@ def ensure_cache_client_not_connected():
 @pytest.fixture(scope="function")
 def ensure_cache_portal():
     if config.dev.mock_tests:
-        cache_data =   {
+        cache_data = {
             "name": "cencli-test",
             "id": "58039716-efb9-4397-9fe1-4b13e30df928",
             "url": "https://naw1.cloudguest.central.arubanetworks.com/portal/scope.cust-5000692/delme/capture",
@@ -1283,7 +1281,6 @@ def ensure_cache_portal():
         ...
 
     yield
-
 
     if config.dev.mock_tests and cache_data["id"] in cache.portals_by_id:
         doc_id = cache.portals_by_id[cache_data["id"]].doc_id
@@ -1396,7 +1393,7 @@ def ensure_cache_label5():
 def ensure_cache_label2():
     if config.dev.mock_tests:
         batch_del_labels = [
-            {"id":1107,"name":"cencli_test_label2","devices":0},
+            {"id": 1107, "name": "cencli_test_label2", "devices": 0},
         ]
         missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
         if missing:
@@ -1408,7 +1405,7 @@ def ensure_cache_label2():
 def ensure_cache_label3():
     if config.dev.mock_tests:
         batch_del_labels = [
-            {"id":1108,"name":"cencli_test_label3","devices":0},
+            {"id": 1108, "name": "cencli_test_label3", "devices": 0},
         ]
         missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
         if missing:
@@ -1420,14 +1417,15 @@ def ensure_cache_label3():
 def ensure_cache_batch_labels():
     if config.dev.mock_tests:
         batch_del_labels = [
-            {"id":1109,"name":"cencli_test_label4","devices":0},
-            {"id":1110,"name":"cencli_test_label5","devices":0},
-            {"id":1111,"name":"cencli_test_label6","devices":0},
+            {"id": 1109, "name": "cencli_test_label4", "devices": 0},
+            {"id": 1110, "name": "cencli_test_label5", "devices": 0},
+            {"id": 1111, "name": "cencli_test_label6", "devices": 0},
         ]
         missing = [label["name"] for label in batch_del_labels if label["name"] not in cache.labels_by_name]
         if missing:
             assert asyncio.run(cache.update_label_db(data=batch_del_labels))
     yield
+
 
 # Need to add APs to FloorPlanAPDB
 #   {
@@ -1668,7 +1666,6 @@ def ensure_cache_ap_template():
         assert asyncio.run(cache.update_db(cache.TemplateDB, update_data, truncate=True))
 
 
-
 @pytest.fixture(scope="function")
 def ensure_cache_template_by_name():
     if config.dev.mock_tests:
@@ -1696,6 +1693,7 @@ def ensure_cache_j2_var_yaml():
 
     test_j2_file.unlink(missing_ok=True)
 
+
 @pytest.fixture(scope="function")
 def ensure_cache_j2_var_csv():
     test_j2_file = TEST_FILE_DIR / "test_runner_template.csv"
@@ -1707,6 +1705,7 @@ def ensure_cache_j2_var_csv():
 
     test_j2_file.unlink(missing_ok=True)
 
+
 @pytest.fixture(scope="function")
 def ensure_assign_dev_no_sub():
     test_assign_dev = cache.get_inv_identifier(test_data["subscription"]["assign_to_device"]["serial"])
@@ -1714,6 +1713,7 @@ def ensure_assign_dev_no_sub():
         cache_update_data = {**dict(test_assign_dev), "services": None, "subscription_expires": None, "subscription_key": None}
         asyncio.run(common.cache.update_inv_db(cache_update_data))
     yield
+
 
 @pytest.fixture(scope="function")
 def ensure_assign_dev_sub():

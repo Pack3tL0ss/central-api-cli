@@ -60,7 +60,6 @@ class CentralAPI:
 
         return await self.session.get(url, params=params)
 
-
     async def get_site_details(
         self,
         site_id: int,
@@ -264,7 +263,6 @@ class CentralAPI:
         url = f"/central/v2/sites/{site_id}"
         if zipcode:
             zipcode = str(zipcode)
-
 
         site_address = {"address": address, "city": city, "state": state, "country": country, "zipcode": zipcode}
         geolocation = {"latitude": latitude, "longitude": longitude}

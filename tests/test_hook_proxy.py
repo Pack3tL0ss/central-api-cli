@@ -18,13 +18,11 @@ if config.classic.webhook.token:
         assert result.exit_code == 1
         assert "not running" in result.stdout
 
-
     def test_start_hook_proxy():
         result = runner.invoke(app, ["start", "hook-proxy", "-yy"])
         capture_logs(result, "test_start_hook_proxy")
         assert result.exit_code == 0
         assert "Started" in result.stdout
-
 
     # start_hook_proxy needs to be ran for this to pass
     @pytest.mark.parametrize(
@@ -39,7 +37,6 @@ if config.classic.webhook.token:
         capture_logs(result, f"{env.current_test}-{idx}")
         assert result.exit_code == 0
         assert pass_condition(result.stdout)
-
 
     def test_stop_hook_proxy(ensure_hook_proxy_started):
         with mock_sleep:
