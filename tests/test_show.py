@@ -476,7 +476,7 @@ def test_show_devices_fail(idx: int, fixture: str | None, args: tuple[str], pass
 )
 def test_show_devices_cnx(idx: int, args: tuple[str], pass_condition: Callable):
     result = runner.invoke(app, ["test", "command", *args])
-    capture_logs(result, f"{env.current_test}{idx}")
+    capture_logs(result, f"{env.current_test}-{idx}")
     assert result.exit_code == 0
     assert pass_condition(result.stdout)
 
