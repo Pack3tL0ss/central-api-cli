@@ -438,6 +438,52 @@ def cache_del(
 
 
 @app.command()
+def cache_update(
+    cache_table: CacheArgs = typer.Argument(..., help="Cache to remove item from", show_default=False),
+    query_str: str = typer.Argument(..., help="The query string to search the cache for, for the record to Update", show_default=False),
+    key: str = typer.Argument(..., help="The key field to update", show_default=False),
+    value: str = typer.Argument(..., help="The value to update the key field with", show_default=False),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Update an item in the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Update an item in the cache"""
+    if key == "status":
+        value = value.capitalize()
+    from centralcli import cache
+    lookups = {
+        CacheArgs.devices: (cache.get_dev_identifier, cache.update_dev_db),
+        CacheArgs.inventory: (cache.get_inv_identifier, cache.update_inv_db),
+        CacheArgs.sites: (cache.get_site_identifier, cache.update_site_db),
+        CacheArgs.groups: (cache.get_group_identifier, cache.update_group_db),
+    }
+    qry_func, update_func = lookups.get(cache_table, (None, None))
+    if not qry_func:
+        common.exit(f"cache-update for {cache_table} not implemented yet.")
+    _match = qry_func(query_str, retry=False)
+    if _match is None:
+        common.exit(f"{emoji.info} [cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.  Nothing to Update.", code=0)
+    if not hasattr(_match, key):
+        common.exit(f"[cyan]{key}[/] does not appear to be an attribute of [cyan]{cache_table.value}[/] cache.")
+    if getattr(_match, key) == value:
+        common.exit(f"{emoji.info} [cyan]{_match.summary_text}[/]\n   Already has desired value [bold green]{value}[/] for [cyan]{key}[/]. No Update necessary.", code=0, emoji=False)
+
+    if env.is_pytest:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]mock[/] [dim](pytest)[/] workspace.[/italic]\n")
+    elif config.workspace != config.default_workspace:
+        render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]{config.workspace}[/] workspace.[/italic]\n")
+
+    render.console.print(f"{emoji.warn} [bold green]Updat{'ing' if yes else 'e'}[/] {_match.summary_text} from [spring_green1]{cache_table.name}[/] cache.\n   [bold green]Update[/] [cyan]{key}[/] --> [green]{value}[/]", emoji=False)
+    render.confirm(yes)
+    update_data = {**dict(_match), key: value}
+    cache_resp = asyncio.run(update_func(update_data))
+    render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
+    common.exit(int(not cache_resp))
+
+
+@app.command()
 def ws_change(
     workspace_list: list[str] = typer.Argument(
         None,
