@@ -184,7 +184,7 @@ class CacheInvDevice(CentralObject):
         self.type: str = data["type"]
         self.model: str = data["model"]
         self.sku: str = data["sku"]
-        self.services: str | None = data["services"]
+        self.services: str | None = data.get("services", data.get("subscription"))  # backward compat new field name is subscription
         self.subscription_key: str = data.get("subscription_key")
         self.subscription_expires: int | float = data.get("subscription_expires")
         self.assigned: bool = data.get("assigned")  # glp only
@@ -394,12 +394,12 @@ class CacheGroup(CentralObject):
         self.name: str = data["name"]
         self.allowed_types: List[constants.DeviceTypes] = data["allowed_types"]
         self.gw_role: constants.BranchGwRoleTypes = data["gw_role"]
-        self.aos10: bool = data["aos10"]
-        self.microbranch: bool = data["microbranch"]
-        self.wlan_tg: bool = data["wlan_tg"]
-        self.wired_tg: bool = data["wired_tg"]
-        self.monitor_only_sw: bool = data["monitor_only_sw"]
-        self.monitor_only_cx: bool = data["monitor_only_cx"]
+        self.aos10: bool = data.get("aos10")
+        self.microbranch: bool = data.get("microbranch")
+        self.wlan_tg: bool = data.get("wlan_tg")
+        self.wired_tg: bool = data.get("wired_tg")
+        self.monitor_only_sw: bool = data.get("monitor_only_sw")
+        self.monitor_only_cx: bool = data.get("monitor_only_cx")
         self.cnx: bool = data.get("cnx")
         _allowed_types_str = f"[magenta]allowed types[/]: {utils.color(self.allowed_types)}"
         _mon_only = [f"[magenta]monitor only {_type}[/]: \u2705" for _type, _mon_only in zip(["sw", "cx"], [self.monitor_only_sw, self.monitor_only_cx]) if _mon_only]
@@ -1463,7 +1463,7 @@ class Cache:
         return {label["name"]: CacheLabel(label) for label in self.labels}
 
     @property
-    def licenses(self) -> List[str]:
+    def licenses(self) -> list[str]:
         if hasattr(self, "LicenseDB"):
             return [lic["name"] for lic in self.LicenseDB.all()]
         else:  # pragma: no cover
@@ -1571,10 +1571,6 @@ class Cache:
     @property
     def label_names(self) -> list:
         return [g["name"] for g in self.LabelDB.all()]
-
-    @property
-    def license_names(self) -> list:
-        return sorted([lic["name"] for lic in self.LicenseDB.all()])
 
     @property
     def templates(self) -> list:
