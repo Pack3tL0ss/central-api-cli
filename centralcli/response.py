@@ -383,6 +383,10 @@ class Response:
         return [k for inner in failed_devs for k in inner.values()]
 
     @property
+    def is_glp(self) -> bool:
+        return True if "greenlake" in (self.url and self.url.host or "") else False
+
+    @property
     def is_already_claimed(self) -> bool:
         """property used for glp async ops responses to determine if the failure was due to it already being claimed
 
