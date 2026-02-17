@@ -178,7 +178,7 @@ class CLIOptions:
     def __init__(self, cache: Cache, timerange: str = "3h", include_mins: bool = None):
         self.cache = cache
         self.timerange: str = timerange
-        self.include_mins: bool = include_mins if include_mins is not None else True
+        self._include_mins: bool = include_mins if include_mins is not None else True
         self.client: OptionInfo = typer.Option(None, "--client", metavar=iden_meta.client, autocompletion=cache.client_completion, show_default=False,)
         self.do_gw: OptionInfo = typer.Option(None, "--gw", help="Update group level config for gateways.")
         self.do_ap: OptionInfo = typer.Option(None, "--ap", help="Update group level config for APs.")
@@ -319,6 +319,15 @@ class CLIOptions:
             time_word = time_word.rsplit("s")
 
         return f"{self.timerange[0:-1]} {time_word} ago"
+
+    @property
+    def include_mins(self) -> bool:
+        return self._include_mins
+
+    @include_mins.setter
+    def include_mins(self, include_mins: bool) -> bool:
+        self._include_mins = include_mins
+        return self._include_mins
 
     def get(
         self,

@@ -1559,6 +1559,7 @@ def cache_(
     else:
         for idx, arg in enumerate(args, start=1):
             cache_out: List[Document] = getattr(common.cache, arg)
+            cache_out = cache_out if arg != "licenses" else [{"name": sub} for sub in cache_out]  # cache.licenses is just a list of license names
             cache_out = [dict(d) for d in cache_out]
             arg = arg if not hasattr(arg, "value") else arg.value
             if arg == "devices":
@@ -2729,6 +2730,9 @@ def roaming(
     caption = None if not resp else f"{len(resp)} roaming events"
     caption = f"{caption} in past 3 hours" if not start else f"{caption} in {DateTime(start.timestamp(), 'timediff-past')}"
     render.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
+
+
+common.options.include_mins = True
 
 
 @app.command()
