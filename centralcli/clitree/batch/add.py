@@ -10,19 +10,19 @@ import typer
 from pydantic import ValidationError
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, log, render, utils
 from centralcli.constants import APIAction
 from centralcli.models.imports import ImportMACs, ImportMPSKs
 
 from . import examples
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheMpskNetwork
+    from centralcli.objects.cache import CacheMpskNetwork
     from centralcli.response import Response
     from centralcli.typedefs import CloudAuthUploadTypes
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 def batch_add_cloudauth(import_file: Path, upload_type: CloudAuthUploadTypes = "mac", *, ssid: CacheMpskNetwork = None, yes: bool = False) -> Response:
@@ -139,6 +139,13 @@ def devices(
         autocompletion=common.cache.sub_completion,
         hidden=not common.cache.config.glp.ok
     ),
+    no_pre_prov: bool = typer.Option(
+        False,
+        "--no-pre-group",
+        "--npg",
+        help=f"Ignore group if found in import file.  Do not pre-provision devices to group. {render.help_block('Devices will be pre-provisioned to group if defined in import')}",
+        envvar="CENCLI_NO_PRE_PROVISION",
+    ),
     yes: int = common.options.yes_int,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -158,7 +165,7 @@ def devices(
     _tags = _tags or []  # in case they use the form --tags tagname=tagvalue which would not populate _tags
     tag_dict = None if not tags else utils.parse_var_value_list([*tags, *_tags])
 
-    resp = common.batch_add_devices(import_file, tags=tag_dict, subscription=sub, yes=yes)
+    resp = common.batch_add_devices(import_file, tags=tag_dict, subscription=sub, no_pre_prov=no_pre_prov, yes=yes)
     if [r for r in resp if not r.ok and r.url.path.endswith("/subscriptions/assign")]:  # pragma: no cover # TOGLP will add to tests once adjusted to use GLP
         log.warning("Aruba Central took issue with some of the devices when attempting to assign subscription.  It will stop processing when this occurs, meaning valid devices may not have their license assigned.", caption=True, log=True)
         log.info(f"Use [cyan]cencli batch verify devices {import_file}[/] to check status of license assignment.", caption=True)
@@ -194,6 +201,7 @@ def labels(
 @app.command()
 def variables(
     import_file: Path = common.arguments.get("import_file", help="Path to file with variables"),
+    by_device: bool = common.options.by_device,
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -201,6 +209,10 @@ def variables(
     workspace: str = common.options.workspace,
 ) -> None:
     """Batch add variables for devices based on data from required import file.
+
+    --by-dev will result in an API call for each device with variables defined in the import_file.
+    [italic]This is only useful when some devices are failing, as the default bulk call will
+    be rejected for all devices if *any* devices fail[/]
 
     Use [cyan]cencli batch add variables --example[/] to see example import file formats.
     [italic]Accepts same format as Aruba Central UI, but also accepts .yaml[/]
@@ -211,7 +223,7 @@ def variables(
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch add variables [OPTIONS] [IMPORT_FILE]"))
 
-    common.batch_add_update_replace_variables(import_file, action=APIAction.ADD, yes=yes)
+    common.batch_add_update_replace_variables(import_file, action=APIAction.ADD, bulk=not by_device, yes=yes)
 
 
 @app.command()

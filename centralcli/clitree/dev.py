@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import asyncio
-from enum import Enum
+from sqlite3 import OperationalError
+from time import sleep
+from typing import TYPE_CHECKING
 
+import asyncio
 import shutil
+from enum import Enum
 from functools import partial
 from pathlib import Path
 
@@ -12,10 +15,14 @@ import typer
 from rich import print
 
 from centralcli import common, config, render
+from centralcli.constants import HelpObject
 from centralcli.environment import env
 from centralcli.strings import emoji
 from centralcli.typedefs import StrPath
-from centralcli.constants import HelpObject
+from centralcli.cache.sqlite import DBAction
+
+if TYPE_CHECKING:
+    from centralcli.objects.cache import CacheDevice, CacheInvDevice, CacheSite, CacheGroup
 
 app = typer.Typer()
 
@@ -196,8 +203,8 @@ def no_cache(
 
     So cencli can be tested as if no cache exists.
     """
-    conf_msg = f"Stash existing cache [cyan]{config.cache_file}[/] to [dark_olive_green2]{config.cache_file}.bak[/]"
-    toggle_bak_file(config.cache_file, conf_msg=conf_msg, yes=yes)
+    conf_msg = f"Stash existing cache [cyan]{config.cache.file}[/] to [dark_olive_green2]{config.cache.file}.bak[/]"
+    toggle_bak_file(config.cache.file, conf_msg=conf_msg, yes=yes)
 
 
 @app.command()
@@ -214,7 +221,7 @@ def restore_cache(
     :information:  Use [cyan]--pytest[/] :triangular_flag: to restore real cache in the event a test run
     is aborted and pytest teardown did not restore it.
     """
-    cache_bak = Path(f"{str(config.cache_file)}.{'bak' if not pytest else 'pytest.bak'}")
+    cache_bak = Path(f"{str(config.cache.file)}.{'bak' if not pytest else 'pytest.bak'}")
     conf_msg = f"Restoring [cyan]cencli[/] cache from [cyan]{cache_bak.name}[/]..."
     toggle_bak_file(cache_bak, conf_msg=conf_msg)
 
@@ -355,40 +362,25 @@ def help_text(
     cache_object: list[HelpObject] = typer.Argument(None, help="The cache object to show summary text for. Defaults to all.", show_default=False),
 ) -> None:
     """Show help / summary text for all Cache Objects"""
-    from centralcli.cache import CacheGroup, CacheDevice, CacheInvDevice, CacheInvMonDevice, CacheSite, CacheClient, CacheBuilding, CacheFloorPlanAP, CacheGuest, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSub, CacheTemplate, CacheCert
-    from centralcli import utils, cache
-    groups = list(map(CacheGroup, cache.GroupDB.all()))
-    sites = list(map(CacheSite, cache.SiteDB.all()))
-    devices = list(map(CacheDevice, cache.DevDB.all()))
-    inventory = list(map(CacheInvDevice, cache.InvDB.all()))
+    from centralcli import cache, utils
+    from centralcli.objects.cache import CacheInvMonDevice, CacheDevice, CacheInvDevice
     serials = set([*list(cache.inventory_by_serial.keys()), *list(cache.devices_by_serial.keys())])
     invmondevs = [CacheInvMonDevice(None if s not in cache.inventory_by_serial else CacheInvDevice(cache.inventory_by_serial[s]), None if s not in cache.devices_by_serial else CacheDevice(cache.devices_by_serial[s])) for s in serials]
-    clients = list(map(CacheClient, cache.ClientDB.all()))
-    buildings = list(map(CacheBuilding, cache.BuildingDB.all()))
-    floor_aps = list(map(CacheFloorPlanAP, cache.FloorPlanAPDB.all()))
-    guests = list(map(CacheGuest, cache.GuestDB.all()))
-    labels = list(map(CacheLabel, cache.LabelDB.all()))
-    mpsks = list(map(CacheMpsk, cache.MpskDB.all()))
-    mpsk_nets = list(map(CacheMpskNetwork, cache.MpskNetDB.all()))
-    portals = list(map(CachePortal, cache.PortalDB.all()))
-    subs = list(map(CacheSub, cache.SubDB.all()))
-    certs = [CacheCert(**c) for c in cache.CertDB.all()]
-    templates = list(map(CacheTemplate, cache.TemplateDB.all()))
     ignore_emoji = [":cd:", ":ab:"]
 
     def show(tables: str | list[str] = None):
         cache_name = ["groups", "sites", "devices", "inventory", "invmondevs", "certs", "clients", "buildings", "floor-aps", "guests", "labels", "mpsks", "mpsk-nets", "portals", "subs", "certs", "templates"]
-        cache_list = [groups, sites, devices, inventory, invmondevs, certs, clients, buildings, floor_aps, guests, labels, mpsks, mpsk_nets, portals, subs, certs, templates]
+        cache_list = [cache.groups, cache.sites, cache.devices, cache.inventory, invmondevs, cache.certs, cache.clients, cache.floor_plan_buildings, cache.floor_plan_aps, cache.guests, cache.labels, cache.mpsk, cache.mpsk_networks, cache.portals, cache.subscriptions, cache.certs, cache.templates]
         items = list(zip(cache_name, cache_list)) if not tables else [(t, cache_list[cache_name.index(t)]) for t in utils.listify(tables)]
         for name, c in items:
             render.console.rule(name)
-            for obj in c[0:4 if not tables else len(c)]:
+            for obj in list(c)[0:4 if not tables else len(list(c))]:
                 render.console.print(f"{'typer':>14}: ", end="")
                 typer.echo(obj.help_text)
                 render.console.print(f"{'rich.Text':>14}: ", end="")
                 render.console.print(obj.text)
-                render.console.print(f"{'rich_help_text':>14}: ", end="")
-                render.console.print(obj.rich_help_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
+                # render.console.print(f"{'rich_help_text':>14}: ", end="")
+                # render.console.print(obj.rich_help_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
                 render.console.print(f"{'summary_ext':>14}: ", end="")
                 render.console.print(obj.summary_text, emoji=all([e not in obj.text.plain.lower() for e in ignore_emoji]))
 
@@ -400,6 +392,7 @@ class CacheArgs(str, Enum):
     inventory = "inventory"
     sites = "sites"
     groups = "groups"
+    labels = "labels"
 # full list in constants.CacheArgs
 
 
@@ -420,27 +413,28 @@ def cache_del(
         CacheArgs.inventory: (cache.get_inv_identifier, cache.update_inv_db),
         CacheArgs.sites: (cache.get_site_identifier, cache.update_site_db),
         CacheArgs.groups: (cache.get_group_identifier, cache.update_group_db),
+        CacheArgs.labels: (cache.get_label_identifier, cache.update_label_db),
     }
     qry_func, update_func = lookups.get(cache_table, (None, None))
     if not qry_func:
         common.exit(f"cache-del for {cache_table} not implemented yet.")
-    _match = qry_func(query_str, retry=False)
+    _match: CacheDevice | CacheInvDevice | CacheSite | CacheGroup = qry_func(query_str, retry=False)
     if _match is None:
-        common.exit(f"{emoji.info} [cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.  Nothing to delete.", code=0)
+        common.exit(f"[cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.  Nothing to delete.", code=0)
     if env.is_pytest:
         render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]mock[/] [dim](pytest)[/] workspace.[/italic]\n")
     elif config.workspace != config.default_workspace:
         render.console.print(f"{emoji.info} [italic]Updating cache for [bright_green]{config.workspace}[/] workspace.[/italic]\n")
     render.console.print(f"{emoji.warn} [bold red]Remov{'ing' if yes else 'e'}[/] {_match.summary_text} from [spring_green1]{cache_table.name}[/] cache.", emoji=False)
     render.confirm(yes)
-    cache_resp = asyncio.run(update_func(_match.doc_id, remove=True))
+    cache_resp = asyncio.run(update_func(dict(_match), action=DBAction.DELETE))
     render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
-    common.exit(int(not cache_resp))
+    common.exit(code=int(not cache_resp))
 
 
 @app.command()
 def cache_update(
-    cache_table: CacheArgs = typer.Argument(..., help="Cache to remove item from", show_default=False),
+    cache_table: CacheArgs = typer.Argument(..., help="Cache table to update", show_default=False),
     query_str: str = typer.Argument(..., help="The query string to search the cache for, for the record to Update", show_default=False),
     key: str = typer.Argument(..., help="The key field to update", show_default=False),
     value: str = typer.Argument(..., help="The value to update the key field with", show_default=False),
@@ -482,6 +476,50 @@ def cache_update(
     cache_resp = asyncio.run(update_func(update_data))
     render.console.print(f"[bright_green]:heavy_check_mark:  [dim]{update_func.__name__}...[/] Success[/]" if cache_resp else f":x:  [dim]{update_func.__name__}...[/] Failure")
     common.exit(int(not cache_resp))
+
+
+@app.command()
+def cache_lookup(
+    cache_table: CacheArgs = typer.Argument(..., help="Cache to query", show_default=False),
+    query_str: str = typer.Argument(..., help="The query string", show_default=False),
+    yes: bool = common.options.yes,
+    mock: bool = typer.Option(False, help="Lookup an item in the mock cache", show_default=False),  # this is handled in __init__
+    debug: bool = common.options.debug,
+    default: bool = common.options.default,
+    workspace: str = common.options.workspace,
+) -> None:
+    """Lookup an item in the cache"""
+    from centralcli import cache
+    lookups = {
+        CacheArgs.devices: (cache.get_dev_identifier, cache.update_dev_db),
+        CacheArgs.inventory: (cache.get_inv_identifier, cache.update_inv_db),
+        CacheArgs.sites: (cache.get_site_identifier, cache.update_site_db),
+        CacheArgs.groups: (cache.get_group_identifier, cache.update_group_db),
+    }
+    qry_func, update_func = lookups.get(cache_table, (None, None))
+    if not qry_func:
+        common.exit(f"cache-update for {cache_table} not implemented yet.")
+
+    for _ in range(2):
+        try:
+            _match: CacheDevice | CacheInvDevice | CacheSite | CacheArgs = qry_func(query_str, retry=False)
+            break
+        except OperationalError as e:
+            if "database is locked" in repr(e):
+                sleep(1)
+                continue
+            else:
+                raise e
+
+    if env.is_pytest:
+        render.console.print(f"{emoji.info} [italic]Cache lookup for [bright_green]mock[/] [dim](pytest)[/] workspace.[/italic]\n")
+    elif config.workspace != config.default_workspace:
+        render.console.print(f"{emoji.info} [italic]Cache lookup for [bright_green]{config.workspace}[/] workspace.[/italic]\n")
+    if _match is None:
+        common.exit(f"{emoji.info} [cyan]{query_str}[/] was [red]not found[/] in [cyan]{cache_table.value}[/] cache.", code=1)
+
+    render.console.print(_match, emoji=False)
+    render.display_results(data=_match.data, tablefmt="yaml")
 
 
 @app.command()

@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, List
 
+from centralcli.response import BatchResponse
+
 from ... import log, utils
 from ...client import BatchRequest
-from centralcli.response import BatchResponse
 
 if TYPE_CHECKING:
     from ...client import Session

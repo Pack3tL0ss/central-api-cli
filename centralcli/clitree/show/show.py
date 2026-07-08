@@ -26,8 +26,8 @@ except (ImportError, ModuleNotFoundError):  # pragma: no cover
 
 from centralcli import api_clients, caas, cache, cleaner, common, config, log, render, utils
 from centralcli.caas import CaasAPI
-from centralcli.cache import CacheDevice, CacheInvDevice, CentralObject
 from centralcli.client import BatchRequest
+from centralcli.cache.sqlite import DBAction
 from centralcli.clitree import ts as clitshoot
 from centralcli.constants import (
     LIB_DEV_TYPE,
@@ -78,15 +78,14 @@ from centralcli.constants import (
 )
 from centralcli.models.cache import Device
 from centralcli.objects import DateTime, ShowInterfaceFilters
+from centralcli.objects.cache import CacheDevice, CacheInvDevice, CacheObject, CentralObject
 from centralcli.response import BatchResponse, Response
 from centralcli.strings import cron_weekly, emoji
 
 from . import audit, bandwidth, branch, cloudauth, firmware, mpsk, ospf, overlay, ts, wids
 
 if TYPE_CHECKING:
-    from tinydb.table import Document
-
-    from ...cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite, CacheSub
+    from ...objects.cache import CacheClient, CacheGroup, CacheLabel, CachePortal, CacheSite, CacheSub
 
 
 app = typer.Typer()
@@ -278,16 +277,17 @@ def _get_details_for_all_devices(params: dict, include_inventory: bool = False, 
         if common.cache.responses.dev:  # pragma: no cover
             log.error("DEV NOTE: _get_details_for_all_devices.  common.cache.responses.dev already has value.", show=True, caption=True, log=True)
         resp = api.session.request(common.cache.refresh_dev_db, **params)
-        caption = None if not hasattr(resp, "ok") or not resp.ok else _build_device_caption(resp, status=status)
+        caption = None if not hasattr(resp, "ok") or not resp.ok or not resp.output else _build_device_caption(resp, status=status)
 
     return resp, caption
 
 
 def _update_cache_for_specific_devices(batch_res: List[Response], devs: List[CacheDevice]):
     try:
-        data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok]
-        model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
-        api.session.request(common.cache.update_dev_db, model_data)
+        data = [{**r.output, "type": d.type, "switch_role": r.output.get("switch_role", d.switch_role), "swack_id": r.output.get("swarm_id", r.output.get("stack_id")) or (d.serial if d.is_aos10 else None)} for r, d in zip(batch_res, devs) if r.ok and d is not None]
+        if data:
+            model_data: List[dict] = [Device(**dev).model_dump() for dev in data]
+            api.session.request(common.cache.update_dev_db, model_data, action=DBAction.UPSERT)
     except Exception as e:  # pragma: no cover
         log.exception(f"Cache Update Failure from _update_cache_for_specific_devices \n{e}")
         log.error(f"Cache update failed {e.__class__.__name__}.", caption=True)
@@ -300,22 +300,31 @@ def _get_details_for_specific_devices(
         tabular_output: bool = False
 ) -> Tuple[BatchResponse, str]:
     caption = None
+    devs = None
 
-    # Build requests
-    devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
-    dev_types = [dev.type for dev in devs]
-    batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+    # Build requests  # if device from args appears to be serial and dev-type is provided we can skip the cache lookup
+    if all([utils.is_serial(d) for d in devices]) and dev_type and not include_inventory:
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, device_type=dev_type, serial=d) for d in devices]
+        serial_type = {d: dev_type for d in devices}
+        dev_types = [dev_type]
+    else:
+        devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory) for d in devices]
+        dev_types = [dev.type for dev in devs]
+        batch_reqs = [BatchRequest(api.monitoring.get_dev_details, dev.type, dev.serial) for dev in devs]
+        serial_type = {d.serial: d.type for d in devs}
 
     # Fetch results from API
     batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
     if include_inventory:  # Combine results with inventory results
-        _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=[d.serial for d in devs])
+        _ = api.session.request(common.cache.refresh_inv_db, serial_numbers=list(serial_type.keys()))
         for r, dev in zip(batch_resp.responses, devs):
             if r.ok:
                 r.output = {**r.output, **common.cache.inventory_by_serial.get(dev.serial, {})}
             else:
                 log.error(f"Unable to show details for {dev.summary_text}.  {r.status} {r.error}", caption=True)
 
+    if not devs:
+        devs: list[CacheDevice | CacheInvDevice] = [common.cache.get_dev_identifier(d, dev_type=dev_type, include_inventory=include_inventory, retry=False) for d in devices]
     _update_cache_for_specific_devices(batch_resp.responses, devs)
 
     if tabular_output and len(dev_types) > 1 and len(batch_resp.passed) > 1:
@@ -569,6 +578,7 @@ def aps(
     aps: List[str] = typer.Argument(None, metavar=iden_meta.dev_many, hidden=False, autocompletion=common.cache.dev_ap_completion, show_default=False,),
     dirty: bool = typer.Option(False, "--dirty", "-D", help=f"Get Dirty diff [dim][italic](config items not pushed)[/italic] {common.help_block('--group', help_type='requires')}[/]"),
     neighbors: bool = typer.Option(False, "-n", "--neighbors", help=f"Show all AP LLDP neighbors for a site {common.help_block('--site', help_type='requires')}", show_default=False,),
+    site_file: Path = typer.Option(None, "--site-file", help="A file containing a list of sites to gather LLDP neighbor information for all APs in the site.", exists=True, show_default=False,),
     with_inv: bool = common.options.get("with_inv", help="Include aps in Inventory that have yet to connect"),
     group: str = common.options.group,
     site: str = common.options.site,
@@ -610,15 +620,32 @@ def aps(
         tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
         render.display_results(resp, tablefmt=tablefmt, title=f"AP config items that have not pushed for group {group.name}", pager=pager, outfile=outfile, sort_by=sort_by, group_by="ap", reverse=reverse, cleaner=cleaner.get_dirty_diff)
     elif neighbors:
-        if site is None:
-            common.exit("[cyan]--site <site name>[/] is required for neighbors output.")
+        if site is None and site_file is None:
+            common.exit("[cyan]--site <site name>[/] or [cyan]--site-file[/] is required for neighbors output.")
 
-        site: CacheSite = common.cache.get_site_identifier(site)
-        resp: Response = api.session.request(api.topo.get_topo_for_site, site.id, )
         tablefmt: str = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table, default="rich")
 
+        if site:
+            site: CacheSite = common.cache.get_site_identifier(site)
+            resp: Response = api.session.request(api.topo.get_topo_for_site, site.id)
+            title = f"AP Neighbors for site {site.name}"
+        else:
+            site_data = common._get_import_file(site_file, "sites", required_fields=["name"], text_ok=True)
+            site_names = [s["name"] for s in site_data]
+            title = f"AP Neighbors for {len(site_names)} sites" if len(site_names) > 5 else f"AP Neighbors for sites:  {utils.color(site_names)}"
+            cache_sites = common.cache.bulk_site_cache_lookup(site_names=site_names)
+            batch_reqs = [BatchRequest(api.topo.get_topo_for_site, site.id) for site in cache_sites]
+            batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
+            if batch_resp.passed:
+                resp = batch_resp.display
+            if batch_resp.failed:
+                if batch_resp.passed:
+                    log.error(f"Partial Failure {len(batch_resp.failed)} of {len(batch_resp)} requests returned failures.  [italic]see logs[/]", caption=True)
+                else:
+                    resp = batch_resp.responses
+
         cleaner_kwargs = {} if not status else {"filter": status.value.lower()}
-        render.display_results(resp, tablefmt=tablefmt, title=f"AP Neighbors for site {site.name}", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site, **cleaner_kwargs)
+        render.display_results(resp, tablefmt=tablefmt, title=title, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.show_all_ap_lldp_neighbors_for_site, **cleaner_kwargs)
     else:
         show_devices(
             aps, dev_type="ap", include_inventory=with_inv, verbosity=verbose, outfile=outfile, group=group, site=site, label=label, status=status,
@@ -822,7 +849,7 @@ def inventory(
         outfile=outfile,
         sort_by=sort_by,
         reverse=reverse,
-        set_width_cols={"services": {"min": 31}},
+        set_width_cols={"subscription": {"min": 31}},
         cleaner=cleaner.get_device_inventory,
         sub=sub,
         key=key
@@ -1558,9 +1585,10 @@ def cache_(
 
     else:
         for idx, arg in enumerate(args, start=1):
-            cache_out: List[Document] = getattr(common.cache, arg)
+            cache_out: List[CacheObject] = getattr(common.cache, arg)
+            cache_out = cache_out if arg != "licenses" else [{"name": sub} for sub in cache_out]  # cache.licenses is just a list of license names
             cache_out = [dict(d) for d in cache_out]
-            arg = arg if not hasattr(arg, "value") else arg.value
+            # arg = arg if not hasattr(arg, "value") else arg.value
             if arg == "devices":
                 cache_out = sort_devices(cache_out)
 
@@ -1651,11 +1679,11 @@ def labels(
     render.display_results(resp, tablefmt=tablefmt, title="labels", pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_labels)
 
 
-def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False):
+def _build_site_caption(resp: Response, count_state: bool = False, count_country: bool = False, filtered: bool = False):
     if not resp.ok:
         return
 
-    caption = f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
+    caption = "" if filtered else f'Total Sites: [green3]{resp.raw.get("total", len(resp.output))}[/]'
     counts, count_caption = {}, None
     for do, field in zip([count_state, count_country], ["state", "country"]):
         if do:
@@ -1670,12 +1698,12 @@ def _build_site_caption(resp: Response, count_state: bool = False, count_country
     if count_caption:
         caption = f'[reset]{caption}, {count_caption}[reset][/]'
 
-    return caption
+    return caption or None
 
 
 @app.command(short_help="Show sites/details")
 def sites(
-    site: str = typer.Argument(None, metavar=iden_meta.site, autocompletion=common.cache.site_completion, show_default=False),
+    sites: list[str] = typer.Argument(None, metavar=iden_meta.site_many, autocompletion=common.cache.site_completion, show_default=False),
     count_state: bool = typer.Option(False, "-s", show_default=False, help="Calculate # of sites per state"),
     count_country: bool = typer.Option(False, "-c", show_default=False, help="Calculate # of sites per country"),
     sort_by: SortSiteOptions = common.options.sort_by,
@@ -1692,25 +1720,28 @@ def sites(
     workspace: str = common.options.workspace,
 ):
     sort_by = None if sort_by == "name" else sort_by  # Default sort from endpoint is by name
+    sites = sites if not sites else [s for s in sites if s and s.lower() != "all"]
 
-    site = None if site and site.lower() == "all" else site
-    if not site:
+    if not sites:
+        title = "Sites"
         resp = api.session.request(common.cache.refresh_site_db)
         cleaner_func = None  # No need to clean cache sends through model/cleans
     else:
-        site: CacheSite = common.cache.get_site_identifier(site)
-        resp = api.session.request(api.central.get_site_details, site.id)
+        cache_sites: list[CacheSite] = [common.cache.get_site_identifier(site) for site in sites]
+        title = f"{utils.summarize_list([s.name for s in cache_sites], max=None, sep=', ', pad=0)} site details"
+        batch_resp = BatchResponse(api.session.batch_request([BatchRequest(api.central.get_site_details, s.id) for s in cache_sites]))
+        resp = batch_resp.display
         cleaner_func = cleaner.sites
 
     # TODO find public API to determine country/state based on get coordinates if that's all that is set for site.
     # Country is blank when added via API and not provided.  Find public API to lookup country during add
-    caption = _build_site_caption(resp, count_state=count_state, count_country=count_country)
+    caption = _build_site_caption(resp, count_state=count_state, count_country=count_country, filtered=bool(sites))
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
 
     render.display_results(
         resp,
         tablefmt=tablefmt,
-        title="Sites" if not site else f"{site.name} site details",
+        title=title,
         pager=pager,
         outfile=outfile,
         sort_by=sort_by,
@@ -1775,7 +1806,7 @@ def templates(
 
     if obj:
         title = f"{obj.name.title()} Template"
-        if obj.is_dev:  # They provided a dev identifier
+        if isinstance(obj, CacheDevice):  # They provided a dev identifier
             resp = api.session.request(api.configuration.get_variablised_template, obj.serial)
         else:  # obj.is_template
             resp = api.session.request(api.configuration.get_template, group=obj.group, template=obj.name)
@@ -2059,7 +2090,7 @@ def config_(
         return _get_cencli_config(all_workspaces=bool(verbose))
 
     group_dev: CacheGroup | CacheDevice = common.cache.get_identifier(group_dev, ["group", "dev"],)
-    if group_dev.is_dev and group_dev.type not in ["ap", "gw"]:
+    if isinstance(group_dev, CacheDevice) and group_dev.type not in ["ap", "gw"]:
         _group: CacheGroup = common.cache.get_group_identifier(group_dev.group)
         if device:
             log.warning(f"ignoring extra argument [red]{device}[/].  As [cyan]{group_dev.name}[/] is a device.", caption=True)
@@ -2731,6 +2762,9 @@ def roaming(
     render.display_results(resp, title=title, caption=caption, tablefmt=tablefmt, pager=pager, outfile=outfile, sort_by=sort_by, reverse=reverse, cleaner=cleaner.get_client_roaming_history)
 
 
+common.options.include_mins = True
+
+
 @app.command()
 def logs(
     event_id: str = typer.Argument(
@@ -2815,7 +2849,7 @@ def logs(
     level = level if level is None else level.name
     dev_id = None
     swarm_id = None
-    if device:
+    if device:  # device has to be in monitoring UI (checked in at some point) otherwise 500 internal server errror.  So can't just take serial as arg without lookup
         device: CacheDevice = common.cache.get_dev_identifier(device)
         if swarm:
             if device.type != "ap":
@@ -3115,7 +3149,7 @@ def hook_proxy(
 ) -> None:
     def _get_process_details() -> tuple:
         for p in psutil.process_iter(attrs=["name", "cmdline"]):
-            if p.info["cmdline"] and True in ["wh_proxy" in x for x in p.info["cmdline"][1:]]:
+            if p.info["cmdline"] and True in ["webhooks" in x and "proxy" in x for x in p.info["cmdline"][1:]]:
                 for flag in p.cmdline()[::-1]:
                     if flag.startswith("-"):
                         continue  # pragma: no cover
@@ -3638,7 +3672,7 @@ def _get_cencli_config(*, all_workspaces: bool = False, brief: bool = False) -> 
     caption = None if brief else f"[italic]{emoji.info} Use [cyan]-f[/]|[cyan]--file[/] flag to show raw contents of the config file @ {config.file}[/italic]"
 
     if brief:
-        out = {config.workspace: workspaces.get(config.workspace, {}), "cache file": config.cache_file}
+        out = {config.workspace: workspaces.get(config.workspace, {}), "cache file": config.cache.file}
     elif all_workspaces:
         out = {"workspaces": workspaces, **out}
     else:

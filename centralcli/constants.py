@@ -6,8 +6,8 @@ from __future__ import annotations
 import re
 import sys
 from enum import Enum
-from typing import Literal
 from json import JSONDecodeError
+from typing import Literal, TypeAlias
 
 from aiohttp import ClientConnectorError, ClientOSError, ContentTypeError
 from aiohttp.http_exceptions import ContentLengthError
@@ -24,7 +24,7 @@ SwitchTypes = Literal["cx", "sw"]
 DeviceTypes = Literal["ap", "cx", "sw", "gw", "sdwan"]
 EventDeviceTypes = Literal["ap", "gw", "switch", "client"]
 ClientStatus = Literal["FAILED_TO_CONNECT", "CONNECTED"]
-ClientType = Literal["wired", "wireless", "all"]
+ClientType: TypeAlias = Literal["wired", "wireless", "all"]
 DeviceStatus = Literal["up", "down"]
 BranchGwRoleTypes = Literal["branch", "vpnc", "wlan"]
 _ = ["license", "services", "subscription"]
@@ -372,8 +372,8 @@ class CertFormat(str, Enum):
 
 
 class StartArgs(str, Enum):
-    hook_proxy = "hook-proxy"
-    hook2snow = "hook2snow"
+    wh_watcher = "hook-watcher"
+    nms_proxy = "hook-proxy"
 
 
 class ResetArgs(str, Enum):
@@ -600,6 +600,15 @@ class CacheArgs(str, Enum):
     certs = "certs"
     floor_plan_buildings = "floor_plan_buildings"
     floor_plan_aps = "floor_plan_aps"
+
+
+class RefreshCacheArgs(str, Enum):
+    devices = "devices"
+    inventory = "inventory"
+    sites = "sites"
+    templates = "templates"
+    groups = "groups"
+    labels = "labels"
 
 
 class KickArgs(str, Enum):
@@ -1214,9 +1223,11 @@ class SortSiteOptions(str, Enum):
     address = "address"
     city = "city"
     state = "state"
-    zipcode = "zipcode"
+    zip = "zip"
     country = "country"
-    associated_devices = "associated-devices"
+    lat = "lat"
+    lon = "lon"
+    devices = "devices"
 
 
 class SortGroupOptions(str, Enum):

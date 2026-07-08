@@ -6,11 +6,12 @@ import asyncio
 import typer
 from rich.console import Console
 
-from centralcli import common, config, render
-from centralcli.cache import api
+from centralcli import api_clients, common, config, render
 from centralcli.client import Session
+from centralcli.constants import RefreshCacheArgs
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()
@@ -61,16 +62,17 @@ def token(
 
             return success_list
 
-        with console.status(f"Refreshing Tokens for {len(workspace_list)} accounts defined in config", spinner="runner",):
+        with console.status(f"Refreshing Tokens for {len(workspace_list)} workspaces defined in config", spinner="runner",):
             success_list = asyncio.run(refresh_multi(workspace_list))
 
         for workspace, success in zip(workspace_list, success_list):
             console.print(f"{':x:' if not success else ':heavy_check_mark:'}  {workspace}")
-        console.print(f"\nSuccessfully refreshed tokens for {success_list.count(True)} of {len(success_list)} accounts.")
+        console.print(f"\nSuccessfully refreshed tokens for {success_list.count(True)} of {len(success_list)} workspaces.")
 
 
 @app.command()
 def cache(
+    cache_table: list[RefreshCacheArgs] = typer.Argument(None, help=f"Cache table to update. {render.help_block('refresh core tables')}", show_default=False),
     default: bool = common.options.default,
     debug: bool = common.options.debug,
     workspace: str = common.options.workspace,
@@ -81,9 +83,18 @@ def cache(
     Has similar benefits for sites, groups, certificates, etc.
 
     This is not necessary under normal circumstances as the cli will automatically refresh the cache if you provide an identifier
-    that doesn't have a match.
+    not found in the cache.
     """
-    res = common.cache(refresh=True)
+    table_param_map = {
+        "devices": "dev_db",
+        "inventory": "inv_db",
+        "sites": "site_db",
+        "templates": "template_db",
+        "groups": "group_db",
+        "labels": "label_db"
+    }
+    kwargs = {} if not cache_table else {v: True for k, v in table_param_map.items() if k in cache_table}
+    res = common.cache.check_fresh(refresh=True, **kwargs)
 
     exit_code = 0 if all([r.ok if not hasattr(r, "all_ok") else r.all_ok for r in res]) else 1
     common.exit(code=exit_code)

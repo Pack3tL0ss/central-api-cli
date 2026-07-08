@@ -9,12 +9,13 @@ from typing import List, Literal
 import pendulum
 import typer
 
-from centralcli import cleaner, common, render
-from centralcli.cache import CacheDevice, api
+from centralcli import api_clients, cleaner, common, render
 from centralcli.models.wids import Wids
+from centralcli.objects.cache import CacheDevice
 from centralcli.response import Response
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 class WidsResponse:

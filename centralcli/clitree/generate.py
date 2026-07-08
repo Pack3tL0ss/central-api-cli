@@ -3,10 +3,10 @@
 from pathlib import Path
 
 import typer
+from rich.markup import escape
 
 from centralcli import common, config, render
 from centralcli.clicommon import Mac
-from rich.markup import escape
 
 app = typer.Typer()
 
@@ -59,8 +59,9 @@ def bssids_from_xls(
     bssid_out: Path = None
 ):
     prepped_file = out or file.parent / f"{file.stem}.csv"
-    import tablib
     import importlib.util
+
+    import tablib
     if importlib.util.find_spec("et_xmlfile") is None:
         common.exit(f"Missing optional xlsx support.  re-install centralcli with optional dependency to add support for xlsx files. [cyan]uv tool install {escape('centralcli[xlsx]')}[/]\n[italic]No need to uninstall, just re-run as described to add support for xlsx[/]")  # pragma: no cover
 

@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -7,16 +9,14 @@ import json
 import sys
 from datetime import datetime as dt
 from pathlib import Path
-from typing import List, Literal, Optional
+from typing import List
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, Header, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
 from rich import print
 from starlette.requests import Request  # NoQA
-import aiohttp
-import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -31,8 +31,8 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .models.webhook import WebHook
 from .models import snow as models
+from .models.webhook import HookResponse, WebHook, wh_resp_schema
 
 
 def init_logs():
@@ -49,79 +49,6 @@ DEFAULT_HEADERS = {
     "Content-Type": "application/json"
 }
 
-
-class HookResponse(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "OK", "updated": True, }
-        }
-
-
-class HookResponseTooBig(HookResponse):
-    class Config:
-        schema_extra = {
-            "example": {"result": "Content too long", "updated": False}
-        }
-
-
-class HookResponseTokenFail(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "Unauthorized", "updated": False}
-        }
-
-
-class BranchResponse(BaseModel):
-    id: str
-    ok: bool
-    alert_type: str
-    device_id: str
-    state: Literal["Open", "Close"]
-    text: str
-    timestamp: Optional[int]
-
-    class Config:
-        schema_extra = {
-            "example": {
-                    "id": "CNF1234567_init",
-                    "ok": False,
-                    "alert_type": "BH_POLL_UPLK_OR_TUN_DOWN",
-                    "device_id": "CNF1234567",
-                    "state": "Open",
-                    "text": "sdbranch1:7008:uplk_g1694_v3250_inet::vpnc1:uplk_g1694_v3250_inet found to be down at hook proxy startup",
-                    "timestamp": int(dt.now().timestamp())
-            }
-        }
-
-
-# Not Used for now would need to ensure all possible fields
-class WebhookData(BaseModel):
-    id: Optional[str] = Field(default_factory=str)
-    timestamp: int
-    nid: int
-    alert_type: str
-    severity: str
-    details: dict
-    description: str
-    setting_id: str
-    state: str
-    webhook: str
-    cluster_hostname: str = None
-    operation: str = None
-    device_id: str = None
-    text: str = None
-
-
-wh_resp_schema = {
-    401: {"model": HookResponseTokenFail},
-    413: {"model": HookResponseTooBig}
-}
 
 app = FastAPI(
     title='Central CLI Webhook-2-SNOW Proxy',
@@ -227,8 +154,8 @@ class Hook2Snow:
                 log.warning(f'Snow incident {word} failed... retrying.', show=True)
 
         if response is None:
-                log.error(f'Snow incident {word} failed. Giving Up', show=True)
-                self.fail_count += 1
+            log.error(f'Snow incident {word} failed. Giving Up', show=True)
+            self.fail_count += 1
         elif response.status != 201:
             log.error(f'SNOW incident {word} failed [{response.status}] {response.reason}', show=True)
             self.fail_count += 1

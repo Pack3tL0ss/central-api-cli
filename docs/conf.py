@@ -12,6 +12,7 @@
 #
 import os
 import sys
+
 # Add path for custom extensions
 # sys.path.insert(0, os.path.abspath("./_ext"))
 # path to project directory

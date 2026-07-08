@@ -9,7 +9,22 @@ from typing import Literal
 import pendulum
 from pydantic import BaseModel
 
-TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string"]
+TimeFormat = Literal["day-datetime", "durwords", "durwords-short", "timediff", "timediff-past", "mdyt", "log", "date-string", "mdyt-timediff"]
+
+
+class CacheFile:
+    def __init__(self, file: Path):
+        self.file: Path = file
+        self._ok: bool = file.is_file() and file.stat().st_size > 0  # captured at launch to determine if migration is needed
+
+    @property
+    def ok(self):
+        return self._ok
+
+    @ok.setter
+    def ok(self, ok: bool):  # Needed for pytest runs when we invalidate the cache for testing
+        self._ok = ok
+        return self._ok
 
 
 class DateTime():
@@ -125,6 +140,15 @@ class DateTime():
         return pendulum.from_timestamp(self.ts, tz=self.tz).to_day_datetime_string()
 
     @property
+    def mdyt_timediff(self) -> str:
+        """Render date in day_datetime format, with timediff in parnes
+
+        Returns:
+            str: Date as string in format: 'Thu, May 7, 2020 3:49 AM (6 hours ago)'
+        """
+        return f"{self.mdyt} [dim italic]({self.timediff})[/]"
+
+    @property
     def durwords(self) -> str:
         """Render elapsed time in seconds as duration string.
 
@@ -215,11 +239,13 @@ class DateTime():
 class Encoder(JSONEncoder):
     """A Custom JSON Encoder to handle custom DateTime object (and Path) during JSON serialization.
     """
-    def default(self, obj: DateTime | Path | BaseModel):
+    def default(self, obj: DateTime | Path | BaseModel | CacheFile):
         if isinstance(obj, DateTime) or isinstance(obj, Path):
             return str(obj)
         elif hasattr(obj, "model_dump"):
             return obj.model_dump()
+        elif isinstance(obj, CacheFile):
+            return {"file": str(obj.file), "ok": obj.ok}
         else:
             return obj    # pragma: no cover
 

@@ -3,12 +3,13 @@
 
 import typer
 
-from centralcli import common, render
-from centralcli.cache import CacheClient, api
+from centralcli import api_clients, common, render
 from centralcli.constants import iden_meta
 from centralcli.models.cache import Clients
+from centralcli.objects.cache import CacheClient
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

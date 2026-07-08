@@ -20,8 +20,8 @@ Documentation: https://central-api-cli.readthedocs.io/en/latest/readme.html
 HomePage: https://github.com/Pack3tL0ss/central-api-cli
 """
 # flake8: noqa
+import aiohttp
 import os
-from re import A
 import sys
 from pathlib import Path
 from typing import Callable, Iterable, List, Literal, Optional, Sequence, overload
@@ -30,6 +30,8 @@ from functools import cached_property
 import click
 import typer
 from rich.traceback import install
+
+from centralcli.typedefs import UNSET
 
 from .environment import env
 from .utils import Utils
@@ -53,7 +55,7 @@ def get_option_from_args(option: str, is_flag: Literal[False]) -> str: ...
 def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Optional[Literal[False]], pop: Optional[bool]) -> str: ...
 
 @overload
-def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Literal[True],  pop: Optional[bool]) -> int: ...
+def get_option_from_args(option: str, is_flag: Literal[False], convert_int: Literal[True], pop: Optional[bool]) -> int: ...
 
 def get_option_from_args(option: str, is_flag: bool = True, pop: bool = True, convert_int: bool = False) -> str | int | bool:
     """Get CLI Options from sys.argv
@@ -267,16 +269,21 @@ from .cnx.api import CentralAPI, GreenLakeAPI
 class APIClients:
     # clients_by_workspace: dict[str, ClassicAPI | GreenLakeAPI | CentralAPI | None] = {}
 
-    def __init__(self, cfg: Config = None, classic_base_url: str = None, glp_base_url: str = None, cnx_base_url: str = None, silent: bool = True):
+    def __init__(self, cfg: Config = None, *, classic_base_url: str = None, glp_base_url: str = None, cnx_base_url: str = None, silent: bool = True, limit_per_host: int | None = None, total_timeout: int | None = UNSET):
         self.config = cfg or config
         self.classic_base_url = classic_base_url
         self.glp_base_url = glp_base_url
         self.cnx_base_url = cnx_base_url
         self.silent = silent
+        self.limit_per_host = limit_per_host
+        self.total_timeout = total_timeout
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.config.workspace} workspace) object at {hex(id(self))}>"
 
     @property
     def classic(self) -> ClassicAPI:
-        return ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
+        return ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent, limit_per_host=self.limit_per_host, total_timeout=self.total_timeout)
         # if APIClients.clients_by_workspace.get(config.workspace, {}).get("classic"):
         #     return APIClients.clients_by_workspace[config.workspace]["classic"]
         # classic_client = ClassicAPI(self.config, base_url=self.classic_base_url, silent=self.silent)
@@ -286,7 +293,7 @@ class APIClients:
 
     @property
     def glp(self) -> GreenLakeAPI | None:
-        return None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
+        return None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)  # , limit_per_host=self.limit_per_host, total_timeout=self.total_timeout)  # XXX limit_per_host and total_timeout not implemented for glp/cnx the need was for classic (watcher.py)
         # if APIClients.clients_by_workspace.get(config.workspace, {}).get("glp"):
         #     return APIClients.clients_by_workspace[config.workspace]["glp"]
         # glp_client = None if not self.config.glp.ok else GreenLakeAPI(self.config, base_url=self.glp_base_url, silent=self.silent)
@@ -296,7 +303,7 @@ class APIClients:
 
     @property
     def cnx(self) -> CentralAPI | None:
-        return None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
+        return None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)  # , limit_per_host=self.limit_per_host, total_timeout=self.total_timeout)
         # if APIClients.clients_by_workspace.get(config.workspace, {}).get("cnx"):
         #     return APIClients.clients_by_workspace[config.workspace]["cnx"]
         # cnx_client = None if not self.config.cnx.ok else CentralAPI(self.config, base_url=self.cnx_base_url, silent=self.silent)
@@ -306,31 +313,14 @@ class APIClients:
 
 api_clients = APIClients()
 
-from .cache import Cache, CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding, CacheService, CacheSub
+from .cache import Cache
+from .objects.cache import CacheCert, CacheClient, CacheDevice, CacheGroup, CacheGuest, CacheInvDevice, CacheLabel, CacheMpsk, CacheMpskNetwork, CachePortal, CacheSite, CacheTemplate, CacheFloorPlanAP, CacheBuilding, CacheService, CacheSub
 
 cache = Cache(config=config)
-if config.valid:
-    CacheDevice.set_db(cache.DevDB)
-    CacheInvDevice.set_db(cache.InvDB)
-    CacheCert.set_db(cache.CertDB)
-    CacheGroup.set_db(cache.GroupDB)
-    CacheSite.set_db(cache.SiteDB)
-    CacheClient.set_db(cache.ClientDB, cache=cache)
-    CacheLabel.set_db(cache.LabelDB)
-    CachePortal.set_db(cache.PortalDB)
-    CacheGuest.set_db(cache.GuestDB, cache=cache)
-    CacheTemplate.set_db(cache.TemplateDB)
-    CacheMpskNetwork.set_db(cache.MpskNetDB)
-    CacheMpsk.set_db(cache.MpskDB)
-    CacheBuilding.set_db(cache.BuildingDB)
-    CacheFloorPlanAP.set_db(cache.FloorPlanAPDB, building_db=cache.BuildingDB)
-    if config.glp.ok:
-        CacheSub.set_db(cache.SubDB)
-        CacheService.set_db(cache.SvcDB)
-
 from .clicommon import CLICommon
 
 common = CLICommon(config.workspace, cache, raw_out=raw_out)
+CacheDevice.cache = common.cache
 
 from . import cleaner, render
 

@@ -2,14 +2,16 @@
 # MIT License
 from __future__ import annotations
 
-import oauthlib
-from requests_oauthlib import OAuth2Session
-from oauthlib.oauth2 import BackendApplicationClient
-from pathlib import Path
-from .. import config, log
 import json
-import pendulum
+from pathlib import Path
 from typing import Literal
+
+import oauthlib
+import pendulum
+from oauthlib.oauth2 import BackendApplicationClient
+from requests_oauthlib import OAuth2Session
+
+from .. import config, log
 
 
 class NewCentralURLs:
@@ -134,8 +136,8 @@ class NewCentralBase:
                 return
 
             if "expires" in token_data:
-                if pendulum.now().int_timestamp - 300 > token_data["expires"]:
-                    return  # if cached token is within 5 mins of expiration we want to force a refresh
+                if pendulum.now().int_timestamp - 1_800 > token_data["expires"]:
+                    return  # if cached token is within 30 mins of expiration we want to force a refresh
 
             return token_data.get("access_token")
 

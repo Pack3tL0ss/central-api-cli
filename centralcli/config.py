@@ -18,10 +18,11 @@ from rich.prompt import Confirm, Prompt
 from tablib.exceptions import UnsupportedFormat
 
 from .constants import CLUSTER_URLS
-from .utils import ToBool
 from .environment import env
 from .models.config import ConfigData
 from .typedefs import JSON_TYPE
+from .utils import ToBool
+from .objects import CacheFile
 
 try:
     import readline  # noqa
@@ -311,7 +312,7 @@ class Config:
         self.stored_tasks_file = self.dir / "stored-tasks.yaml"
         self.cache_dir = self.dir / ".cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        self.default_cache_file = self.cache_dir / "db.json"
+        self.default_cache_file = self.cache_dir / "default.db"
         self.sticky_workspace_file = self.cache_dir / "last_workspace"
         self.sanitize_file = self.dir / "redact.yaml"
 
@@ -361,9 +362,14 @@ class Config:
         if extras:  # pragma: no cover
             self.deprecation_warnings = self.deprecation_warnings or []
             self.deprecation_warnings += [f'The following configuration items [dim italic]({", ".join(extras)})[/] were found in the config, but are not recognized by [cyan]cencli[/]']
+        self.cache = CacheFile(self.get_cache_file_name())
+        self.tinydb_cache = CacheFile(self.get_cache_file_name(tinydb=True))
+
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({self.workspace}) object at {hex(id(self))}>"
 
     def __bool__(self):
-        return len(self.data) > 0 and self.workspace in self.data
+        return len(self.data) > 0 and self.workspace in self.data.get("workspaces", {})
 
     def __len__(self):
         return len(self.data)  # pragma: no cover
@@ -424,16 +430,6 @@ class Config:
         return Path(self.cache_dir / f'cnx_tok_{self._normalized_workspace}_{self.classic.client_id}.json') if self.classic.client_id else None
 
     @property
-    def cache_file(self):
-        if not (env.is_pytest and self.dev.mock_tests):
-            return self.default_cache_file if self.workspace in ["central_info", "default"] else self.cache_dir / f"{self._normalized_workspace}.json"
-        return self.cache_dir / "db.mocked.json"
-
-    @property
-    def cache_file_ok(self):
-        return self.cache_file.is_file() and self.cache_file.stat().st_size > 0
-
-    @property
     def last_command_file(self):
         return self.cache_dir / "last_command" if self.workspace in ["central_info", "default"] else self.cache_dir / f"{self._normalized_workspace}_last_command"
 
@@ -455,6 +451,14 @@ class Config:
         example_str = f"\n# See Example at link below for all options.\n# {EXAMPLE_LINK}"
         data_str = yaml.safe_dump(self.data, sort_keys=False)
         return f"CFG_VERSION: 2\n\n{data_str}{example_str}\n"
+
+    def get_cache_file_name(self, *, tinydb: bool = False):
+        if not (env.is_pytest and self.dev.mock_tests):
+            if tinydb:
+                return self.cache_dir / (f"{self._normalized_workspace}.json" if self.workspace not in ["central_info", "default"] else "db.json")
+            else:
+                return self.default_cache_file if self.workspace in ["central_info", "default"] else self.cache_dir / f"{self._normalized_workspace}.db"
+        return self.cache_dir / "db.mocked.json" if tinydb else self.cache_dir / "mock.db"
 
     def get_cnx_url(self, classic_base_url: str | None):
         if not classic_base_url:  # This can occur if they use --ws flag with an workspace that is not configured
@@ -546,8 +550,9 @@ class Config:
                         if not model:
                             return import_data
                         # return yaml.load(f, Loader=yaml.SafeLoader) if not model else model(*yaml.load(f, Loader=yaml.SafeLoader))
-                    elif import_file.suffix in ['.csv', '.tsv', '.dbf']:
-                        csv_data = "".join([line for line in f.read().splitlines(keepends=True) if line and not line.startswith("#")])
+                    elif import_file.suffix in ['.csv', '.tsv', '.dbf']:  # tested csv.reader it's actually slower than the manual parsing below
+                        csv_data = "".join([line for line in f.read().splitlines(keepends=True) if line.strip() and not line.lstrip().startswith("#")])
+
                         try:
                             ds = tablib.Dataset().load(csv_data)
                         except UnsupportedFormat:
@@ -557,7 +562,8 @@ class Config:
                             except UnsupportedFormat:
                                 print(f'Unable to import data from {import_file.name} verify formatting commas/headers/etc.')
                                 sys.exit(1)
-                        import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)
+
+                        import_data = yaml.load(ds.json, Loader=yaml.SafeLoader)  # SLOW fetching ds.json from csv with ~ 17k rows takes ~ 15s  # TODO investigate faster methods/libraries polars/pyarrow
                         import_data = [{k: v if str(v).lower() not in ["true", "false"] else ToBool(v).value for k, v in inner.items()} for inner in import_data]
                         if not model:
                             return import_data
@@ -591,21 +597,29 @@ class Config:
             str: The workspace to use based on --workspace --ws -d flags and last_workspace file.
         """
         # No printing, any printing messes with completion
-        # env_ws = env.get("ARUBACLI_ACCOUNT", env.get("CENCLI_WORKSPACE", ""))
+        workspace = None
+        workspace_from_arg = None
         if "-d" in sys.argv or " -d " in str(sys.argv) or str(sys.argv).rstrip("']").endswith("-d"):
             return self.default_workspace
-        elif [arg for arg in sys.argv if arg.startswith("-") and arg.count("-") == 1 and "d" in arg]:
+        if [arg for arg in sys.argv if arg.startswith("-") and arg.count("-") == 1 and "d" in arg]:
             return self.default_workspace
-        elif "--workspace" in sys.argv:
-            workspace = sys.argv[sys.argv.index("--workspace") + 1]
+        elif "--workspace" in sys.argv:  # can not return here if non default workspace, last_workspace file is updated below
+            workspace_from_arg = sys.argv[sys.argv.index("--workspace") + 1]
         elif "--ws" in sys.argv:
-            workspace = sys.argv[sys.argv.index("--ws") + 1]
+            workspace_from_arg = sys.argv[sys.argv.index("--ws") + 1]
+        elif "--move-ws" in sys.argv:  # specific to cencli start hook-watcher
+            workspace_from_arg = sys.argv[sys.argv.index("--move-ws") + 1]
+        if workspace_from_arg == self.default_workspace:
+            return self.default_workspace
+
+        if workspace_from_arg is not None:
+            workspace = workspace_from_arg
         else:
-            workspace = self.default_workspace if not env.workspace else env.workspace
+            workspace = env.workspace or self.default_workspace
 
         if workspace in ["central_info", "default"]:
             if self.forget and self.last_workspace_expired:
-                pass  # all_commands_callback will handle messaging can't do here, along with last_workspace file reset.
+                pass  # all_commands_callback will handle messaging and last_workspace file reset.  Can't do it here as the typer app is not loaded yet.
             else:
                 workspace = self.last_workspace or workspace
         elif (workspace in self.data or workspace in self.data.get("workspaces", {})) and workspace != env.workspace:

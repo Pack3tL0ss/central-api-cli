@@ -40,22 +40,23 @@ Bottom Line.
 """
 import sys
 import time
-from traceback import print_exception
 from functools import partial
 from pathlib import Path
+from traceback import print_exception
 from unittest import mock
 
-import pytest
 import pendulum
+import pytest
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.http_exceptions import ContentLengthError
 from click.testing import Result
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import api_clients as api_clients, cache, config, log
-from centralcli.cache import CacheDevice
+from centralcli import api_clients as api_clients
+from centralcli import cache, config, log
+from centralcli.objects.cache import CacheDevice
 from centralcli.exceptions import CentralCliException
-from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
-from aiohttp.http_exceptions import ContentLengthError
 
 from ._mock_request import mock_request
 from ._test_data import test_data as test_data

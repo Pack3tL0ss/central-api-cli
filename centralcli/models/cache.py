@@ -40,7 +40,7 @@ class InventoryDevice(BaseModel):
     type: Optional[str] = Field(None, alias=AliasChoices("type", "device_type", "deviceType"))
     model: Optional[str] = None
     sku: Optional[str] = Field(None, alias=AliasChoices("aruba_part_no", "sku", "PartNumber"))
-    services: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services", "tier"))
+    subscription: Optional[List[str] | str] = Field(None, alias=AliasChoices("license", "services", "tier", "subscription"))
     subscription_key: Optional[str] = Field(None, alias=AliasChoices("subscription_key", "key"))
     subscription_expires: Optional[int] = Field(None, alias=AliasChoices("subscription_expires", "end_time"))
     assigned: Optional[bool] = None
@@ -71,7 +71,7 @@ class Inventory(RootModel):
                 return self._inv_type(value, model=device.get("model"))
             if key == "subscription_expires" and value:
                 return value if len(str(value)) == 10 else value / 1000  # convert ts in ms to ts in seconds
-            if key == "services":
+            if key in ["subscription", "services"]:
                 if not value:
                     return None
                 return value if not isinstance(value, list) or len(value) > 1 else value[0]
@@ -117,8 +117,8 @@ class Inventory(RootModel):
 
         return count_str
 
-    def cache_dump(self) -> list[dict[str, str | int | bool]]:  # currently no adjustments from model_dump.  use json.loads(self.model_dump_json()) with customer json serializer if adjustments needed in future.
-        return self.model_dump()
+    def cache_dump(self) -> list[dict[str, str | int | bool]]:  # currently no adjustments from model_dump.  use json.loads(self.model_dump_json()) with custom json serializer if adjustments needed in future.
+        return [dev.model_dump() for dev in self.root]
 
 
 class DeviceStatus(str, Enum):
@@ -174,6 +174,9 @@ class Site(BaseModel):
     lat: Optional[float] = Field(None, alias=AliasChoices("latitude", "lat"))
     devices: Optional[int] = Field(0, alias=AliasChoices("associated_device_count", "devices", "associated devices"))  # field in prev cache had space "associated devices"
 
+    def cache_dump(self) -> dict[str, str | int | float | None]:
+        return self.model_dump()
+
 
 class Sites(RootModel):
     root: List[Site]
@@ -211,6 +214,9 @@ class Sites(RootModel):
     def by_id(self) -> Dict[int, Dict[str, str | int | float]]:
         return {s.id: s.model_dump() for s in self.root}
 
+    def cache_dump(self) -> list[dict[str, str | int | float | None]]:
+        return [s.cache_dump() for s in self.root]
+
 
 class GatewayRole(str, Enum):
     branch = "branch"
@@ -244,6 +250,9 @@ class Group(BaseModel):
     ap_config: Optional[Path] = Field(None, exclude=True)
     gw_vars: Optional[Path] = Field(None, exclude=True)
     ap_vars: Optional[Path] = Field(None, exclude=True)
+
+    def cache_dump(self) -> dict[str, Any]:
+        return {k: v if str(v) != "NA" else None for k, v in self.model_dump().items()}
 
 
 class Groups(RootModel):
@@ -288,9 +297,7 @@ class Groups(RootModel):
                     allowed_dev_types.get(dt) for dt in [*g["properties"].get("AllowedDevTypes", []), *g["properties"].get("AllowedSwitchTypes", [])] if dt != "Switches"
                 ],
                 "GwNetworkRole": gw_role_map[g["properties"].get("GwNetworkRole", "NA")],
-                "aos10": "NA"
-                if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA"
-                else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
+                "aos10": "NA" if aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "NA" else aos_version_map.get(g["properties"].get("AOSVersion", "NA"), "err") == "AOS10",
                 "microbranch": "NA" if g["properties"].get("ApNetworkRole") is None else g["properties"]["ApNetworkRole"].lower() == "microbranch",
                 "monitor_only_sw": "AOS_S" in g["properties"].get("MonitorOnly", []),
                 "monitor_only_cx": "AOS_CX" in g["properties"].get("MonitorOnly", []),
@@ -307,6 +314,9 @@ class Groups(RootModel):
             ]  # We allow hyphen in most inputs/import keys to be consistent with the CLI Options, but we always use _ to store the data.
 
         return clean
+
+    def cache_dump(self) -> list[dict[str, Any]]:
+        return [g.cache_dump() for g in self.root]
 
 
 class Template(BaseModel):
@@ -343,8 +353,8 @@ class Templates(RootModel):
 
 
 class Label(BaseModel):
-    id: int = Field(alias="label_id")
-    name: str = Field(alias="label_name")
+    id: int = Field(alias=AliasChoices("id", "label_id"))
+    name: str = Field(alias=AliasChoices("name", "label_name"))
     devices: Optional[int] = Field(0, alias=AliasChoices("devices", "associated_device_count"))
 
 
@@ -369,7 +379,6 @@ class ClientType(str, Enum):
     wireless = "wireless"
 
 
-# Client Cache  # TODO need to include attribute for TinyDB.Table doc_id
 class Client(BaseModel):
     model_config = ConfigDict(use_enum_values=True, arbitrary_types_allowed=True, json_encoders={DateTime: lambda dt: dt.ts})
     mac: str = Field(default_factory=str, alias=AliasChoices("macaddr", "mac"))
@@ -439,6 +448,9 @@ class Clients(RootModel):
     @property
     def by_mac(self) -> Dict[str, Any]:  # Nedd to use model_dump_json to use models JsonEncoder
         return {c.mac or f"NOMAC_{randint(100_000, 999_999)}": json.loads(c.model_dump_json()) for c in self.root}
+
+    def cache_dump(self) -> list[dict[str, str | int | None]]:
+        return [json.loads(c.model_dump_json()) for c in self.root]
 
 
 class MpskNetwork(BaseModel):
@@ -541,7 +553,10 @@ class Cert(BaseModel):
     @field_validator("expiration", mode="before")
     @classmethod
     def convert_expiration(cls, expiration: str) -> int:
-        return pendulum.from_format(expiration.rstrip("Z"), "YYYYMMDDHHmmss").int_timestamp
+        if expiration:
+            return pendulum.from_format(expiration.rstrip("Z"), "YYYYMMDDHHmmss").int_timestamp
+        else:
+            return 0
 
 
 class Certs(RootModel):

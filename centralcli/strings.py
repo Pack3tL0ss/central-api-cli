@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.markup import escape
 from rich.syntax import Syntax
 
-from centralcli import log, utils, config
+from centralcli import config, log, utils
 from centralcli.render import tty
 from centralcli.vendored.csvlexer.csv import CsvLexer
 
@@ -31,6 +31,25 @@ console = Console(emoji=False)
 TabLibFormats = Literal['json', 'yaml', 'csv', 'tsv', 'dbf', 'html', 'jira', 'latex', 'df', 'rst', 'cli']
 ExampleType = Literal["devices", "sites", "groups", "labels", "macs", "mpsk", "variables"]
 Action = Literal["add", "delete", "move", "rename", "other"]
+
+
+@dataclass
+class Emoji:
+    warn: str = "[dark_orange3]\u26a0[/] "  # ⚠
+    info: str = "[deep_sky_blue3]\u2139[/] "  # ℹ
+    reboot: str = "[bright_green]\u267b[/] "  # ♻ :recycle:
+    cache: str = "\U0001f503"  # 🔃 :arrows_clockwise:
+    delete: str = "\U0001f5d1"  # 🗑 :wastebasket:
+
+
+@dataclass
+class CLIStrings:
+    glp: str = "[green]GreenLake[/]"
+
+
+emoji = Emoji()
+cli_strings = CLIStrings()
+
 
 _pad = " " * 6
 ADD_FIELDS = {
@@ -910,16 +929,35 @@ dev_options:          # --- Developer Options ---
 """
 
 
-@dataclass
-class Emoji:
-    warn: str = "[dark_orange3]\u26a0[/] "  # ⚠
-    info: str = "[deep_sky_blue3]\u2139[/] "  # ℹ
+start_help = f"""Start WebHook Proxy Service on this system in the background
 
+    Currently 2 webhook automations:
+    For Both automations the URL to configure as the webhook destination is [cyan]http://<fqdn of this system>[:PORT]/webhook[/] (currently http)
 
-@dataclass
-class CLIStrings:
-    glp: str = "[green]GreenLake[/]"
+    [cyan]hook-watcher[/]:
+      - Watches a directory for import files with specific prefixes.
+      - For new devices.  Automatically performs devices moves (sites/group/label) based on what is defined in the import file.
+      - Also supports ui-only [red]deletes[/] for migration workflow, which will [red]delete[/] the device from the --delete-ws workspace when they go offline.
+      - For migration workflow.  Sites are also deleted, once all devices in that site have been removed.
+      - The Moves/Deletes are performed on intgerval every 10 minutes after the watcher-service is started.
+      - creates the following files:
+        1. watcher-results.csv:  Status of each action attempted (move/delete).  Logs will also have details.
+        2. watcher-staged-move-WORKSPACE_NAME.csv: The staged moves that have yet to be performed (devices have come online).
+        3. watcher-staged-del-WORKSPACE_NAME.csv: The staged deletes if using migrate workflow (devices have gone offline).
+        When moves/deletes are performed the watcher-staged file associated with that action is deleted, and watcher-results.csv is updated with the results.
+        If failures occur, depending on the failure, those devices will remain in the watcher-staged file for retry at the next interval.
 
+        {emoji.info} The workspace the command is run as is evaluated as the [bright_green]move[/] workspace (or set envvar [cyan]CENCLI_DEST_WORKSPACE[/]).
+        Meaning it will watch for New devices to come online in that workspace.
 
-emoji = Emoji()
-cli_strings = CLIStrings()
+        For the migrate workflow [dim italic]migrating devices from one workspace to another[/] provide --delete-ws (or set envvar [cyan]CENCLI_SRC_WORKSPACE[/])
+        {emoji.warn} Providing this option means devices will be removed/deleted from monitoring UI once they go offline, and the sites associated with the devices will be
+        deleted once all devices in the site have gone offline.
+
+    [cyan]hook-proxy[/]:
+      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
+      - Presents it's own REST API that can be polled for branch/tunnel status:
+        See [cyan]http://localhost:port/api/docs[/] (after starting proxy) for available endpoints / schema details.
+
+    [italic]Requires optional hook-proxy component '[bright_green]uv tool install -U centralcli{escape("[hook-proxy]")}[reset]'
+    """  # pragma: no cover

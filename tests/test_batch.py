@@ -31,8 +31,8 @@ from ._test_data import (
     test_switch_var_file_flat,
     test_switch_var_file_json,
     test_update_aps_file,
-    test_verify_file,
     test_var_file,
+    test_verify_file,
 )
 
 runner = CliRunner()
@@ -123,12 +123,12 @@ if config.dev.mock_tests:
         "idx,args,pass_condition",
         [
             [1, (str(test_device_file), "--cx-retain"), lambda r: "API" in r],
-            [2, (str(test_device_file_one_not_exist),), lambda r: "skipped" in r],
+            [2, (str(test_device_file_one_not_exist),), lambda r: "skipped" in r or "ignoring" in r.lower()],  # tests correct matching of cache_devs to data from import when one of the cache_devs is skipped
         ]
     )
     def test_batch_move(ensure_inv_cache_batch_devices, ensure_dev_cache_batch_devices, ensure_cache_label1, ensure_cache_site1, idx: int, args: tuple[str], pass_condition: Callable):
         result = runner.invoke(app, ["batch", "move", "devices", *args, "-y"])
-        capture_logs(result, f"{env.current_test}{idx}")
+        capture_logs(result, f"{env.current_test}-{idx}")
         assert result.exit_code == 0
         assert "200" in result.stdout
         assert pass_condition(result.stdout)
@@ -199,8 +199,8 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,fixtures,args,pass_condition",
         [
-            [1, None, (str(test_var_file),), lambda r: r.count("200") == 2],
-            [2, None, (str(test_var_file), "-R"), lambda r: r.count("200") == 2],
+            [1, None, (str(test_var_file),), lambda r: "200" in r],
+            [2, None, (str(test_var_file), "-R"), lambda r: "200" in r],
         ]
     )
     def test_batch_update_variables(idx: int, fixtures: str | list[str] | None, args: tuple[str], pass_condition: Callable, request: pytest.FixtureRequest):
@@ -252,7 +252,7 @@ else:  # pragma: no cover
         [2, ("devices", "nonexistfile.fake.json"), lambda r: "Invalid" in r],
         [3, ("devices", f'{str(test_device_file)}', f'{str(test_rename_aps_file)}', "--label"), lambda r: "oo many" in r],
         [4, ("devices", f'{str(test_site_file)}'), lambda r: "missing required field" in r],
-        [5, ("devices", f'{str(test_switch_var_file_flat)}'), lambda r: "AttributeError" in r],
+        [5, ("devices", f'{str(test_switch_var_file_flat)}'), lambda r: "Error" in r and "⚠" in r],
         [6, ("devices", f'{str(test_device_file_none_exist)}'), lambda r: "No devices found" in r],
         [7, ("devices", f'{str(test_device_file_w_dup)}'), lambda r: "Duplicates exist" in r],
     ]

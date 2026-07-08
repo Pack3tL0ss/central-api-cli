@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 import typer
 
-from centralcli import common, render
-from centralcli.cache import api
+from centralcli import api_clients, common, render
 from centralcli.constants import DevTypes
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

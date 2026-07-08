@@ -279,7 +279,7 @@ class CentralAPI:
 
         return await self.session.patch(url, json_data=json_data)
 
-    async def delete_site(self, site_ids: int | list[int]) -> list[Response]:
+    async def delete_site(self, site_ids: int | list[int], continue_on_fail: bool = False) -> list[Response]:
         """Delete Site(s).
 
         Args:
@@ -294,7 +294,8 @@ class CentralAPI:
             [
                 BatchRequest(self.session.delete, f"{b_url}/{_id}")
                 for _id in site_ids
-            ]
+            ],
+            continue_on_fail=continue_on_fail
         )
 
     async def move_devices_to_site(

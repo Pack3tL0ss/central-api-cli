@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import binascii
+import itertools
 import json
 import logging
 import os
@@ -435,8 +436,8 @@ class Utils:
                 it is converted to string and italics applied.  If list of strings
                 is provided it is converted to str and formatted.
             color_str (str, optional): Text is formatted with this color.
-                'random' will pick a random color.  If text is a list, it will pick a random
-                color for each item in the list.
+                'random' will pick a random color.  If text is a list, it will alternate
+                based on the items in the list.
                 Default: bright_green
             pad_len (int, optional): Number of spaces to pad each entry with.  Defaults to 0.
             italic (bool, optional): Wheather to apply dim format to text.
@@ -450,6 +451,8 @@ class Utils:
         if isinstance(text, bool):
             italic = True if italic is None else italic
             text = str(text)
+        elif isinstance(text, str) and text.lower() in ["up", "down"]:
+            return f"[{'bright_green' if text.lower() == 'up' else 'red'}]{text}[/]"
 
         def _get_color_str(_color: str):  # , _dim: bool = False, _italic: bool = False, _bold: bool = False, _blink: bool = False):
             if _color == "random":
@@ -467,7 +470,10 @@ class Utils:
             text = f"{' ' if pad_len else '':{pad_len or 1}}[{color}]{text}[/]"
             return text if not pad_len else text.lstrip()  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
         elif isinstance(text, (list, set)) and all([isinstance(x, str) for x in text]):
-            colors = [_get_color_str(color_str) for _ in range(len(text))]
+            if isinstance(color_str, list):
+                colors = list(itertools.islice(itertools.cycle(color_str), len(text)))
+            else:
+                colors = [_get_color_str(color_str) for _ in range(len(text))]
             text = [f"{' ' if pad_len else '':{pad_len or 1}}[{c}]{t}[/]" for t, c in zip(text, colors)]
             text = text if pad_len else [t.lstrip() for t in text]  # workaround for py < 3.10 ... '=' alignment not allowed in string format specifier (pad_len or 1 above to avoid, then lstrip here to strip)
             return sep.join(text)
@@ -477,6 +483,13 @@ class Utils:
     @staticmethod
     def chunker(seq: Iterable, size: int):
         return [seq[pos:pos + size] for pos in range(0, len(seq), size)]
+
+    def expand_generic_dev_type(self, dev_type: Iterable) -> list[Literal["cx", "sw", "ap", "gw"]]:
+        if dev_type:
+            dev_type = self.listify(dev_type)
+            if "switch" in dev_type:
+                dev_type = list(set(filter(lambda t: t != "switch", [*dev_type, "cx", "sw"])))
+        return dev_type
 
     @staticmethod
     def normalize_device_sub_field(data: list[dict[str, str]], *, word_sep: Literal["-", "_"] = None) -> list[dict[str, str]]:
@@ -647,6 +660,7 @@ class Utils:
         if not items:
             return ""
 
+        pad = pad if "\n" in sep else 0
         max = max if max and max + 1 != len(items) else len(items)  # if max is 1 less than the items sent we display all as we'd just be swapping one item for ... anyway.
         bot = int(max / 2)
         top = max - bot
@@ -737,7 +751,7 @@ class Utils:
         req_url = f"{base_url or ''}{url}"
         req = requests.Request(method, url=req_url, params=params, files=files)
         prepared = req.prepare()
-        return {"params": params, "payload": prepared.body, "headers": prepared.headers}
+        return {"params": params or {}, "payload": prepared.body, "headers": prepared.headers}
 
     @staticmethod
     def parse_phone_number(phone_number: int | str, strict: bool = True) -> str:
@@ -804,6 +818,28 @@ class Utils:
             raise typer.Exit(1)
 
         return {k: v for k, v in zip(vars, vals)}
+
+    @staticmethod
+    def format_ranges(nums, sep: str = ", "):
+        if not nums:
+            return nums
+
+        nums = sorted(set(nums))
+        ranges = []
+
+        start = end = nums[0]
+
+        for i in range(1, len(nums)):
+            if nums[i] == end + 1:  # Continue the current sequence
+                end = nums[i]
+            else:  # Close the current range and start a new one
+                ranges.append(f"{start}-{end}" if start != end else str(start))
+                start = end = nums[i]
+
+        # Append the final sequence or individual number
+        ranges.append(f"{start}-{end}" if start != end else str(start))
+
+        return sep.join(ranges)
 
 
 if __name__ == "__main__":

@@ -280,16 +280,16 @@ class Inventory(BaseModel):
     @model_validator(mode="before")
     def prep_for_cache(data: list[dict[str, int | dict[str, Any]]]) -> list[dict[str, int | dict[str, Any]]]:
         def _inv_type(dev_type: str, model: str | None) -> Literal["ap", "gw", "sw", "cx", "bridge", "sdwan"] | None:
-                if dev_type is None:  # Only occurs when import data is passed into this model, inventory data from API should have the type
-                    return None
+            if dev_type is None:  # Only occurs when import data is passed into this model, inventory data from API should have the type
+                return None
 
-                if dev_type == "IAP":
-                    return "ap"
-                if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY, BRIDGE, SDWAN
-                    aos_sw_models = {"2530", "2540", "2920", "2930", "3810", "5400"}  # current as of 2.5.8 not expected to change.  MAS not supported.
-                    return "sw" if model[0:4] in aos_sw_models else "cx"
+            if dev_type == "IAP":
+                return "ap"
+            if dev_type == "SWITCH":  # SWITCH, AP, GATEWAY, BRIDGE, SDWAN
+                aos_sw_models = {"2530", "2540", "2920", "2930", "3810", "5400"}  # current as of 2.5.8 not expected to change.  MAS not supported.
+                return "sw" if model[0:4] in aos_sw_models else "cx"
 
-                return "gw" if dev_type == "GATEWAY" else dev_type.lower()
+            return "gw" if dev_type == "GATEWAY" else dev_type.lower()
 
         items = [{k: v if k not in ["deviceType"] else _inv_type(v, model=dev.get("model")) for k, v in dev.items() if v != 'devices/device'} for dev in data.get("items", [])]
         return {**data, "items": items}

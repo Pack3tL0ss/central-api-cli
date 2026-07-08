@@ -6,26 +6,26 @@ i.e. The CLI handles validation / errors prior to sending to the library modules
 So to test handling of invalid arguments to the library methods we need to test them directly (or via "cencli test method")
 """
 
-from enum import Enum
 from collections.abc import Callable
+from enum import Enum
 from typing import Any
 
 import pytest
 from click.exceptions import Exit
 from typer.testing import CliRunner
 
-from centralcli import api_clients, cache, cleaner, common, utils, log
-from centralcli.objects import DateTime
-from centralcli.cache import api
+from centralcli import api_clients, cache, cleaner, common, log, utils
 from centralcli.cli import app
 from centralcli.constants import ShowArgs, arg_to_what, lib_to_api
 from centralcli.environment import env
 from centralcli.exceptions import MissingRequiredArgumentException
+from centralcli.objects import DateTime
 
 from . import capture_logs, config, test_data
 from ._test_data import test_ap_ui_group_template, test_cert_file, test_sw_template
 
 runner = CliRunner()
+api = api_clients.classic
 
 
 class InvalidTimeRange(str, Enum):

@@ -8,22 +8,24 @@ import json
 import sys
 from datetime import datetime as dt
 from pathlib import Path
-from typing import Literal, Optional
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 import uvicorn
-from fastapi import FastAPI, Header, Request, Response, status
+from fastapi import FastAPI, Header, Request, Response as FastAPIResponse, status
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 from starlette.requests import Request  # NoQA
 from starlette.responses import FileResponse
 
-from centralcli import MyLogger, cache, config
+from centralcli import MyLogger, cache, config, api_clients, common
 from centralcli.client import BatchRequest
-from centralcli.response import Response as APIResponse
+from centralcli.models.sql import WebHookData
+from centralcli.models.webhook import BranchResponse, HookResponse, wh_resp_schema
+from centralcli.response import Response as Response
 
-from .cache import api
+api = api_clients.classic
 
 log_file = Path(config.dir / "logs" / f"{Path(__file__).stem}.log")
 log_file.parent.mkdir(exist_ok=True)
@@ -75,80 +77,6 @@ print(f"Web Hook Proxy logging to {log_file}")
 #     },
 # }
 # update and pass as param to uvicorn.run to send logs to our file "log_config=LOGGING_CONFIG"
-
-
-class HookResponse(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "OK", "updated": True, }
-        }
-
-
-class HookResponseTooBig(HookResponse):
-    class Config:
-        schema_extra = {
-            "example": {"result": "Content too long", "updated": False}
-        }
-
-
-class HookResponseTokenFail(BaseModel):
-    result: str
-    updated: bool
-
-    class Config:
-        schema_extra = {
-            "example": {"result": "Unauthorized", "updated": False}
-        }
-
-
-class BranchResponse(BaseModel):
-    id: str
-    ok: bool
-    alert_type: str
-    device_id: str
-    state: Literal["Open", "Close"]
-    text: str
-    timestamp: Optional[int]
-
-    class Config:
-        schema_extra = {
-            "example": {
-                    "id": "CNF1234567_init",
-                    "ok": False,
-                    "alert_type": "BH_POLL_UPLK_OR_TUN_DOWN",
-                    "device_id": "CNF1234567",
-                    "state": "Open",
-                    "text": "sdbranch1:7008:uplk_g1694_v3250_inet::vpnc1:uplk_g1694_v3250_inet found to be down at hook proxy startup",
-                    "timestamp": int(dt.now().timestamp())
-            }
-        }
-
-
-# Not Used for now would need to ensure all possible fields
-class WebhookData(BaseModel):
-    id: str
-    timestamp: int
-    nid: int
-    alert_type: str
-    severity: str
-    details: dict
-    description: str
-    setting_id: str
-    state: str
-    webhook: str
-    cluster_hostname: str = None
-    operation: str = None
-    device_id: str = None
-    text: str = None
-
-
-wh_resp_schema = {
-    401: {"model": HookResponseTokenFail},
-    413: {"model": HookResponseTooBig}
-}
 
 
 app = FastAPI(
@@ -205,7 +133,7 @@ def _hook_response(data: dict) -> dict:
         }
 
 
-def _batch_resp_all_ok(responses: list[APIResponse]) -> bool:
+def _batch_resp_all_ok(responses: list[Response]) -> bool:
     if not all(r.ok for r in responses):
         _ = [log.error(str(r), show=True) for r in responses]
         log.critical("hook proxy exiting due to error.", show=True)
@@ -255,7 +183,7 @@ def get_current_branch_state():
     ]
     batch_resp = api.session.batch_request(_reqs)
     if not _batch_resp_all_ok(batch_resp):
-        sys.exit(1)
+        common.exit()
 
     down_tunnels = {s: [] for s in [ser for _, serials in gw_maybe_bad.items() for ser in serials]}
     for idx, serial in enumerate(down_tunnels.keys()):
@@ -276,12 +204,10 @@ def get_current_branch_state():
         for k, v in down_tunnels.items() if v
     ]
 
-    # TODO hook_data to it's own DB file
-    cache.HookDataDB.truncate()
     cache_upd_resp = api.session.request(cache.update_hook_data_db, alerts_now)
     log.debug(f"Hook cache update response: {cache_upd_resp}")
 
-    log.info(f"Initial state of HookDataDB set.  {len(alerts_now)} gateways with WAN issues.", show=True)
+    log.info(f"Initial state of WebHookData DB set.  {len(alerts_now)} gateways with WAN issues.", show=True)
 
 
 def verify_header_auth(data: dict, svc: str, sig: str, ts: str, del_id: str):
@@ -330,14 +256,15 @@ async def check_cache_entry(data: dict) -> list | None:
         data (dict): The webhook post content.
 
     Returns:
-        list | None: returns list of cache doc_ids returned from cache update method
-            if an update was necessary, None if no update performed (i.e. new hook for branch)
+        bool | None: returns bool returned from cache update method if an update was performed
+            (indicating # of records sent matches # of records updated in cache).
+            None if no update was necessary (i.e. new hook for branch)
             already in cache.
     """
-    # -- // match based on wh id \\ --
-    match = cache.HookDataDB.get(
-        (cache.Q.id == data["id"])
-    )
+    stmt = select(WebHookData).where(WebHookData.id == data["id"])
+    with Session(cache.engine) as session:
+        match = session.execute(stmt)
+
     if match is not None:
         # wh id matched Remove entry if it's close.  If it's open ignore we already have a cache entry with that id
         if data["state"] != "Open":
@@ -347,10 +274,10 @@ async def check_cache_entry(data: dict) -> list | None:
             log.error(f"[WH INGORE ADD] {data['text']} - gw already in cache.", show=True)
             return
 
-    # -- // match id assigned on startup based on get_branch_health \\ --
-    match = cache.HookDataDB.get(
-        (cache.Q.id == f"{data['device_id']}_init")
-    )
+    stmt = select(WebHookData).where(WebHookData.id == f"{data['device_id']}_init")
+    with Session(cache.engine) as session:
+        match = session.execute(stmt)
+
     if match is None:
         # No init entry, Update cache with new entry based on wh, ignore if it's a close msg as no entry exists
         if data["state"] == "Open":
@@ -367,7 +294,7 @@ async def check_cache_entry(data: dict) -> list | None:
             log.info(f"[WH INGORE ADD] {data['text']} gw already in cache.")
             return
 
-        res: APIResponse = await api.session._request(api.monitoring.get_gw_tunnels, data["device_id"])
+        res: Response = await api.session._request(api.monitoring.get_gw_tunnels, data["device_id"])
         if not res:
             log.error(f"[WH IGNORE CLEAR] Error attempting to verify tunnels for {data['device_id']}")  # [{res.status}]{res.url}: {res.error}.")
             log.error("DB may drift from reality :(")
@@ -415,7 +342,7 @@ async def alerts_by_serial(request: Request, serial: str = None):
 async def webhook(
     data: dict,
     request: Request,
-    response: Response,
+    response: FastAPIResponse,
     content_length: int = Header(...),
     x_central_service: str = Header(None),
     x_central_signature: str = Header(None),

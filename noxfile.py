@@ -1,6 +1,7 @@
+from pathlib import Path
+
 from nox import Session, options
 from nox_uv import session
-from pathlib import Path
 
 options.default_venv_backend = "uv"
 

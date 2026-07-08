@@ -10,13 +10,14 @@ import yaml
 from rich.markup import escape
 from rich.text import Text
 
-from centralcli import cleaner, common, log, render, utils, config
+from centralcli import api_clients, cleaner, common, config, log, render, utils
 from centralcli.caas import CaasAPI
-from centralcli.cache import CacheCert, CacheDevice, CacheGroup, CachePortal, CacheTemplate, api
 from centralcli.client import BatchRequest
 from centralcli.config import VALID_EXT
 from centralcli.constants import DevTypes, DynamicAntMode, GatewayRole, IAPTimeZoneNames, NotifyToArgs, RadioBandOptions, iden_meta, state_abbrev_to_pretty
+from centralcli.objects.cache import CacheCert, CacheDevice, CacheGroup, CachePortal
 from centralcli.utils import VarValueSource
+from centralcli.strings import emoji
 
 SPIN_TXT_AUTH = "Establishing Session with Aruba Central API Gateway..."
 SPIN_TXT_CMDS = "Sending Commands to Aruba Central API Gateway..."
@@ -24,6 +25,7 @@ SPIN_TXT_DATA = "Collecting Data from Aruba Central API Gateway..."
 
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 # TODO add support for j2 / variable conversion as with cencli update config
@@ -76,7 +78,7 @@ def template(
         if len(_tmplt) != 1:
             common.exit(f"Failed to determine template for {obj.name}.  Found: {len(_tmplt)}")
 
-        cache_template = CacheTemplate(_tmplt[0])
+        cache_template = _tmplt[0]
     else:
         cache_template = obj
 
@@ -256,7 +258,7 @@ def group(
 config_help = f"""Update group or device level config (ap or gw), or update cencli config.
 
 [cyan]cli_file[/] Can be raw CLI (no variables or conditional logic) or a jinja2 template.
-[italic][deep_sky_blue]:information:[/]  If the cli_file is a [medium_spring_green].j2[/] file the template will be converted based on variables in [cyan]var_file[/] prior to sending.[/italic]
+[italic]f"{emoji.info} If the cli_file is a [medium_spring_green].j2[/] file the template will be converted based on variables in [cyan]var_file[/] prior to sending.[/italic]
 
 If providing a jinja2 template, this command will automatically look for a [cyan]var_file[/] with the same name and a valid suffix [italic]({utils.color(VALID_EXT, color_str="medium_spring_green")})[/].
 [cyan]--var-file <PATH>[/] can be used to specify the variable file explicitly.

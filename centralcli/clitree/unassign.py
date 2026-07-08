@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import typer
 
-from centralcli import api_clients, common, log, render, utils, config
-from centralcli.cache import CacheDevice, CacheInvMonDevice, CacheLabel
+from centralcli import api_clients, common, config, log, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
+from centralcli.models.sql import Subscription
+from centralcli.objects.cache import CacheDevice, CacheInvMonDevice, CacheLabel
+from centralcli.strings import emoji
 
 app = typer.Typer()
 api = api_clients.classic
@@ -77,7 +79,7 @@ def glp_subscription(
     except Exception as e:  # pragma: no cover
         log.exception(
             f"{repr(e)} while trying to update inventory cache after subscription unassignment(s)",
-            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show inventory[/]  Will refresh the inventory cache.",
+            f"{emoji.info} Running [cyan]cencli show inventory[/]  Will refresh the inventory cache.",
             show=True
         )
 
@@ -86,14 +88,14 @@ def glp_subscription(
         if sub_keys:
             unique_sub_keys = utils.unique(sub_keys)
             cache_subs = common.cache.subscriptions_by_key
-            sub_update_data = {**common.cache.subscriptions_by_key, **{k: {**dict(cache_subs[k]), "available": cache_subs[k].available + sub_keys.count(k)} for k in unique_sub_keys}}
-            glp_api.session.request(common.cache.update_db, common.cache.SubDB, list(sub_update_data.values()))
+            sub_update_data = {k: {**cache_subs[k], "available": cache_subs[k]["available"] + sub_keys.count(k)} for k in unique_sub_keys}
+            glp_api.session.request(common.cache._update_db, Subscription, data=sub_update_data)
         else:  # pragma: no cover
             ...
     except Exception as e:  # pragma: no cover
         log.exception(
             f"{repr(e)} while trying to update subscription cache (increase available qty after sub(s) unassigned)"
-            "[deep_sky_blue]:information:[/]  Running [cyan]cencli show subsciptions[/]  Will refresh the subscription cache.",
+            f"{emoji.info} Running [cyan]cencli show subsciptions[/]  Will refresh the subscription cache.",
             show=True
         )
 

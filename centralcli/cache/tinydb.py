@@ -25,26 +25,25 @@ from tinydb.table import Document
 from yarl import URL
 
 from centralcli import config, constants, log, render, utils
-from centralcli.response import CombinedResponse, BatchResponse
+from centralcli.response import BatchResponse, CombinedResponse
 from centralcli.typedefs import typed_lru_cache
 
-from . import api_clients
-from .client import BatchRequest, Session
-from .cnx.models.cache import Inventory as GlpInventory
-from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
-from .environment import env
-from .models import cache as models
-from .objects import DateTime
-from .response import Response
-
+from .. import api_clients
+from ..client import BatchRequest, Session
+from ..cnx.models.cache import Inventory as GlpInventory
+from ..cnx.models.cache import Subscriptions, get_inventory_with_sub_data
+from ..environment import env
+from ..models import cache as models
+from ..objects import DateTime
+from ..response import Response
 
 api = api_clients.classic
 
 if TYPE_CHECKING:
     from tinydb.table import Document, Table
 
-    from .config import Config
-    from .typedefs import CacheSiteDict, CertType, ClientType, MPSKStatus, PortalAuthTypes, SiteData
+    from ..config import Config
+    from ..typedefs import CacheSiteDict, CertType, ClientType, MPSKStatus, PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -184,7 +183,7 @@ class CacheInvDevice(CentralObject):
         self.type: str = data["type"]
         self.model: str = data["model"]
         self.sku: str = data["sku"]
-        self.services: str | None = data["services"]
+        self.services: str | None = data.get("services", data.get("subscription"))  # backward compat new field name is subscription
         self.subscription_key: str = data.get("subscription_key")
         self.subscription_expires: int | float = data.get("subscription_expires")
         self.assigned: bool = data.get("assigned")  # glp only
@@ -394,12 +393,12 @@ class CacheGroup(CentralObject):
         self.name: str = data["name"]
         self.allowed_types: List[constants.DeviceTypes] = data["allowed_types"]
         self.gw_role: constants.BranchGwRoleTypes = data["gw_role"]
-        self.aos10: bool = data["aos10"]
-        self.microbranch: bool = data["microbranch"]
-        self.wlan_tg: bool = data["wlan_tg"]
-        self.wired_tg: bool = data["wired_tg"]
-        self.monitor_only_sw: bool = data["monitor_only_sw"]
-        self.monitor_only_cx: bool = data["monitor_only_cx"]
+        self.aos10: bool = data.get("aos10")
+        self.microbranch: bool = data.get("microbranch")
+        self.wlan_tg: bool = data.get("wlan_tg")
+        self.wired_tg: bool = data.get("wired_tg")
+        self.monitor_only_sw: bool = data.get("monitor_only_sw")
+        self.monitor_only_cx: bool = data.get("monitor_only_cx")
         self.cnx: bool = data.get("cnx")
         _allowed_types_str = f"[magenta]allowed types[/]: {utils.color(self.allowed_types)}"
         _mon_only = [f"[magenta]monitor only {_type}[/]: \u2705" for _type, _mon_only in zip(["sw", "cx"], [self.monitor_only_sw, self.monitor_only_cx]) if _mon_only]
@@ -1283,7 +1282,7 @@ class Cache:
         self.config = config
         self.responses = CacheResponses()
         if config.valid and config.cache_dir.exists():
-            self.DevDB: TinyDB = TinyDB(config.cache_file)
+            self.DevDB: TinyDB = TinyDB(config.tinydb_cache.file)
             self.InvDB: Table = self.DevDB.table("inventory")
             self.SubDB: Table = self.DevDB.table("subscriptions")
             self.SiteDB: Table = self.DevDB.table("sites")
@@ -1356,7 +1355,7 @@ class Cache:
             return f"{size_in_bytes:.1f}Y{suffix}"
 
         if self.config is not None:
-            db_stats = self.config.cache_file.stat()
+            db_stats = self.config.tinydb_cache.file.stat()
             return human_size(db_stats.st_size)
 
         return "0"
@@ -1463,7 +1462,7 @@ class Cache:
         return {label["name"]: CacheLabel(label) for label in self.labels}
 
     @property
-    def licenses(self) -> List[str]:
+    def licenses(self) -> list[str]:
         if hasattr(self, "LicenseDB"):
             return [lic["name"] for lic in self.LicenseDB.all()]
         else:  # pragma: no cover
@@ -1571,10 +1570,6 @@ class Cache:
     @property
     def label_names(self) -> list:
         return [g["name"] for g in self.LabelDB.all()]
-
-    @property
-    def license_names(self) -> list:
-        return sorted([lic["name"] for lic in self.LicenseDB.all()])
 
     @property
     def templates(self) -> list:
@@ -4041,8 +4036,8 @@ class Cache:
         refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
-        if refresh or not self.config.cache_file_ok:
-            _word = "Refreshing" if self.config.cache_file_ok else "Populating"
+        if refresh or not self.config.tinydb_cache.ok:
+            _word = "Refreshing" if self.config.tinydb_cache.ok else "Populating"
             updating_db = "[bright_green]Full[/] Identifier mapping" if not update_count else utils.color([k for k, v in db_map.items() if v])
             print(f"[cyan]-- {_word} {updating_db} Cache --[/cyan]", end="")
 
@@ -4164,7 +4159,7 @@ class Cache:
         if "dev" in qry_funcs:  # move dev query last
             qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
 
-        match: List[CentralObject] = []
+        match: List[CacheDevice | CacheGroup | CacheSite | CacheTemplate] = []
         for idx in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()

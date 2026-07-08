@@ -1,27 +1,69 @@
+"""
+This provides consistency and a single place to see the various environment variables supported by the CLI
+"""
 from os import environ
 
 
 class EnvVar:
-    def __init__(self, workspace: str = "CENCLI_WORKSPACE", debug: str = "CENCLI_DEBUG", dest_workspace: str = "CENCLI_DEST_WORKSPACE"):
-        self.workspace = workspace
-        self.debug = debug
-        self.dest_workspace = dest_workspace
+    def __init__(self):
+        self.workspace = "ARUBACLI_ACCOUNT" if "ARUBACLI_ACCOUNT" in environ else "CENCLI_WORKSPACE"
+        self.debug = "ARUBACLI_DEBUG" if "ARUBACLI_DEBUG" in environ else "CENCLI_DEBUG"
+        self.dest_workspace = "CENCLI_DEST_WORKSPACE"
+        self.do_retry = "CENCLI_DO_RETRY"
+        self.delete_ws = "CENCLI_DELETE_WORKSPACE"
+        self.move_ws = "CENCLI_MOVE_WORKSPACE"
+        self.src_workspace = "CENCLI_SRC_WORKSPACE"  # TODO replace this w delete ws
+        self.to_group = "CENCLI_TO_GROUP"
+        self.no_refresh = "CENCLI_NO_REFRESH"
+        self.no_sub = "CENCLI_NO_SUB"
+        self.cx_retain_config = "CENCLI_CX_RETAIN_CONFIG"
+        self.cx_retain_config_all = "CENCLI_CX_RETAIN_CONFIG_ALL"
+        self.watcher_dir = "CENCLI_WATCHER_DIR"
+        self.import_sites = "CENCLI_IMPORT_SITES"
+        self.dev_search_dir = "CENCLI_DEV_SEARCH_DIR"  # Only applies to vscode debugger
+        self.watcher_no_moves = "CENCLI_WATCHER_NO_MOVES"
+        self.watcher_no_deletes = "CENCLI_WATCHER_NO_DELETES"
+        self.watcher_current_alerts_past = "CENCLI_WATCHER_CURRENT_ALERTS_PAST"
+        self.migrate_lldp_file = "CENCLI_MIGRATE_LLDP_FILE"
 
 
 env_var = EnvVar()
-classic_env_var = EnvVar("ARUBACLI_ACCOUNT", "ARUBACLI_DEBUG")
 
 
 class Env:
     _is_pytest: bool = bool(environ.get("PYTEST_VERSION"))
 
     def __init__(self):
-        self.workspace: str = environ.get(env_var.workspace) or environ.get(classic_env_var.workspace)
+        self.workspace: str = environ.get(env_var.workspace)
         self.dest_workspace = environ.get(env_var.dest_workspace)
+        self.src_workspace = environ.get(env_var.src_workspace)
+        self.delete_workspace = environ.get(env_var.delete_ws)
+        self.move_workspace = environ.get(env_var.move_ws)
+        self.no_refresh = environ.get(env_var.no_refresh)
+        self.to_group = environ.get(env_var.to_group)
+        self.import_site = environ.get(env_var.import_sites)
+        self.no_sub = environ.get(env_var.no_sub)
+        self.cx_retain_config = environ.get(env_var.cx_retain_config)
+        self.cx_retain_config_all = environ.get(env_var.cx_retain_config_all)
+        self.watcher_dir = environ.get(env_var.watcher_dir)
+        self.do_retry = environ.get(env_var.do_retry)
+        self.user = environ.get("USER")
+
+    @property
+    def watcher_no_moves(self):
+        return environ.get(env_var.watcher_no_moves)
+
+    @property
+    def watcher_no_deletes(self):
+        return environ.get(env_var.watcher_no_deletes)
+
+    @property
+    def is_dev_user(self) -> bool:
+        return self.user == "wade"
 
     @property
     def debug(self) -> bool:
-        _debug = environ.get(env_var.debug) if environ.get(env_var.debug) is not None else environ.get(classic_env_var.debug)
+        _debug = environ.get(env_var.debug)
         return True if _debug and _debug.lower() in ["1", "true"] else False
 
     @property

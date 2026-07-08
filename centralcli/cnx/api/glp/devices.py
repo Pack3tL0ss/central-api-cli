@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Optional, TypedDict
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional, TypedDict
 
-from centralcli import utils, log, render
+from centralcli import log, render, utils
 from centralcli.client import BatchRequest, Session
+from centralcli.cnx.models.cache import Inventory
 from centralcli.response import BatchResponse
 from centralcli.typedefs import UNSET
-from centralcli.cnx.models.cache import Inventory
 
 if TYPE_CHECKING:
     from centralcli.cache import Cache
@@ -23,9 +24,53 @@ class GLPDevice(TypedDict):
     tags: Optional[list[dict[str, str]]]
 
 
+@dataclass
+class GLPIDInvResponse:
+    inv_resp: Response
+    add_resp: list[Response] = None
+    exit_code: int = 0
+    new_devs_by_serial: dict[str, dict[str, Any]] = None
+    device_ids: list[str] = None
+
+
 class GreenLakeDevicesAPI:
     def __init__(self, session: Session):
         self.session = session
+
+    async def fetch_glp_ids(self, serials: list[str], add_results_resp: list[Response] = None, cache: Cache = None):
+        for _ in range(3):
+            inv_resp = await self.get_devices(serial_numbers=serials)
+            # chunks = utils.chunker(serials, 100)  # TODO this is now chunked in get_devices.   Remove once tested at scale.
+            # inv_batch_reqs = [BatchRequest(self.get_devices, serial_numbers=chunk) for chunk in chunks]
+            # inv_batch_resp = BatchResponse(await self.session._batch_request(inv_batch_reqs))
+            # inv_resp = inv_batch_resp.display
+            if inv_resp.ok and len(inv_resp) == len(serials):
+                break
+
+            with render.Spinner(f"Allowing more time for [green]GreenLake[/] to be prepared to send inventory response for {len(serials)} added devices."):
+                await asyncio.sleep(3)
+
+        if not inv_resp.ok or not inv_resp.output:
+            sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
+            log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
+            return GLPIDInvResponse(inv_resp=inv_resp, add_resp=add_results_resp, exit_code=1)
+        elif len(inv_resp) != len(serials):
+            inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
+            missing = [s for s in serials if s not in inv_resp_serials]
+            log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True)
+            log.warning(f"{len(missing)} will not have service assignment (Aruba Central), or subscription assignment.", show=True)
+
+        if cache:  # We update cache here, as we need to do the call to fetch device_ids here to process the service assignment/subscriptions.
+            try:
+                cache_data = Inventory(**inv_resp.raw)
+                _ = await cache.update_inv_db(cache_data.model_dump()["items"])
+            except Exception as e:
+                log.exception(f"Exception ({repr(e)}) during cache update after device addition (devices.add_devices())", caption=True)
+
+        new_devs_by_serial = {dev["serialNumber"]: dev for dev in inv_resp.output}
+        device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
+
+        return GLPIDInvResponse(inv_resp=inv_resp, add_resp=add_results_resp, new_devs_by_serial=new_devs_by_serial, device_ids=device_ids, exit_code=0)
 
     async def get_progresss_of_async_ops(self, responses: list[Response]) -> list[Response]:
         """Given a list of GLP API responses, fetch status of async operation.
@@ -50,7 +95,7 @@ class GreenLakeDevicesAPI:
             return list(return_responses.values())
         async_status_resp = {idx: res for idx, res in zip(resp_idx_list, await self.session._batch_request(batch_reqs))}
         retry_reqs = {}
-        for _ in range(3):
+        for _ in range(6):
             if _ > 0:
                 resp_idx_list = list(retry_reqs.keys())
                 async_status_resp = {idx: res for idx, res in zip(resp_idx_list, await self.session._batch_request(list(retry_reqs.values())))}
@@ -104,22 +149,24 @@ class GreenLakeDevicesAPI:
         }
         bool_filters = {
             "archived": archived,
-
         }
-        filter_str = ""
+        # filter_str = ""
+        filter_strs = []
         if serial_numbers:
             if archived is not None:
                 raise ValueError("Can only provide serial_numers or archived, not both")
-            filter_str = " or ".join([f"serialNumber eq '{serial.upper()}'" for serial in utils.listify(serial_numbers)])
+            if len(serial_numbers) <= 100:  # Max is 112 serials or 414 request uri too long
+                filter_strs += [" or ".join([f"serialNumber eq '{serial.upper()}'" for serial in utils.listify(serial_numbers)])]
+            else:
+                chunks = utils.chunker(serial_numbers, 100)
+                filter_strs += [" or ".join([f"serialNumber eq '{serial.upper()}'" for serial in chunk]) for chunk in chunks]
         else:
-            filter_str = " and ".join([f"{k} eq {str(v).lower()}" for k, v in bool_filters.items() if v is not None])
+            filter_strs += [_str for _str in [" and ".join([f"{k} eq {str(v).lower()}" for k, v in bool_filters.items() if v is not None])] if _str]
 
-        if assigned is not None:
-            filter_str = filter_str and f"{filter_str} and"
-            filter_str = f"{filter_str} assignedState {'eq' if assigned else 'ne'} 'ASSIGNED_TO_SERVICE'".lstrip()
-
-        if filter_str:
-            params["filter"] = filter_str
+        for filter_str in filter_strs:
+            if assigned is not None:
+                filter_str = filter_str and f"{filter_str} and"
+                filter_str = f"{filter_str} assignedState {'eq' if assigned else 'ne'} 'ASSIGNED_TO_SERVICE'".lstrip()
 
         if sort_by:
             sort_by = ",".join(utils.listify(sort_by))
@@ -127,9 +174,17 @@ class GreenLakeDevicesAPI:
                 sort_by = f"{sort_by} desc"
             params["sort"] = sort_by
 
+        if filter_strs:
+            if len(filter_strs) > 1:  # sort_by is not really going to work with a multi-call response by serial numbers.  Rare edge case though
+                batch_reqs = [BatchRequest(self.session.get, url, params={**params, "filter": f}) for f in filter_strs]
+                batch_res = BatchResponse(await self.session._batch_request(batch_reqs))
+                return batch_res.display
+            else:
+                params["filter"] = filter_strs[0]
+
         return await self.session.get(url, params=params)
 
-    async def add_devices(
+    async def add_devices_only_one(
             self,
             devices: GLPDevice | list[GLPDevice],
             application_id: str | None = UNSET,
@@ -160,7 +215,7 @@ class GreenLakeDevicesAPI:
         if not passed:
             return add_resp
 
-        async_add_resp = await self.get_progresss_of_async_ops(add_resp)
+        add_results_resp = await self.get_progresss_of_async_ops(add_resp)
 
         # Send Assignment to Central and Subscription assignments to update
         devs_by_sub = {}
@@ -174,51 +229,147 @@ class GreenLakeDevicesAPI:
 
         if not application_id and not subscription_ids and not devs_by_sub:
             log.info("Devices have been added to [green]GreenLake[/], but no application_id/subscription provided to add function, they are not associated with Aruba Central.", caption=True, show=True, log=False)
-            return async_add_resp
+            return add_results_resp
 
-        serials = [d["serial"] for d in devices]  # Max is 112 serials or 414 request uri too long
-        for _ in range(3):
-            chunks = utils.chunker(serials, 100)
-            inv_batch_reqs = [BatchRequest(self.get_devices, serial_numbers=chunk) for chunk in chunks]
-            inv_batch_resp = BatchResponse(await self.session._batch_request(inv_batch_reqs))
-            inv_resp = inv_batch_resp.display
-            if inv_resp.ok and len(inv_resp) == len(serials):
-                break
+        # We now need to fetch the inventory
+        serials = [d["serial"] for d in devices]
+        glp_id_resp = await self.fetch_glp_ids(serials, add_results_resp=add_results_resp, cache=cache)
+        if glp_id_resp.exit_code:
+            add_results_resp[-1].exit_code = 1  # HACK
+            return [*add_results_resp, glp_id_resp.inv_resp]
+        # for _ in range(3):
+        #     inv_resp = await self.get_devices(serial_numbers=serials)
+        #     # chunks = utils.chunker(serials, 100)
+        #     # inv_batch_reqs = [BatchRequest(self.get_devices, serial_numbers=chunk) for chunk in chunks]
+        #     # inv_batch_resp = BatchResponse(await self.session._batch_request(inv_batch_reqs))
+        #     # inv_resp = inv_batch_resp.display
+        #     if inv_resp.ok and len(inv_resp) == len(serials):
+        #         break
 
-            with render.Spinner(f"Allowing more time for [green]GreenLake[/] to be prepared to send inventory response for {len(serials)} added devices."):
-                await asyncio.sleep(3)
+        #     with render.Spinner(f"Allowing more time for [green]GreenLake[/] to be prepared to send inventory response for {len(serials)} added devices."):
+        #         await asyncio.sleep(3)
 
-        if not inv_resp.ok or not inv_resp.output:
-            sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
-            log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
-            async_add_resp[-1].exit_code = 1
-            return [*async_add_resp, inv_resp]
-        elif len(inv_resp) != len(serials):
-            inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
-            missing = [s for s in serials if s not in inv_resp_serials]
-            log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)
-            log.warning(f"{len(missing)} will not have service assignment (Aruba Central), or subscription assignment.", show=True)
+        # if not inv_resp.ok or not inv_resp.output:
+        #     sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
+        #     log.error(f"Unable to perform service (Aruba Central) assignment, Subscription Assignment and Cache update due to failure fetching device_ids. {sfx}", caption=True, log=True)
+        #     add_results_resp[-1].exit_code = 1
+        #     return [*add_results_resp, inv_resp]
+        # elif len(inv_resp) != len(serials):
+        #     inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
+        #     missing = [s for s in serials if s not in inv_resp_serials]
+        #     log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True)
+        #     log.warning(f"{len(missing)} will not have service assignment (Aruba Central), or subscription assignment.", show=True)
 
-        if cache:  # We update cache here, as we need to do the call to fetch device_ids here to process the service assignment/subscriptions.
-            try:
-                cache_data = Inventory(**inv_resp.raw)
-                _ = await cache.update_inv_db(cache_data.model_dump()["items"])
-            except Exception as e:
-                log.exception(f"Exception ({repr(e)}) during cache update after device addition (devices.add_devices())", caption=True)
+        # if cache:  # We update cache here, as we need to do the call to fetch device_ids here to process the service assignment/subscriptions.
+        #     try:
+        #         cache_data = Inventory(**inv_resp.raw)
+        #         _ = await cache.update_inv_db(cache_data.model_dump()["items"])
+        #     except Exception as e:
+        #         log.exception(f"Exception ({repr(e)}) during cache update after device addition (devices.add_devices())", caption=True)
 
-        new_devs_by_serial = {dev["serialNumber"]: dev for dev in inv_resp.output}
+        # new_devs_by_serial = {dev["serialNumber"]: dev for dev in inv_resp.output}
+        # device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
+
         if devs_by_sub:
-            update_reqs = [BatchRequest(self.update_devices, [new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]], subscription_ids=sub, application_id=application_id, region=region) for sub in devs_by_sub]
+            update_reqs = [
+                BatchRequest(
+                    self.update_devices,
+                    [glp_id_resp.new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]],
+                    subscription_ids=sub,
+                    application_id=application_id,
+                    region=region
+                )
+                for sub in devs_by_sub
+            ]
             update_responses = await self.session._batch_request(update_reqs)
-            return [*async_add_resp, *update_responses]
+            return [*add_results_resp, *update_responses]
 
-        device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
-        missing = len(serials) - len(device_ids)
+        missing = len(serials) - len(glp_id_resp.device_ids)
         if missing:
             log.error(f"{missing} of {len(serials)} failed to be added to GreenLake Inventory.  Processing aborted for these devies.")
         ret = [
-            *async_add_resp,
-            *await self.update_devices(device_ids, subscription_ids=subscription_ids, application_id=application_id, region=region)
+            *add_results_resp,
+            *await self.update_devices(glp_id_resp.device_ids, subscription_ids=subscription_ids, application_id=application_id, region=region)
+        ]
+        return ret
+
+    async def add_devices(
+            self,
+            devices: GLPDevice | list[GLPDevice],
+            application_id: str | None = UNSET,
+            region: str | None = None,
+            tags: dict[str, str] | None = None,
+            subscription_ids: list[str] | str | None = UNSET,
+            cache: Cache = None,
+        ) -> list[Response]:  # pragma: no cover  still use classic for now
+        url = "/devices/v1/devices"
+        # We need to add the device before we can assign it to Aruba Central
+        devices = devices if isinstance(devices, list) else [devices]
+        payloads = [
+            {
+                "network": [
+                    {k: v for k, v in {
+                            "serialNumber": d["serial"],
+                            "macAddress": d.get("mac") and utils.Mac(d["mac"]).cols.upper(),  # has to be uppercase col delim.  If lowercase GLP will return device not found error.
+                            "tags": {**(tags or {}), **(d.get("tags") or {})} or None,
+                        }.items() if v is not None
+                    } for d in chunk
+                ],
+                "storage": [],
+                "compute": []
+            }
+            for chunk in utils.chunker(devices, 5)
+        ]
+
+        batch_reqs = [BatchRequest(self.session.post, url, json_data=payload) for payload in payloads]
+        add_resp = await self.session._batch_request(batch_reqs)
+        passed = [r for r in add_resp if r.ok]
+        if not passed:
+            return add_resp
+
+        add_results_resp = await self.get_progresss_of_async_ops(add_resp)
+
+        # Send Assignment to Central and Subscription assignments to update
+        devs_by_sub = {}
+        if not subscription_ids:
+            devices = utils.normalize_device_sub_field(devices)
+            subs = [d["subscription"] for d in devices if "subscription" in d]
+            if len(set(subs)) == 1:
+                subscription_ids = subs[0]
+            elif subs:
+                [utils.update_dict(devs_by_sub, d["subscription"], d) for d in devices if d.get("subscription")]
+
+        if not application_id and not subscription_ids and not devs_by_sub:
+            log.info("Devices have been added to [green]GreenLake[/], but no application_id/subscription provided to add function, they are not associated with Aruba Central.", caption=True, show=True, log=False)
+            return add_results_resp
+
+        # We now need to fetch the inventory
+        serials = [d["serial"] for d in devices]
+        glp_id_resp = await self.fetch_glp_ids(serials, add_results_resp=add_results_resp, cache=cache)
+        if glp_id_resp.exit_code:
+            add_results_resp[-1].exit_code = 1  # HACK
+            return [*add_results_resp, glp_id_resp.inv_resp]
+
+        if devs_by_sub:
+            update_reqs = [
+                BatchRequest(
+                    self.update_devices,
+                    [glp_id_resp.new_devs_by_serial[dev["serial"]]["id"] for dev in devs_by_sub[sub]],
+                    subscription_ids=sub,
+                    application_id=application_id,
+                    region=region
+                )
+                for sub in devs_by_sub
+            ]
+            update_responses = await self.session._batch_request(update_reqs)
+            return [*add_results_resp, *update_responses]
+
+        missing = len(serials) - len(glp_id_resp.device_ids)
+        if missing:
+            log.error(f"{missing} of {len(serials)} failed to be added to GreenLake Inventory.  Processing aborted for these devies.")
+        ret = [
+            *add_results_resp,
+            *await self.update_devices(glp_id_resp.device_ids, subscription_ids=subscription_ids, application_id=application_id, region=region)
         ]
         return ret
 

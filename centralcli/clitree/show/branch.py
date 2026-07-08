@@ -4,10 +4,10 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cache, cleaner, common, render
-from centralcli.cache import api
+from centralcli import api_clients, cache, cleaner, common, render
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

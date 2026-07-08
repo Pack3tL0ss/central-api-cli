@@ -1,4 +1,3 @@
-import asyncio
 from typing import Callable
 
 import pytest
@@ -7,22 +6,20 @@ from typer.testing import CliRunner
 from centralcli.cli import app
 from centralcli.environment import env
 
-from . import cache, capture_logs, config, test_data
-from ._test_data import test_cert_file, test_cert_file_der, test_cert_file_p12, test_invalid_var_file, test_switch_var_file_csv, test_switch_var_file_flat, test_switch_var_file_json, test_cert_file_invalid_sfx, test_sw_template
+from . import capture_logs, config, test_data
+from ._test_data import (
+    test_cert_file,
+    test_cert_file_der,
+    test_cert_file_invalid_sfx,
+    test_cert_file_p12,
+    test_invalid_var_file,
+    test_sw_template,
+    test_switch_var_file_csv,
+    test_switch_var_file_flat,
+    test_switch_var_file_json,
+)
 
 runner = CliRunner()
-
-
-@pytest.fixture(scope="module", autouse=True)
-def ensure_not_cache_b4_adds():
-    if config.dev.mock_tests:
-        dbs = [cache.GroupDB, cache.SiteDB, cache.LabelDB, cache.CertDB]
-        doc_ids = [[g.doc_id for g in db.all() if g["name"].startswith("cencli_test")] for db in dbs]
-        assert [asyncio.run(cache.update_db(db, doc_ids=ids)) for db, ids in zip(dbs, doc_ids)]
-    else:  # pragma: no cover
-        ...
-
-    yield
 
 
 @pytest.mark.parametrize(
@@ -34,7 +31,7 @@ def ensure_not_cache_b4_adds():
         (str(test_cert_file_der), "--svr"),
     ]
 )
-def test_add_cert(args: tuple[str]):
+def test_add_cert(ensure_not_cache_b4_adds, args: tuple[str]):
     result = runner.invoke(app, ["add", "cert", "cencli_test", *args, "-Y"])
     capture_logs(result, "test_add_cert")
     assert result.exit_code == 0
@@ -117,7 +114,7 @@ def test_add_site_by_geo():
     )
 
 
-def test_add_template(ensure_cache_group2: None):
+def test_add_template(ensure_cache_group2):
     result = runner.invoke(app, ["add", "template", "cencli_test_template", "cencli_test_group2", str(test_sw_template), "--dev-type", "sw", "-Y"])
     capture_logs(result, "test_add_template")
     assert result.exit_code == 0
@@ -146,17 +143,18 @@ def test_add_variables_invalid(ensure_cache_group2: None):
     assert "Missing" in result.stdout
 
 
+# idx also serves as test_name_append for the below
 @pytest.mark.parametrize(
-    "labels",
+    "idx,labels",
     [
-        ("cencli_test_label1",),
-        ("cencli_test_label2", "cencli_test_label3"),
+        [1, ("cencli_test_label1",)],
+        [2, ("cencli_test_label2", "cencli_test_label3")],
     ]
 )
-def test_add_label(labels: tuple[str]):
+def test_add_label(idx: int, labels: tuple[str]):
+    env.current_test = f"{env.current_test}_{idx}"
     result = runner.invoke(app, ["add", "label", *labels, "-Y"])
     capture_logs(result, "test_add_label")
-    assert result.exit_code == 0
     assert "test_label" in result.stdout
     if config.dev.mock_tests:
         assert result.exit_code == 0

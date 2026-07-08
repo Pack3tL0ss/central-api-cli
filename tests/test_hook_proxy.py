@@ -1,6 +1,7 @@
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
-from typing import Callable
 
 from centralcli import config
 from centralcli.cli import app
@@ -32,7 +33,7 @@ if config.classic.webhook.token:
             [2, ("logs",), lambda r: "INFO" in r],
         ]
     )
-    def test_show_webhook_running(idx: int, args: tuple[str], pass_condition: Callable):
+    def test_show_webhook_running(ensure_hook_proxy_started, idx: int, args: tuple[str], pass_condition: Callable):
         result = runner.invoke(app, ["show", "hook-proxy", *args])
         capture_logs(result, f"{env.current_test}-{idx}")
         assert result.exit_code == 0

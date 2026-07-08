@@ -1,5 +1,6 @@
-from ._mock_request import test_responses
 from centralcli.environment import env
+
+from ._mock_request import test_responses
 
 
 def test_per_test_regex_match():

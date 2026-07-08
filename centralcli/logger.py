@@ -38,7 +38,7 @@ LogLevel = Literal["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET", "c
 
 
 class MyLogger:
-    def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None):
+    def __init__(self, log_file: str | Path, debug: bool = False, show: bool = False, verbose: bool = False, deprecation_warnings: str | list[str] = None, prefix: str = None):
         self._DEBUG: bool = debug
         self.log_msgs: list[str] = []
         self.verbose: bool = verbose
@@ -58,6 +58,7 @@ class MyLogger:
         self.exception = partial(self.log_print, level="exception", exc_info=True)
         self.critical = partial(self.log_print, level="critical")
         self.fatal = partial(self.log_print, level="fatal")
+        self.prefix = prefix or ""
 
     def __getattr__(self, name: str) -> Any:  # pragma: no cover Exists only as a convenience when debugging
         if hasattr(self, "_log") and hasattr(self._log, name):
@@ -100,20 +101,36 @@ class MyLogger:
     def follow(self, pytest: bool = False) -> None:  # pragma: no cover requires a tty
         """generator function that yields new lines in log file"""
         file = self.log_file if not pytest else self.log_file.parent / "pytest.log"
-        with file.open("r") as lf:
-            lines = lf.readlines()
-            console.print("".join(lines[int(f"-{len(lines) if len(lines) <= 20 else 20}"):]).rstrip())
+        current_inode = file.stat().st_ino
+        lf = file.open("r")
+        lines = lf.readlines()
+        console.print("".join(lines[int(f"-{len(lines) if len(lines) <= 20 else 20}"):]).rstrip())
 
-            while True:
-                try:
-                    line = lf.readline()
-                    if not line:
-                        sleep(1)
+        while True:
+            try:
+                line = lf.readline()
+                if not line:
+                    try:
+                        now_inode = file.stat().st_ino
+                    except FileNotFoundError:
+                        sleep(0.4)
                         continue
 
-                    console.print(line.rstrip())
-                except (KeyboardInterrupt, EOFError):
-                    break
+                    if now_inode != current_inode:
+                        econsole.print(":arrows_counterclockwise:  [bright_green]Log file rotated.[/] Reopening...")
+                        lf.close()
+                        lf = file.open("r")
+                        current_inode = file.stat().st_ino
+                        continue
+
+                    sleep(0.1)
+                    continue
+
+                console.print(line.rstrip())
+
+            except (KeyboardInterrupt, EOFError):
+                lf.close()
+                break
 
     @property
     def caption(self) -> None | str:
@@ -157,7 +174,7 @@ class MyLogger:
                 if log:
                     if level == "exception" and env.is_pytest:  # Don't log tracebacks for expected exceptions during test runs
                         exc_info = exc_info if (sys.exc_info()[0] not in PYTEST_EXPECTED_EXCEPTIONS.values()) else False
-                    getattr(self._log, level)(self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
+                    getattr(self._log, level)(self.prefix + self._remove_rich_markups(i.lstrip()).replace(r'\[', '['), *args, exc_info=exc_info, extra=extra, stack_info=stack_info, stacklevel=stacklevel, **kwargs)
                     _logged.append(i)
                 if i and i not in self.log_msgs:
                     _msgs.append(i)

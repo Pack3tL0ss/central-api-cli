@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from collections.abc import Callable
 
 import json
+from collections.abc import Callable
 from functools import cached_property
-from typing import Any, Dict, List, Literal, Mapping, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Mapping, Union
 
-from aiohttp import ClientResponse
 import pendulum
+from aiohttp import ClientResponse
 from rich.console import Console
 from yarl import URL
 
@@ -16,6 +16,7 @@ from centralcli import config, log, utils
 from centralcli.environment import env
 from centralcli.exceptions import CentralCliException
 from centralcli.objects import DateTime
+from centralcli.strings import emoji
 
 from . import render
 
@@ -290,7 +291,7 @@ class Response:
 
             log.info(f"Prepped new MOCK for {pkey}[{self.method}][{key}]")
             # return {**now, pkey: {**now[pkey], self.method: {**now[pkey][self.method], key: out}}}
-            return {**now, pkey: {**now.get(pkey, {}), self.method: {**now.get(pkey, {self.method: {}})[self.method], key: out}}}
+            return {**now, pkey: {**now.get(pkey, {}), self.method: {**now.get(pkey, {self.method: {}}).get(self.method, {}), key: out}}}
 
         _url = self.url.with_query(utils.remove_time_params(self.url.query))
         out = {
@@ -381,6 +382,10 @@ class Response:
     def async_failed_devices(self) -> list[str]:
         failed_devs = self.summary.get("output", {}).get("async operation response", {}).get("result", {}).get("failedDevices", [{}])
         return [k for inner in failed_devs for k in inner.values()]
+
+    @property
+    def is_glp(self) -> bool:
+        return True if "greenlake" in (self.url and self.url.host or "") else False
 
     @property
     def is_already_claimed(self) -> bool:
@@ -631,6 +636,9 @@ class BatchResponse:
         BatchResponse._rl = self.last_rl
         BatchResponse._exit_code = BatchResponse._exit_code or self.exit_code
 
+    def __repr__(self):
+        return f"<{self.__module__}.{type(self).__name__} ({'OK' if self.ok else f'{len(self.failed)} Failures'}|responses: {len(self)}) object at {hex(id(self))}>"
+
     def __bool__(self):  # pragma: no cover
         return self.ok
 
@@ -642,6 +650,13 @@ class BatchResponse:
         if output and self._output_formatter:
             output = self._output_formatter(output)
         return output
+
+    @property
+    def caption(self) -> str:
+        if not self.failed:
+            return f"[italic]All ({len(self)}) calls were [green]Successful[/][/]"
+
+        return f"[italic]{emoji.warn} [green]Success[/]: [cyan]{len(self.passed)}[/], [red]Failed[/]: [cyan]{len(self.failed)}[/][/]"
 
     @property
     def display(self) -> Response | None:
@@ -669,7 +684,7 @@ class BatchResponse:
 
     @cached_property
     def elapsed(self) -> float:  # pragma: no cover
-        return sum(r.elapsed for r in self.responses)
+        return 0 if not self.responses else sum(r.elapsed for r in self.responses)
 
     @cached_property
     def passed(self):
@@ -690,7 +705,12 @@ class BatchResponse:
     @cached_property
     def last_rl(self):
         rl_objs = [r.rl for r in self.responses if r.rl.has_value]
-        return self.responses[-1].rl if not rl_objs else min(rl_objs)
+        if rl_objs:
+            return min(rl_objs)
+        if self.responses:
+            return self.responses[-1].rl
+        return RateLimit()
+        # return self.responses[-1].rl if not rl_objs else min(rl_objs)
 
     @cached_property
     def raw(self) -> dict[str, Any]:
@@ -707,6 +727,18 @@ class BatchResponse:
             else:
                 raw[f"{res.url.path}_call_{idx}"] = res.raw
         return raw
+
+    def cache_clear(self) -> None:
+        if hasattr(self, "elapsed"):
+            del self.elapsed
+        if hasattr(self, "passed"):
+            del self.passed
+        if hasattr(self, "failed"):
+            del self.failed
+        if hasattr(self, "last_rl"):
+            del self.last_rl
+        if hasattr(self, "raw"):
+            del self.raw
 
     @property
     def ok(self):

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import pytest
 from typing import Callable
+
+import pytest
 from typer.testing import CliRunner
 
 from centralcli import utils

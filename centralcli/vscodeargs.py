@@ -1,3 +1,4 @@
+import os
 import sys
 from pathlib import Path
 
@@ -8,6 +9,8 @@ if r'${input:cliArgs}' in str(sys.argv) or r'${input:cliArgsHistory}' in str(sys
 debug = True if "--debug " in str(sys.argv) or "--debugv " in str(sys.argv) else False
 
 batch_dir = Path().home() / "git/cencli-batch"
+search_dir = os.environ.get("CENCLI_DEV_SEARCH_DIR") and Path(os.environ["CENCLI_DEV_SEARCH_DIR"])
+_search_dirs = [d for d in [search_dir, batch_dir, Path.home()] if d and d.is_dir()]
 
 
 # -- break up arguments passed as single string from vscode promptString --
@@ -34,13 +37,14 @@ def vscode_arg_handler():
                         for arg in vsc_args.split():
                             updated = False
                             if "." in arg and arg.split(".")[-1] in ["yaml", "csv", "json", "j2", "txt"] and not Path(arg).exists():
-                                batch_file = Path.joinpath(batch_dir, arg)
-                                if batch_file.exists():
-                                    out += [str(batch_file)]
-                                    updated = True
-                                elif Path.joinpath(batch_dir, arg.split("/")[-1]).exists():
-                                    out += [str(Path.joinpath(batch_dir, arg.split("/")[-1]))]
-                                    updated = True
+                                for _search_dir in _search_dirs:
+                                    batch_file = Path.joinpath(_search_dir, arg)
+                                    if batch_file.exists():
+                                        out += [str(batch_file)]
+                                        updated = True
+                                    elif Path.joinpath(batch_dir, arg.split("/")[-1]).exists():
+                                        out += [str(Path.joinpath(_search_dir, arg.split("/")[-1]))]
+                                        updated = True
                             if not updated:
                                 out += [arg]
                         vsc_args = " ".join(out)

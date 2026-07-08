@@ -4,13 +4,17 @@ import asyncio
 import time
 from typing import Any, Dict, Generator, List, Optional
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, RootModel, field_validator, PrivateAttr
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, PrivateAttr, RootModel, field_validator
 
 from centralcli import utils
 from centralcli.render import Spinner
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from centralcli.models.sql import InventoryDevice
 
-from ..cache import Cache, CacheInvDevice, CacheInvMonDevice, CacheSub
-from ..constants import SiteStates, state_abbrev_to_pretty, possible_sub_keys
+from ..cache import Cache
+from ..constants import SiteStates, possible_sub_keys, state_abbrev_to_pretty
+from ..objects.cache import CacheInvDevice, CacheInvMonDevice, CacheSub
 from .common import MpskStatus
 
 
@@ -230,11 +234,14 @@ class ImportDevice(_ImportDevice):
         return self.subscription in [field for field in [self.sub.id, self.sub.key] if field]
 
     def _get_inv_object(self, serials: list[str] | None = None) -> CacheInvDevice | None:
-        inv_dev = self._cache.InvDB.search(self._cache.Q.serial == self.serial)  # this is much faster than calling cache.get_combined_inv_dev_identifier > 4x faster this method is about .1s per lookup
+        stmt = select(InventoryDevice).where(InventoryDevice.serial == self.serial)
+        with Session(self._cache.engine) as session:
+            inv_dev = session.scalars(stmt).first()
         if not inv_dev and self._cache.responses.inv is None:
             return self._cache.get_inv_identifier(self.serial, serial_numbers=tuple(serials), exit_on_fail=False, silent=True)
+
         self._inv_fetched = True
-        self._inv_object = None if not inv_dev else CacheInvDevice(inv_dev[0])
+        self._inv_object = None if not inv_dev else CacheInvDevice(inv_dev.to_dict())
         return self._inv_object
 
     @property
@@ -271,7 +278,7 @@ class ImportDevice(_ImportDevice):
     @property
     def rich_help_text(self) -> str:
         if self.inv is not None:
-            return f"{self.inv.rich_help_text}"
+            return f"{self.inv.summary_text}"
         return f"[dark_orange3]\u26a0[/]  {self.serial}  Does not exist in [green]GreenLake[/]"
 
     def __rich__(self) -> str:
@@ -391,7 +398,7 @@ class ImportDevices(RootModel):
         _additional_subs = {}
         for sub_id in out_dict:
             if len(out_dict[sub_id].devices) > out_dict[sub_id].cache_sub.available:
-                this_subs: list[CacheSub] = self._cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_match=True)
+                this_subs: list[CacheSub] = self._cache.get_sub_identifier(out_dict[sub_id].cache_sub.name, silent=True, all_sub_matches=True)
                 if len(utils.listify(this_subs)) > 1:
                     devs = out_dict[sub_id].devices
                     exact_matches = [devs.pop(devs.index(d)) for d in devs if d.exact_sub]

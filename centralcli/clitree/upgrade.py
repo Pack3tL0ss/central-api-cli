@@ -8,16 +8,16 @@ from typing import TYPE_CHECKING
 import typer
 from rich.markup import escape
 
-from centralcli import common, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, common, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import AllDevTypes, iden_meta, lib_to_gen_plural  # noqa
 from centralcli.objects import DateTime
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheGroup
+    from centralcli.objects.cache import CacheGroup
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

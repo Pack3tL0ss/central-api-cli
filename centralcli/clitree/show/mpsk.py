@@ -6,15 +6,15 @@ from typing import TYPE_CHECKING
 
 import typer
 
-from centralcli import cleaner, common, log, render
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, log, render
 from centralcli.constants import SortNamedMpskOptions
 from centralcli.strings import Warnings
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheMpsk
+    from centralcli.objects.cache import CacheMpsk
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()
@@ -68,8 +68,8 @@ def named(
         status = "disabled"
 
     if csv_import and not ssid:
-        if len(common.cache.mpsk_networks) == 1:
-            ssid = common.cache.mpsk_networks[0]["name"]
+        if len(list(common.cache.mpsk_networks)) == 1:
+            ssid = list(common.cache.mpsk_networks)[0]["name"]
             log.warning(f"[cyan]ssid[/] argument is required when [cyan]--import[/] is used.  However cache only contains 1 MPSK SSID [bright_green]{ssid}[/].", caption=True)
         else:
             common.exit("[cyan]--import[/] option is only supported when MPSK ssid is provided")

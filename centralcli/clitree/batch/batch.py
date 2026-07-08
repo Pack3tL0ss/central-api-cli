@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -10,11 +11,12 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import cache, cleaner, common, config, log, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, cache, cleaner, common, config, log, render, utils
 from centralcli.client import BatchRequest
-from centralcli.constants import BatchRenameArgs, iden_meta, possible_sub_keys, GroupDevTypes
+from centralcli.constants import BatchRenameArgs, GroupDevTypes, iden_meta, possible_sub_keys
+from centralcli.environment import env_var
 from centralcli.response import Response
+from rich.text import Text
 
 from . import add, delete, examples, update
 
@@ -27,6 +29,7 @@ app = typer.Typer()
 app.add_typer(delete.app, name="delete",)
 app.add_typer(add.app, name="add",)
 app.add_typer(update.app, name="update",)
+api = api_clients.classic
 
 
 class FstrInt:  # pragma: no cover requires tty
@@ -369,13 +372,37 @@ def batch_deploy(import_file: Path, yes: bool = False) -> list[Response]:
         render.display_results(resp, tablefmt="action")
 
 
+def _get_migrate_down_devs(import_file: Path) -> dict[str, dict[str, Any]]:
+    if "migrate" not in import_file.stem:
+        return {}
+
+    down_file1 = import_file.parent / f'down{import_file.stem.removeprefix("migrate")}.json'
+    # down_file2 = import_file.parent / f'down{import_file.stem.removeprefix("migrate")}.csv'
+    for down_file in [down_file1]:
+        if down_file.exists():
+            try:
+                if down_file.suffix == ".json":
+                    return json.loads(down_file.read_text())
+                else:
+                    with render.Spinner(f"Fetching data from [dark_violet]{down_file.name}[/]", spinner="arrow3"):
+                        return common._get_import_file(down_file, "devices", required_fields=["serial"])
+            except Exception as e:
+                log.exception(f"{repr(e)} during attempt to read in {down_file}", show=True)
+    return {}
+
+
 @app.command()
 def verify(
     import_file: Path = common.arguments.import_file,
     show_example: bool = common.options.show_example,
-    no_refresh: bool = typer.Option(False, hidden=True, help="Used for repeat testing when there is no need to update cache."),
-    failed: bool = typer.Option(False, "-F", help="Output only a simple list with failed serials"),
-    passed: bool = typer.Option(False, "-OK", help="Output only a simple list with serials that validate OK"),
+    no_refresh: bool = typer.Option(False, "--nr", "--no-refresh", help="Bypass cache refresh.  Used for repeat verification when the cache is known to be up to date.", envvar="CENCLI_DEV_NO_REFRESH", hidden=False),
+    failed: bool = typer.Option(False, "-F", "--failed", help="Output only devices that fail validation (full output with just [red]failed[/] devices)", rich_help_panel="Filtering Options"),
+    passed: bool = typer.Option(False, "-P", "--passed", help="Output only devices that pass validation (full output with just [green]passed[/] devices)", rich_help_panel="Filtering Options"),
+    down: bool = typer.Option(False, "-D", "--down", help="Output only devices that have checked in, but are currently [red]Down[/]", rich_help_panel="Filtering Options"),
+    down_prior: bool = typer.Option(False, "--down-prior", help="Output only devices that were down prior to migration.  [dim italic]For use with [cyan]cencli migrate devices ...[/]", rich_help_panel="Filtering Options"),
+    brief: bool = typer.Option(False, "-B", "--brief", help="Applies to -F|--failed|-P|--passed flags.  Output only a simple list of serials matching the filter", rich_help_panel="Filtering Options"),
+    grep: bool = typer.Option(False, "--grep", help="Implies -B.  Format brief output [italic](serial numbers)[/] in a format that can be used with grep to filter an existing csv."),
+    do_retry: bool = common.options.get("do_retry", help="create retry file with just the devices from import that fail validation"),
     outfile: Path = common.options.outfile,
     default: bool = common.options.default,
     debug: bool = common.options.debug,
@@ -388,30 +415,38 @@ def verify(
     if show_example:
         render.console.print(examples.verify)
         return
+    if not import_file:
+        common.exit(render._batch_invalid_msg("cencli batch verify [OPTIONS] [IMPORT_FILE]"))
 
-    data = common._get_import_file(import_file, import_type="devices")
-    data = utils.normalize_device_sub_field(data, word_sep="-")
-    file_all_keys = utils.all_keys(data)
+    with render.Spinner(f"Fetching data from [dark_violet]{import_file.name}[/]", spinner="arrow3"):
+        data = common._get_import_file(import_file, import_type="devices", required_fields=["serial"], sub_word_sep="-")
+        file_all_keys = utils.all_keys(data)
+        down_prior_by_serial = _get_migrate_down_devs(import_file)
+        if not down_prior_by_serial:
+            if "status" in utils.all_keys(data):
+                down_prior_by_serial = {d["serial"]: f'{utils.summarize_list([field for field in [[dev.get("name"), dev.get("serial"), dev.get("group"), dev.get("site")] for dev in data] if field is not None])}' for d in data if d.get("status") != "Up"}
 
-    resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
-    if not resp.ok:
-        render.display_results(resp, stash=False, exit_on_fail=True)
-    resp.output = utils.normalize_device_sub_field(cleaner.simple_kv_formatter(resp.output), word_sep="-")
+    _spin_txt = f"Fetching device details from [medium_spring_green]{'cache' if no_refresh else 'Aruba Central'}[/]"
+    with render.Spinner(_spin_txt) as spinner:
+        resp: Response = common.cache.get_devices_with_inventory(no_refresh=no_refresh)
+        spinner.start(_spin_txt)  # if refresh spinner will be taken over in resp.py.  This ensures it is retored
+        if not resp.ok:
+            render.display_results(resp, stash=False, exit_on_fail=True)
+        resp.output = utils.normalize_device_sub_field(cleaner.simple_kv_formatter(resp.output), word_sep="-")
 
-    file_by_serial = {
-        d["serial"]: {
-            k: v if k != "license" else v.lower().replace("-", "_").replace(" ", "_") for k, v in d.items() if k != "serial"
-        } for d in data
-    }
-    central_by_serial = {
-        d["serial"]: {
-            k: v if k != "services" or v is None else v.lower().replace(" ", "_") for k, v in d.items() if k != "serial"
+    with render.Spinner("Preparing data for validation"):
+        file_by_serial = {
+            d["serial"]: d
+            for d in sorted(data, key=lambda d: (d.get("type", ""), d.get("site", "")))
         }
-        for d in resp.output
-    }
+        central_by_serial = {d["serial"]: d for d in resp.output}
 
-    validation = {}
-    not_in_inventory = not_checked_in = _up = _down = 0
+        validation = {}
+        _down_prior = {}
+        not_in_inventory = not_checked_in = _up = _down = down_prior_down_now = 0
+
+    spinner = render.Spinner(f"Validating current status against desired status from [dark_violet]{import_file}[/]", spinner="dots2")
+    spinner.start()
     for s in file_by_serial:
         validation[s] = []
         if s not in central_by_serial:
@@ -420,7 +455,12 @@ def verify(
             continue
 
         if not central_by_serial[s].get("status"):
+            if s in down_prior_by_serial:
+                _down_prior[s] = f"Device was [red]Down[/] prior to migration.  Still [red]Down[/]: {down_prior_by_serial[s]}"
+                down_prior_down_now += 1
+                continue
             not_checked_in += 1
+
         elif central_by_serial[s]['status'].lower() == 'up':
             _up += 1
         else:
@@ -429,6 +469,14 @@ def verify(
         _dev_type = central_by_serial[s]['type'].upper()
         _dev_type = _dev_type if _dev_type not in ["CX", "SW"] else f"{_dev_type} switch"
         _pfx = f"[magenta]{_dev_type}[/] is in inventory, "
+        _assigned = central_by_serial[s].get("assigned")
+        _subscription = central_by_serial[s].get("subscription")
+        _valid = central_by_serial[s].get("expires in") and not central_by_serial[s]["expires in"].is_expired
+        _expires_in = central_by_serial[s].get("expires in") and central_by_serial[s]["expires in"]
+        if all([_assigned, _subscription, _valid]):
+            _valid_str = f"[bright_green]Iventory Status Valid[/]: (assigned/subscribed/[cyan]expires in[/]: {_expires_in})"
+        else:
+            _valid_str = f"[red]Inventory Status Issue[/]: [cyan]Assigned[/]: {_assigned}, [cyan]Subscription[/]: {_subscription}, [cyan]expires in[/]: {_expires_in}"
         if file_by_serial[s].get("group"):
             if not central_by_serial[s].get("status"):
                 validation[s] += [f"[cyan]Group:[/] {_pfx}but has not connected to Central.  Not able to validate pre-provisioned group via API."]
@@ -439,71 +487,104 @@ def verify(
 
         if file_by_serial[s].get("site"):
             if not central_by_serial[s].get("status"):
-                validation[s] += [f"[cyan]Site:[/] {_pfx}Unable to assign/verify site prior to device checking in."]
+                validation[s] += [f"[cyan]Site:[/] {_pfx}Unable to assign/verify site [dim italic]([green]{file_by_serial[s]['site']}[/])[/dim italic] prior to device checking in."]
             elif not central_by_serial[s].get("site"):
-                validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
+                validation[s] += [f"[cyan]Site:[/] {_pfx}Site: [cyan]{file_by_serial[s]['site']}[/] from import != [italic]None[/] reflected in Central."]
             elif file_by_serial[s]["site"] != central_by_serial[s]["site"]:
-                validation[s] += [f"[cyan]Site:[/]{_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
+                validation[s] += [f"[cyan]Site:[/] {_pfx}Site: [bright_red]{file_by_serial[s]['site']}[/] from import != [bright_green]{central_by_serial[s]['site']}[/] reflected in Central."]
 
         if "subscription" in file_all_keys:
             _pfx = "" if _pfx in str(validation[s]) else _pfx
             if file_by_serial[s].get("subscription", "null") != (central_by_serial[s]["subscription"] or "null"):  # .replace("-", "_").replace(" ", "_")
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s].get('subscription', 'null')}[/] from import != [bright_green]{central_by_serial[s]['subscription'] or 'No Subscription Assigned'}[/] reflected in Central."]
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_red]{file_by_serial[s].get('subscription', 'null')}[/] from import != [bright_green]{central_by_serial[s].get('subscription', '[red]No Sub Key in data[/]') or 'No Subscription Assigned'}[/] reflected in Central."]
             elif validation[s]:  # Only show positive valid results here if the device failed other items.
-                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s]['subscription'] or '[red]No Subscription[/]'}) Assigned.  Matches import file."]
+                validation[s] += [f"[cyan]Subscription[/]: {_pfx}[bright_green]OK[/] ({central_by_serial[s].get('subscription', '[red]No Sub Key in data[/]') or '[red]No Subscription[/]'}) Assigned.  Matches import file."]
+        if not central_by_serial[s].get("status"):
+            validation[s] += [_valid_str]
 
-    ok_devs, not_ok_devs = [], []
+    ok_devs, not_ok_devs, prev_down_devs, retry_data = [], [], [], []
     for s in file_by_serial:
-        if not validation[s]:
+        if not validation[s] and s not in _down_prior:
             ok_devs += [s]
             _msg = "Added to Inventory: [bright_green]OK[/]"
             for field in ["group", "site", "subscription"]:
                 if field is not None and field in file_by_serial[s] and file_by_serial[s][field]:
                     _msg += f", {field.title()}: [bright_green]OK[/]"
-            if central_by_serial[s].get("status"):
-                _msg += f", Status: [{'bright_green' if central_by_serial[s]['status'].lower() == 'up' else 'red'}]{central_by_serial[s]['status']}[/]"
             validation[s] += [_msg]
+        elif s in _down_prior:
+            prev_down_devs += [s]
+            validation.pop(s)
         else:
             not_ok_devs += [s]
+            retry_data += [file_by_serial[s]]
 
     if not_ok_devs:
         caption = f"Out of {len(file_by_serial)} devices in {import_file.name} [red]{len(not_ok_devs)}[/] potentially have validation issues, and [green]{len(ok_devs)}[/] validate [green]OK[/]."
     else:
         caption = f"\u2705 All validations pass for the {len(file_by_serial)} devices in {import_file.name}"
-    caption = f"{caption}\n[dark_olive_green2]Counts[/]: Total: {len(file_by_serial)}, {utils.color([f'{k}: [cyan]{v}[/]' for k, v in zip(['Not in Inventory', 'Not Checked in'], [not_in_inventory, not_checked_in]) if v])}".rstrip(", ")
+    zip_ = zip(['Not in Inventory', 'Not Checked in', '[dim]Ignored [red]down[/] prior to migration[/]'], [not_in_inventory, not_checked_in, down_prior_down_now])
+    caption = f"{caption}\n[dark_olive_green2]Counts[/]: Total: {len(file_by_serial)}, {utils.color([f'{k}: [cyan]{v}[/]' for k, v in zip_ if v])}".rstrip(", ")
     if _up:
         caption = f"{caption}, [bright_green]Up[/]: [bright_green]{_up}[/]"
     if _down:
         caption = f"{caption}, [red]Down[/]: [red]{_down}[/]"
+    spinner.stop()
 
     console = Console(emoji=False, record=True)
     console.begin_capture()
 
-    if failed:
-        render.econsole.print("\n".join(not_ok_devs))
-    elif passed:
-        render.console.print("\n".join(ok_devs))
-    else:
-        console.rule("Validation Results")
-        for s in validation:
-            _hostname = central_by_serial.get(s, {}).get("name", "")
-            _hostname = _hostname and f"|{_hostname}"
-            _site = central_by_serial.get(s, {}).get("site", "") or ""
-            _site = _site and f"|s:{_site}"
-            dev_summary = f'{f"{s}{_hostname}{_site}":>35}'
-            if s in ok_devs:
-                console.print(f"[bright_green]\u2714  {dev_summary}[/]: {validation[s][0]}")
-            else:
-                _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
-                console.print(f"[bright_red]\u274c  {dev_summary}[/]: {_msg}")
-        console.rule()
-        console.print(f"[italic dark_olive_green2]{caption}[/]")
+    brief = brief or grep
+    brief_sep = "\n" if not grep else r"\|"
+    brief_bookends = '"' if grep else ''
+    with render.Spinner("Rendering Output..."):
+        if failed and brief:
+            render.econsole.print(f'{brief_bookends}{brief_sep.join(not_ok_devs)}{brief_bookends}')
+        elif passed and brief:
+            render.econsole.print(f'{brief_bookends}{brief_sep.join(ok_devs)}{brief_bookends}')
+        elif down_prior:
+            console.rule("Validation Results [deep_sky_blue2 italic]Devices down prior to migration[/]")
+            _ = [console.print(f"[dim]\u2753  {s}: {_down_prior.get(s, '❓')}") for s in _down_prior]
+            console.rule()
+            console.print(f"[italic dark_olive_green2]{caption}[/]")
+        else:
+            console.rule("Validation Results")
+            for s in _down_prior:
+                if not any([passed, failed]):
+                    console.print(f"[dim]\u2753  {s}: {_down_prior.get(s, '❓')}")  # ❓
+            for s in validation:
+                _hostname = central_by_serial.get(s, {}).get("name") or f'[dim]{file_by_serial.get(s, {}).get("name", "")}[/]'
+                _hostname = _hostname and f"|{_hostname}"
+                _site = (central_by_serial.get(s, {}).get("site", ) or "") or f'[dim]{file_by_serial.get(s, {}).get("site", "")}[/]'
+                _site = _site and f"|s:{_site}"
+                _status = central_by_serial.get(s, {}).get("status", "")
+                _status = _status and f"|{utils.color(_status)}"
+                dev_summary = f"{s}{_hostname}{_site}{_status}" if s not in ok_devs else f'{f"{s}{_hostname}{_site}{_status}":>35}'
+                if down and _status != "Down":
+                    continue
+                if s in ok_devs:
+                    if not failed:
+                        console.print(f"[bright_green]\u2714  {dev_summary}[/]: {validation[s][0]}")
+                elif not passed:
+                    pad = len(Text.from_markup(dev_summary))
+                    _msg = f"\n{' ' * (pad + 6)}".join(validation[s])
+                    # _msg = f"\n{' ' * (len(s) + 2)}".join(validation[s])
+                    console.print(f"[bright_red]\u274c  {dev_summary}[/]: {_msg}")
+            console.rule()
+            console.print(f"[italic dark_olive_green2]{caption}[/]")
 
-    outdata = console.end_capture()
+        outdata = console.end_capture()
     typer.echo(outdata)
 
     if outfile:
         render.write_file(outfile, typer.unstyle(outdata))
+    if do_retry and retry_data:
+        if not ok_devs:
+            render.econsole.print(f"No need for retry file, [red]no devices passed validation[/].  [italic dim]Continue to use {import_file.name}[/]")
+            return
+        key_order = ["name", "status", "type", "model", "ip", "serial", "mac", "group", "site", "retain_config"]
+        retry_data = utils.format_table(retry_data, key_order=key_order)
+        csv_str = render.get_csv_string(retry_data)
+        render.write_file(import_file.parent / f"{import_file.stem}-retry.csv", csv_str, is_retry_file=True)
 
 
 @app.command(short_help="Batch Deploy groups, sites, devices... from file", hidden=True)
@@ -549,7 +630,7 @@ def _build_sub_requests(devices: list[dict], unsub: bool = False) -> tuple[list[
     try:
         subs = [common.cache.LicenseTypes(s.lower().replace("_", "-").replace(" ", "-")).name for s in subs]  # type: ignore
     except ValueError as e:
-        sub_names = "\n".join(common.cache.license_names)
+        sub_names = "\n".join(common.cache.licenses)
         common.exit(str(e).replace("ValidLicenseTypes", f'subscription name.\n[cyan]Valid subscriptions[/]: \n{sub_names}'))
 
     devs_by_sub = {s: [] for s in subs}
@@ -818,16 +899,25 @@ def move(
     do_group: bool = typer.Option(False, "-G", "--group", help="Only process group move from import."),
     do_site: bool = typer.Option(False, "-S", "--site", help="Only process site move from import."),
     do_label: bool = typer.Option(False, "-L", "--label", help="Only process label assignment from import."),
-    cx_retain_config: bool = typer.Option(
-        False,
-        "-k",
-        help="Keep config intact for CX switches during group move. [cyan italic]retain_config[/] [italic dark_olive_green2]in import_file takes precedence[/], this flag enables the option without it being specified in the import_file."
+    cx_retain_config: bool = common.options.get(
+        "cx_retain_config",
+        help="Keep config intact for CX switches during group move. [italic][cyan]retain_config[/] [dark_olive_green2]in import_file takes precedence[/][/italic], this flag enables the option without it being specified in the import_file."
     ),
-    cx_retain: bool = typer.Option(
+    cx_retain_all: bool = typer.Option(
         None,
         help="Keep config intact or not for CX switches during group move [italic dark_olive_green2]regardless of what is in the import_file[/].",
         show_default=False,
+        envvar="CENCLI_CX_RETAIN_CONFIG_ALL"
     ),
+    no_pre_prov: bool = typer.Option(
+        False,
+        "--no-pre-group",
+        "--npg",
+        help=f"Only process moves for devices that have checked in.  Do not pre-provision devices to groups if they have not yet checked in {render.help_block('Devices that have not checked in are pre-provisioned to specified group (CX depends on retain option)')}",
+        envvar="CENCLI_NO_PRE_PROVISION",
+    ),
+    no_refresh: bool = common.options.get("no_refresh", "--nr", "--no-refresh", help=f"Do not do on-demand cache refresh {render.help_block('Refresh is performed, on demand if device or site is not found in cache or already appears to be in desired group/site')}", envvar=env_var.no_refresh),
+    refresh: bool = common.options.get("refresh", help=f"Refresh the cache prior to move, {render.help_block('Refresh is performed, on demand if device or site is not found in cache')}"),
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -846,21 +936,26 @@ def move(
 
     i.e. if import includes a definition for group, site, and label, and you only want to
     process the site move. Use the -S|--site flag, to ignore the other columns.
+
+    If failures occur:
+        [cyan]cencli batch verify IMPORT_FILE -FR[/] can be used to create a retry file with only with only failed moves.
     """
     if show_example:
         print(examples.move_devices)
         return
 
-    import_file = [f for f in import_file if not str(f).startswith("device")]  # allow unnecessary 'devices' sub-command
+    if import_file:
+        import_file = [f for f in import_file if not str(f).startswith("device")]  # allow unnecessary 'devices' sub-command
 
     if not import_file:
         common.exit(render._batch_invalid_msg("cencli batch move [OPTIONS] [IMPORT_FILE]"))
-    elif len(import_file) > 1:
+
+    if len(import_file) > 1:
         common.exit("Too many arguments.  Use [cyan]cencli batch move --help[/] for help.")
-    elif not import_file[0].exists():
+    if not import_file[0].exists():
         common.exit(f"Invalid value for '[IMPORT_FILE]': Path '[cyan]{str(import_file[0])}[/]' does not exist.")
 
-    resp = common.batch_move_devices(import_file[0], yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain)
+    resp = common.batch_move_devices(import_file[0], yes=yes, do_group=do_group, do_site=do_site, do_label=do_label, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_all, no_pre_prov=no_pre_prov, refresh=refresh, refresh_on_fail=not no_refresh)
     render.display_results(resp, tablefmt="action")
 
 
