@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 
 from centralcli import utils
 from centralcli.client import Session
-from centralcli.constants import DeviceStatusFilter, APDeployment, CNXDevTypes
-
+from centralcli.constants import APDeployment, CNXDevTypes, DeviceStatusFilter
 
 if TYPE_CHECKING:
     from centralcli.response import Response

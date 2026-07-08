@@ -2,21 +2,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import typer
 from rich import print
 
-from centralcli import common, render
-from centralcli.cache import api
+from centralcli import api_clients, common, render
+from centralcli.cache import DBAction
 from centralcli.constants import iden_meta
 
 from . import update
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheDevice, CacheGroup, CacheSite
+    from centralcli.cache import CacheGroup, CacheSite
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()
@@ -50,14 +52,14 @@ def ap(
     """
     [bright_green]Rename an Access Point[/]
     """
-    ap: CacheDevice = common.cache.get_dev_identifier(ap, dev_type="ap")
-    print(f"Please Confirm: rename ap [bright_red]{ap.name}[/] -> [bright_green]{new_name}[/]")
+    _ap = common.cache.get_dev_identifier(ap, dev_type="ap")
+    print(f"Please Confirm: rename ap [bright_red]{_ap.name}[/] -> [bright_green]{new_name}[/]")
     print("    [italic]Will result in 2 API calls[/italic]\n")
     render.confirm(yes)
-    resp = api.session.request(api.configuration.update_ap_settings, ap.serial, new_name)
+    resp = api.session.request(api.configuration.update_ap_settings, _ap.serial, new_name)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
     if resp.status == 200:  # we don't just check for OK because 299 (no call performed) is returned if the old and new name match according to central
-        common.cache.DevDB.update({"name": new_name}, doc_ids=[ap.doc_id])
+        asyncio.run(common.cache.update_dev_db({"serial": _ap.serial, "name": new_name}, action=DBAction.UPDATE))
 
 
 @app.command()

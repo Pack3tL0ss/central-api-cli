@@ -1,8 +1,8 @@
 from __future__ import annotations
+
+from typing import Any, Callable, Dict, List
+
 from ... import log, utils
-
-from typing import List, Dict, Any, Callable
-
 
 COMMON_SHORT_KEY = {}
 COMMON_SHORT_VALUE = {}

@@ -10,15 +10,15 @@ from typing import TYPE_CHECKING, Literal
 import typer
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, log, render
 from centralcli.constants import BandwidthInterval, RadioBandOptions, UplinkNames, iden_meta  # noqa
 from centralcli.response import Response
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheClient, CacheDevice, CacheGroup, CacheLabel
+    from centralcli.objects.cache import CacheClient, CacheDevice, CacheGroup, CacheLabel
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 def _render(resp: Response, *, tablefmt: Literal["rich", "yaml", "csv", "json", "graph"], title: str, pager: bool = False, outfile: Path = None, cleaner: callable = cleaner.get_gw_uplinks_bandwidth,) -> None:

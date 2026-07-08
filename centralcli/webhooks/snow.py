@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
+
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -9,13 +11,12 @@ from datetime import datetime as dt
 from pathlib import Path
 from typing import List
 
+import aiohttp
 import uvicorn
 from fastapi import FastAPI, Header, Request, Response, status
 from fastapi.responses import JSONResponse
 from rich import print
 from starlette.requests import Request  # NoQA
-import aiohttp
-import asyncio
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:
@@ -30,8 +31,8 @@ except (ImportError, ModuleNotFoundError) as e:
         print(pkg_dir.parts)
         raise e
 
-from .models.webhook import WebHook, HookResponse, wh_resp_schema
 from .models import snow as models
+from .models.webhook import HookResponse, WebHook, wh_resp_schema
 
 
 def init_logs():

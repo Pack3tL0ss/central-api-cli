@@ -1,7 +1,7 @@
 # pragma: exclude file  Still a WIP
 import base64
-from functools import lru_cache
 import ipaddress
+from functools import lru_cache
 from itertools import groupby
 from typing import Literal
 
@@ -10,15 +10,16 @@ from google.protobuf.json_format import MessageToDict
 from rich import inspect
 from rich.console import Console
 
-from centralcli import render
-from centralcli.cache import CacheDevice, api
+from centralcli import api_clients, render
 from centralcli.models.config import WSSConfig
+from centralcli.objects.cache import CacheDevice
 from centralcli.typedefs import LogType
 
-from . import config, log, utils, cache
+from . import cache, config, log, utils
 from .objects import DateTime
 from .protobuf import audit_pb2, monitoring_pb2, streaming_pb2
 
+api = api_clients.classic
 console = Console(emoji=False)
 econsole = Console(stderr=True)
 

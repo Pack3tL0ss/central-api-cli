@@ -1,15 +1,15 @@
+import sys
 from typing import Callable
 
 import pytest
-import sys
 from typer.testing import CliRunner
 
 from centralcli import utils
 from centralcli.cli import app
 from centralcli.environment import env
 
-from . import capture_logs, config, test_data, at_str
-from ._test_data import test_j2_file, test_gen_bssid_file, test_gen_bssid_xlsx_file, test_ap_ui_group_template, test_ap_ui_group_variables
+from . import at_str, capture_logs, config, test_data
+from ._test_data import test_ap_ui_group_template, test_ap_ui_group_variables, test_gen_bssid_file, test_gen_bssid_xlsx_file, test_j2_file
 
 runner = CliRunner()
 

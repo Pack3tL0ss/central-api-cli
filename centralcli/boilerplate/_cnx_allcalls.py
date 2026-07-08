@@ -1,7 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Dict, List, Any
-
+from typing import Any, Dict, List
 
 # Detect if called from pypi installed package or via cloned github repo (development)
 try:

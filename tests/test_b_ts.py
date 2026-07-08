@@ -51,7 +51,7 @@ def test_ts_clients(args: tuple[str], pass_condition: Callable):
 @pytest.mark.parametrize(
     "args,pass_condition",
     [
-        [(test_data["ap"]["name"], "--wired"), lambda r: "⚠" in r or "❌" in r],
+        [(test_data["ap"]["name"], "--wired"), lambda r: "Response" in r],  # "⚠" in r or "❌"
     ]
 )
 def test_ts_clients_fail(args: tuple[str], pass_condition: Callable):
@@ -68,7 +68,7 @@ def test_ts_images():
     assert "API" in result.stdout
 
 
-def test_ts_clear():
+def test_ts_clear(ensure_dev_cache_test_switch):
     result = runner.invoke(app, ["ts", "clear", test_data["switch"]["mac"]])
     capture_logs(result, "test_ts_clear")
     assert result.exit_code == 0

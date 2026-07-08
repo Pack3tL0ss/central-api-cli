@@ -8,9 +8,9 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+from collections.abc import Callable
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
-from collections.abc import Callable
 
 import pendulum
 import yaml
@@ -130,6 +130,7 @@ _short_value: dict[str, Callable[[str], str] | str] = {
     "ts": lambda x: DateTime(x, format="log"),
     "timestamp": lambda x: DateTime(x, format="log"),
     "subscription_expires": lambda x: DateTime(x, "timediff", format_expiration=True),
+    "last_updated": lambda x: DateTime(x, "mdyt-timediff"),  # get_lldp_neighbors u_time_interval
     "firmware_scheduled_at": lambda x: DateTime(x, "mdyt"),
     "Unknown": "?",
     "HPPC": "SW",
@@ -527,7 +528,6 @@ def get_clients(
     **kwargs
 ) -> list:
     data = utils.listify(data)
-    data = [_client_concat_associated_dev(d, cache=cache, verbose=verbosity) for d in data]
     format = format or "rich" if not verbosity else "yaml"
 
     verbosity_keys = {
@@ -576,6 +576,13 @@ def get_clients(
     _short_value["speed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
     _short_value["maxspeed"] = lambda x: utils.convert_bytes_to_human(x, speed=True)
 
+    # if tablefmt is tabular we need each row to have the same columns
+    if format in TABULAR_FORMATS:
+        key_order = verbosity_keys.get(verbosity) or [*verbosity_keys[max(verbosity_keys)], *[k for k in utils.all_keys(data) if k not in verbosity_keys[max(verbosity_keys)]]]
+        data = utils.format_table(data, key_order=key_order)
+
+    data = [_client_concat_associated_dev(d, cache=cache, verbose=verbosity) for d in data]
+
     data = [
         dict(
             short_value(
@@ -587,10 +594,6 @@ def get_clients(
         )
         for idx, d in enumerate(data)
     ]
-
-    # if tablefmt is tabular we need each row to have the same columns
-    if format in TABULAR_FORMATS:
-        data = utils.format_table(data)
 
     data = utils.strip_no_value(data, aggressive=bool(verbosity and format not in TABULAR_FORMATS))
 
@@ -966,7 +969,7 @@ def get_lldp_neighbor(data: list[dict[str, str]]) -> dict[str, dict[str, str]]:
     strip_keys = ["cid"]
     # grab the key details from switch lldp return, make data look closer to lldp return from AP
     if data and "dn" in data[0].keys():
-        data = [{**dict(d if "dn" not in d else d["dn"]), "vlan_id": ",".join(d.get("vlan_id", [])), "lldp_poe": d.get("lldp_poe_enabled")} for d in data]
+        data = [{**dict(d if "dn" not in d else d["dn"]), "vlan_id": utils.format_ranges(d.get("dn", {}).get("vlan_id", d.get("vlan_id", []))), "lldp_poe": d.get("lldp_poe_enabled"), "last_updated": d.get("u_time_interval")} for d in data]
         data = sort_interfaces(data, interface_key="port")
     # simplify some of the values and strip the bond0 entry from AP
     data = [dict(short_value(k, d[k]) for k in d if d.get("localPort", "") != "bond0" and k not in strip_keys) for d in data]
@@ -1111,7 +1114,7 @@ def get_template_details_for_device(data: str, device: CacheDevice) -> str:
                 ...
 
         console.print(
-            "\n[italic][deep_sky_blue]:information:[/]  The Order and format of lines from running config may differ from the Central side config depending on how the template is structured.[/italic]",
+            "\n[italic][deep_sky_blue1]:information:[/]  The Order and format of lines from running config may differ from the Central side config depending on how the template is structured.[/italic]",
             emoji=True
         )
 
@@ -1244,7 +1247,7 @@ def get_device_inventory(data: list[dict], sub: bool = None, key: str = None) ->
         "type",
         "model",
         "sku",
-        "services",
+        "subscription",
         "subscription_key",
         "subscription_expires",
         "archived"
@@ -1252,13 +1255,13 @@ def get_device_inventory(data: list[dict], sub: bool = None, key: str = None) ->
 
     _short_key["subscription_key"] = "subscription key"  # override the default short value which is used for subscription output
     data = simple_kv_formatter(data, key_order=field_order, emoji_bools=True)
-    data = sorted(utils.strip_no_value(data), key=lambda i: (i.get("services") or "", i["model"]))
+    data = sorted(utils.strip_no_value(data), key=lambda i: (i.get("subscription", i.get("services")) or "", i["model"]))
 
     if key is not None:
         data = [{k: v for k, v in d.items()} for d in data if (d["subscription key"] or "") == key]
     elif sub is not None:
         if sub:
-            data = [{k: v for k, v in d.items()} for d in data if d["services"]]
+            data = [{k: v for k, v in d.items()} for d in data if d["subscription"]]
         else:
             data = [{k: v for k, v in d.items()} for d in data if not d["services"]]
 
@@ -1627,6 +1630,7 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
             'name',
             'essid',
             'type',
+            'forward_mode',
             'hide_ssid',
             'disable_ssid',
             'rf_band',
@@ -1698,7 +1702,8 @@ def get_full_wlan_list(data: list[dict] | str | dict[str, Any], verbosity: int =
 
     # override default which swaps in unicode checkmark/X (for rich output)
     if format in TABULAR_FORMATS:
-        pretty_data = utils.format_table(pretty_data)
+        key_order = verbosity_keys.get(verbosity) or [*verbosity_keys[max(verbosity_keys)], *[k for k in utils.all_keys(data) if k not in verbosity_keys[max(verbosity_keys)]]]
+        pretty_data = utils.format_table(pretty_data, key_order=key_order)
     if format != "rich":  # TODO csv is handled with render.output.normalize_for_csv, need to handle conversions for json/yaml is covered, then this can be removed
         _short_value["disable_ssid"] = lambda v: 'True' if not v else 'False'
     # if format != "rich" and "disable_ssid" in data[-1].keys():  # TODO csv should be handled with render.output.normalize_for_csv, need to ensure json/yaml is covered
@@ -1771,35 +1776,38 @@ def cloudauth_get_namedmpsk(data: list[dict[str, Any]], verbosity: int = 0,) -> 
 
 
 def show_all_ap_lldp_neighbors_for_site(data, filter: Literal["up", "down"] = None):
-    data = utils.unlistify(data)
+    in_data = data
+    out_data = []
     # TODO circular import if placed at top review import logic
     from centralcli import cache
 
-    if filter is None:
-        aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP"}
-    else:
-        status = 0 if filter == "down" else 1
-        aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP" and dev["status"] == status}
-    ap_connections = {edge["toIf"]["serial"]: edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_site}
-    data = [
-        {
-            "ap": aps_in_site[ap].get("name", "--"),
-            "ap_ip": aps_in_site[ap].get("ipAddress", "--"),
-            "ap_serial": aps_in_site[ap].get("serial", "--"),
-            "ap_port": ap_connections.get(ap, {"toIf": {}})["toIf"].get("portNumber", "--"),
-            # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
-            # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
-            "switch": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("deviceName", "--"),
-            "switch_ip": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress", "--") if ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress") not in [None, "Unknown"] else cache.devices_by_serial.get(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"), {}).get("ip", "--"),
-            "switch_serial": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"),
-            "switch_port": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("name", "--"),
-            "untagged_vlan": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", "--"),
-            "tagged_vlans": ",".join([str(v) for v in sorted(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("taggedVlans") or []) if v != ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", 9999)]),
-            "healthy": "✅" if aps_in_site[ap].get("health", "") == "good" else "❌"
-        } for ap in aps_in_site
-    ]
+    for data in in_data:
+        if filter is None:
+            aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP"}
+        else:
+            status = 0 if filter == "down" else 1
+            aps_in_site = {dev["serial"]: dev for dev in data["devices"] if dev["role"] == "IAP" and dev["status"] == status}
+        ap_connections = {edge["toIf"]["serial"]: edge for edge in data["edges"] if edge["toIf"]["serial"] in aps_in_site}
+        data = [
+            {
+                "ap": aps_in_site[ap].get("name", "--"),
+                "ap_ip": aps_in_site[ap].get("ipAddress", "--"),
+                "ap_serial": aps_in_site[ap].get("serial", "--"),
+                "ap_port": ap_connections.get(ap, {"toIf": {}})["toIf"].get("portNumber", "--"),
+                # "ap_untagged_vlan": x["toIf"].get("untaggedVlan"),
+                # "ap_tagged_vlans": x["toIf"].get("taggedVlans"),
+                "switch": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("deviceName", "--"),
+                "switch_ip": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress", "--") if ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("ipAddress") not in [None, "Unknown"] else cache.devices_by_serial.get(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"), {}).get("ip", "--"),
+                "switch_serial": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("serial", "--"),
+                "switch_port": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("name", "--"),
+                "untagged_vlan": ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", "--"),
+                "tagged_vlans": ",".join([str(v) for v in sorted(ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("taggedVlans") or []) if v != ap_connections.get(ap, {"fromIf": {}})["fromIf"].get("untaggedVlan", 9999)]),
+                "healthy": "✅" if aps_in_site[ap].get("health", "") == "good" else "❌"
+            } for ap in aps_in_site
+        ]
+        out_data += data
 
-    return simple_kv_formatter(data)
+    return simple_kv_formatter(out_data)
 
 
 def get_gw_tunnels(data: list[dict[str, Any]]) -> list[dict[str, Any]]:

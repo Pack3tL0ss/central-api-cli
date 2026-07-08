@@ -1,15 +1,25 @@
 """This test file contains all tests that need to be ran against both GLP and classic flows
 """
+from typing import Callable
+
 import pytest
 from typer.testing import CliRunner
 
-from typing import Callable
-from centralcli import config, utils, common
+from centralcli import common, config, utils
 from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, test_data
-from ._test_data import test_device_file, test_device_file_txt, test_sub_file_yaml, test_sub_file_csv, test_sub_file_test_ap, test_sub_file_classic_yaml, test_invalid_device_file_csv, test_invalid_empty_file
+from ._test_data import (
+    test_device_file,
+    test_device_file_txt,
+    test_invalid_device_file_csv,
+    test_invalid_empty_file,
+    test_sub_file_classic_yaml,
+    test_sub_file_csv,
+    test_sub_file_test_ap,
+    test_sub_file_yaml,
+)
 
 runner = CliRunner()
 
@@ -218,7 +228,7 @@ if config.dev.mock_tests:
     @pytest.mark.parametrize(
         "idx,fixture,glp_ok,args,exit_code,pass_condition",
         [
-            [1, None, False, (str(test_sub_file_classic_yaml),), 0, lambda r: "200" in r],
+            [1, "ensure_cache_subscription", False, (str(test_sub_file_classic_yaml),), 0, lambda r: "200" in r],
             [2, None, True, (str(test_sub_file_yaml), "--tags", "testtag1", "=", "testval1,", "testtag2=testval2"), 0, lambda r: r.count("code: 202") == 2],  # glp w tags
             [3, None, False, (str(test_sub_file_yaml),), 1, lambda r: "⚠" in r and "Valid" in r],
             [4, None, True, (str(test_sub_file_csv),), 0, lambda r: r.count("code: 202") >= 2],
@@ -226,8 +236,8 @@ if config.dev.mock_tests:
         ]
     )
     def test_batch_subscribe(ensure_inv_cache_batch_sub_devices, idx: int, fixture: str, glp_ok: bool, args: tuple[str], exit_code: int, pass_condition: Callable, request: pytest.FixtureRequest):
-        if idx == 1:
-            request.getfixturevalue("ensure_cache_subscription")
+        # if idx == 1:
+        #     request.getfixturevalue("ensure_cache_subscription")
         if fixture:
             request.getfixturevalue(fixture)
         config._mock(glp_ok)

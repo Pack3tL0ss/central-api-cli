@@ -1,8 +1,9 @@
-from sphinx.cmd.build import main
 from pathlib import Path
-from docutils.nodes import Text
 
+from docutils.nodes import Text
 from rich.traceback import install
+from sphinx.cmd.build import main
+
 install(show_locals=True)
 
 RICH_MARKUPS = [

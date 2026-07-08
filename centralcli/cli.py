@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 import subprocess
 import sys
+from pathlib import Path
 from time import sleep
 
 import typer
-from rich.markup import escape
 
-from centralcli import cache, common, config, log, render, utils
-from centralcli.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject, api
+from centralcli import api_clients, cache, common, config, log, render, utils
 from centralcli.client import BatchRequest
 from centralcli.clitree import add, assign, caas, cancel, check, clone, convert, export, generate, kick, migrate, refresh, rename, test, ts, unassign, update, upgrade
 from centralcli.clitree import dev as clidev
@@ -17,8 +16,9 @@ from centralcli.clitree.delete import delete
 from centralcli.clitree.set import set as cliset
 from centralcli.clitree.show import show
 from centralcli.constants import BlinkArgs, BounceArgs, EnableDisableArgs, LicenseTypes, ResetArgs, StartArgs, do_load_pycentral, iden_meta
-from centralcli.environment import env
-from centralcli.strings import emoji
+from centralcli.environment import env, env_var
+from centralcli.objects.cache import CacheDevice, CacheInvDevice, CacheSite, CentralObject
+from centralcli.strings import emoji, start_help
 
 try:
     import psutil
@@ -53,8 +53,10 @@ app.add_typer(check.app, name="check",)
 app.add_typer(cancel.app, name="cancel",)
 app.add_typer(convert.app, name="convert",)
 app.add_typer(generate.app, name="generate",)
-app.add_typer(migrate.app, name="migrate", hidden=True)
+app.add_typer(migrate.app, name="migrate")
 app.add_typer(clidev.app, name="dev", hidden=True)
+
+api = api_clients.classic
 
 
 # TODO see if can change kw1 to "group" kw2 to "site" and unhide
@@ -140,7 +142,11 @@ def move(
     if not group and not site:
         common.exit("Missing Required Argument, group and/or site is required.")
 
-    data = [{"serial": d, "group": group, "site": site, "retain_config": cx_retain_config} for d in device]
+    devices = [common.cache.get_dev_identifier(d, include_inventory=True, swack=True, silent=True, exit_on_fail=False) for d in device]
+    if not utils.strip_none(devices):
+        common.exit("None of the devices provided were found.  Nothing to move.  Exiting...")
+
+    data = [{"serial": d.serial, "group": group, "site": site, "retain_config": cx_retain_config} for d in devices if d is not None]
     move_resp = common.batch_move_devices(data=data, yes=yes)
     render.display_results(move_resp, tablefmt="action")
 
@@ -251,9 +257,9 @@ def reboot(
         batch_reqs += [BatchRequest(func, arg, 'reboot')]
         confirm_msgs += [conf_msg]
 
-    confirm_msgs_str = "\n  ".join(confirm_msgs)
+    confirm_msgs_str = "\n   ".join(confirm_msgs)
     # \u267b = ♻ :recycle: use unicode chars here as confirm message could have mac looks like emoji markup :cd:
-    render.console.print(f'[bright_green]\u267b[/]  [bold bright_green]{_confirm_pfx}[/]\n  {confirm_msgs_str}', emoji=False)
+    render.console.print(f'{emoji.reboot} [bold bright_green]{_confirm_pfx}[/]\n   {confirm_msgs_str}', emoji=False)
     if len(batch_reqs) > 1:
         render.econsole.print(f"  [italic dark_olive_green2]Will result in {len(batch_reqs)} API Calls.")
 
@@ -373,41 +379,51 @@ def sync(
 
 # TODO get the account, port and process details (start_time, pid) cache
 # add cache.RunDB or InfoDB to use to store this kind of stuff
-start_help = f"""Start WebHook Proxy Service on this system in the background
-
-    Currently 2 webhook automations:
-    For Both automations the URL to configure as the webhook destination is [cyan]http://localhost/api/webhook[/] (currently http)
-
-    [cyan]hook-proxy[/]:
-      - Gathers status of all branch tunnels at launch, and utilizes webhooks to keep a local DB up to date.
-      - Presents it's own REST API that can be polled for branch/tunnel status:
-        See [cyan]http://localhost:port/api/docs[/] (after starting proxy) for available endpoints / schema details.
-
-    [cyan]hook2snow[/]:
-      - [bright_red]!!![/] This integration is incomplete, as the customer that requested it ended up going a different route with the webhooks.
-      - Queries alerts API at launch to gather any "Open" items.
-      - Receives webhooks from Aruba Central, and creates or resolves incidents in Service-Now via SNOW REST API
-
-    [italic]Requires optional hook-proxy component '[bright_green]uv tool install -U centralcli{escape("[hook-proxy]")}[reset]'
-    """  # pragma: no cover
-
-
-@app.command(help=start_help, short_help="Start WebHook Proxy", hidden=not hook_enabled)
+# TODO break into sub-command with start hook-watcher and start hook-nms-proxy
+watcher_prefix_default = "'migrate' or 'devices'"
+@app.command(help=start_help, short_help="Start WebHook Watcher", hidden=not hook_enabled)  # NoQA
 def start(
     what: StartArgs = typer.Argument(
-        "hook-proxy",
-        help="See documentation for info on what each webhook receiver does",
+        StartArgs.wh_watcher,
+        help="See documentation or above for info on what each webhook receiver does",
     ),
-    port: int = typer.Option(config.webhook.port, help="Port to listen on (overrides config value if provided)", show_default=True),
-    collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", hidden=True),
+    port: int = typer.Option(config.webhook.port, "-P", "--port", help="Port to listen on (overrides config value if provided)", show_default=True),
+    collect: bool = typer.Option(False, "--collect", "-c", help="Store raw webhooks in local json file", rich_help_panel="Dev Options", hidden=not env.is_dev_user),
+    test_mode: bool = typer.Option(False, "--test-mode", help="Enable test mode [dim italic](Allows hooks with no signature)[/]", rich_help_panel="Dev Options", hidden=not env.is_dev_user),
+    watcher_dir: Path = typer.Option(
+        Path.cwd(),
+        "-D",
+        "--dir",
+        help=f"For [cyan]hook-watcher[/].  Directory to watch for device files defining how to respond to devices going online/offline. {render.help_block(f'current directory ({Path.cwd()})')}",
+        show_default=False,
+        envvar=env_var.watcher_dir
+    ),
+    watcher_prefix: str = typer.Option(None, "--prefix", help=f"filename prefix to watch for. [dim italic]Specify exact file-name to monitor devices in a specific file[/] {render.help_block(watcher_prefix_default)}", show_default=False),
+    delete_ws: str = typer.Option(
+        None,
+        envvar=env_var.delete_ws,
+        help=f"The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace for delete operations.  {emoji.warn} Devices found in watch files will be deleted from this workspace once disconnected.",
+        autocompletion=cache.workspace_completion,
+        show_default=False,
+    ),
+    foreground: bool = typer.Option(False, "-F", "--foreground", help=f"Start [cyan]hook-watcher[/] in the foreground. {render.help_block('hook-watcher is started in the background.')}"),
+    update_interval: int = typer.Option(30, "-I", "--update-interval", help="Update interval in seconds.  Device moves are queued and sent periodically to reduce API calls.", show_default=True),
+    no_refresh: bool = common.options.get("no_refresh", help="Do not perform cache update at startup."),
+    past: int = typer.Option(30, "--past", help=f"Fetch current alerts.  {render.help_block('30 mins. (specify 0 to skip fetch of current alerts from REST API)')}", envvar=env_var.watcher_current_alerts_past),
     yes: int = common.options.yes_int,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
-    workspace: str = common.options.workspace,
+    workspace: str = common.options.get("workspace", "--ws", "--workspace", "--move-ws", help=f"The Aruba Central [dim italic]([green]GreenLake[/green])[/] WorkSpace for move operations.  {emoji.info} Devices found in watch files will be moved to defined group/site once connected.",),
 ) -> None:  # pragma: no cover
-    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
+    # TODO need confirmation with src_workspace delete_ws info
+    svc = what.name
     yes_both = True if yes > 1 else False
-    yes = True if yes else False
+    yes = bool(yes)
+    if what == StartArgs.wh_watcher and foreground:
+        from centralcli.webhooks import watcher
+        watcher_prefix = watcher_prefix and [watcher_prefix] or ["migrate", "devices"]
+        watcher.start_webhook_watcher(workspace=workspace, watcher_dir=watcher_dir, watcher_prefix=watcher_prefix, port=port, delete_ws=delete_ws, test_mode=test_mode, collect=collect, update_interval=update_interval, refresh=not no_refresh, past=past)
+        common.exit(code=0)
 
     def terminate_process(pid):
         p = psutil.Process(pid)
@@ -426,19 +442,30 @@ def start(
     pid = get_pid()
     if pid:
         _abort = True if not port or port == int(config.webhook.port) else False
-        render.console.print(f"Webhook proxy is currently running (process id {pid}).")
+        render.console.print(f"Webhook proxy [dim italic]({what.value})[/] is currently running (process id {pid}).")
         render.console.print(f"Terminat{'e' if not yes_both else 'ing'} existing process{'?' if not yes_both else '.'}")
         if render.confirm(yes_both, abort=_abort):  # pragma: no cover
             terminate_process(pid)
             render.console.print("[cyan]Process Terminated")
 
-    render.console.print(f"Webhook Proxy will listen on port {port or config.webhook.port}")
+    watcher_prefix = watcher_prefix or "migrate,devices"
+    render.console.print(f"Webhook Proxy [dim italic]({what.value})[/] will listen on port {port or config.webhook.port}")
     render.confirm(yes)
     port = port or config.webhook.port
-    cmd = ["nohup", sys.executable, "-m", f"centralcli.{svc}", str(port)]
+    cmd = ["nohup", sys.executable, "-m", f"centralcli.webhooks.{svc}", str(port)]
+    if what == StartArgs.wh_watcher:
+        cmd += [watcher_dir.absolute(), watcher_prefix]
     if collect:
         cmd += ["-c"]
-    with render.Spinner("Starting Webhook Proxy..."):
+    if test_mode:
+        cmd += ["--test-mode"]
+    if delete_ws:
+        if not config.workspaces.get(delete_ws):
+            common.exit(f"Workspace [cyan]{delete_ws}[/] not found in config.")
+        cmd += ["--delete-ws", delete_ws]
+    if workspace:
+        cmd += ["--move-ws", workspace]
+    with render.Spinner(f"Starting Webhook Proxy ([cyan]{what.value}[/])..."):
         p = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -453,9 +480,9 @@ def start(
     if not psutil.pid_exists(p.pid) or proc.status() not in ["running", "sleeping"]:
         output = [line.decode("utf-8").rstrip() for line in p.stdout if not line.decode("utf-8").startswith("nohup")]
         render.econsole.print("\n".join(output))
-        render.econsole.print("\nWebHook Proxy Startup [red]Failed[/].")
+        render.econsole.print(f"\nWebHook Proxy ([cyan]{what.value}[/]) Startup [red]Failed[/].")
     else:
-        render.console.print(f"[{p.pid}] WebHook Proxy [bright_green]Started[/].")
+        render.console.print(f"[{p.pid}] WebHook Proxy ([cyan]{what.value}[/]) [bright_green]Started[/].")
 
 
 @app.command(hidden=not hook_enabled)
@@ -467,7 +494,7 @@ def stop(
     workspace: str = common.options.workspace,
 ) -> None:  # pragma: no cover
     """Stop WebHook Proxy (background process)."""
-    svc = "wh_proxy" if what == "hook-proxy" else "wh2snow"
+    svc = what.name
 
     def terminate_process(pid):
         with render.Spinner("Terminating Webhook Proxy..."):
@@ -737,7 +764,7 @@ def callback(
        - Useful if you want to see the same output in a different format or you want to output to file (--out <FILE>)
        - :warning:  [cyan]--raw[/] output is not cached for re-display.
     """
-    if not config.cache_file_ok and do_load_pycentral():
+    if not config.cache.ok and do_load_pycentral():
         cache.check_fresh(refresh=True)  # pragma: no cover
 
 

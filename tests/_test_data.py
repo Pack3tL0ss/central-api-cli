@@ -1,8 +1,8 @@
 import json
+import random
 import shutil
 from pathlib import Path
 from typing import Any, Callable, Literal
-import random
 
 import yaml
 

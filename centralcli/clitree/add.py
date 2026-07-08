@@ -10,16 +10,17 @@ from typing import TYPE_CHECKING, List, Tuple
 import pendulum
 import typer
 import yaml
-from rich.console import Console
 
 from centralcli import api_clients, common, config, log, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import DevTypes, GatewayRole, NotifyToArgs, iden_meta, state_abbrev_to_pretty
 from centralcli.render import econsole
 from centralcli.response import Response
+from centralcli.cache import DBAction
+from centralcli.strings import emoji
 
 if TYPE_CHECKING:
-    from ..cache import CacheGroup, CacheMpskNetwork, CachePortal
+    from ..objects.cache import CacheGroup, CacheMpskNetwork, CachePortal
 
 
 api = api_clients.classic
@@ -46,14 +47,11 @@ class AddGroupArgs(str, Enum):
     mac = "mac"
 
 
-err_console = Console(stderr=True)
-
-
 def _update_inv_cache_after_dev_add(resp: Response | List[Response], serial: str = None, mac: str = None, subscription: str | List[str] = None) -> None:
     if subscription:
         try:
             subscription = utils.unlistify(subscription)
-            subscription: str = subscription.lower().replace("_", "-").replace(" ", "-"),
+            subscription: str = subscription.lower().replace("_", "-").replace(" ", "-")
         except Exception as e:  # pragma: no cover
             log.exception(f"{repr(e)} in _update_inv_cache_after_dev_add\n{e}", caption=True)  # This isn't imperative given it's the inv cache.  It's not used for much.
 
@@ -402,13 +400,13 @@ def label(
 
     Label can't have any devices associated with it to delete.
     """
-    econsole.print(f'[bright_green]{"Creating" if yes else "Create"}[/] label{"s" if len(labels) > 1 else ""}:')
+    econsole.print(f'[bright_green]Creat{"ing" if yes else "e"}[/] label{"s" if len(labels) > 1 else ""}:')
     econsole.print("\n".join([f"  [cyan]{label}[/]" for label in labels]))
     for idx in range(0, 2):
-        duplicate_names = [name for name in [*[s["name"] for s in common.cache.sites], *common.cache.label_names] if name in labels]
+        duplicate_names = [name for name in [*[s.name for s in common.cache.sites], *common.cache.label_names] if name in labels]
         if duplicate_names:
             if idx == 0:
-                err_console.print(f":warning:  Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, refreshing cache to ensure data is current.")
+                render.econsole.print(f"{emoji.warn} Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, refreshing cache to ensure data is current.")
                 common.cache.check_fresh(site_db=True, label_db=True)
             else:
                 common.exit(f"Name{'s' if len(duplicate_names) > 1 else ''} ({utils.color(duplicate_names)}) already exists in site or label DB, label/site names must be unique (sites included)")
@@ -418,7 +416,7 @@ def label(
     batch_resp = api.session.batch_request(batch_reqs)
     render.display_results(batch_resp, tablefmt="action")
     update_data = [{"id": resp.raw["label_id"], "name": resp.raw["label_name"], "devices": 0} for resp in batch_resp if resp.ok]
-    api.session.request(common.cache.update_label_db, data=update_data)
+    api.session.request(common.cache.update_label_db, data=update_data, action=DBAction.UPSERT)
 
 
 # FIXME # API-FLAW The cert_upload endpoint does not appear to be functional
@@ -501,9 +499,9 @@ def cert(
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
     try:
         data = {"name": cert_name, "type": resp.output["cert_type"].upper(), "md5_checksum": resp.output["cert_md5_checksum"], "expired": False, "expiration": None}
-        api.session.request(common.cache.update_db, common.cache.CertDB, data=data, truncate=False)
+        api.session.request(common.cache.update_cert_db, data=data, action=DBAction.INSERT)
     except Exception as e:  # pragma: no cover
-        log.exception(f"Exception during attempt to update CertDB {repr(e)}", show=True)
+        log.exception(f"Exception during attempt to update cache certificates table {repr(e)}", show=True)
 
 
 @app.command(help="Add a WebHook")
@@ -572,7 +570,7 @@ def template(
             "version": version,
             "template_hash": template_hash,
         },
-        add=True
+        action=DBAction.UPSERT
     )
 
 
@@ -678,7 +676,7 @@ def guest(
         created = pendulum.now(tz="UTC")
         expires = created.add(days=3)
         cache_data = {"portal_id": portal.id, "name": name, "id": resp.output["id"], "email": email, "phone": phone, "company": company, "enabled": is_enabled, "status": "Active" if is_enabled else "Inactive", "created": created.int_timestamp, "expires": expires.int_timestamp}
-        _ = api.session.request(common.cache.update_db, common.cache.GuestDB, cache_data, truncate=False)
+        _ = api.session.request(common.cache.update_guest_db, cache_data, action=DBAction.INSERT)
     except Exception as e:  # pragma: no cover
         log.exception(f"{repr(e)} attempting to update Guest cache after adding guest {name}.")
         render.econsole.print(f"[red]:warning:[/]  Exception ({(repr(e))}) occured during attempt to update guest cache, refer to logs ([cyan]cencli show logs cencli[/]) for details.")

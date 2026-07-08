@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import List, Dict, Any, TYPE_CHECKING
-from .common import CLIFormatter
-from ...objects import DateTime
+from typing import TYPE_CHECKING, Any, Dict, List
+
 from ... import log
+from ...objects import DateTime
+from .common import CLIFormatter
 
 if TYPE_CHECKING:
     from ...objects import TimeFormat

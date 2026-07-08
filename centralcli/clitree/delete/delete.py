@@ -7,15 +7,16 @@ import typer
 from rich import print
 
 from centralcli import api_clients, common, config, render, utils
-from centralcli.cache import CacheCert, CacheLabel, CacheSite
 from centralcli.client import BatchRequest
 from centralcli.constants import iden_meta
+from centralcli.objects.cache import CacheCert, CacheLabel, CacheSite
 from centralcli.response import Response
+from centralcli.cache import DBAction
 
 from . import firmware
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheGroup, CacheGuest, CachePortal, CacheTemplate
+    from centralcli.objects.cache import CacheGroup, CacheGuest, CachePortal, CacheTemplate
 
 
 app = typer.Typer()
@@ -39,7 +40,7 @@ def cert(
     render.confirm(yes)
     resp = api.session.request(api.configuration.delete_certificate, cert.name)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    api.session.request(common.cache.update_cert_db, cert.doc_id, remove=True)
+    api.session.request(common.cache.update_cert_db, data={"name": cert.name}, action=DBAction.DELETE)
 
 
 @app.command(short_help="Delete sites")
@@ -66,8 +67,8 @@ def site(
     render.display_results(resp, tablefmt="action")
 
     # cache update. resp will be a single failed Response if the first one fails.  Will result in exit above
-    cache_del_list = [s.doc_id for r, s in zip(resp, sites) if r.ok]
-    api.session.request(common.cache.update_site_db, data=cache_del_list, remove=True)
+    cache_del_list = [{"name": s.name} for r, s in zip(resp, sites) if r.ok]
+    api.session.request(common.cache.update_site_db, data=cache_del_list, action=DBAction.DELETE)
 
 
 @app.command(name="label")
@@ -110,8 +111,8 @@ def portal(
     render.display_results(batch_resp, tablefmt="action")
 
     # cache update
-    doc_ids = [portal.doc_id for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
-    api.session.request(common.cache.update_portal_db, doc_ids, remove=True)
+    cache_data = [{"id": portal.id} for portal, resp in zip(cache_portals, batch_resp) if resp.ok]
+    api.session.request(common.cache.update_portal_db, data=cache_data, action=DBAction.DELETE)
 
 
 @app.command()
@@ -144,8 +145,8 @@ def group(
     render.display_results(resp, tablefmt="action")
 
     # cache update
-    doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-    api.session.request(common.cache.update_group_db, data=doc_ids, remove=True)
+    cache_data = [{"name": g.name} for g, r in zip(groups, resp) if r.ok]
+    api.session.request(common.cache.update_group_db, data=cache_data, action=DBAction.DELETE)
 
 
 @app.command(short_help="Delete a WLAN (SSID)")
@@ -215,7 +216,7 @@ def template(
     render.confirm(yes)
     resp = api.session.request(api.configuration.delete_template, template.group, template.name)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)
-    _ = api.session.request(common.cache.update_template_db, doc_ids=template.doc_id)
+    _ = api.session.request(common.cache.update_template_db, data=dict(template), action=DBAction.DELETE)
 
 
 @app.command(no_args_is_help=True)
@@ -243,6 +244,7 @@ def device(
     devices: List[str] = common.arguments.devices,
     ui_only: bool = typer.Option(False, "--ui-only", help="Only delete device from UI/Monitoring views.  App assignment and subscriptions remain intact. [dim italic]Device(s) must be [red]offline[/red][/]"),
     cop_inv_only: bool = typer.Option(False, "--cop-only", help="Only delete device from CoP inventory.", hidden=not config.is_cop,),
+    no_refresh: bool = common.options.get("no_refresh", help=f"Don't refresh the cache.  {render.help_block('Cache is deleted if device(s) not found in Inv or Monitoring Cache')}"),
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
     default: bool = common.options.default,
@@ -265,7 +267,7 @@ def device(
     # The provided input does not have to be the serial number batch_del_devices will use get_dev_identifier to look the dev
     # up.  It just validates the import has the `serial` field.
     data = [{"serial": d} for d in devices]
-    resp = common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes)
+    resp = common.batch_delete_devices(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, no_refresh=no_refresh)
     render.display_results(resp, tablefmt="action")
 
 
@@ -288,7 +290,7 @@ def guest(
     render.confirm(yes)
     resp = api.session.request(api.guest.delete_guest, portal_id=portal.id, guest_id=guest.id)
     render.display_results(resp, tablefmt="action", exit_on_fail=True)  # exits here if call failed
-    _ = api.session.request(common.cache.update_guest_db, guest.doc_id, remove=True)
+    _ = api.session.request(common.cache.update_guest_db, data={"id": guest.id}, action=DBAction.DELETE)
 
 
 @app.callback()

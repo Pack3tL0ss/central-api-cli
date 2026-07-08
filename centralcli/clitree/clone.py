@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import typer
 
-from centralcli import common, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, common, render, utils
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

@@ -34,10 +34,11 @@ import typer
 from rich import print
 from rich.console import Console
 
-from centralcli import caas, cache, cleaner, common, config, constants, render, utils
-from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
+from centralcli import api_clients, caas, cache, cleaner, common, config, constants, render, utils
 from centralcli.client import BatchRequest
+from centralcli.objects.cache import CacheDevice, CacheGroup, CacheSite
 
+api = api_clients.classic
 iden_meta = constants.iden_meta
 
 app = typer.Typer()

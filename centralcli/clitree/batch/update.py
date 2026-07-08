@@ -6,7 +6,8 @@ from pathlib import Path
 
 import typer
 
-from centralcli import common, render, config, utils
+from centralcli import common, config, render, utils
+from centralcli.strings import emoji
 from centralcli.constants import APIAction
 
 from . import examples
@@ -43,7 +44,7 @@ def aps(
     data = common._get_import_file(import_file, "devices")
 
     if banner_file:
-        render.econsole.print(f"[deep_sky_blue]:information:[/]  When --banner-file is provided.  Only the banner is processed.  re-run the command without banner to process any other updates from {import_file.name}")
+        render.econsole.print(f"{emoji.info} When --banner-file is provided.  Only the banner is processed.  re-run the command without banner to process any other updates from {import_file.name}")
 
     common.batch_update_aps(data, yes=yes, reboot=reboot)
 
@@ -158,6 +159,7 @@ def ap_banner(
 def variables(
     import_file: Path = common.arguments.get("import_file", help="Path to file with variables"),
     replace: bool = typer.Option(False, "-R", "--replace", help=f"Replace all existing variables with the variables provided {render.help_block('existing variables are retained unless updated in this payload')}"),
+    by_device: bool = common.options.by_device,
     show_example: bool = common.options.show_example,
     yes: bool = common.options.yes,
     debug: bool = common.options.debug,
@@ -165,6 +167,10 @@ def variables(
     workspace: str = common.options.workspace,
 ) -> None:
     """Batch update/replace variables for devices based on data from required import file.
+
+    --by-dev will result in an API call for each device with variables defined in the import_file.
+    [italic]This is only useful when some devices are failing, as the default bulk call will
+    be rejected for all devices if *any* devices fail[/]
 
     Use [cyan]cencli batch update variables --example[/] to see example import file formats.
     [italic]Accepts same format as Aruba Central UI, but also accepts .yaml[/]
@@ -179,7 +185,7 @@ def variables(
         common.exit(render._batch_invalid_msg("cencli batch update variables [OPTIONS] [IMPORT_FILE]"))
 
     action = APIAction.REPLACE if replace else APIAction.UPDATE
-    common.batch_add_update_replace_variables(import_file, action=action, yes=yes)
+    common.batch_add_update_replace_variables(import_file, action=action, bulk=not by_device, yes=yes)
 
 
 @app.callback()

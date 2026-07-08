@@ -8,12 +8,12 @@ from pathlib import Path
 import pendulum
 import typer
 
-from centralcli import cleaner, common, render
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, render
 from centralcli.constants import SortOverlayInterfaceOptions, SortRouteOptions, iden_meta
 from centralcli.response import Response
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 # TODO need to build SortBy classes

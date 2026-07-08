@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING
 import pendulum
 import typer
 
-from centralcli import cleaner, common, log, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, log, render, utils
 from centralcli.constants import LogAppArgs, LogSortBy
 
 if TYPE_CHECKING:
-    from centralcli.cache import CacheDevice, CacheGroup
+    from centralcli.objects.cache import CacheDevice, CacheGroup
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command(hidden=True, deprecated=True)
@@ -136,7 +136,7 @@ def acp_logs(
             sort_by=sort_by,
             reverse=not reverse,  # API returns newest is on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs,  # if not verbose else None,
-            cache_update_func=common.cache.update_log_db,  # cache is not updated if -vv if not verbose else None,
+            cache_update_func=common.cache.update_central_audit_log_db,  # cache is not updated if -vv if not verbose else None,
             verbosity=verbose
         )
 
@@ -252,7 +252,7 @@ def logs(
             sort_by=sort_by,
             reverse=not reverse,  # API returns newest on top this makes newest on bottom unless they use -r
             cleaner=cleaner.get_audit_logs if not verbose else None,
-            cache_update_func=common.cache.update_log_db if not verbose else None,
+            cache_update_func=common.cache.update_central_audit_log_db if not verbose else None,
             caption=caption,
         )
 

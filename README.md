@@ -23,10 +23,9 @@ A CLI app for interacting with Aruba Central Cloud Management Platform. With cro
 - Multiple output formats
 - Output to file
 - Numerous import formats (csv, yaml, json, etc.)
-- Multiple workspace support (easily switch between different central workspaces `--account myotheraccount`)
-  > What is now called a workspace was formerly referred to as an account.  `--account` will likely change to `--workspace` in a future release.
-- Batch Operation based on data from input file.  i.e. Add sites in batch based on data from a csv.
-- Mass AP rename, that automatically constructs the name based on whatever format specifier you provide.  This can use portions or all of the AP model / MAC / serial, the upstream switch hostname / port, switch port, AP MAC, and the site name.
+- Multiple workspace support (easily switch between different central workspaces `--ws myotheraccount`)
+- Batch Operation based on data from input file.  i.e. Add sites, devices, groups, etc. in batch based on data from a csv.
+- Mass AP rename, that automatically constructs the name based on whatever format specifier you provide.  This can use portions or all of the AP model / MAC / serial, the upstream switch hostname / port, switch port, and the site name.
 - Automatic Token refresh.  With prompt to paste in a new token if it becomes invalid.
   > If using Tokens, dedicate the token to the CLI alone, using it in swagger or on another system, will eventually lead to a refresh that invalidates the tokens on the other systems using it.
 - You can also use username/Password Auth. which will facilitate automatic retrieval of new Tokens even if they do become invalid.

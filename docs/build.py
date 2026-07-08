@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 
 from pathlib import Path
-from sphinx.application import Sphinx
 
 from rich.traceback import install
+from sphinx.application import Sphinx
+
 install(show_locals=True)
 
 docs_directory = Path(__file__).parent

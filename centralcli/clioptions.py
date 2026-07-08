@@ -15,12 +15,12 @@ from centralcli.typedefs import UNSET
 
 from .environment import env_var
 
-ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file", "dest_workspace"]
+ArgumentType = Literal["cache", "name", "device", "devices", "device_type", "what", "group", "groups", "group_dev", "site", "import_file", "wid", "version", "session_id", "ssid", "portal", "portals", "banner_file", "move_workspace"]
 OptionType = Literal[
     "client", "group", "group_many", "site", "site_many", "label", "label_many", "debug", "debugv", "device_type", "do_json", "do_yaml", "do_csv", "do_table",
     "outfile", "reverse", "pager", "ssid", "yes", "yes_int", "device_many", "device", "swarm_device", "swarm", "sort_by", "default", "workspace", "verbose",
     "raw", "end", "update_cache", "show_example", "at", "in", "reboot", "start", "past", "subscription", "version", "not_version", "band", "banner", "banner_file",
-    "tags", "with_inv", "no_refresh", "cx_retain_config",
+    "tags", "with_inv", "no_refresh", "refresh", "cx_retain_config", "do_retry"
 ]
 
 
@@ -43,10 +43,10 @@ class CLIArgs:
         self.wid: ArgumentInfo = typer.Argument(..., help="Use [cyan]show webhooks[/] to get the wid", show_default=False,)
         self.portal: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal, autocompletion=cache.portal_completion, show_default=False,)
         self.portals: ArgumentInfo = typer.Argument(..., metavar=iden_meta.portal_many, autocompletion=cache.portal_completion, show_default=False,)
-        self.dest_workspace: ArgumentInfo = typer.Argument(
+        self.move_workspace: ArgumentInfo = typer.Argument(
             None,
             envvar=env_var.dest_workspace,
-            help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] Destination WorkSpace for migration operations",
+            help="The Aruba Central [dim italic]([green]GreenLake[/green])[/] Destination WorkSpace for migration operations. [dim italic]Devices [bright_green]moves[/] will be processed as devices come online[/]",
             autocompletion=cache.workspace_completion,
             show_default=False,
         )
@@ -203,8 +203,11 @@ class CLIOptions:
         self.banner_file: OptionInfo = typer.Option(None, "--banner-file", help="The file with the desired banner text.  [dim italic]supports .j2 (Jinja2) template[/]", exists=True, show_default=False)
         self.banner: OptionInfo = typer.Option(False, "--banner", help="Update banner text.  This option will prompt for banner text (paste into terminal)", show_default=False)
         self.with_inv: OptionInfo = typer.Option(False, "-I", "--inv", help="Include device details from [green]GreenLake[/] Inventory", show_default=False,)
-        self.no_refresh: OptionInfo = typer.Option(False, "--no-refresh", help=f"Don't refresh the cache.  [dim]{escape('[default: Cache is updated]')}[/]")
-        self.cx_retain_config: bool = typer.Option(False, "-k", help="Keep config intact for CX switches during move")
+        self.no_refresh: OptionInfo = typer.Option(False, "--nr", "--no-refresh", help=f"Don't refresh the cache.  [dim]{escape('[default: Cache is updated]')}[/]", envvar=env_var.no_refresh)
+        self.refresh: OptionInfo = typer.Option(False, "-r", "--refresh", help=f"Refresh associated cache tables prior to running command.  [dim]{escape('[default: Cache is updated on demand if cache lookup yields no result]')}[/]")
+        self.cx_retain_config: bool = typer.Option(False, "-k", "--cx-retain", help="Keep config intact for CX switches during move", envvar=env_var.cx_retain_config)
+        self.do_retry: bool = typer.Option(False, "-R", "--retry-file", help="Create retry file for devices that fail", envvar=env_var.do_retry)
+        self.by_device: bool = typer.Option(False, "--by-dev", help=f"Process variables using an individual API call per device.  [dim]{escape('[default: A single bulk call is made]')}[/]")
         self.yes: OptionInfo = typer.Option(False, "-Y", "-y", "--yes", help="Bypass confirmation prompts - Assume Yes",)
         self.yes_int: OptionInfo = typer.Option(
             0,

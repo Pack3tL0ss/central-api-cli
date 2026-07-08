@@ -87,18 +87,23 @@ class ConfigAPI:
             log.error(f"Ignoring group(s): {'|'.join(groups_with_comma_in_name)}.  Group APIs do not support groups with commas in name", show=True, caption=True, log=True)
             _ = [groups.pop(groups.index(g)) for g in groups_with_comma_in_name]
 
-        batch_resp = await self.session._batch_request(
-            [
-                BatchRequest(self.get_groups_template_status, groups),
-                BatchRequest(self.get_groups_properties, groups)
-            ]
-        )
+        # batch_resp = await self.session._batch_request(
+        #     [
+        #         BatchRequest(self.get_groups_template_status, groups),
+        #         BatchRequest(self.get_groups_properties, groups)
+        #     ]
+        # )
+        template_resp = await self.get_groups_template_status(groups)
+        props_resp = await self.get_groups_properties(groups)
+        batch_resp = [template_resp, props_resp]
+        # failed = [r for r in [*template_resp, *props_resp] if not r.ok]
+
         failed = [r for r in batch_resp if not r.ok]
         if failed:
             log.error(f"{len(failed)} API calls necessary to fetch group details failed.  See logs for more details.", caption=True)
             return failed[-1]
 
-        template_resp, props_resp = batch_resp
+        # template_resp, props_resp = batch_resp
 
         template_by_group = {d["group"]: d["template_details"] for d in deepcopy(template_resp.output)}
         props_by_group = {d["group"]: d["properties"] for d in deepcopy(props_resp.output)}
@@ -618,7 +623,7 @@ class ConfigAPI:
 
         Returns:
             Response: CentralAPI Response object
-        """
+        """  # TODO this may have a limit of the # of serials that can be sent in one call
         url = "/configuration/v1/preassign"
 
         json_data = {
@@ -1022,6 +1027,60 @@ class ConfigAPI:
 
         return await self.session.get(url, params=params)
 
+    async def create_all_devices_template_variables(
+        self,
+        variable_file: Path | str,
+    ) -> Response:
+        """Create template variables for all devices.
+
+        Args:
+            variables (Path | str):  File with variables to be applied for device.
+                - {"AB0011111": {"_sys_serial": "AB0011111", "_sys_lan_mac": "11:12:AA:13:14:BB",
+                "SSID_A": "Z-Employee"}, "AB0022222": {"_sys_serial": "AB0022222", "_sys_lan_mac":
+                "21:22:AA:23:24:BB", "vc_name": "Instant-23:24:BB"}}
+            format (str, optional): Format in which input is provided.  Valid Values: JSON
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+        variable_file = variable_file if isinstance(variable_file, Path) else Path(str(variable_file))
+        files = {"variables": (variable_file.name, variable_file.open("rb"), "application/json")}
+
+        params = {
+            'format': "JSON"
+        }
+
+        form_data = utils.build_multipart_form_data(url, "POST", files=files, params=params, base_url=self.session.base_url)
+        return await self.session.post(url, **form_data)
+
+    async def update_all_devices_template_variables(
+        self,
+        variable_file: Path | str,
+        *,
+        replace: bool = False,
+    ) -> Response:
+        """Update or Replace template variables for all devices (Only JSON Payload).
+
+        Args:
+            variable_file (Path | str):  File with variables to be applied for device.
+                - {"AB0011111": {"_sys_serial": "AB0011111", "_sys_lan_mac": "11:12:AA:13:14:BB",
+                "SSID_A": "Z-Employee"}, "AB0022222": {"_sys_serial": "AB0022222", "_sys_lan_mac":
+                "21:22:AA:23:24:BB", "vc_name": "Instant-23:24:BB"}}
+            replace: (bool, optional): Replace all existing variables with the payload provided
+                defaults to False.
+
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/devices/template_variables"
+        variable_file = variable_file if isinstance(variable_file, Path) else Path(str(variable_file))
+        files = {"variables": (variable_file.name, variable_file.open("rb"), "application/json")}
+
+        func = self.session.patch if not replace else self.session.put
+        form_data = utils.build_multipart_form_data(url, func.__name__.upper(), files=files, params={}, base_url=self.session.base_url)
+        return await func(url, **form_data)
+
     async def create_device_template_variables(
         self,
         serial: str,
@@ -1113,21 +1172,21 @@ class ConfigAPI:
     # >>>> CERTIFICATES <<<<
 
     async def get_certificates(self, q: str = None, offset: int = 0, limit: int = 20) -> Response:
-            """Get Certificates details.
+        """Get Certificates details.
 
-            Args:
-                q (str, optional): Search for a particular certificate by its name, md5 hash or sha1_hash
-                offset (int, optional): Number of items to be skipped before returning the data, useful
-                    for pagination. Defaults to 0.
-                limit (int, optional): Maximum number of records to be returned. Defaults to 20, Max 20.
+        Args:
+            q (str, optional): Search for a particular certificate by its name, md5 hash or sha1_hash
+            offset (int, optional): Number of items to be skipped before returning the data, useful
+                for pagination. Defaults to 0.
+            limit (int, optional): Maximum number of records to be returned. Defaults to 20, Max 20.
 
-            Returns:
-                Response: CentralAPI Response object
-            """
-            url = "/configuration/v1/certificates"
-            params = {"q": q, "offset": offset, "limit": limit}  # offset and limit are both required by the API method.
+        Returns:
+            Response: CentralAPI Response object
+        """
+        url = "/configuration/v1/certificates"
+        params = {"q": q, "offset": offset, "limit": limit}  # offset and limit are both required by the API method.
 
-            return await self.session.get(url, params=params)
+        return await self.session.get(url, params=params)
 
     async def upload_certificate(
         self,
@@ -1879,36 +1938,36 @@ class ConfigAPI:
         return await self.session.post(url, json_data=json_data)
 
     async def _add_altitude_to_config(self, data: List[str], altitude: int | float) -> List[str] | None:
-            """Adds GPS altitude (meters from ground) to existing AP or swarm config
+        """Adds GPS altitude (meters from ground) to existing AP or swarm config
 
-            Args:
-                data (str): str representing the current configuration.
-                altitude (int | float): The ap-altitude to add to the provided config.
+        Args:
+            data (str): str representing the current configuration.
+            altitude (int | float): The ap-altitude to add to the provided config.
 
-            Raises:
-                CentralCliException: If no commands remain after stripping empty lines.
+        Raises:
+            CentralCliException: If no commands remain after stripping empty lines.
 
-            Returns:
-                List[str] | None Original config with 2 additional lines to define ap-altitude for gps
-                    Returns None if desired ap-altitude is already in current configuration
-            """
-            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+        Returns:
+            List[str] | None Original config with 2 additional lines to define ap-altitude for gps
+                Returns None if desired ap-altitude is already in current configuration
+        """
+        cli_cmds = [out for out in [line.rstrip() for line in data] if out]
 
-            if not cli_cmds:
-                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+        if not cli_cmds:
+            raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
 
-            # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
-            # sending value as int initially is OK, but float to int it doesn't like so just always send float
-            # this may have been because group level had ap-altitude as 2, dunno
-            if "gps" not in cli_cmds:
-                cli_cmds += ["gps", f"  ap-altitude {float(altitude)}"]
-            elif f"  ap-altitude {float(altitude)}" in cli_cmds:
-                return  # No change ap-altitude already in existing
-            else:
-                cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
-                cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {float(altitude)}")
+        # Need to send altitude as a float, if you try to update 2.1 with 2 it results in dirty-diff, but 2.1 updated to 2.0 is OK (wtf)
+        # sending value as int initially is OK, but float to int it doesn't like so just always send float
+        # this may have been because group level had ap-altitude as 2, dunno
+        if "gps" not in cli_cmds:
+            cli_cmds += ["gps", f"  ap-altitude {float(altitude)}"]
+        elif f"  ap-altitude {float(altitude)}" in cli_cmds:
+            return  # No change ap-altitude already in existing
+        else:
+            cli_cmds = [line for line in cli_cmds if not line.strip().startswith("ap-altitude")]
+            cli_cmds.insert(cli_cmds.index("gps") + 1, f"  ap-altitude {float(altitude)}")
 
-            return cli_cmds
+        return cli_cmds
 
     async def update_ap_altitude(
         self,
@@ -1967,41 +2026,41 @@ class ConfigAPI:
         return [*update_resp, *skipped, *list(failed.values())]
 
     async def _add_banner_to_config(self, data: List[str], banner: str | list[str]) -> List[str] | None:
-            """Adds banner motd text to existing AP or swarm config
+        """Adds banner motd text to existing AP or swarm config
 
-            Args:
-                data (str): str representing the current configuration.
-                banner (str | list[str]): The banner text as str or list of str.
+        Args:
+            data (str): str representing the current configuration.
+            banner (str | list[str]): The banner text as str or list of str.
 
-            Raises:
-                CentralCliException: If no commands remain after stripping empty lines.
+        Raises:
+            CentralCliException: If no commands remain after stripping empty lines.
 
-            Returns:
-                List[str] | None: Original config with with banner text inserted.
-                    Returns None if desired ap-altitude is already in current configuration
-            """
-            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
-            existing_banner = [line for line in cli_cmds if line.startswith("banner motd")]
-            if isinstance(banner, str):
-                banner = banner.splitlines()
+        Returns:
+            List[str] | None: Original config with with banner text inserted.
+                Returns None if desired ap-altitude is already in current configuration
+        """
+        cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+        existing_banner = [line for line in cli_cmds if line.startswith("banner motd")]
+        if isinstance(banner, str):
+            banner = banner.splitlines()
 
-            def _format_banner_line(banner_line: str) -> str:
-                return banner_line if banner_line.startswith("banner motd") else f'banner motd "{banner_line}"'
+        def _format_banner_line(banner_line: str) -> str:
+            return banner_line if banner_line.startswith("banner motd") else f'banner motd "{banner_line}"'
 
-            banner = [_format_banner_line(line.strip()) for line in banner]
+        banner = [_format_banner_line(line.strip()) for line in banner]
 
-            if not cli_cmds:
-                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+        if not cli_cmds:
+            raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
 
-            if not existing_banner:
-                cli_cmds += banner
-            elif banner == existing_banner:
-                return  # No change banner text is as desired
-            else:
-                cli_cmds = [line for line in cli_cmds if not line.strip().startswith("banner motd")]
-                cli_cmds += banner
+        if not existing_banner:
+            cli_cmds += banner
+        elif banner == existing_banner:
+            return  # No change banner text is as desired
+        else:
+            cli_cmds = [line for line in cli_cmds if not line.strip().startswith("banner motd")]
+            cli_cmds += banner
 
-            return cli_cmds
+        return cli_cmds
 
     async def update_ap_banner(
         self,
@@ -2061,39 +2120,39 @@ class ConfigAPI:
         return [*update_resp, *skipped, *list(failed.values())]
 
     async def _update_cp_cert_in_config(self, data: List[str], cp_cert_md5: str,) -> List[str] | None:
-            """Updates cp-cert-checksum in AP group level config
+        """Updates cp-cert-checksum in AP group level config
 
-            Args:
-                data (str): str representing the current configuration.
-                cp_cert_md5 (str): The cp-cert-md5 checksum to reference in the config.
+        Args:
+            data (str): str representing the current configuration.
+            cp_cert_md5 (str): The cp-cert-md5 checksum to reference in the config.
 
-            Raises:
-                CentralCliException: If no commands remain after stripping empty lines.
-                    This really should not happen.
+        Raises:
+            CentralCliException: If no commands remain after stripping empty lines.
+                This really should not happen.
 
-            Returns:
-                List[str] | None Original config with cp-cert-checksum updated with provided value
-                    Returns None if desired cp-cert-checksum is already in current configuration
-            """
-            cli_cmds = [out for out in [line.rstrip() for line in data] if out]
+        Returns:
+            List[str] | None Original config with cp-cert-checksum updated with provided value
+                Returns None if desired cp-cert-checksum is already in current configuration
+        """
+        cli_cmds = [out for out in [line.rstrip() for line in data] if out]
 
-            if not cli_cmds:
-                raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
+        if not cli_cmds:
+            raise CentralCliException("Error: No cli commands remain after stripping empty lines.")
 
-            if f"cp-cert-checksum {cp_cert_md5}" in cli_cmds:
-                return  # No change cp-cert-checksum already as desired
-            else:
-                line_index = [idx for idx, line in [(idx, line) for idx, line in enumerate(cli_cmds)] if line.strip().startswith("cp-cert-checksum")]
-                if line_index:
-                    line_index = line_index[0]
-                    _ = cli_cmds.pop(line_index)
-                    log.debug(f"Removed {_} from config")
-                else:  # cp-cert-checksum does not exist in the config
-                    line_index = cli_cmds.index("cluster-security")
-                cli_cmds.insert(line_index, f"cp-cert-checksum {cp_cert_md5}")
-                log.debug(f'Added "cp-cert-checksum {cp_cert_md5}" to line {line_index + 1} of the config')
+        if f"cp-cert-checksum {cp_cert_md5}" in cli_cmds:
+            return  # No change cp-cert-checksum already as desired
+        else:
+            line_index = [idx for idx, line in [(idx, line) for idx, line in enumerate(cli_cmds)] if line.strip().startswith("cp-cert-checksum")]
+            if line_index:
+                line_index = line_index[0]
+                _ = cli_cmds.pop(line_index)
+                log.debug(f"Removed {_} from config")
+            else:  # cp-cert-checksum does not exist in the config
+                line_index = cli_cmds.index("cluster-security")
+            cli_cmds.insert(line_index, f"cp-cert-checksum {cp_cert_md5}")
+            log.debug(f'Added "cp-cert-checksum {cp_cert_md5}" to line {line_index + 1} of the config')
 
-            return cli_cmds
+        return cli_cmds
 
     async def update_group_cp_cert(
         self,

@@ -1,28 +1,29 @@
 import asyncio
 import datetime
+import re
+from pathlib import Path
 from typing import Any, Optional, Type, Union
 from unittest.mock import Mock
 from urllib.parse import unquote_plus
 from zoneinfo import ZoneInfo
 
 import jsonref as json
+import pendulum
 import pytest
 from aiohttp import RequestInfo, StreamReader
 from aiohttp.client import ClientResponse, ClientSession, hdrs
+from aiohttp.client_exceptions import ClientConnectorError
 from aiohttp.client_proto import ResponseHandler
+from aiohttp.client_reqrep import ConnectionKey
 from aiohttp.helpers import TimerNoop
+from aiohttp.http_exceptions import ContentLengthError
 from jinja2 import Environment, FileSystemLoader
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
-from aiohttp.client_exceptions import ClientConnectorError
-from aiohttp.client_reqrep import ConnectionKey
-from aiohttp.http_exceptions import ContentLengthError
-from pathlib import Path
-import re
 
 from centralcli import config, log, utils
-from centralcli.environment import env
 from centralcli.constants import PYTEST_EXPECTED_EXCEPTIONS
+from centralcli.environment import env
 
 
 # MOCKED aiohttp.client.ClientResponse object
@@ -141,12 +142,14 @@ class TestResponses:
             in_two_months = now + datetime.timedelta(days=2 * 30)  # approx
             _three_hours_ago = now - datetime.timedelta(hours=3)
             three_hours_ago_ts = int(_three_hours_ago.timestamp())
+            in_3_mos = pendulum.now(tz="UTC") + pendulum.duration(days=88)
+            in_6_mos = pendulum.now(tz="UTC") + pendulum.duration(days=178)
             # Set up Jinja2 environment
             j2env = Environment(loader=FileSystemLoader(config.closed_capture_file.parent))  # Assuming template is in the same directory
             template = j2env.get_template(config.closed_capture_file.name)
 
-            # Render the template with the dates
-            mocks = json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months, three_hours_ago_ts=three_hours_ago_ts))
+            # Render the template with the dates.  pendulum to iso8601_string has 6 digits after the decimal, but the pydantic models and real responses always have 3, hence the split(".")[0]... to avoid validation errors
+            mocks = json.loads(template.render(in_five_months=in_five_months, in_two_months=in_two_months, three_hours_ago_ts=three_hours_ago_ts, in_3_mos=f'{in_3_mos.to_iso8601_string().split(".")[0]}.000Z', in_6_mos=f'{in_6_mos.to_iso8601_string().split(".")[0]}.000Z'))
             # _ok_responses_get = [res if "events" not in res["payload"] else self._convert_event_ts(res) for res in mocks["ok_responses"]]
             _ok_responses_get = {url_key: self._convert_event_ts(mocks["ok_responses"]["GET"][url_key]) for url_key in mocks["ok_responses"]["GET"]}
             mocks["ok_responses"]["GET"] = _ok_responses_get
@@ -288,7 +291,7 @@ class TestResponses:
             return resp_candidates[-1]
 
         log.error(f"{env.current_test} - No Mock Response found for {key}.  Returning failed (418) response.")  # pragma: no cover
-        if not method == "GET" and url.startswith("/configuration/v2/wlan/"):  # TODO verify what a GET_/configuration/v2/wlan/<GROUP>/<ssid> response looks like when the SSID is not found.
+        if not method == "GET" and url.path.startswith("/configuration/v2/wlan/"):  # TODO verify what a GET_/configuration/v2/wlan/<GROUP>/<ssid> response looks like when the SSID is not found.
             self.missing_mocks += [key]  # pragma: no cover
         return {
             "url": url,

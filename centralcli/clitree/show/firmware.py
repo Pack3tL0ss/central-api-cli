@@ -7,12 +7,13 @@ from typing import List
 import typer
 from rich.markup import escape
 
-from centralcli import cleaner, common, log, render, utils
-from centralcli.cache import CacheDevice, CacheGroup, CentralObject, api
+from centralcli import api_clients, cleaner, common, log, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import DevTypes, FirmwareDeviceType, iden_meta
+from centralcli.objects.cache import CacheDevice, CacheGroup, CentralObject
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 # TODO add support for APs use batch_reqs = [BatchRequest(api.firmware.get_swarm_firmware_details, dev.swack_id) for dev in devs]

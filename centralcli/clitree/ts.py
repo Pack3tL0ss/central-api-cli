@@ -10,8 +10,8 @@ import typer
 from rich.progress import track
 
 from centralcli import api_clients, cleaner, common, render, utils
-from centralcli.cache import CacheDevice
 from centralcli.constants import iden_meta, lib_to_api
+from centralcli.objects.cache import CacheDevice
 
 try:
     from fuzzywuzzy import process

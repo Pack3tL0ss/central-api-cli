@@ -4,6 +4,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING
 
 from centralcli.classic.api.visualrf import VisualRFAPI
+from centralcli.typedefs import UNSET
 
 from ... import config as cfg
 from ...client import Session
@@ -25,16 +26,15 @@ from .troubleshooting import TroubleShootingAPI
 
 if TYPE_CHECKING:  # pragma: no cover
     from ...config import Config
-
     from ...typedefs import StrOrURL
 
 
-class ClassicAPI:
+class ClassicAPI:  # this object is a singleton per workspace
     _by_workspace: dict[str, ClassicAPI] = {}
 
-    def __init__(self, config: Config = None, *, base_url: StrOrURL = None, silent: bool = True):
+    def __init__(self, config: Config = None, *, base_url: StrOrURL = None, silent: bool = True, limit_per_host: int | None = None, total_timeout: int | None = UNSET):
         self.config = config or cfg
-        self._session = Session(config=self.config, base_url=base_url or self.config.classic.base_url, silent=silent)
+        self._session = Session(config=self.config, base_url=base_url or self.config.classic.base_url, silent=silent, limit_per_host=limit_per_host, total_timeout=total_timeout)
 
     def __new__(cls, config: Config = None, **kwargs):
         workspace = config and config.workspace or cfg.workspace

@@ -25,26 +25,25 @@ from tinydb.table import Document
 from yarl import URL
 
 from centralcli import config, constants, log, render, utils
-from centralcli.response import CombinedResponse, BatchResponse
+from centralcli.response import BatchResponse, CombinedResponse
 from centralcli.typedefs import typed_lru_cache
 
-from . import api_clients
-from .client import BatchRequest, Session
-from .cnx.models.cache import Inventory as GlpInventory
-from .cnx.models.cache import Subscriptions, get_inventory_with_sub_data
-from .environment import env
-from .models import cache as models
-from .objects import DateTime
-from .response import Response
-
+from .. import api_clients
+from ..client import BatchRequest, Session
+from ..cnx.models.cache import Inventory as GlpInventory
+from ..cnx.models.cache import Subscriptions, get_inventory_with_sub_data
+from ..environment import env
+from ..models import cache as models
+from ..objects import DateTime
+from ..response import Response
 
 api = api_clients.classic
 
 if TYPE_CHECKING:
     from tinydb.table import Document, Table
 
-    from .config import Config
-    from .typedefs import CacheSiteDict, CertType, ClientType, MPSKStatus, PortalAuthTypes, SiteData
+    from ..config import Config
+    from ..typedefs import CacheSiteDict, CertType, ClientType, MPSKStatus, PortalAuthTypes, SiteData
 
 try:
     import readline  # noqa imported for backspace support during prompt.
@@ -1283,7 +1282,7 @@ class Cache:
         self.config = config
         self.responses = CacheResponses()
         if config.valid and config.cache_dir.exists():
-            self.DevDB: TinyDB = TinyDB(config.cache_file)
+            self.DevDB: TinyDB = TinyDB(config.tinydb_cache.file)
             self.InvDB: Table = self.DevDB.table("inventory")
             self.SubDB: Table = self.DevDB.table("subscriptions")
             self.SiteDB: Table = self.DevDB.table("sites")
@@ -1356,7 +1355,7 @@ class Cache:
             return f"{size_in_bytes:.1f}Y{suffix}"
 
         if self.config is not None:
-            db_stats = self.config.cache_file.stat()
+            db_stats = self.config.tinydb_cache.file.stat()
             return human_size(db_stats.st_size)
 
         return "0"
@@ -4037,8 +4036,8 @@ class Cache:
         refresh = refresh or bool(update_count)  # if any DBs are set to update they will update regardless of refresh value
         update_all = True if not update_count else False  # if all are False default is to update all DBs but only if refresh=True
 
-        if refresh or not self.config.cache_file_ok:
-            _word = "Refreshing" if self.config.cache_file_ok else "Populating"
+        if refresh or not self.config.tinydb_cache.ok:
+            _word = "Refreshing" if self.config.tinydb_cache.ok else "Populating"
             updating_db = "[bright_green]Full[/] Identifier mapping" if not update_count else utils.color([k for k, v in db_map.items() if v])
             print(f"[cyan]-- {_word} {updating_db} Cache --[/cyan]", end="")
 
@@ -4160,7 +4159,7 @@ class Cache:
         if "dev" in qry_funcs:  # move dev query last
             qry_funcs = [*[q for q in qry_funcs if q != "dev"], *["dev"]]
 
-        match: List[CentralObject] = []
+        match: List[CacheDevice | CacheGroup | CacheSite | CacheTemplate] = []
         for idx in range(0, 2):
             for q in qry_funcs:
                 kwargs = default_kwargs.copy()

@@ -1,17 +1,18 @@
 from __future__ import annotations
-from collections.abc import Callable
 
 import asyncio
 import json
 import sys
 import time
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Tuple, Type
 
+from aiohttp import ClientTimeout, TCPConnector
 from aiohttp.client import ClientResponse, ClientSession
-from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError
+from aiohttp.client_exceptions import ClientConnectorError, ClientOSError, ContentTypeError, ConnectionTimeoutError
 from aiohttp.http_exceptions import ContentLengthError
 from pycentral.base import ArubaCentralBase
 from pycentral.base_utils import tokenLocalStoreUtil
@@ -19,21 +20,23 @@ from rich.console import Console
 from rich.markup import escape
 from yarl import URL
 
-from . import cleaner, config as cfg, log, utils
-from .config import Config
+from . import cleaner, log, utils
+from . import config as cfg
 from .cnx.base import NewCentralBase
+from .config import Config
 from .constants import STRIP_KEYS, lib_to_api
 from .exceptions import InvalidConfigException
 from .render import Spinner
 from .response import Response
-from .typedefs import Method, StrOrURL
+from .typedefs import UNSET, Method, StrOrURL, typed_lru_cache
+
 
 DEFAULT_HEADERS = {
     'Content-Type': 'application/json',
     'Accept': 'application/json'
 }
 DEFAULT_SPIN_TXT = "\U0001f4a9 DEFAULT_SPIN_TXT \U0001f4a9"  # should never see this, makes it more obvious we missed a spinner update
-MAX_CALLS_PER_CHUNK = 6
+MAX_CALLS_PER_CHUNK = 7
 econsole = Console(stderr=True)
 INIT_TS = time.monotonic()
 
@@ -96,12 +99,16 @@ class Session():
         config: Config = None,
         aio_session: ClientSession = None,
         silent: bool = True,
-        cnx: bool = None
+        cnx: bool = None,
+        limit_per_host: int | None = None,
+        total_timeout: int | None = UNSET,
+        rate: int = 1,  # seconds
+        limit: int = MAX_CALLS_PER_CHUNK,  # number of calls per rate
     ) -> None:
         self.silent = silent  # squelches out automatic display of failed Responses.
         self.base_url = None if not base_url else str(base_url).rstrip('/')
         self.config = config or cfg if workspace_name is None else Config(workspace=workspace_name)
-        self.workspace_name = workspace_name or self.config.workspace  # only used for refresh of tokens in multiple workspaces
+        # self._workspace_name = workspace_name or self.config.workspace  # only used for refresh of tokens in multiple workspaces
         self._aio_session = aio_session
         self.ssl = self.config.ssl_verify
         self.req_cnt = 0
@@ -112,10 +119,23 @@ class Session():
         self.BatchRequest = BatchRequest
         self.running_spinners: List[str] = []  # TODO this should probably be a class attribute of the Spinner class, which is already a singleton
         self.is_cnx = cnx if isinstance(cnx, bool) else (self.base_url and ("greenlake" in self.base_url or ".api.central." in self.base_url))
+        self.remaining_calls = 0
+        self._batch_results = []
+        self.total_timeout = total_timeout
+        self.limit_per_host = limit_per_host
+
+    @property
+    def session_kwargs(self) -> dict[str, TCPConnector | ClientTimeout]:
+        kwargs = {}
+        if self.total_timeout is not UNSET:
+            kwargs["timeout"] = ClientTimeout(total=self.total_timeout)
+        if self.limit_per_host:
+            kwargs["connector"] = TCPConnector(limit_per_host=self.limit_per_host, force_close=True)
+        return kwargs
 
     @property
     def auth(self):
-        return self.get_conn_from_file(self.workspace_name) if not self.is_cnx else self.get_glp_conn_from_file()
+        return self.get_conn_from_file(self.config.workspace) if not self.is_cnx else self.get_glp_conn_from_file()
 
     @classmethod
     def requests_clear(cls):
@@ -148,6 +168,7 @@ class Session():
 
         return conn
 
+    @typed_lru_cache
     def get_conn_from_file(self, workspace_name: str = None) -> ArubaCentralBase:
         """Creates an instance of class`pycentral.ArubaCentralBase` based on config file.
 
@@ -159,12 +180,14 @@ class Session():
                 Used to manage Auth and Tokens.
         """
         central_info = None
-        if workspace_name:
-            central_info = self.config.workspaces.get(workspace_name, {}).get("classic")
+        if workspace_name and workspace_name != self.config.workspace:
+            log.error(f"get_conn_from_file changing workspace {self.config.workspace} -> {workspace_name}", show=True)
+            if workspace_name in self.config.workspaces:
+                self.config.workspace = workspace_name
+            else:
+                log.warning(f"{workspace_name} does not exist in config, fallback to default")
 
-        # fallback if workspace provided does not exist to prevent issues with autocomplete
-        central_info = central_info or self.config.central_info
-
+        central_info = self.config.central_info
         conn = ArubaCentralBase(central_info, token_store=self.config.token_store, logger=log, ssl_verify=self.config.ssl_verify)
         token_cache = Path(tokenLocalStoreUtil(self.config.token_store, central_info["customer_id"], central_info["client_id"]))
 
@@ -192,7 +215,7 @@ class Session():
     @property
     def aio_session(self):
         if self._aio_session is None or self._aio_session.closed:
-            self._aio_session = ClientSession(base_url=self.base_url)
+            self._aio_session = ClientSession(base_url=self.base_url, **self.session_kwargs)
 
         return self._aio_session
 
@@ -226,26 +249,40 @@ class Session():
     def _get_spin_text(self, spin_txt: str = None):
         if spin_txt:
             if "retry" in spin_txt:
-                return spin_txt
+                return spin_txt if self.remaining_calls <= 1 else f"{spin_txt} [dim italic][cyan]{self.remaining_calls}[/] calls in queue[/]"
             if spin_txt == DEFAULT_SPIN_TXT:
-                log.warning(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=self.config.debug)
+                log.error(f"DEV NOTE: client.Session._get_spin_text was sent the default spin text.\n{self.running_spinners = }", show=self.config.debug)
 
             self.running_spinners = [*self.running_spinners, spin_txt]
+            if spin_txt.startswith("Delaying"):
+                try:
+                    _delays = [int("".join([i for i in s if i.isdigit()])) for s in self.running_spinners if s.startswith("Delaying")]
+                    _delayed_req = len(_delays)
+                    _spin_txt = f"Delaying {max(_delays)}s due to Rate Limit hit."
+                    _spin_txt = _spin_txt if _delayed_req == 1 else f"{_spin_txt} [dim italic][red]{_delayed_req}[/] requests currently paused.[/]"
+                    return _spin_txt if self.remaining_calls <= 1 else f"{_spin_txt} [dim italic][cyan]{self.remaining_calls}[/] calls in queue[/]"
+                except Exception as e:
+                    log.exception(f"{repr(e)} in client.Session._get_spin_text", show=self.config.debug)
+                    return spin_txt
+
         elif not self.running_spinners:  # pragma: no cover
-            return "missing spin text"
+            return f"missing spin text [dim italic][cyan]{self.remaining_calls}[/] calls in queue[/]"
 
         try:  # reformat for pagination multi-call.  There will be multiple spinners with the same base text w/ Request: <num> after the base text
-            if len(self.running_spinners) > 1:
+            if self.remaining_calls > 1:
                 if len(set([x.split("...")[0] for x in self.running_spinners])) == 1:
                     pfx = "1" if ":" not in self.running_spinners[0] else self.running_spinners[0].split(":")[-1].lstrip()
                     sfx = ",".join(f" {idx}" if ":" not in x else x.split(":")[1] for idx, x in enumerate(self.running_spinners[1:], start=2))
-                    return f'{self.running_spinners[0].split("...")[0]}... Request: {pfx},{sfx}'.replace("...,", "...")
+                    _spin_txt = f'{self.running_spinners[0].split("...")[0].rstrip(",")}... Request: {pfx},{sfx}'.replace("...,", "...")
                 else:
-                    return f"{self.running_spinners[0]} [dim italic]Processing {len(self.running_spinners)} requests."
+                    _no_delay_spinners = [s for s in self.running_spinners if not s.startswith("Delaying")]
+                    _spin_txt = f"{self.running_spinners[0]} [dim italic]Processing [cyan]{len(_no_delay_spinners)}[/] requests."
+                return _spin_txt if self.remaining_calls <= 1 else f"{_spin_txt.rstrip(',')} [dim italic][cyan]{self.remaining_calls}[/] calls in queue[/]"
         except Exception as e:  # pragma: no cover
             log.exception(f"DEV NOTE: {repr(e)} exception in combined spinner update (Client.Session._get_spin_text)")
 
-        return spin_txt if not self.running_spinners else self.running_spinners[0]
+        _spin_txt = spin_txt if not self.running_spinners else self.running_spinners[0]
+        return _spin_txt if self.remaining_calls <= 1 else f"{_spin_txt} [dim italic][cyan]{self.remaining_calls}[/] calls in queue[/]"
 
     async def vlog_api_req(self, method: Method, url: StrOrURL, params: Dict[str, Any] = None, data: Any = None, json_data: Dict[str, Any] = None, kwargs: Dict[str, Any] = None) -> None:  # pragma: no cover
         call_data = {
@@ -267,16 +304,16 @@ class Session():
         resp = None
         _url = URL(url).with_query(params)
         _data_msg = ' ' if not url else f' {escape(f"[{_url.path}]")}'  # Need to cancel [ or rich will eval it as a closing markup
-        end_name = _url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)
+        end_name = f'[italic dark_olive_green2]{_url.name if _url.name not in ["aps", "gateways", "switches"] else lib_to_api(_url.name)}[/]'
         if self.config.dev.sanitize and utils.is_serial(end_name):  # pragma: no cover
             end_name = "USABCD1234"
         if _url.query.get("offset") and _url.query["offset"] != "0":
             _data_msg = f'{_data_msg.rstrip("]")}?offset={_url.query.get("offset")}&limit={_url.query.get("limit")}...]'
         run_sfx = '' if self.req_cnt <= 1 else f' Request: {self.req_cnt}'
         spin_word = "Collecting" if method == "GET" else "Sending"
-        spin_txt_run = f"{spin_word} ({end_name}) Data...{run_sfx}"
+        spin_txt_run = f"{spin_word} {end_name} Data...{run_sfx}"
         spin_txt_retry = DEFAULT_SPIN_TXT  # helps detect if this was not set correctly after previous failure :poop:
-        spin_txt_fail = f"{spin_word} ({end_name}) Data{_data_msg}"
+        spin_txt_fail = f"{spin_word} {end_name} Data{_data_msg}"
         self.spinner.update(DEFAULT_SPIN_TXT)
         for _ in range(0, 2):
             spin_txt_run = spin_txt_run if _ == 0 else f"{spin_txt_run} {spin_txt_retry}".rstrip()
@@ -291,7 +328,7 @@ class Session():
             # token_msg is only a conditional for show version (non central API call).
             # could update attribute in clicommonm cli.call_to_central
             log.debug(
-                f'Attempt API Call to:{_data_msg} Try: {_ + 1}{token_msg if not self.requests and not self.is_cnx else ""}'  # token msg only displayed on first call if not cnx
+                f'Attempt API Call ({self.config.workspace} workspace) to:{_data_msg} Try: {_ + 1}{token_msg if not self.requests and not self.is_cnx else ""}'  # token msg only displayed on first call if not cnx
             )
             if self.config.debugv:
                 asyncio.create_task(self.vlog_api_req(method=method, url=url, params=params, data=data, json_data=json_data, kwargs=kwargs))
@@ -311,8 +348,7 @@ class Session():
                 self.spinner.start(self._get_spin_text(spin_txt_run), spinner="dots")
                 self.req_cnt += 1  # TODO may have deprecated now that logging requests
 
-                # async with self as client:
-                async with ClientSession(base_url=self.base_url) as client:  # TODO find out what impact is of opening/closing sessions for every call.  Common aio_session property is being stepped on by multiple calls/async threads
+                async with ClientSession(base_url=self.base_url, **self.session_kwargs) as client:  # TODO find out what impact is of opening/closing sessions for every call.  Common aio_session property is being stepped on by multiple calls/async threads
                     resp = await client.request(
                         method=method,
                         url=url,
@@ -344,6 +380,9 @@ class Session():
             except (ClientOSError, ClientConnectorError) as e:
                 log.exception(f'[{method}:{URL(url).path}] {str(e).removesuffix(" [None]")}')
                 resp = Response(error=repr(e), url=_url.path_qs)
+            except ConnectionTimeoutError as e:
+                log.exception(f'[{method}:{URL(url).path}] {str(e).removesuffix(" [None]")}')
+                resp = Response(error=repr(e), url=_url.path_qs)
             except ContentLengthError as e:
                 log.exception(f'[{method}:{URL(url).path}] {e}')
                 resp = Response(error=repr(e), url=_url.path_qs)
@@ -372,6 +411,9 @@ class Session():
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/] after 500: [cyan]Internal Server Error[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 500 (Internal Server Error) from Central API gateway')
                     # returns JSON: {'message': 'An unexpected error occurred'}
+                elif resp.status == 502:  # seen when sending 300 POST calls to GLP API GW to add devices
+                    spin_txt_retry = f":shit:  [bright_red blink]retry[/]  after 502: [cyan]{resp.error}[/]"
+                    log.warning(f'{resp.url.path_qs} forced to retry after 502 ({resp.error}) from API gateway')
                 elif resp.status == 503:
                     spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after 503: [cyan]Service Unavailable[/]"
                     log.warning(f'{resp.url.path_qs} forced to retry after 503 (Service Unavailable) from Central API gateway')
@@ -383,17 +425,27 @@ class Session():
                     if "greenlake" in resp.url.host:
                         spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per minute rate limit"
                         self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/m: {resp.rl.remain_min}: {resp.url.path_qs}"]
-                        self.spinner.update(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit.")
+                        # with econsole.status(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):  # << this displays the spinner, but there are multiple spinners
+                        _wait_spin_txt = self._get_spin_text(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit.")
+                        # self.spinner.update(_wait_spin_txt, spinner="clock")
+                        self.spinner.start(_wait_spin_txt, spinner="clock")
                         await asyncio.sleep(resp.rl.glp_rl_reset)
-                        # with Spinner(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit."):
+                        self.running_spinners.remove(f"Delaying {resp.rl.glp_rl_reset}s due to Rate Limit hit.")
+                        self.spinner.stop()
+
                     else:  # per second rate limit.
                         spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after hitting per second rate limit"
                         self.rl_log += [f"{now:.2f} [:warning: [bright_red]RATE LIMIT HIT[/]] p/s: {resp.rl.remain_sec}: {_url.path_qs}"]
                     _ -= 1
                 elif resp.status == 418:  # Spot to handle retries for any caught exceptions
-                    if resp.error == "ContentLengthError":
-                        spin_txt_retry = ":shit:  [bright_red blink]retry[/]  after [cyan]ContentLengthError[/]"
-                        log.warning(f'{resp.url.path_qs} forced to retry after ContentLengthError')
+                    _error = None
+                    if "ContentLengthError" in resp.error:
+                        _error = "ContentLengthError"
+                    elif "ConnectionTimeoutError" in resp.error:
+                        _error = "ConnectionTimeoutError"
+                    if _error:
+                        spin_txt_retry = f":shit:  [bright_red blink]retry[/]  after [cyan]{_error}[/]"
+                        log.warning(f'{resp.url.path_qs} forced to retry after {_error}')
                     else:
                         log.error(f'{resp.url.path_qs} {resp.error} Exception is not configured for retry')
                         break
@@ -411,11 +463,14 @@ class Session():
 
                 # This handles long running API calls where subsequent calls finish before the previous...
                 if self.running_spinners:
-                    self.spinner.update(self._get_spin_text(), spinner="dots2")
+                    _spin_txt = self._get_spin_text()
+                    kwargs = {} if "Delaying" in _spin_txt else {"spinner": "dots2"}
+                    self.spinner.update(_spin_txt, **kwargs)
                 else:
                     self.spinner.stop()
                 break
 
+        self.remaining_calls -= 1
         return resp
 
     async def handle_pagination(self, res: Response, paged_raw: Dict | List | None = None, paged_output: Dict | List | None = None,) -> Tuple:
@@ -472,7 +527,7 @@ class Session():
         """
 
         # TODO cleanup, if we do strip_none here can remove from calling funcs.
-        params = utils.strip_none(params)
+        params = params and utils.strip_none(params) or {}
 
         # /routing endpoints use "marker" rather than "offset" for pagination
         offset_key = "marker" if "marker" in params or "/api/routing/" in str(url) else "offset"
@@ -509,15 +564,13 @@ class Session():
             # TODO OK to remove confirmed not used anywhere
             elif callback is not None:
                 # TODO [remove] moving callbacks to display output in cli, leaving methods to return raw output
-                log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}")
+                log.debug(f"DEV NOTE CALLBACK IN centralapi lib {r.url.path} -> {callback}", show=True, caption=True, log=True)
                 r.output = callback(r.output, **callback_kwargs or {})
 
             paged_raw, paged_output = await self.handle_pagination(r, paged_raw=paged_raw, paged_output=paged_output)
 
             # On 1st call determine if remaining calls can be made in batch
             # total is provided for some calls with the total # of records available
-            # TODO # TOGLP  need to use "next" as pagination field
-            # if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) + (params.get("limit", 0) * params["next"]) < r.raw["total"]):
             is_events = True if str(url).endswith("/monitoring/v2/events") else False
             do_next = do_pagination = False
             if params.get("limit") and params.get("next") and isinstance(r.raw, dict) and r.raw.get("total") and (len(r.output) if params["next"] in [None, 1] else len(r.output) + (params.get("limit", 0)) * params["next"]) < r.raw["total"]:
@@ -639,6 +692,8 @@ class Session():
 
                 if token:
                     auth.storeToken(token)
+                    self.get_conn_from_file.cache_clear()  # clear lru_cache
+                    log.debug("get_conn_from_file lru_cache cleared")
                     auth.central_info["token"] = token
                     if not silent:
                         self.spinner.stop()
@@ -736,12 +791,12 @@ class Session():
 
         return token_data
 
-    async def _request(self, func: Callable, *args, **kwargs):
-        # async with ClientSession() as self.aio_session:
-        async with self.aio_session:
+    async def _request(self, func: Callable, *args, **kwargs) -> Response | list[Response]:
+        self.remaining_calls += 1
+        async with ClientSession(base_url=self.base_url, **self.session_kwargs) as self.aio_session:
             return await func(*args, **kwargs)
 
-    def request(self, func: Callable, *args, **kwargs) -> Response:
+    def request(self, func: Callable, *args, **kwargs) -> Response | list[Response]:
         """non async to async wrapper for all API calls
 
         Args:
@@ -753,9 +808,101 @@ class Session():
         log.debug(f"sending request to {func.__name__} with args {args}, kwargs {kwargs}")
         return asyncio.run(self._request(func, *args, **kwargs))
 
+    async def _semaphore_batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
+        self.remaining_calls += len(api_calls)
+        self.silent = True
+        m_resp: List[Response] = []
+        _tot_start = time.perf_counter()
+
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests):  # a call has been made no need to verify first call (token refresh)
+            chunked_calls = [api_calls]
+        else:
+            resp: Response = await api_calls[0].func(
+                *api_calls[0].args,
+                **api_calls[0].kwargs
+                )
+            if (not resp and not continue_on_fail) or len(api_calls) == 1:
+                return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
+
+            m_resp: List[Response] = utils.listify(resp)
+
+            chunked_calls: list[BatchRequest] = [api_calls[1:]]
+
+        for chunk in chunked_calls:
+            _start = time.perf_counter()
+
+            _calls_per_chunk = len(chunk)
+            m_resp += await asyncio.gather(
+                *[call.func(*call.args, **call.kwargs) for call in chunk]
+            )
+
+            _elapsed = time.perf_counter() - _start
+            log.debug(f"chunk of {_calls_per_chunk} took {_elapsed:.2f}.")
+
+        m_resp = utils.listify(m_resp, flatten=True)
+
+        if len(api_calls) > 1:
+            log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
+
+        self.silent = False
+
+        if all([hasattr(r, "rl") for r in m_resp]):
+            log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+
+        return m_resp
+
+    async def _leaky_hangs_batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
+        # TODO implement retry_failed
+        # TODO return Response objects for all requests, when first fails build empty Response for remainder so not to cause issue when unpacking
+        self.remaining_calls += len(api_calls)
+        self.silent = True
+        m_resp: List[Response] = []
+        _tot_start = time.perf_counter()
+        results = []
+
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        worker_task = loop.create_task(self.leaky_worker(asyncio.Queue(), self.limiter, results))
+
+        if (not self.is_cnx and self.requests) or (self.is_cnx and self.glp_requests):  # a call has been made no need to verify first call (token refresh)
+            self.bucket.put_nowait(api_calls)
+        else:
+            resp: Response = await api_calls[0].func(
+                *api_calls[0].args,
+                **api_calls[0].kwargs
+                )
+            if (not resp and not continue_on_fail) or len(api_calls) == 1:
+                return utils.listify(resp, flatten=True)  # possible the method returns a list of responses on some combined calls.
+
+            m_resp: List[Response] = utils.listify(resp)
+            self.bucket.put_nowait(api_calls[1:])
+
+        await self.bucket.join()
+        worker_task.cancel()
+        # m_resp += await asyncio.gather(*tasks)  # exceptions should be handled in exec_api_calls
+        m_resp += results
+
+        # strip out the pause/limiter (asyncio.sleep) responses (None)
+        m_resp = utils.listify(m_resp, flatten=True)
+        m_resp = utils.strip_none(m_resp)
+
+        if len(api_calls) > 1:
+            log.info(f"Batch Requests exec {len(api_calls)} calls, Total time {time.perf_counter() - _tot_start:.2f}")
+
+        self.silent = False
+
+        if log.DEBUG and all([hasattr(r, "rl") for r in m_resp]):
+            log.debug(f"API per sec rate-limit as reported by Central: {[r.rl.remain_sec for r in m_resp]}")
+
+        return m_resp
+
     async def _batch_request(self, api_calls: List[BatchRequest], continue_on_fail: bool = False, retry_failed: bool = False) -> List[Response]:
         # TODO implement retry_failed
         # TODO return Response objects for all requests, when first fails build empty Response for remainder so not to cause issue when unpacking
+        self.remaining_calls += len(api_calls)
         self.silent = True
         m_resp: List[Response] = []
         _tot_start = time.perf_counter()

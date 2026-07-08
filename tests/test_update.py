@@ -483,7 +483,7 @@ if config.dev.mock_tests:
             [3, ["ensure_cache_cert", "ensure_cache_group4"], ("cencli_test", "-G", "cencli_test_group4",), True, lambda r: "⚠" in r],  # invalid group (no aps/gws)
             [4, ["ensure_cache_cert_same_as_existing", "ensure_cache_group1"], ("cencli_test-existing-cert", "-G", "cencli_test_group1",), True, lambda r: "skipped" in r],  # cert same as existing
             [5, ["ensure_cache_cert_expired", "ensure_cache_group1"], ("cencli-test-expired-cert", "-G", "cencli_test_group1",), True, lambda r: "xpired" in r],  # cert expired
-            [6, ["ensure_cache_cert"], ("cencli_test", "all",), False, lambda r: "200" in r],
+            [6, ["ensure_cache_cert"], ("cencli_test", "all",), False, lambda r: "200" in r],  # tests that an exact match by name returns just that match
         ]
     )
     def test_update_cp_cert(idx: int, fixture: str | None, args: tuple[str], expect_failure: bool, pass_condition: Callable, request: pytest.FixtureRequest):

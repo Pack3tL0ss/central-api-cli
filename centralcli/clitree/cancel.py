@@ -5,12 +5,12 @@ from __future__ import annotations
 import typer
 from rich.markup import escape
 
-from centralcli import common, render, utils
-from centralcli.cache import api
+from centralcli import api_clients, common, render, utils
 from centralcli.client import BatchRequest
 from centralcli.constants import CancelWhat, DevTypes, what_to_pretty
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

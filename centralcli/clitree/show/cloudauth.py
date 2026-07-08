@@ -6,11 +6,11 @@ from pathlib import Path
 
 import typer
 
-from centralcli import cleaner, common, render
-from centralcli.cache import api
+from centralcli import api_clients, cleaner, common, render
 from centralcli.constants import CloudAuthMacSortBy, CloudAuthUploadType, TimeRange
 
 app = typer.Typer()
+api = api_clients.classic
 
 
 @app.command()

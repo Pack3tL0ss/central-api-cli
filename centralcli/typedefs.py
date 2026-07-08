@@ -1,7 +1,7 @@
 # future annotations does not work here, need to use Union to support py < 3.10
 import os
 from functools import lru_cache
-from typing import Callable, Dict, List, Literal, Optional, Sequence, TypedDict, TypeVar, Union, ParamSpec
+from typing import Callable, Dict, List, Literal, Optional, ParamSpec, Sequence, TypedDict, TypeVar, Union
 
 from yarl import URL
 

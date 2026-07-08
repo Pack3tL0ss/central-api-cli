@@ -7,7 +7,7 @@ from typing import List
 
 import typer
 
-from centralcli import api_clients, common, config, log, render
+from centralcli import api_clients, common, config, log, render, utils
 from centralcli.client import Session
 from centralcli.response import Response
 
@@ -24,8 +24,9 @@ def webhook(
     workspace: str = common.options.workspace,
 ):
     """Test WebHook Notifications."""
+    if not utils.is_resource_id(wid):
+        log.error(f"{wid} does not look like a webhook id (wid).  webhooks are not cached.  Use [cyan]cencli show webhooks[/] to get the wid.", caption=True)
     resp = api.session.request(api.central.test_webhook, wid)
-
     render.display_results(resp, tablefmt="rich", title="WebHook Test Results")
 
 

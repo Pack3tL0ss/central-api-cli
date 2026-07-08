@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import asyncio
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, List
 
@@ -11,16 +11,17 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from centralcli import caas, common, config, log, render, utils
-from centralcli.cache import CacheDevice, CacheGroup, CacheSite, api
+from centralcli import api_clients, caas, common, config, log, render, utils
 from centralcli.classic.api import ClassicAPI
 from centralcli.client import BatchRequest
 from centralcli.constants import ExportDevType
+from centralcli.objects.cache import CacheDevice, CacheGroup, CacheSite
 from centralcli.render import Spinner
 from centralcli.response import BatchResponse, RateLimit, Response
 from centralcli.strings import Warnings
 
 app = typer.Typer()
+api = api_clients.classic
 console = Console(emoji=False)
 
 
@@ -120,29 +121,29 @@ def _process_variable_requests(outdir: Path, show: bool = False, pager: bool = F
 
 
 def _process_ap_env_requests(aps: list[CacheDevice], reqs: list[BatchRequest], *, outdir: Path, show: bool = False, pager: bool = False) -> BatchResponse:
-        ap_env_res = BatchResponse(api.session.batch_request(reqs))
+    ap_env_res = BatchResponse(api.session.batch_request(reqs))
 
-        console = Console(force_terminal=False, emoji=False)
-        with console.capture() as cap:
-            for d, r in zip(aps, ap_env_res.responses):
-                if not r.ok:
-                    log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
-                    continue
-                console.rule()
-                console.print(f"[bold]AP env for {d.rich_help_text}[reset]")
-                console.rule()
-                console.print("\n".join(r.output))
+    console = Console(force_terminal=False, emoji=False)
+    with console.capture() as cap:
+        for d, r in zip(aps, ap_env_res.responses):
+            if not r.ok:
+                log.error(f"Failed to retrieve per-ap-settings for {d.name}... {r.error}", show=True)
+                continue
+            console.rule()
+            console.print(f"[bold]AP env for {d.rich_help_text}[reset]")
+            console.rule()
+            console.print("\n".join(r.output))
 
-        outfile = outdir / "ap_env.txt"
-        res = ap_env_res.last
-        res.output = cap.get()
+    outfile = outdir / "ap_env.txt"
+    res = ap_env_res.last
+    res.output = cap.get()
 
-        if not show:
-            render.write_file(outfile, res.output)
-        else:
-            render.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
+    if not show:
+        render.write_file(outfile, res.output)
+    else:
+        render.display_results(res, tablefmt=None, pager=pager, outfile=outfile)
 
-        return ap_env_res
+    return ap_env_res
 
 
 def _build_template_requests(dev_type: ExportDevType, group: CacheGroup | None = None, site: CacheSite | None = None, group_match: str | None = None) -> dict[str, BatchRequest]:
@@ -171,31 +172,31 @@ class DeviceConfigRequests:  # pragma: no cover
 
 
 def _build_device_config_requests(dev_type: ExportDevType, groups_with_type: list[str], ap_env: bool = False, group: CacheGroup = None, site: CacheSite = None, group_match: str | None = None) -> DeviceConfigRequests:
-        devs: List[CacheDevice] = [CacheDevice(d) for d in common.cache.devices if d["type"] == dev_type and d["group"] in groups_with_type and (not group or d["group"] == group.name) and (not site or d["site"] == site.name)]
+    devs: List[CacheDevice] = [CacheDevice(d) for d in common.cache.devices if d["type"] == dev_type and d["group"] in groups_with_type and (not group or d["group"] == group.name) and (not site or d["site"] == site.name)]
 
-        dev_reqs = []
-        ap_env_reqs = []
-        if devs:
-            if dev_type == "ap":
-                func = api.configuration.get_ap_config
+    dev_reqs = []
+    ap_env_reqs = []
+    if devs:
+        if dev_type == "ap":
+            func = api.configuration.get_ap_config
 
-                def args_getter(device: CacheDevice) -> tuple:
-                    return (device.swack_id,)
-            else:
-                caasapi = caas.CaasAPI()
-                func = caasapi.show_config
+            def args_getter(device: CacheDevice) -> tuple:
+                return (device.swack_id,)
+        else:
+            caasapi = caas.CaasAPI()
+            func = caasapi.show_config
 
-                def args_getter(device: CacheDevice) -> tuple:
-                    return (device.group, device.mac)
+            def args_getter(device: CacheDevice) -> tuple:
+                return (device.group, device.mac)
 
-            if group_match:
-                devs = [dev for dev in devs if group_match in dev.group]
-            dev_reqs = [BatchRequest(func, *args_getter(d)) for d in devs]
+        if group_match:
+            devs = [dev for dev in devs if group_match in dev.group]
+        dev_reqs = [BatchRequest(func, *args_getter(d)) for d in devs]
 
-            if dev_type == "ap" and ap_env:
-                ap_env_reqs = [BatchRequest(api.configuration.get_per_ap_config, d.serial) for d in devs]
+        if dev_type == "ap" and ap_env:
+            ap_env_reqs = [BatchRequest(api.configuration.get_per_ap_config, d.serial) for d in devs]
 
-        return DeviceConfigRequests(devs, dev_reqs, ap_env_reqs)
+    return DeviceConfigRequests(devs, dev_reqs, ap_env_reqs)
 
 
 @app.command()
@@ -252,7 +253,7 @@ def configs(
     outdir = outdir or config.export_dir
     outdir.mkdir(exist_ok=True)
 
-    # build items included in pre-fetch cache refresh.  GroupDB is always refreshed.
+    # build items included in pre-fetch cache refresh.  groups cache is always refreshed.
     template_db = True if any([do_ap, do_cx, do_sw]) else False
 
     dev_types = [] if not do_ap else ["ap"]
@@ -476,7 +477,7 @@ def redsky_bssids(
         "[deep_sky_blue3]:information:[/]  As with all commands that return data, the command can be repeated without doing any API calls using [cyan]cencli show last[/]"
     ] if update is not False else ["[deep_sky_blue1]:information:[/]  [cyan]--no-update[/] :triangular_flag: used.  Only APs that exist in location cache will be included in output."]
 
-    if len(common.cache.sites) > 5:  # pragma: no cover
+    if len(list(common.cache.sites)) > 5:  # pragma: no cover
         render.econsole.print("\n".join(confirm_msg))
         render.confirm(yes)
 

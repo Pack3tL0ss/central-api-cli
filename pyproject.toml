@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "9.3.1"
+version = "10.0.0"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -63,7 +63,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-hook-proxy = ["fastapi", "uvicorn", "psutil"]
+hook-proxy = ["fastapi", "uvicorn", "psutil", "watchdog"]
 speedups = [
     "aiodns>=3.2.0;platform_system != 'Windows'",
     "pycares<5.0.0;platform_system != 'Windows'",
@@ -149,6 +149,7 @@ omit = [
     "centralcli/webhook.py",
     "centralcli/snow.py",
     "centralcli/boilerplate/*",
+    "centralcli/webhooks/*",
     "protobuf/*"
 ]
 
@@ -192,12 +193,16 @@ omit = [
     "centralcli/vscodeargs.py",
     "centralcli/clitree/dev.py",
     "centralcli/protobuf/*",
+    "centralcli/clitree/migrate.py",
+    "centralcli/cache/migrate.py",
+    "centralcli/cache/tinydb.py",
+    "centralcli/models/alerts.py",
     "noxfile.py"
 ]
 
 [tool.ruff]
 line-length = 181
-exclude = ["dashboard", "wh_proxy_service.py"]
+exclude = ["dashboard", "wh_proxy_service.py", "*/protobuf/*"]
 # Enable the pycodestyle (`E`) and Pyflakes (`F`) rules by default.
 # Unlike Flake8, Ruff doesn't enable pycodestyle warnings (`W`) or
 # McCabe complexity (`C901`) by default.
@@ -205,7 +210,7 @@ exclude = ["dashboard", "wh_proxy_service.py"]
 [tool.ruff.lint]
 preview = true
 select = ["E", "F", "W605", "E221", "E222", "E241"]
-ignore = ["E501", "E116"]  # ignore line too long and unexpected indentation for comments
+ignore = ["E501", "E114", "E116"]  # ignore line too long, indentation not multiple of 4, and unexpected indentation for comments
 
 # Allow autofix for all enabled rules (when `--fix`) is provided.
 # fixable = ["ALL"]
@@ -251,3 +256,7 @@ unresolved-attribute = "ignore"
 invalid-method-override = "ignore"
 not-iterable = "ignore"
 invalid-exception-caught = "ignore"
+
+[tool.bandit]
+exclude_dirs = ["tests", "centralcli/boilerplate"]
+skips = ["B701", "B104"]

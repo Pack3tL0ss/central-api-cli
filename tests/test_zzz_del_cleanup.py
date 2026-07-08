@@ -8,7 +8,7 @@ from centralcli.cli import app
 from centralcli.environment import env
 
 from . import capture_logs, config
-from ._test_data import test_data, test_device_file, test_group_file, test_site_file_none_exist, test_site_file_one_not_exist, test_invalid_site_file
+from ._test_data import test_data, test_device_file, test_group_file, test_invalid_site_file, test_site_file_none_exist, test_site_file_one_not_exist
 
 runner = CliRunner()
 

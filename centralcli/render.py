@@ -6,6 +6,8 @@ render.py (this module) takes the normalized data, and displays it (various form
 '''
 from __future__ import annotations
 
+import csv
+import io
 import ipaddress
 import json
 import shutil
@@ -14,7 +16,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Type, Union, Callable
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Literal, Optional, Type, Union
 
 import typer
 import yaml
@@ -285,7 +287,7 @@ def _batch_invalid_msg(usage: str, provide: str = None) -> str:  # referenced in
     return "\n".join(_msg)
 
 
-def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this function is mocked
+def write_file(outfile: Path, outdata: str, *, is_retry_file: bool = False) -> None:  # pragma: no cover this function is mocked
     """Output data to file
 
     Args:
@@ -298,7 +300,6 @@ def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this fu
                 outfile.parent.resolve().name == "central-api-cli" and
                 Path.joinpath(outfile.parent.resolve() / ".git").is_dir()
             ):
-                # outdir = Path.home() / 'cencli-out'
                 econsole.print(
                     "\n[bright_green]You appear to be in the development git dir.\n"
                     f"Exporting to[/] [cyan]{config.outdir.relative_to(config.cwd)}[/] directory."
@@ -306,10 +307,11 @@ def write_file(outfile: Path, outdata: str) -> None:  # pragma: no cover this fu
                 config.outdir.mkdir(exist_ok=True)
                 outfile = config.outdir / outfile
 
-        econsole.print(f"[cyan]Writing output to {outfile}... ", end="")
+        _msg = f"[cyan]Writing output to {outfile}... " if not is_retry_file else f"[cyan]Creating retry file {outfile}... "
+        econsole.print(_msg, end="")
 
         if not outfile.parent.is_dir():
-            econsole.print(f"[red]Directory Not Found[/]\n[dark_orange3]:warning:[/]  Unable to write output to [cyan]{outfile.name}[/].\nDirectory [cyan]{str(outfile.parent.absolute())}[/] [red]does not exist[/].")
+            econsole.print(f"[red]Directory Not Found[/]\n[dark_orange3]:warning:[/] Unable to write output to [cyan]{outfile.name}[/].\nDirectory [cyan]{str(outfile.parent.absolute())}[/] [red]does not exist[/].")
         else:
             out_msg = None
             try:
@@ -582,6 +584,22 @@ def format_data_by_key(data: list[dict[str, Any]], output_by_key: str) -> dict[s
     return data
 
 
+# NOT-USED-YET was doing speed comparisons.
+# for 109425 records ... average time processing 100x (timeit.repeat(numer=100))
+#   Existing list comp: avg 65.7 secs
+#   This func (csvwriter, StringIO): 87.6 secs  (and the above ran everything through normalize_for_csv)
+def get_csv_string(data: list[dict[str, Any]]):
+    output = io.StringIO()  # in-memory string buffer
+    keys = data[0].keys()
+    writer = csv.DictWriter(output, fieldnames=keys)
+    writer.writeheader()
+    writer.writerows(data)
+    csv_str = output.getvalue()
+    output.close()
+
+    return csv_str
+
+
 def output(
     outdata: List[str] | List[Dict[str, Any]] | Dict[str, Any] | str,
     tablefmt: TableFormat = "rich",  # "action" and "raw" are not sent through formatter, handled in display_output
@@ -636,13 +654,15 @@ def output(
         ...
 
     elif tablefmt == "csv":
-        def normalize_for_csv(value: Any) -> str:
+        def normalize_for_csv(value: Any, key: str = None) -> str:
             if value is None:
                 return ""
             elif isinstance(value, DateTime):
-                return str(value.iso)
+                return str(value.iso) if not key or key != "uptime" else str(value.durwords_short)
             elif value in ["❌", "✅"]:
-                return False if value == "❌" else True
+                return "false" if value == "❌" else "true"
+            elif value == "--":
+                return ""
             else:
                 return str(value) if "," not in str(value) else f'"{value}"'
 
@@ -655,7 +675,7 @@ def output(
             [
                 ",".join(
                     [
-                        normalize_for_csv(v) for k, v in d.items() if k not in CUST_KEYS
+                        normalize_for_csv(v, key=k) for k, v in d.items() if k not in CUST_KEYS
                     ]
                 )
                 for d in outdata
@@ -664,7 +684,7 @@ def output(
         raw_data = table_data = csv_data if not outdata else f"{','.join([normalize_key_for_csv(k) for k in outdata[0].keys() if k not in CUST_KEYS])}\n{csv_data}\n"
         out = Syntax(code=raw_data, lexer=CsvLexer(ensurenl=False), theme="native")
         table_data = out.highlight(out.code.rstrip()).markup
-        table_data = rich_capture(table_data)
+        table_data = rich_capture(table_data)  # SLOW with large datasets
 
     elif tablefmt == "rich":
         raw_data, table_data = rich_output(outdata, title=title, caption=caption, workspace=workspace, set_width_cols=set_width_cols, full_cols=full_cols, fold_cols=fold_cols, group_by=group_by, min_width=min_width)
@@ -1106,8 +1126,8 @@ def display_results(
                         print(render_title(title, bar_color="green" if r.ok else "red"))
                     _url = r.url if not hasattr(r.url, "path") else r.url.path
                     m_color = m_colors.get(r.method, "reset")
-                    print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
-                    print(f" [{fg}]Response[reset]:")
+                    econsole.print(f"Request {idx + 1} [[{m_color}]{r.method}[reset]: [cyan]{_url}[/cyan]]")
+                    econsole.print(f" [{fg}]Response[reset]:")
 
             if any(conditions[1:]):
                 # raw output (unformatted response from Aruba Central API GW)
@@ -1142,7 +1162,7 @@ def display_results(
                     # Success
                     if r.ok and r.output and cleaner and cleaner.__name__ != "simple_kv_formatter":  # We send select action responses through cleaner when they pass
                         r.output = _clean_output(r.output, cleaner, **cleaner_kwargs)
-                    console.print(r, emoji=False)
+                    econsole.print(r, emoji=False)
 
                 # For Multi-Response action tablefmt (responses to POST, PUT, etc.) We only display the last rate limit
                 if idx + 1 == len(resp):

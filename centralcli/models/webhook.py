@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime as dt
+from typing import List, Literal, Optional
+from enum import Enum
 
-from pydantic import BaseModel, Field, ConfigDict, AliasChoices
-from typing import Optional, List, Literal
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 
 # WebHook Models WebHookDetails no reliable source for all possible fields.
@@ -110,14 +111,14 @@ class HookResponse(BaseModel):
     updated: bool
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {"result": "OK", "updated": True, }
         }
 
 
 class HookResponseTooBig(HookResponse):
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {"result": "Content too long", "updated": False}
         }
 
@@ -127,7 +128,7 @@ class HookResponseTokenFail(BaseModel):
     updated: bool
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {"result": "Unauthorized", "updated": False}
         }
 
@@ -142,7 +143,7 @@ class BranchResponse(BaseModel):
     timestamp: Optional[int]
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                     "id": "CNF1234567_init",
                     "ok": False,
@@ -159,3 +160,75 @@ wh_resp_schema = {
     401: {"model": HookResponseTokenFail},
     413: {"model": HookResponseTooBig}
 }
+
+
+class MonitoringWebHookDetails(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    params: List[str]
+    ts: Optional[str] = None
+    serial: str
+    conn_status: Optional[str] = None
+    time: str
+    group_name: str
+
+
+class AlertType(str, Enum):
+    CONNECTED = "CONNECTED"
+    DISCONNECTED = "DISCONNECTED"
+    OTHER = "OTHER"
+
+
+class MonitoringWebHook(BaseModel):
+    id: str
+    cid: Optional[str] = None
+    nid: int
+    alert_type: str
+    setting_id: str
+    device_id: str
+    description: str
+    state: str
+    severity: str
+    operation: Optional[str] = None
+    timestamp: int
+    details: MonitoringWebHookDetails
+    webhook: Optional[str] = None
+    text: Optional[str] = None
+
+    @field_validator("alert_type", mode="before")
+    @classmethod
+    def _normalize_alert_type(cls, v: str) -> str:
+        return v.lower().replace("_", " ")
+
+    @field_validator("cid", mode="before")
+    @classmethod
+    def _to_str(cls, v: int | str | None) -> str | None:
+        return v and str(v)
+
+    @property
+    def dev_type(self) -> str:
+        if "switch" in self.alert_type:
+            return "switch"  # could be stack, that determination is made in watcher.py # TODO stacks not really accomodated currently
+        if "ap" in self.alert_type:
+            return "ap"
+        if "gateway" in self.alert_type:
+            return "gw"
+
+    @property
+    def type(self) -> AlertType:
+        if "disconnected" in self.alert_type:  # this needs to go first... connected is in disconnected
+            return AlertType.DISCONNECTED
+        elif ("detected" in self.alert_type or "connected" in self.alert_type):
+            return AlertType.CONNECTED
+        else:
+            return AlertType.OTHER
+
+    @property
+    def delete_method(self) -> str | None:
+        if self.type == AlertType.DISCONNECTED:
+            if "switch" in self.alert_type:
+                return "delete_switch"  # could be stack, that determination is made in watcher.py
+            if "ap" in self.alert_type:
+                return "delete_ap"
+            if "gateway" in self.alert_type:
+                return "delete_gateway"
+

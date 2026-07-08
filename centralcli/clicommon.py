@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import binascii
+import json
 import string
 import sys
 import time
 import urllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
@@ -29,27 +30,27 @@ from rich.table import Table
 from rich.traceback import install
 
 from centralcli import config, log, render, utils
-from centralcli.cache import CacheInvMonDevice, CacheSite
-from centralcli.classic.api import ClassicAPI
 from centralcli.clioptions import CLIArgs, CLIOptions
 from centralcli.constants import APIAction, GroupDevTypes, MacFormat, dynamic_antenna_models, flex_dual_models
 from centralcli.models.cache import Groups, Inventory, Labels
 from centralcli.models.imports import ImportSites
 from centralcli.objects import DateTime
+from centralcli.objects.cache import CacheDevice, CacheInvMonDevice, CacheSite, CacheInvDevice, MigrateDevice
 from centralcli.strings import emoji
 from centralcli.utils import ToBool
+from centralcli.cache.sqlite import DBAction
 
-from . import api_clients
+from . import APIClients, api_clients as _api_clients
 from .client import BatchRequest, Session
-from .cache import CacheDevice
 from .environment import env, env_var
 from .models.common import APUpdate, APUpdates
 from .models.imports import ImportDevices
-from .response import Response
+from .response import BatchResponse, Response
 from .ws_client import follow_logs
 
 if TYPE_CHECKING:  # pragma: no cover
-    from centralcli.cache import Cache, CacheGroup, CacheInvDevice, CacheLabel, CacheSub, CentralObject
+    from centralcli.cache import Cache
+    from centralcli.objects.cache import CacheGroup, CacheLabel, CacheSub, CentralObject
     from centralcli.typedefs import ImportType, LogType, SendConfigTypes
 
 install(show_locals=True)
@@ -57,14 +58,21 @@ install(show_locals=True)
 TableFormat = Literal["json", "yaml", "csv", "rich", "simple", "tabulate", "raw", "action", "clean"]
 MsgType = Literal["initial", "previous", "forgot", "will_forget", "previous_will_forget"]
 
-api = api_clients.classic
+api = _api_clients.classic
 
 
 @dataclass
 class BuiltRequests:
-    requests: list[BatchRequest]
+    requests: list[BatchRequest] = field(default_factory=list)
     confirm_msgs: list[str] = None
     warnings: list[str] = None
+    items: list[str | tuple[str]] = None
+
+    def __len__(self):
+        return len(self.requests)
+
+    def __bool__(self):
+        return bool(self.requests)
 
 
 class BlockDetails(BaseModel):
@@ -222,7 +230,7 @@ class Mac(Convert):
             if not self.ok:
                 out_str += render.rich_capture(f"[dark_orange3]\u26a0[/]  Unable to generate BSSIDs {self.orig} does not appear to be a valid MAC address")  # \u26a0 is warning emoji
                 if Path(self.orig).exists():
-                    out_str += render.rich_capture(f"\n[italic][deep_sky_blue]\u2139[/]  Use [cyan]--file[/] {self.orig} to generate BSSIDs from file.")  # \u2139 = is information emoji
+                    out_str += render.rich_capture(f"\n[italic][deep_sky_blue1]\u2139[/]  Use [cyan]--file[/] {self.orig} to generate BSSIDs from file.")  # \u2139 = is information emoji
             else:
                 console = Console(emoji=False)
                 if self.tablefmt != "vertical":
@@ -282,13 +290,13 @@ class MoveData:
             for k, v_list in mv_msgs.items():
                 dev_word = "devices" if len(v_list) > 1 else "device"
                 action_words = f"[bright_green]{action_word}[/] to" if action_word != "removed" else f"[red]{action_word}[/] from"
-                confirm_msg = f'[deep_sky_blue1]\u2139[/]  [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'  # \u2139 = :information:
+                confirm_msg = f'[deep_sky_blue1]{emoji.info if action_word != "removed" else emoji.warn}[/] [dark_olive_green2]{len(v_list)}[/] {dev_word} will be {action_words} {move_type} [cyan]{k}[/]'
                 if retain_config:
                     confirm_msg = f"{confirm_msg} [italic dark_olive_green2]CX config will be preserved[/]."
                 confirm_msgs += [confirm_msg]
                 if len(v_list) > 6:
                     v_list = [*v_list[0:3], "...", *v_list[-3:]]
-                confirm_msgs = [*confirm_msgs, *[f'  {dev}' for dev in v_list]]
+                confirm_msgs = [*confirm_msgs, *[f'   {dev}' for dev in v_list]]
 
         return confirm_msgs
 
@@ -330,6 +338,25 @@ class PreConfig:
 class GLPAction(str, Enum):
     ADD = "add"
     UPDATE = "update"
+
+
+class DevQueryResults:
+    def __init__(self, serial_numbers: list[str], cache_results: list[CacheDevice | CacheInvDevice | MigrateDevice | None]):
+        self.serials = serial_numbers
+        self.cache_result = cache_results
+        self.found_devs = [dev for dev in cache_results if dev is not None]
+        self.mon_devs = [d for d in self.found_devs if d.is_dev]
+        self.inv_devs = [d for d in self.found_devs if d.is_inv]
+        self.found_serials: list[str] = [s.serial for s in self.found_devs]
+        self.not_found_serials = [s for s in serial_numbers if s not in self.found_serials]
+
+    def __bool__(self):
+        return bool(self.found_devs)
+
+    @cached_property
+    def error_not_found_all(self) -> str:
+        log.debug(f"Ignoring the following {len(self.not_found_serials)} devices: [red]Not found[/] in inventory.  {utils.summarize_list(self.not_found_serials, sep=', ', max=0)}")
+        return f"{emoji.info} [dark_orange3]Ignoring[/] {len(self.not_found_serials)} device{'s' if len(self.not_found_serials) > 1 else ''}. [dim red italic]Not found in [green]GreenLake[/] inventory[/]."
 
 
 class CLICommon:
@@ -733,6 +760,16 @@ class CLICommon:
 
         return data
 
+    # TODO NEED SWACK OPTION like self.cache.get_dev_identifier(d, include_inventory=True, swack=True, silent=True, exit_on_fail=False)
+    def query_cache_for_moninv_devs(self, serial_numbers: list[str], refresh: bool = False, refresh_on_fail: bool = True) -> DevQueryResults:
+        start = time.perf_counter()
+        with render.Spinner(f"Getting Inventory/Monitoring details for {len(serial_numbers)} devices"):
+            cache_devs = self.cache.get_inv_mon_devs_from_cache(serial_numbers=serial_numbers, refresh=refresh, refresh_on_fail=refresh_on_fail)
+            duration = time.perf_counter() - start
+            log.debug(f"{round(duration, 2)} ellapsed to gather details for {len(serial_numbers)} devices.  {round(duration / len(serial_numbers), 2)} / device.\n")
+
+        return DevQueryResults(serial_numbers=serial_numbers, cache_results=cache_devs)
+
     @staticmethod
     async def get_file_hash(file: Path = None, string: str = None) -> str:
         import hashlib
@@ -769,7 +806,7 @@ class CLICommon:
 
         return devices
 
-    def _get_import_file(self, import_file: Path = None, import_type: ImportType = None, subscriptions: bool = False, text_ok: bool = False, required_fields: list[str] = None) -> list[dict[str, Any]]:
+    def _get_import_file(self, import_file: Path = None, import_type: ImportType = None, subscriptions: bool = False, text_ok: bool = False, required_fields: list[str] = None, sub_word_sep: str | None = None) -> list[dict[str, Any]]:
         data = None
         if import_file is not None:
             try:
@@ -806,14 +843,18 @@ class CLICommon:
 
         data = utils.strip_no_value(data, aggressive=True)  # We need to strip empty strings as csv import will include the field with empty string and fail validation
                                                             # We support yaml with csv as an !include so a conditional by import_file.suffix is not sufficient.
-
         # They can mark items as ignore or retired (True).  Those devices/items are filtered out.
         if isinstance(data, list) and all([isinstance(d, dict) for d in data]):
+            if import_type == "devices":
+                data = utils.normalize_device_sub_field(data, word_sep=sub_word_sep)  # TODO batch verify sends through normalize_device_sub_fields again with word_set="-"... see if it would hurt any other processes to do that here and remove redundant from verify
             data = [d for d in data if not d.get("retired", d.get("ignore"))]
             if required_fields:
                 rows_missing_fields = [idx for idx, item in enumerate(data, start=1) if not all([f in item for f in required_fields])]
                 if rows_missing_fields:
-                    self.exit(f"The following entries are missing required fields [dim]({utils.color(required_fields)})[/dim].  {', '.join(map(str, rows_missing_fields))}")
+                    if len(rows_missing_fields) == len(data):
+                        self.exit(f"{import_file.name} is missing required fields [dim]({utils.color(required_fields)})[/dim].")
+                    else:
+                        self.exit(f"{import_file.name} the following entries are missing required fields [dim]({utils.color(required_fields)})[/dim].  {', '.join(map(str, rows_missing_fields))}")
 
         if not data:  # TODO add exit_if_no_data: bool = True to consolidate the check for all functions that use this.  (easier for coverage)
             log.warning("No data after import from file.", caption=True)
@@ -821,10 +862,16 @@ class CLICommon:
         return data
 
     def _check_update_dev_db(self, device: CacheDevice) -> CacheDevice:
-        if self.cache.responses.dev:  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
-            log.warning(f"_check_update_dev_db called for {device.serial} devices have already been fetched this session. Skipping.")
+        refresh_kwargs = {
+            "dev_type": device.type,
+        }
+        if hasattr(device, "site"):
+            refresh_kwargs["site"] = device.site
+        kwargs_match = tuple(sorted(self.cache.responses.device_kwargs.items())) == tuple(sorted(refresh_kwargs.items()))
+        if self.cache.responses.dev and (not self.cache.responses.device_kwargs or kwargs_match):  # TODO have check_fresh bypass API call if cli.cache.responses.dev has value  (move this check there)
+            log.debugv(f"_check_update_dev_db called for {device.serial} devices have already been fetched this session. Skipping check.")
         else:
-            _ = api.session.request(self.cache.refresh_dev_db, dev_type=device.type)
+            _ = api.session.request(self.cache.refresh_dev_db, **refresh_kwargs)
             device = self.cache.get_dev_identifier(device.serial, include_inventory=True, dev_type=device.type)
 
         return device
@@ -883,6 +930,12 @@ class CLICommon:
                 render.econsole.rule(f"End {pc.name} {pretty_type} config")
             idx += 1
         return yes
+
+    def check_for_dups(self, dev_idens: list[str]) -> None:
+        if len(set(dev_idens)) < len(dev_idens):
+            dup_count = len(dev_idens) - len(set(dev_idens))
+            dups = set([iden for iden in dev_idens if dev_idens.count(iden) > 1])
+            self.exit(f"Duplicates exist in import data.  Number of duplicate entries: [cyan]{dup_count}[/]. Duplicates: {utils.color(dups)}")
 
     def batch_add_groups(self, import_file: Path = None, data: dict = None, yes: bool = False) -> list[Response]:
         """Batch add groups to Aruba Central
@@ -1037,7 +1090,7 @@ class CLICommon:
             self.exit(f"Import data failed validation, refer to [cyan]cencli batch add sites --example[/] for example formats.\n{_msg}")
 
         for idx in range(2):
-            already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in [s["name"] for s in self.cache.sites]]
+            already_exists = [(s.site_name, idx) for idx, s in enumerate(verified_sites) if s.site_name in self.cache.sites_by_name]
             if already_exists:
                 if idx == 0:
                     render.econsole.print(f"[dark_orange3]:warning:[/]  [cyan]{len(already_exists)}[/] sites from import already exist according to the cache, ensuring cache is current.")
@@ -1066,12 +1119,12 @@ class CLICommon:
             BatchRequest(api.central.create_site, **site.model_dump())
             for site in verified_sites
         ]
-        resp = api.session.batch_request(reqs)
+        resp = api.session.batch_request(reqs)  # TODO use BatchResponse here
         passed = list(sorted([r for r in resp if r.ok], key=lambda r: r.rl))
         failed = [r for r in resp if not r.ok]
         if passed:
             cache_data = [r.output for r in passed]
-            api.session.request(self.cache.update_site_db, data=cache_data)  # TODO need an add function, this update combines old with new then truncates and re-writes all sites.
+            api.session.request(self.cache.update_site_db, data=cache_data, action=DBAction.UPSERT)
             # we combine the passing responses into 1.
             passed[0].output = cache_data
             resp = passed[0] if not failed else [passed[0], *failed]
@@ -1097,7 +1150,7 @@ class CLICommon:
                 for idx in range(2):
                     try:
                         if not config.glp.ok:  # No sub cache pre glp support
-                            if d['subscription'].lower().replace("-", "_") not in self.cache.license_names:
+                            if d['subscription'].lower().replace("-", "_") not in self.cache.licenses:
                                 raise ValueError()  # caught below
                             else:
                                 d['subscription'] = d['subscription'].lower().replace("-", "_")
@@ -1109,7 +1162,7 @@ class CLICommon:
                     except ValueError:
                         if idx == 0 and self.cache.responses.license is None:
                             render.econsole.print(f'[dark_orange3]:warning:[/]  [cyan]{d["subscription"]}[/] [red]not found[/] in list of valid subscriptions.\n:arrows_clockwise: Refreshing subscription/license name cache.')
-                            resp = api.session.request(self.cache.refresh_license_db)  # TOGLP
+                            resp = api.session.request(self.cache.refresh_license_db)  # TOGLP  Do not see a GLP API to get all available subscription names
                             if not resp:
                                 render.display_results(resp, exit_on_fail=True)
                         else:
@@ -1162,7 +1215,7 @@ class CLICommon:
                     f"  {warn_devs_str}\n", emoji=False
                 )
             else:
-                render.econsole.print("\n[deep_sky_blue]:information:[/]  [magenta]Migration[/] Pre-provisioning CX devices to group will not be done to prevent configuration from being overriden.")
+                render.econsole.print(f"\n{emoji.info} [magenta]Migration[/] Pre-provisioning CX devices to group will not be done to prevent configuration from being overriden.")
                 render.econsole.print(f"The group found for the following device{'s are' if len(warn_devs) > 1 else ' is'} being ignored.\n{warn_devs_str}\n", emoji=False)
                 render.econsole.print("[dim italic]Once devices have come online in the new environment, use [cyan]cencli batch move devices MIGRATION_FILE[/] to move the devices to the final site, along with any CX switches to the final group (with the retain_config option)[/]")
 
@@ -1212,47 +1265,51 @@ class CLICommon:
 
         return resp or Response(error="No Devices were added")
 
-    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False) -> List[Response]:
+    def batch_add_devices_glp(self, data: list[dict[str, Any]] | None = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, manual_flow: bool = False, api_clients: APIClients = None) -> List[Response]:
+        if api_clients:
+            global config
+            config = api_clients.config
+            self.cache.set_config(api_clients.config)
+        else:
+            api_clients = _api_clients
+
         import_devs = self._prep_glp_add_update_data(data, subscription=subscription, action=GLPAction.ADD)  # replaces subscription with global subscrition override for each dev if provided
 
         confirm_msg = []
         if import_devs.has_subs and not self.cache.responses.sub:
             confirm_msg += ["[italic dark_olive_green2 dim]Qty Available reflects qty as of last subscription cache refresh.  [cyan]cencli show subscriptions[/] and [cyan]cencli show inventory[/] both result in a subscription cache refresh.[/]"]
 
-        # glp_api = GreenLakeAPI(config.glp.base_url)
         glp_api = api_clients.glp
         add_data = [{k: v for k, v in dev.items() if k != "subscription"} for dev in import_devs.model_dump()]  # strip the subscription from the add, as it's whatever the user put in the import.  We send it in the update below where it is flipped to the necessary subscription.id
-        add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=add_data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
-        if any([r.exit_code == 1 for r in add_resp]):  # exit_code 1 from devices.add_devices indicates iventory call has already been attempted, add failed.
-            return add_resp
+        if not manual_flow:
+            add_resp: list[Response] = glp_api.session.request(glp_api.devices.add_devices, devices=add_data, application_id=self.cache.my_service.id, region=self.cache.my_service.region, cache=self.cache)
+            if any([r.exit_code == 1 for r in add_resp]):  # exit_code 1 from devices.add_devices indicates iventory call has already been attempted, add failed.
+                return add_resp
+        else:
+            serials = [dev.serial for dev in import_devs]
+            _serials = []
+            new_devs_by_serial = {}
+            for _ in range(5):
+                inv_resp = glp_api.session.request(self.cache.refresh_inv_db_glp, serial_numbers=_serials or serials)
+                if inv_resp.ok:
+                    new_devs_by_serial = {**new_devs_by_serial, **{dev["serial"]: dev for dev in inv_resp.output}}
+                    if len(new_devs_by_serial) == len(serials):
+                        break
+                    _serials = [s for s in serials if s not in new_devs_by_serial]
 
-        # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
-        serial_numbers = [d["serial"] for d in data]
-        for _ in range(3):
-            inv_devs = [self.cache.get_inv_identifier(s, serial_numbers=tuple(serial_numbers), exit_on_fail=False, silent=True) for s in serial_numbers]
-            # inv_resp = asyncio.run(self.cache.refresh_inv_db(serial_numbers=serial_numbers))
-            # if inv_resp.ok and len(inv_resp) == len(serial_numbers):
-            if None not in inv_devs:
-                break
+                with render.Spinner(
+                    f"Allowing more time for [green]GreenLake[/] to be prepared to send inventory response for {len(serials)} added devices.  [dim italic][medium_spring_green]Total requested[/]: {len(serials)}, [green]Collected[/]: {len(new_devs_by_serial)}, [dark_orange]Remaining[/]: {len(serials) - len(new_devs_by_serial)}[/]"):
+                    time.sleep(3)
 
-            with render.Spinner("Allowing time for [green]GreenLake[/] to be ready for device updates after device addition"):
-                sleep(3)
+            if not inv_resp.ok:
+                log.error(f"Failed to fetch Inventory Response [dim](to fetch GLP ids[/] {inv_resp.error}.  Aborting... Command can be repeated.")
+                return inv_resp
 
-        # if not inv_resp or not inv_resp.output:  # None of the serials were found after add
-        #     sfx = inv_resp.error if not inv_resp.ok else "Device add failed."
-        #     log.error(f"Unable to perform subscription/tag updates due to failure fetching device_ids. {sfx}", caption=True, log=True)
-        #     return [*add_resp, inv_resp]
-        # elif len(inv_resp) != len(serial_numbers):
-        #     inv_resp_serials = [d["serialNumber"] for d in inv_resp.output]
-        #     missing = [s for s in serial_numbers if s not in inv_resp_serials]
-        #     log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)
-        #     log.warning(f"{len(missing)} will not have subscription or tags assigned.")
-        missing = [serial_numbers[idx] for idx, v in enumerate(inv_devs) if v is None]
-        if missing:
-            # log.warning(f"The following {len(missing)} devices were not found in [green]GreenLake[/] inventory after device add: {utils.color(missing, color_str='cyan')}", show=True, log=True, caption=True)  # we already log in add_devices
-            log.warning(f"{len(missing)} devices will not have subscription or tags assigned as they not found in [green]GreenLake[/].", show=True, log=True, caption=True)
-
-        update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate)  # confirmation is done in batch_add_devices
+            device_ids = [new_devs_by_serial[s]["id"] for s in serials if s in new_devs_by_serial]
+            if device_ids:
+                add_resp: list[Response] = glp_api.session.request(glp_api.devices.update_devices, device_ids, application_id=self.cache.my_service.id, region=self.cache.my_service.region)
+            else:
+                self.exit(f"Unable to fetch [green]GreenLake[/] ids for [bold]any[/] of the {len(serials)} devices.  Aborting... Verify Device addition in [green]GreenLake[/] Inventory")
 
         # pre-provision devices to groups / classic API
         to_group, group_resp = {}, []
@@ -1262,9 +1319,31 @@ class CLICommon:
             group_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group, serials) for group, serials in to_group.items()]
             group_resp = api.session.batch_request(group_reqs)
 
+        # cache update.  We query for the serials that were added vs parsing the async response to determine if it's OK to continue as we need the device id and an Add failure could indicate already claimed, which doesn't prevent us from continuing.
+        update_resp = []
+        if tags or subscription or import_devs.has_subs or import_devs.has_tags:
+            serial_numbers = [d["serial"] for d in data]
+            for _ in range(3):
+                inv_devs = [self.cache.get_inv_identifier(s, serial_numbers=tuple(serial_numbers), exit_on_fail=False, silent=True) for s in serial_numbers]
+                if None not in inv_devs:
+                    break
+
+                for _ in track(range(3), description="Allowing time for [green]GreenLake[/] to be ready for device updates after device addition..."):
+                    sleep(1)
+
+            missing = [serial_numbers[idx] for idx, v in enumerate(inv_devs) if v is None]
+            if missing:
+                log.warning(f"{len(missing)} devices will not have subscription or tags assigned as they not found in [green]GreenLake[/].", show=True, log=True, caption=True)
+
+            update_resp = self.batch_update_glp_devices(data, tags=tags, subscription=subscription, yes=True, migrate=migrate, api_clients=api_clients)  # confirmation is done in batch_add_devices
+
         return [*add_resp, *update_resp, *group_resp]
 
-    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api: ClassicAPI = api_clients.classic) -> List[Response]:
+    def batch_add_devices(self, import_file: Path = None, data: list[dict[str, Any]] | None = None, yes: int = None, *, tags: dict[str, str] = None, subscription: str = None, migrate: bool = False, api_clients: APIClients = None, manual_flow: bool = False, no_pre_prov: bool = False) -> List[Response]:
+        if api_clients is not None:
+            global config
+            config = api_clients.config
+
         yes = yes if yes is not None else 0
         # TODO build messaging similar to batch move.  build common func to build calls/msgs for these similar funcs
         data: list[dict[str, Any]] = data or self._get_import_file(import_file, import_type="devices", subscriptions=True)
@@ -1279,41 +1358,42 @@ class CLICommon:
         data, retain_warn = self.validate_retain_config(data, migrate=migrate)  # if they have retain_config (cx) in the import, that has to be done via move, not during initial add
         all_keys = utils.all_keys(data, with_value=True)
 
-        file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
-        file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
-        render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
-        confirm_data = [d if d.get("type", "") != "cx" or d.get("group") is not None else {**d, "group": "[dark_olive_green2]unprovisioned[/]"} for d in data]
-        render.console.print(f'   {utils.summarize_data(confirm_data, pad=3).lstrip()}\n', emoji=False)
-        if subscription:
-            sub = self.cache.get_sub_identifier(subscription, best_match=True)
-            render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub}[/]')
-        elif "subscription" in all_keys:
-            render.console.print('[dim italic]Devices will be assigned subscriptions based on subscriptions found in the import.[/]')
-        else:  # pragma: no cover
-            ...
+        if not migrate:
+            file_str = f"{'provided devices' if len(data) > 1 else 'device'}" if not import_file else f"devices found in [cyan]{import_file.name}[/]"
+            file_str = file_str if len(data) == 1 else f'{len(data)} {file_str}'
+            render.console.print(f'\n[bold green]:heavy_plus_sign: Add{"ing" if not warn and yes else ""}[/] the following {file_str}{" " if not migrate else f" to [bright_green]{config.workspace}[/] workspace"}:')
+            confirm_data = [d if d.get("type", "") != "cx" or d.get("group") is not None else {**d, "group": "[dark_olive_green2]unprovisioned[/]"} for d in data]
+            render.console.print(f'   {utils.summarize_data(confirm_data, pad=3).lstrip()}\n', emoji=False)
+            if subscription:
+                sub = self.cache.get_sub_identifier(subscription, best_match=True)
+                render.console.print(f'[dim italic][bold bright_green]All[/] Devices will be assigned subscription {sub}[/]')
+            elif "subscription" in all_keys:
+                render.console.print('[dim italic]Devices will be assigned to specified subscription.[/]')
+            else:  # pragma: no cover
+                ...
 
-        if tags or "tags" in all_keys:
-            render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/green][/]')
-        if "group" in all_keys:
-            render.econsole.print('[dim italic]Devices with a group specified will be pre-provisioned to the group[/]')
-        if "site" in all_keys:
-            render.econsole.print(f'{emoji.warn} [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
+            if tags or "tags" in all_keys:
+                render.econsole.print('[dim italic]Devices will have tags assigned in [green]GreenLake[/green][/]')
+            if "group" in all_keys:
+                render.econsole.print('[dim italic]Devices with a group specified will be pre-provisioned to the group[/]')
+            if "site" in all_keys:
+                render.econsole.print(f'{emoji.warn} [dim italic]Devices can [bright_red]not[/] be pre-assigned to sites.  Use [cyan]cencli batch move devices IMPORT_FILE[/] to move devies to sites once they show up in [bold dark_orange3]Aruba[/] Central.[/]')
 
-        if "group" in all_keys and not retain_warn:
-            render.econsole.print(
-                f'\n{emoji.warn} [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
-                '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
-                '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
-            )
+            if "group" in all_keys and not retain_warn:
+                render.econsole.print(
+                    f'\n{emoji.warn} [dim italic]Assigning a CX switch to a group results in any config on the switch being overriden by the config defined in the group.'
+                    '\n   To retain an existing config for a CX switch, add it without a group, then move it to the final group once it checks in using the -k (retain_config) option'
+                    '\n   i.e. [cyan]cencli move <switch name|serial|mac|ip> group <GROUP> -k[/dim italic]'
+                )
 
-        warn = warn or retain_warn
-        if warn and not migrate:
-            render.econsole.print(f"{emoji.warn} Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
+            warn = warn or retain_warn
+            if warn and not migrate:
+                render.econsole.print(f"{emoji.warn} Warnings exist{' [cyan]-y[/] flag ignored.' if yes else '!'}")
 
         warn = warn if not env.is_pytest and not yes > 1 else False  # bypass confirmation for test runs or
         render.confirm(yes=(not warn or migrate) and yes)
         if config.glp.ok:
-            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, migrate=migrate)
+            return self.batch_add_devices_glp(data, tags=tags, subscription=subscription, migrate=migrate, manual_flow=manual_flow, api_clients=api_clients)
         else:
             return self.batch_add_devices_classic(data)
 
@@ -1350,7 +1430,7 @@ class CLICommon:
         resp = api.session.batch_request(reqs)
         try:
             cache_data = Labels([r.output for r in resp if r.ok])
-            _ = api.session.request(self.cache.update_label_db, data=cache_data.model_dump())
+            _ = api.session.request(self.cache.update_label_db, data=cache_data.model_dump(), action=DBAction.UPSERT)  # label db is on-demand update so label could already exist in table
         except Exception as e:
             log.exception(f'Exception {e.__class__.__name__} during label cache update in batch_add_labels')
             render.econsole.print(f'{emoji.warn} [bright_red]Cache Update Error[/]: {repr(e)}.  See logs.\nUse [cyan]cencli show labels[/] to refresh label cache.')
@@ -1383,7 +1463,7 @@ class CLICommon:
         _word = "device" if len(devs) == 1 else f"[bright_green]{len(devs)}[/] devices"
         render.econsole.print(f"[{'red' if archive else 'green'}]{operation[:-1].capitalize()}{'e' if not yes else 'ing'}[/] the following {_word}:\n    {utils.summarize_list(devs, max=12).lstrip()}", emoji=False)
         render.confirm(yes if yes is not None else operation == "unarchive")  # No confirmation necessary for unarchive
-        api = api_clients.glp
+        api = _api_clients.glp
         res = api.session.request(api.devices.update_devices, [d.id for d in devs], archive=archive)
         render.display_results(res, tablefmt="action")
         update_data = [{**self.cache.inventory_by_serial[serial], "archived": archive} for serial in (d.serial for d in devs)]
@@ -1416,7 +1496,7 @@ class CLICommon:
             render.display_results(data=data, title=title, caption=caption)
 
     class SiteMoves:
-        def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject],):
+        def __init__(self, *, site_mv_reqs: List[BatchRequest], site_mv_msgs: Dict[str, list], site_rm_reqs: List[BatchRequest], site_rm_msgs: Dict[str, list], cache_devs: List[CentralObject]):
             self.cache_devs = cache_devs
             self.move: MoveData = MoveData(mv_reqs=site_mv_reqs, mv_msgs=site_mv_msgs, action_word="moved", move_type="site", cache_devs=cache_devs)
             self.remove: MoveData = MoveData(mv_reqs=site_rm_reqs, mv_msgs=site_rm_msgs, action_word="removed", move_type="site", cache_devs=cache_devs)
@@ -1453,7 +1533,7 @@ class CLICommon:
                 group_mv_msgs: Dict[str, list],
                 group_mv_cx_retain_reqs: List[BatchRequest],
                 group_mv_cx_retain_msgs: Dict[str, list],
-                cache_devs: List[CentralObject],
+                cache_devs: List[CacheDevice],
             ):
             self.preprovision: MoveData = MoveData(mv_reqs=pregroup_mv_reqs, mv_msgs=pregroup_mv_msgs, action_word="pre-provisioned", move_type="group", cache_devs=cache_devs)
             self.move: MoveData = MoveData(mv_reqs=group_mv_reqs, mv_msgs=group_mv_msgs, action_word="moved", move_type="group", cache_devs=cache_devs)
@@ -1482,63 +1562,93 @@ class CLICommon:
 
             return out
 
-    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: dict, cx_retain_config: bool = False, cx_retain_force: bool = None) -> GroupMoves:
+    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]], cx_retain_config: bool = False, cx_retain_force: bool = None, no_pre_prov: bool = False, no_refresh: bool = False) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
         req_dict, msg_dict = {}, {}
+        cache_group_names = self.cache.group_names
+
+        ignoring_not_connected = 0
+        ignoring_already_in_group = 0
+        ignoring_group_cx_retain = 0
+        ignoring_group_not_exists = 0
+
         group_mv_cx_retain_reqs, group_mv_cx_retain_msgs = {}, {}
-        for cache_dev, mv_data in zip(cache_devs, import_data):
-            _skip = False
-            has_connected = True if cache_dev.db.name == "devices" else False
-            for idx in range(0, 2):
-                to_group = mv_data.get("group")
-                if cx_retain_force is not None:
-                    retain_config = cx_retain_force if cache_dev.type == "cx" else False
-                else:
-                    retain_config = mv_data.get("retain_config") or cx_retain_config  # key to use the 'or' here in case retain_config is in data but set to null or ''
-                    _retain_config = ToBool(retain_config)
-                    retain_config = _retain_config.value
-                    if not _retain_config.ok:
-                        self.exit(f'{cache_dev.summary_text} has an invalid value ({retain_config}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
-                    if retain_config and cache_dev.type != "cx":
-                        self.exit(f'{cache_dev.summary_text} has [cyan]retain_config[/] = {retain_config}.  [cyan]retain_config[/] is only valid for [cyan]cx[/] not [red]{cache_dev.type}[/].  Aborting...')
-                if to_group:
-                    if to_group not in self.cache.group_names:
-                        to_group = self.cache.get_group_identifier(to_group)  # will force cache update
-                        to_group = to_group.name
 
-                    if to_group == cache_dev.get("group"):
-                        if idx == 0:
-                            cache_dev = self._check_update_dev_db(cache_dev)
-                        else:
-                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {cache_dev.summary_text}. [dim italic](already in group [magenta]{to_group}[/magenta])[reset].", emoji=False)
-                            _skip = True
+        import_by_serial = {d["serial"]: d for d in import_data}
+        cache_by_serial = {c.serial: c for c in cache_devs if c is not None}
 
-                    # Determine if device is in inventory only determines use of pre-provision group vs move to group
-                    if not has_connected:
-                        req_dict = pregroup_mv_reqs
-                        msg_dict = pregroup_mv_msgs
-                        if retain_config:
-                            _skip = True
-                            if idx == 0:
-                                render.econsole.print(f'{emoji.warn} {cache_dev.summary_text} Group assignment is being ignored.', emoji=False)  # \u26a0 is :warning: need clean_console to prevent MAC from being evaluated as :cd: emoji
-                                render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
-                                render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central, with retain-config option.')
-                    else:
-                        req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
-                        msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+        for serial, mv_data in import_by_serial.items():
+            cache_dev = cache_by_serial.get(serial)
+            if cache_dev is None:  # device was not found in cache.  Skipped (msg handled in calling function)
+                continue
 
-            if not _skip:
-                req_dict = utils.update_dict(req_dict, key=to_group, value=cache_dev.serial)
-                msg_dict = utils.update_dict(msg_dict, key=to_group, value=cache_dev.rich_help_text)
+            to_group = mv_data.get("group")
+            if not to_group:
+                continue
+
+            if to_group not in cache_group_names:
+                to_group = self.cache.get_group_identifier(to_group, exit_on_fail=False, retry=not no_refresh)  # will force cache update, and exit if not found in cache
+                if not to_group:
+                    ignoring_group_not_exists += 1
+                    continue
+                to_group = to_group.name
+
+            if to_group == cache_dev.get("group"):
+                ignoring_already_in_group += 1
+                continue
+
+            # Determine if device is in inventory only determines use of pre-provision group vs move to group
+            has_connected = True if cache_dev.is_dev else False
+            retain_config_from_import = None
+            if mv_data.get("retain_config"):
+                _retain_config = ToBool(mv_data["retain_config"])  # This may be handled in common._get_import_file now (ToBool)
+                retain_config_from_import = _retain_config.value
+                if not _retain_config.ok:
+                    self.exit(f'{cache_dev.summary_text} has an invalid value ({mv_data["retain_config"]}) for "retain_config".  Value should be "true" or "false" (or blank which is evaluated as false).  Aborting...')
+
+            _retain_config = cx_retain_force
+            if _retain_config is not None:
+                _retain_config = retain_config_from_import if retain_config_from_import is not None else cx_retain_config
+            retain_config = _retain_config if cache_dev.type == "cx" else False
+
+            if has_connected:
+                req_dict = group_mv_reqs if not retain_config else group_mv_cx_retain_reqs
+                msg_dict = group_mv_msgs if not retain_config else group_mv_cx_retain_msgs
+            else:
+                if no_pre_prov:
+                    ignoring_not_connected += 1
+                    continue
+                if retain_config:
+                    ignoring_group_cx_retain += 1
+                    continue
+
+                req_dict = pregroup_mv_reqs
+                msg_dict = pregroup_mv_msgs
+
+            req_dict = utils.update_dict(req_dict, key=to_group, value=cache_dev.serial)
+            msg_dict = utils.update_dict(msg_dict, key=to_group, value=cache_dev.rich_help_text)
+
+        if ignoring_not_connected:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {ignoring_not_connected} devices. [dim italic][cyan]No pre-provision group[/] option specified.  Device must connect to Central before it can be moved to group[/]", emoji=False)
+        if ignoring_already_in_group:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {ignoring_already_in_group} devices. [dim italic]Already in desired group[/]", emoji=False)
+        if ignoring_group_not_exists:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {ignoring_group_not_exists} devices. [dim italic]Group does not exist[/]", emoji=False)
+        if ignoring_group_not_exists:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {ignoring_group_not_exists} devices. [dim italic]Group does not exist[/]", emoji=False)
+        if ignoring_group_cx_retain:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] group move for {ignoring_group_cx_retain} devices. [dim italic]Due to [cyan]retain_config[/] option for [cyan]CX[/][/]")
+            render.econsole.print(f'  [italic]Device has not connected to Aruba Central, it must be "pre-provisioned to group [magenta]{to_group}[/]".  [cyan]retain_config[/] is only valid on group move not group pre-provision.[/]')
+            render.econsole.print('  [italic]To onboard and keep the config, allow it to onboard to the default unprovisioned group (default behavior without pre-provision), then move it once it appears in Central,\n  with retain-config option.')
 
         mv_reqs, pre_reqs, mv_retain_reqs = [], [], []
-        if pregroup_mv_reqs:
+        if pregroup_mv_reqs:  # TODO need warning for pre-provision for CX if not retain_config
             pre_reqs = [BatchRequest(api.configuration.preprovision_device_to_group, group=k, serials=v) for k, v in pregroup_mv_reqs.items()]
         if group_mv_reqs:
-            mv_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=v) for k, v in group_mv_reqs.items()]
+            mv_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=chunk) for k, v in group_mv_reqs.items() for chunk in utils.chunker(v, 50)]
         if group_mv_cx_retain_reqs:
-            mv_retain_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=v, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items()]
+            mv_retain_reqs = [BatchRequest(api.configuration.move_devices_to_group, group=k, serials=chunk, cx_retain_config=True) for k, v in group_mv_cx_retain_reqs.items() for chunk in utils.chunker(v, 50)]
 
         return self.GroupMoves(
             pregroup_mv_reqs=pre_reqs,
@@ -1547,41 +1657,67 @@ class CLICommon:
             group_mv_msgs=group_mv_msgs,
             group_mv_cx_retain_reqs=mv_retain_reqs,
             group_mv_cx_retain_msgs=group_mv_cx_retain_msgs,
-            cache_devs=cache_devs
+            cache_devs=cache_devs,
         )
 
-    def _check_site(self, cache_devs: list[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]]) -> SiteMoves:
+    def _check_site(self, cache_devs: list[CacheDevice | CacheInvDevice | MigrateDevice], import_data: list[dict[str, Any]], no_refresh: bool = False) -> SiteMoves:
         site_rm_reqs, site_rm_msgs = {}, {}
         site_mv_reqs, site_mv_msgs = {}, {}
-        for cache_dev, mv_data in zip(cache_devs, import_data):
-            has_connected = True if cache_dev.db.name == "devices" else False
-            for idx in range(0, 2):
-                to_site = mv_data.get("site")
-                now_site = cache_dev.get("site")
-                if not to_site:
-                    continue
-                else:
-                    to_site = self.cache.get_site_identifier(to_site)
-                    if now_site and now_site == to_site.name:
-                        if idx == 0:
-                            cache_dev = self._check_update_dev_db(cache_dev)
-                        elif now_site == to_site.name:
-                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](already in site [magenta]{to_site.name}[/magenta])[reset]", emoji=False)
-                    elif not has_connected:
-                        if idx == 0:
-                            cache_dev = self._check_update_dev_db(cache_dev)
-                        else:
-                            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {cache_dev.summary_text}. [dim italic](Device must connect to Central before site can be assigned)[reset]", emoji=False)
-                    elif idx != 0:
-                        site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{to_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
-                        site_mv_msgs = utils.update_dict(site_mv_msgs, key=to_site.name, value=cache_dev.rich_help_text)
+        ignoring_already_in_site = 0
+        ignoring_not_connected = 0
+        ignoring_site_not_exists = 0
+        not_exist_sites = []
 
-                    if now_site:
-                        now_site = self.cache.get_site_identifier(now_site)
-                        if idx != 0 and now_site.name != to_site.name:  # need to remove from current site
-                            render.econsole.print(f'{cache_dev.summary_text} will be removed from site [red]{now_site.name}[/] to facilitate move to site [bright_green]{to_site.name}[/]', emoji=False)
-                            site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
-                            site_rm_msgs = utils.update_dict(site_rm_msgs, key=now_site.name, value=cache_dev.rich_help_text)
+        site_names = sorted(list(set(d["site"] for d in import_data if "site" in d and d["site"])))
+        cache_sites = site_names and self.cache.bulk_site_cache_lookup(site_names=site_names, refresh_on_fail=not no_refresh)
+        cache_sites_by_name = {s.name: s for s in cache_sites if s is not None}
+        import_by_serial = {d["serial"]: d for d in import_data}
+        cache_by_serial = {c.serial: c for c in cache_devs if c is not None}
+
+        for serial, mv_data in import_by_serial.items():
+            cache_dev = cache_by_serial.get(serial)
+            if cache_dev is None:  # device was skipped not found in device cache
+                continue
+
+            has_connected = True if cache_dev.is_dev else False
+            to_site = mv_data.get("site")
+            if not to_site:
+                continue
+
+            if not has_connected:
+                ignoring_not_connected += 1
+                continue
+
+            now_site = cache_dev.site
+            cache_site = cache_sites_by_name.get(to_site)
+
+            if not cache_site:
+                ignoring_site_not_exists += 1
+                if to_site not in not_exist_sites:
+                    not_exist_sites += [to_site]
+                continue
+
+            if now_site and now_site == cache_site.name:
+                ignoring_already_in_site += 1
+                continue
+
+            site_mv_reqs = utils.update_dict(site_mv_reqs, key=f'{cache_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+            site_mv_msgs = utils.update_dict(site_mv_msgs, key=cache_site.name, value=cache_dev.rich_help_text)
+
+            if now_site and now_site:
+                cache_now_site = cache_sites_by_name.get(now_site, self.cache.get_site_identifier(now_site))
+                if cache_now_site.name != cache_site.name:  # need to remove from current site
+                    # render.econsole.print(f'{cache_dev.summary_text} will be removed from site [red]{cache_now_site.name}[/] to facilitate move to site [bright_green]{cache_site.name}[/]', emoji=False)
+                    site_rm_reqs = utils.update_dict(site_rm_reqs, key=f'{cache_now_site.id}~|~{cache_dev.generic_type}', value=cache_dev.serial)
+                    site_rm_msgs = utils.update_dict(site_rm_msgs, key=cache_now_site.name, value=cache_dev.summary_text)
+
+        if ignoring_not_connected:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {ignoring_not_connected} devices. [dim italic]Device must connect to Central before site can be assigned[/]", emoji=False)
+        if ignoring_already_in_site:
+            render.econsole.print(f"{emoji.info} [dark_orange3]Ignoring[/] site move for {ignoring_already_in_site} devices. [dim italic]Already in desired site[/]", emoji=False)
+        if ignoring_site_not_exists:
+            render.econsole.print(f"{emoji.warn} [dark_orange3]Ignoring[/] site move for {ignoring_site_not_exists} devices. [dim italic]Site does not exist[/]", emoji=False)
+            render.econsole.print(f"{emoji.warn} The following [medium_spring_blue]sites[/] do [red]not exist[/]. {utils.color(not_exist_sites, color_str='cyan')}", emoji=False)
 
         rm_reqs = []
         if site_rm_reqs:
@@ -1600,7 +1736,7 @@ class CLICommon:
             site_mv_reqs=mv_reqs,
             site_mv_msgs=site_mv_msgs,
             site_rm_reqs=rm_reqs,
-            site_rm_msgs=site_rm_msgs
+            site_rm_msgs=site_rm_msgs,
         )
 
     def _check_label(self, cache_devs: list[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]],) -> MoveData:
@@ -1641,22 +1777,36 @@ class CLICommon:
             ]
         )
         moves_by_type = {
-            "site": {self.cache.SiteDB.search(self.cache.Q.id == site)[0]["name"]: serials for site, serials in serials_by_site.items()},
+            "site": {self.cache.get_site_identifier(site).name: serials for site, serials in serials_by_site.items()},
             "group": serials_by_group or {}
         }
-        cache_by_serial = {k: self.cache.devices_by_serial.get(k, self.cache.inventory_by_serial[k]) for k in [*self.cache.inventory_by_serial, *self.cache.devices_by_serial] if k in serials}
+        updates_by_serial = {s: {} for s in serials}
         for r, (move_type, name, serials) in zip(mv_resp, [(move_type, name, serials) for move_type, v in moves_by_type.items() for name, serials in v.items()]):
             if r.ok:
                 if move_type == "site":
-                    site_success_serials = [s["device_id"] for s in r.raw["success"] if utils.is_serial(s["device_id"])]  # if .... is_serial stips out stack_id, success will have all member serials + the stack_id
-                    cache_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], "site": name} for serial in serials if serial in site_success_serials}}
+                    for s in serials:
+                        updates_by_serial[s]["site"] = name
                 if move_type == "group":  # All or none here as far as the response.
-                    cache_by_serial = {**cache_by_serial, **{serial: {**cache_by_serial[serial], "group": name} for serial in serials}}
+                    for s in serials:
+                        updates_by_serial[s]["group"] = name
 
         api.session.request(
             self.cache.update_dev_db,
-            data=list(cache_by_serial.values())
+            data=[{"serial": s, **updates_by_serial[s]} for s in updates_by_serial if updates_by_serial[s]],
+            action=DBAction.UPDATE
         )
+
+    @staticmethod
+    def _create_move_retry_file(retry_data: list[dict[str, Any]], import_file: Path = None) -> Path:
+        timestamp = pendulum.now().format("MMDDYY-HHmmss")
+        if import_file:
+            retry_file = import_file.parent / f"{import_file.stem.removesuffix('-move-retry')}-move-retry.json"
+        else:
+            retry_file = config.outdir / f"move-retry-{timestamp}.json"
+        if import_file == retry_file:
+            retry_file = retry_file.parent / f"{retry_file.stem.split('move-')[0]}move-retry-{timestamp}.json"
+        retry_file.write_text(json.dumps(retry_data, indent=4))
+        return retry_file
 
     def batch_move_devices(
             self,
@@ -1669,6 +1819,10 @@ class CLICommon:
             do_label: bool = False,
             cx_retain_config: bool = False,
             cx_retain_force: bool = None,
+            no_pre_prov: bool = False,
+            refresh: bool = False,
+            refresh_on_fail: bool = True,
+            api_clients: APIClients = None,
         ):
         """Batch move devices based on contents of import file
 
@@ -1690,53 +1844,51 @@ class CLICommon:
         Raises:
             typer.Exit: Exits with error code if none of name/ip/mac are provided for each device.
         """
+        if api_clients is not None:
+            global config
+            config = api_clients.config
+            self.cache.set_config(api_clients.config)
+        else:
+            api_clients = _api_clients
+
         if all([arg is False for arg in [do_site, do_label, do_group]]):
             do_site = do_label = do_group = True
 
         if not any([data, import_file]):
             self.exit("import_file or data is required")
 
-        devices = data or self._get_import_file(import_file, import_type="devices")
+        with render.Spinner("Gathering move data from import", spinner="arrow3"):
+            devices = data or self._get_import_file(import_file, import_type="devices", required_fields=["serial"])
 
         try:
-            dev_idens = [d.get("serial", d.get("mac", d.get("name", "INVALID"))) for d in devices]
-        except AttributeError as e:
-            self.exit(f"Exception gathering devices from [cyan]{import_file.name}[/]\n[red]AttributeError:[/] {e.args[0]}\nUse [cyan]cencli batch move --example[/] for example import format.)")
+            serial_numbers = [d["serial"] for d in devices]
+        except (AttributeError, KeyError, TypeError) as e:
+            self.exit(f"{repr(e)} parsing provided move data.\nUse [cyan]cencli batch move --example[/] for example import format.")
 
-        if "INVALID" in dev_idens:
-            self.exit(f'missing required field for {dev_idens.index("INVALID") + 1} device in import file.  At least one of ({utils.color(["serial", "mac", "name"])}) is required.')
+        self.check_for_dups(serial_numbers)
 
-        if len(set(dev_idens)) < len(dev_idens):  # TODO make seperate function and leverage in all batch_xxx_devices
-            dup_count = len(dev_idens) - len(set(dev_idens))
-            dups = set([iden for iden in dev_idens if dev_idens.count(iden) > 1])
-            self.exit(f"Duplicates exist in import data.  Number of duplicate entries: [cyan]{dup_count}[/]. Duplicates: {utils.color(dups)}")
-
-        # swack option, as group move will move all associated devices when device is part of a swarm or stack
-        cache_devs: list[CacheDevice | CacheInvDevice | None] = [self.cache.get_dev_identifier(d, include_inventory=True, swack=True, silent=True, exit_on_fail=False) for d in dev_idens]
-        not_found_devs: List[str] = [s for s, c in zip(dev_idens, cache_devs) if c is None]
-        cache_devs: list[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
-
-        if not_found_devs:
-            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
-            render.econsole.print(f"\n[dark_orange3]\u26a0[/]  The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
-            render.econsole.print("[dim italic]They will be skipped[/]\n")
-            if not cache_devs:
+        query_res = self.query_cache_for_moninv_devs(serial_numbers, refresh=refresh, refresh_on_fail=refresh_on_fail)
+        if query_res.not_found_serials:
+            render.econsole.print(query_res.error_not_found_all)
+            if not query_res.found_devs:
                 self.exit("No devices found")
 
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], []
         if do_site:  # TODO switch stack with multiple switches confirmation will show "1 device will be moved...", no doubt the same for swarms.  Better if confirm msg indicated the actual # of devices impacted by the move in these cases
-            site_ops = self._check_site(cache_devs=cache_devs, import_data=devices)
-            batch_reqs += site_ops.move.reqs
-            site_rm_reqs += site_ops.remove.reqs
-            confirm_msgs += [str(site_ops)]
+            with render.Spinner(f"Fetching site info from cache for {len(query_res.found_devs)} devices in [cyan]{config.workspace}[/] workspace"):
+                site_ops = self._check_site(cache_devs=query_res.found_devs, import_data=devices, no_refresh=not refresh_on_fail)
+                batch_reqs += site_ops.move.reqs
+                site_rm_reqs += site_ops.remove.reqs
+                confirm_msgs += [str(site_ops)]
         serials_by_site = None if not do_site else site_ops.serials_by_site_id
         if do_group:
-            group_ops = self._check_group(cache_devs=cache_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force)
-            batch_reqs += group_ops.reqs
-            confirm_msgs += [str(group_ops)]
+            with render.Spinner(f"Fetching group info from cache for {len(query_res.found_devs)} devices in [cyan]{config.workspace}[/] workspace", spinner="dots2"):
+                group_ops = self._check_group(cache_devs=query_res.found_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force, no_pre_prov=no_pre_prov, no_refresh=not refresh_on_fail)
+                batch_reqs += group_ops.reqs
+                confirm_msgs += [str(group_ops)]
         serials_by_group = None if not do_group else group_ops.serials_by_group
         if do_label:
-            label_ops = self._check_label(cache_devs=cache_devs, import_data=devices)
+            label_ops = self._check_label(cache_devs=query_res.found_devs, import_data=devices)
             batch_reqs += label_ops.reqs
             confirm_msgs += [str(label_ops)]
 
@@ -1752,7 +1904,7 @@ class CLICommon:
         if site_rm_reqs:
             site_rm_res = api.session.batch_request(site_rm_reqs)
             if not all([r.ok for r in site_rm_res]):
-                render.econsole.print("[bright_red]:warning:[/]  Some site remove requests failed, Aborting...")
+                render.econsole.print(f"{emoji.warn} Some site remove requests failed, Aborting...")
                 return site_rm_res
         batch_res = api.session.batch_request(batch_reqs)
         # FIXME when move stack only the serial for the conductor is in serials_by_site which mucks the logic in device_move_cache_update.  Need to get all switches with a matching stack_id.  Probably a get_swack_members() method in Cache
@@ -1789,7 +1941,7 @@ class CLICommon:
             render.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]group{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
         groups: List[CacheGroup] = [g for g in cache_by_name.values() if g is not None]
-        reqs = [BatchRequest(api.configuration.delete_group, g.name) for g in groups]
+        reqs = [BatchRequest(api.configuration.delete_group, g["name"]) for g in groups]
 
         if not reqs:
             self.exit("No groups remain to process after validation.")
@@ -1802,7 +1954,7 @@ class CLICommon:
             pre = sep = '\n'
             pad = 4
 
-        group_msg = f'{pre}{utils.color([g.name for g in groups], "cyan", pad_len=pad, sep=sep)}'
+        group_msg = f'{pre}{utils.color([g["name"] for g in groups], "cyan", pad_len=pad, sep=sep)}'
         _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'group ' if len(groups) == 1 else f'{len(reqs)} groups:'}{group_msg}"
         render.econsole.print(_msg)
 
@@ -1812,9 +1964,9 @@ class CLICommon:
         render.confirm(yes)
         resp = api.session.batch_request(reqs)
         render.display_results(resp, tablefmt="action")
-        doc_ids = [g.doc_id for g, r in zip(groups, resp) if r.ok]
-        if doc_ids:
-            api.session.request(self.cache.update_group_db, data=doc_ids, remove=True)
+        cache_data = [{"name": g["name"]} for g, r in zip(groups, resp) if r.ok]
+        if cache_data:
+            api.session.request(self.cache.update_group_db, data=cache_data, action=DBAction.DELETE)
 
     def batch_delete_labels(
             self,
@@ -1839,7 +1991,7 @@ class CLICommon:
             render.econsole.print(f"[dark_orange3]:warning:[/]  [red]Skipping[/] {utils.color(not_in_central, 'red')} [italic]label{'s do' if len(not_in_central) > 1 else ' does'} not exist in Central.[/]")
 
         labels: List[CacheLabel] = [label for label in cache_by_name.values() if label is not None]
-        reqs = [BatchRequest(api.central.delete_label, g.id) for g in labels]
+        reqs = [BatchRequest(api.central.delete_label, label.id) for label in labels]
 
         if len(labels) == 1:
             pre = ''
@@ -1849,7 +2001,7 @@ class CLICommon:
             pre = sep = '\n'
             pad = 4
 
-        label_msg = f'{pre}{utils.color([g.name for g in labels], "cyan", pad_len=pad, sep=sep)}'
+        label_msg = f'{pre}{utils.color([label.name for label in labels], "cyan", pad_len=pad, sep=sep)}'
         _msg = f"[bright_red]Delet{'e' if not yes else 'ing'}[/] {'label ' if len(labels) == 1 else f'{len(reqs)} labels:'}{label_msg}"
         render.econsole.print(_msg)
 
@@ -1857,11 +2009,9 @@ class CLICommon:
             render.econsole.print(f"\n[italic dark_olive_green2]{len(reqs)} API calls will be performed[/]")
 
         render.confirm(yes)
-        resp = api.session.batch_request(reqs)
-        render.display_results(resp, tablefmt="action")
-        doc_ids = [g.doc_id for g, r in zip(labels, resp) if r.ok]
-        if doc_ids:
-            api.session.request(self.cache.update_label_db, data=doc_ids, remove=True)
+        batch_resp = api.session.batch_request(reqs)
+        api.session.request(self.cache.update_label_db, data=[dict(label) for label, resp in zip(labels, batch_resp) if resp.ok], action=DBAction.DELETE)
+        render.display_results(batch_resp, tablefmt="action")
 
     def show_archive_results(self, arch_resp: List[Response]) -> None:
         def summarize_arch_res(arch_resp: List[Response]) -> None:
@@ -1889,23 +2039,33 @@ class CLICommon:
         else:
             summarize_arch_res(arch_resp[0:2])
 
-    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice | CacheInvMonDevice]) -> Tuple[List[BatchRequest], List[BatchRequest]]:
+    def _build_mon_del_reqs(self, cache_devs: List[CacheDevice | CacheInvMonDevice]) -> Tuple[BuiltRequests, BuiltRequests]:
         mon_del_reqs, delayed_mon_del_reqs, _stack_ids = [], [], []
+        mon_del_items, delayed_mon_del_items = [], []
         for dev in set(cache_devs):
             if dev.generic_type == "switch" and dev.swack_id is not None:
                 dev_type = "stack"
                 if dev.swack_id in _stack_ids:
                     continue
                 else:
+                    items = tuple([d.serial for d in cache_devs if d.swack_id == dev.swack_id])
                     _stack_ids += [dev.swack_id]
             else:
                 dev_type = dev.generic_type if dev.generic_type != "gw" else "gateway"
+                items = dev.serial
 
             func = getattr(api.monitoring, f"delete_{dev_type}")
-            update_list = mon_del_reqs if dev.status.lower() == "down" else delayed_mon_del_reqs
-            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id)]
+            if dev.status.lower() == "down":
+                update_list = mon_del_reqs
+                items_list = mon_del_items
+            else:
+                update_list = delayed_mon_del_reqs
+                items_list = delayed_mon_del_items
 
-        return mon_del_reqs, delayed_mon_del_reqs
+            update_list += [BatchRequest(func, dev.serial if dev_type != "stack" else dev.swack_id)]
+            items_list += [items]
+
+        return BuiltRequests(mon_del_reqs, items=mon_del_items), BuiltRequests(delayed_mon_del_reqs, items=delayed_mon_del_items)
 
     def _process_delayed_mon_deletes(self, reqs: List[BatchRequest]) -> Tuple[List[Response], List[int]]:
         del_resp: List[Response] = []
@@ -1936,80 +2096,128 @@ class CLICommon:
 
         return del_resp
 
-    def _get_inv_doc_ids(self, batch_resp: List[Response]) -> List[int] | None:
+    def _get_inv_del_serials(self, batch_resp: List[Response]) -> List[int] | None:
         if not batch_resp[1].url.name == "unarchive":
             return
 
         if isinstance(batch_resp[1].raw, dict) and "succeeded_devices" in batch_resp[1].raw:
             try:  # Normal circumstances serial should be in inventory, but for test runs the unarchive response may be a different mock response with different serial numbers not in inventory.
                 cache_inv_to_del = [inv_dev for inv_dev in [self.cache.inventory_by_serial.get(d["serial_number"]) for d in batch_resp[1].raw["succeeded_devices"]] if inv_dev is not None]
-                inv_doc_ids = [dev.doc_id for dev in cache_inv_to_del] or None
+                inv_serials = [dev["serial"] for dev in cache_inv_to_del] or None
             except Exception as e:
                 log.exception(f"Exception while attempting to extract unarchive results for Inv Cache Update.\n{e}")
                 return
-            return inv_doc_ids
+            return inv_serials
 
-    def _get_mon_doc_ids(self, del_resp: List[Response]) -> List[int]:
-        doc_ids = []
-        try:
-            doc_ids = [self.cache.devices_by_serial[r.url.name].doc_id for r in del_resp if r.ok and "switch_stacks" not in r.url.parts]
-            stack_ids = [r.url.name for r in del_resp if r.ok and "switch_stacks" in r.url.parts]
-            for stack_id in stack_ids:
-                doc_ids += [d.doc_id for d in self.cache.DevDB.search(self.cache.Q.swack_id == stack_id) if d is not None]
-        except Exception as e:  # pragma: no cover
-            log.error(f"Error: {e.__class__.__name__} occured fetching doc_ids for local cache update after delete.  Use [cyan]cencli show all[/] to ensure device cache is current.", caption=True, log=True)
+    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, migrate: bool = False, no_refresh: bool = False, api_clients: APIClients = None, do_retry: bool = False) -> List[Response]:
+        if api_clients is not None:
+            global config
+            config = api_clients.config
+            self.cache.set_config(api_clients.config)
+        else:
+            api_clients = _api_clients
 
-        return doc_ids
-
-    def batch_delete_devices(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, migrate: bool = False) -> List[Response]:
         if config.glp.ok and not any([ui_only, cop_inv_only]):
-            return self.batch_delete_devices_glp(data, yes=yes, migrate=migrate)  # Note glp delete flow only deletes from GLP inventory not ui
-        return self.batch_delete_devices_classic(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force)
+            return self.batch_delete_devices_glp(data, yes=yes, migrate=migrate, api_clients=api_clients, no_refresh=no_refresh, do_retry=do_retry)  # Note glp delete flow only deletes from GLP inventory not ui
+        return self.batch_delete_devices_classic(data, ui_only=ui_only, cop_inv_only=cop_inv_only, yes=yes, force=force, no_refresh=no_refresh, api_clients=api_clients, do_retry=do_retry)
 
-    def batch_delete_devices_glp(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, migrate: bool = False) -> List[Response]:
+    def batch_delete_devices_glp(self, data: List[Dict[str, Any]] | Dict[str, Any], *, yes: bool = False, migrate: bool = False, no_refresh: bool = False, api_clients: APIClients = None, do_retry: bool = False) -> List[Response]:  # TODO if data includes glp id we don't need to do the lookup for the inventory delete.
+        if api_clients is not None:
+            global config
+            config = api_clients.config
+            self.cache.set_config(api_clients.config)
+        else:
+            api_clients = _api_clients
+
         api = api_clients.glp
         all_serials = [d["serial"] for d in data]  # all_serials used to trigger more efficient cache update, where update requests specific serial numbers.
-        devs = [self.cache.get_combined_inv_dev_identifier(d["serial"], serial_numbers=tuple(all_serials), retry_dev=False, exit_on_fail=False) for d in data]  # retry_dev false means if the cache is outdated ui deletes may not occur for devs not in mon cache
-        if None in devs:
-            render.econsole.print(f"[dark_orange3]:warning:[/]  Skipping {devs.count(None)} devices not found in [green]GreenLake[/]")
-            devs = [d for d in devs if d is not None]
-            if not devs:
-                if migrate:
-                    return [Response(output=f"No devices provided were found in [cyan]{config.workspace}[/] workspace [green]GreenLake[/] inventory.  No deletes to process.")]
-                else:
-                    self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
-        word = "device" if len(devs) == 1 else f"{len(devs)} devices"
-        render.econsole.print(f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory: \n    {utils.summarize_list(devs, max=15).lstrip()}", emoji=False)
-        render.econsole.print(
-            "\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
-            "\nUse [cyan]cencli batch archive devices ...[/] to archive devices, that's the closest thing possible to really deleting them."
-            "\n[italic]Archive also removes the association with Aruba Central, and clears any subscription assignments."
-        )
+        dev_ids = [d["id"] for d in data if d.get("id")]
+        devs = []
+        glp_resp = []
+        word = f"device{'s' if len(all_serials) > 1 else ''}"
+        if migrate and len(dev_ids) == len(all_serials):
+            render.econsole.print(f"{len(dev_ids)} required data provided (device ids).  No need for lookup")
+        else:
+            start = time.perf_counter()
+            with render.Spinner(f"Getting Inventory/Monitoring details for {len(all_serials)} devices"):
+                devs = self.cache.get_inv_mon_devs_from_cache(serial_numbers=all_serials, refresh_on_fail=not no_refresh)
+                duration = time.perf_counter() - start
+                log.debug(f"{round(duration, 2)} ellapsed to gather details for {len(all_serials)} devices.  {round(duration / len(all_serials), 2)} / device.\n")
+            if None in devs:
+                render.econsole.print(f"{emoji.warn} Skipping {devs.count(None)} devices not found in [green]GreenLake[/]")
+                devs = [d for d in devs if d is not None]
+                if not devs:
+                    if migrate:
+                        return [Response(output=f"No devices provided were found in [cyan]{config.workspace}[/] workspace [green]GreenLake[/] inventory.  No deletes to process.")]
+                    else:
+                        self.exit("No devices provided were found in [green]GreenLake[/] inventory.  Exiting")
 
+            dev_ids = [d.id for d in devs if d.is_inv]
+
+        if not dev_ids:
+            conf_msg = [
+                f"{emoji.warn} [green]GreenLake[/] Delete is being skipped.  Devices not found in inventory.\n",
+                f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from Monitoring UI:"
+            ]
+        else:
+            word = f"{len(dev_ids)} {word}" if len(dev_ids) > 1 else word.rstrip("s")
+            conf_msg = [
+                f"{emoji.warn} Delet{'e' if not yes else 'ing'} the following {word} from [green]GreenLake[/] inventory:"
+            ]
+        conf_msg += [f"    {utils.summarize_list(devs, max=15).lstrip()}"]
+        render.econsole.print(*conf_msg, sep="\n", emoji=False)
+
+        if not config.is_cop and dev_ids:
+            render.econsole.print(
+                "\n[blue]:information:[/]  [italic]Devices are not actually deleted, they are dis-associated with Aruba Central, and all subscriptions are removed.[/]"
+                "\nUse [cyan]cencli batch archive devices ...[/] to archive devices, that's the closest thing possible to really deleting them."
+                "\n[italic]Archive also removes the association with Aruba Central, and clears any subscription assignments."
+            )
         render.confirm(yes)
-        glp_resp: list[Response] = api.session.request(api.devices.remove_devices, device_ids=[d.id for d in devs])
-        success_devs = [dev for r in glp_resp for dev in r.async_success_devices]
-        if success_devs:
-            inv_cache_devs = [self.cache.get_inv_identifier(d.id) for d in devs if d.id in success_devs]
-            cache_update_data = [{**dict(dev), "services": None, "subscription_key": None, "subscription_expires": None, "assigned": False} for dev in inv_cache_devs]
-            asyncio.run(self.cache.update_inv_db(cache_update_data))
 
-        mon_resp, mon_doc_ids = [], []
-        cache_mon_devs = [d for d in devs if d.status is not None]
-        if cache_mon_devs:
+        if dev_ids:
+            glp_resp: list[Response] = api.session.request(api.devices.remove_devices, device_ids=dev_ids)
+            success_devs = [dev for r in glp_resp for dev in r.async_success_devices if r.ok]
+            if success_devs:
+                with render.Spinner(f"{emoji.cache} Preparing data for Inventory Cache update", spinner="runner"):
+                    inv_cache_devs = self.cache.bulk_inv_cache_lookup(glp_ids=success_devs, refresh_on_fail=False)
+                    cache_update_data = [{**dict(dev), "subscription": None, "subscription_key": None, "subscription_expires": None, "assigned": False} for dev in inv_cache_devs if dev is not None]
+                asyncio.run(self.cache.update_inv_db(cache_update_data))  # has it's own spinner
+                # TODO need to evaluate glp_resp and log/build_retry for devices that failed to delete, filtering out failures because they didn't exist
+
+        mon_resp = []
+        if devs:
+            cache_mon_devs = [d for d in devs if d.is_dev and d.status is not None]
+            if not cache_mon_devs:
+                log.info(f"{emoji.info} [italic]None of the {len(all_serials)} devices provided were found in monitoring UI.  No monitoring UI deletes to process.[/]", caption=True)
+                return glp_resp
+
             # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-            mon_del_reqs = delayed_mon_del_reqs = []
-            mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+            mon_del_info, delayed_mon_del_info = self._build_mon_del_reqs(cache_mon_devs)
 
-            if mon_del_reqs:
-                mon_resp = api_clients.classic.session.batch_request(mon_del_reqs)
-                mon_doc_ids += self._get_mon_doc_ids(mon_resp)
-            if delayed_mon_del_reqs:
-                log.info(f"{len(delayed_mon_del_reqs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offline.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
+            up_devs = [d for d in cache_mon_devs if d.status == "Up"]
+            mon_batch_resp = []
+            show = len(cache_mon_devs) == len(up_devs) and not dev_ids
+            if mon_del_info.requests:
+                mon_batch_resp = BatchResponse(api_clients.classic.session.batch_request(mon_del_info.requests))
+                mon_resp = mon_batch_resp.responses
+                up_devs = [d for d in cache_mon_devs if d.status == "Up"]
+            if up_devs:
+                log.info(f"{len(up_devs)} remain in monitoring UI as there status is [green]Up[/].  They can not be removed from the monitoring UI until they have gone offline.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True, show=show)
+                if do_retry:
+                    retry_file = config.outdir / "batch-mon-delete-retry.csv"
+                    csv_data = utils.format_table([dict(d) for d in up_devs])
+                    csv_str = render.get_csv_string(csv_data)
+                    render.write_file(retry_file, csv_str, is_retry_file=True)
 
             # Cache Updates
-            if mon_doc_ids:
-                asyncio.run(self.cache.update_dev_db(mon_doc_ids, remove=True))
+            if mon_batch_resp and mon_batch_resp.passed:
+                try:
+                    update_data = self._extract_serials_from_built_requests_items(mon_del_info.items, mon_batch_resp.responses)
+                    if update_data:
+                        asyncio.run(self.cache.update_dev_db(update_data, action=DBAction.DELETE))
+                except Exception as e:
+                    log.exception(f"{repr(e)} during attempt to update device monitoring db in clicommon.batch_delete_devices_glp.", log=True, caption=True)
 
         return [*glp_resp, *mon_resp]
 
@@ -2039,39 +2247,42 @@ class CLICommon:
 
         return list(by_serial.values())
 
-    def batch_delete_devices_classic(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, exit_on_fail: bool = True) -> List[Response]:
+    @staticmethod
+    def _extract_serials_from_built_requests_items(items: list[str | tuple[str]], responses: list[Response]) -> list[dict[str, str]]:
+        if len(items) != len(responses):
+            log.error(f"Unable to extract serials associated with delete responses.  Mismatched list length {len(items) = }, {len(responses) = }.  Cache will not be updated to reflect deletions.", caption=True, log=True)
+            return []
+
+        out_serials = []
+        _ = [out_serials.append(i) if isinstance(i, str) else out_serials.extend(i) for i, res in zip(items, responses) if res.ok]
+        return [{"serial": s} for s in out_serials]
+
+    def batch_delete_devices_classic(self, data: List[Dict[str, Any]] | Dict[str, Any], *, ui_only: bool = False, cop_inv_only: bool = False, yes: bool = False, force: bool = False, no_refresh: bool = False, api_clients: APIClients = _api_clients, do_retry: bool = False) -> List[Response]:
         BR = BatchRequest
         confirm_msg = []
+        api = api_clients.classic
 
         try:
             serials_in = [dev["serial"] for dev in data]
         except KeyError:  # pragma: no cover
             self.exit("Missing required field: [cyan]serial[/].")
 
-        cache_devs: List[CacheDevice | CacheInvDevice | None] = []
-        # cache_devs: List[CacheInvMonDevice | None] = []
-        serial_updates: Dict[int, str] = {}
-        for idx, d in enumerate(serials_in):
-            this_dev = self.cache.get_dev_identifier(d, silent=True, include_inventory=not ui_only, exit_on_fail=False, retry=not cop_inv_only,)  # dev_type=dev_type)
-            # TODO implement this logic as it won't update dev cache once we add timestamp to cache update.  Logic will be to assume mon/dev cache is current if updated within last x hours, updated it otherwise to ensure mon deletion is not necessary.
-            # This would be for scenario where device is found in inv cache but not in dev cache.  commented cache_mon_devs/cache_inv_devs also part of this logic.
-            # For now given dev cache could be stale sticking with existing logci that will update dev cache proactively if found in inv but not dev to ensure dev is current.
-            # this_dev = self.cache.get_combined_inv_dev_identifier(d, silent=True, retry_dev=False, exit_on_fail=False,)  # retry_inv=not cop_inv_only,)  # dev_type=dev_type)
-            if this_dev is not None:
-                serial_updates[idx] = this_dev.serial
-            cache_devs += [this_dev]
-
-        # if dev_type:
-        #     dev_type = utils.listify(dev_type)
-        #     cache_devs = [c for c in cache_devs if c is not None and c.type and c.type in dev_type]
+        start = time.perf_counter()
+        with render.Spinner(f"Getting Inventory/Monitoring details for {len(serials_in)} devices"):
+            if not ui_only:
+                cache_devs = self.cache.get_inv_mon_devs_from_cache(serial_numbers=serials_in, refresh_on_fail=not no_refresh)
+            else:
+                cache_devs = self.cache.bulk_dev_cache_lookup(serial_numbers=serials_in, refresh_on_fail=not no_refresh)
+            duration = time.perf_counter() - start
+            log.debug(f"{round(duration, 2)} ellapsed to gather details for {len(serials_in)} devices.  {round(duration / len(serials_in), 2)} / device.\n")
 
         not_found_devs: List[str] = [s for s, c in zip(serials_in, cache_devs) if c is None]
         cache_found_devs: List[CacheDevice | CacheInvDevice] = [d for d in cache_devs if d is not None]
-        cache_mon_devs: List[CacheDevice] = [d for d in cache_found_devs if d.db.name == "devices"]
-        cache_inv_devs: List[CacheInvDevice] = [d for d in cache_found_devs if d.db.name == "inventory"]
-        # cache_mon_devs: List[CacheDevice] = [d.mon for d in cache_found_devs if d.mon is not None]
-        # cache_inv_devs: List[CacheInvDevice] = [d.inv for d in cache_found_devs if d.mon is None and d.inv is not None]
+        cache_mon_devs: List[CacheDevice | MigrateDevice] = [d for d in cache_found_devs if isinstance(d, (CacheDevice, MigrateDevice))]
+        cache_inv_devs: List[CacheInvDevice | MigrateDevice] = [d for d in cache_found_devs if isinstance(d, (CacheInvDevice, MigrateDevice))]
 
+        cache_devs_by_serial = {cache_dev.serial: cache_dev for cache_dev in cache_found_devs}
+        serial_updates = {idx: cache_devs_by_serial[serial].serial for idx, serial in enumerate(serials_in) if serial in cache_devs_by_serial}
         serials_in = [s.upper() if idx not in serial_updates else serial_updates[idx] for idx, s in enumerate(serials_in)]
         invalid_serials = [s for s in serials_in if not utils.is_serial(s)]
         valid_serials = [s for s in serials_in if s not in invalid_serials]
@@ -2090,10 +2301,10 @@ class CLICommon:
         ]
 
         # build reqs to remove devs from monit views.  Down devs now, Up devs delayed to allow time to disc.
-        mon_del_reqs = delayed_mon_del_reqs = []
+        mon_del_info = delayed_mon_del_info = BuiltRequests()
         if not cop_inv_only:
-            cache_mon_devs = self._verify_mon_dev_is_up(cache_mon_devs)
-            mon_del_reqs, delayed_mon_del_reqs = self._build_mon_del_reqs(cache_mon_devs)
+            # cache_mon_devs = self._verify_mon_dev_is_up(cache_mon_devs)  # This takes too long / not efficient.
+            mon_del_info, delayed_mon_del_info = self._build_mon_del_reqs(cache_mon_devs)
 
         # cop only delete devices from GreenLake inventory
         cop_del_reqs = [] if not config.is_cop or not cache_inv_devs else [
@@ -2101,22 +2312,25 @@ class CLICommon:
         ]
 
         # warn about devices that were not found
-        if (mon_del_reqs or delayed_mon_del_reqs or cop_del_reqs) and not_found_devs:
-            not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
-            render.econsole.print(f"\n{emoji.warn} The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
-            render.econsole.print("[dim italic]They will be skipped[/]\n")
+        if (mon_del_info.requests or delayed_mon_del_info.requests or cop_del_reqs) and not_found_devs:
+            if config.debug:
+                not_in_inv_msg = utils.color(not_found_devs, color_str="cyan", pad_len=4, sep="\n")
+                render.econsole.print(f"\n{emoji.warn} The following provided devices were not found in the inventory.\n{not_in_inv_msg}", emoji=False)
+                render.econsole.print("[dim italic]They will be skipped[/]\n")
+            else:
+                render.econsole.print(f"\n{emoji.warn} [dark_orange3]Skipping[/] {len(not_found_devs)} devices [italic red]not found [green]GreenLake[/] inventory.[/]")
 
         if ui_only:
-            _total_reqs = len(mon_del_reqs)
+            _total_reqs = len(mon_del_info)
         elif cop_inv_only:
             _total_reqs = len([*[req for req in arch_reqs if req.func != asyncio.sleep], *cop_del_reqs])
         else:
-            _total_reqs = len([*[req for req in arch_reqs if req.func != asyncio.sleep], *cop_del_reqs, *mon_del_reqs, *delayed_mon_del_reqs])
+            _total_reqs = len([*[req for req in arch_reqs if req.func != asyncio.sleep], *cop_del_reqs, *mon_del_info.requests, *delayed_mon_del_info.requests])
 
         if not _total_reqs:
-            if ui_only and delayed_mon_del_reqs:  # they select ui only, but devices are online
-                self.exit(f"[cyan]--ui-only[/] provided, but only applies to devices that are offline, {len(delayed_mon_del_reqs)} device{'s are' if len(delayed_mon_del_reqs) > 1 else ' is'} online.  Nothing to do. Exiting...")
-            self.exit("[italic]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
+            if ui_only and delayed_mon_del_info.requests:  # they select ui only, but devices are online
+                self.exit(f"[cyan]--ui-only[/] provided, but only applies to devices that are offline, {len(delayed_mon_del_info)} device{'s are' if len(delayed_mon_del_info) > 1 else ' is'} online.  Nothing to do. Exiting...")
+            self.exit("[italic dark_olive_green2]Everything is as it should be, nothing to do.  Exiting...[/]", code=0)
 
         cache_down_devs = [c for c in cache_mon_devs if c.status.lower() == 'down']
         confirm_devs = cache_found_devs if not ui_only else cache_down_devs
@@ -2124,16 +2338,17 @@ class CLICommon:
         confirm_msg += [f"{emoji.warn} [red]Delet{'ing' if yes else 'e'}[/] the following {sin_plural}{'' if not ui_only else ' [dim italic]monitoring UI only[/]'}:"]
         if ui_only:
             confirmation_devs = utils.summarize_list(cache_down_devs, max=40, color=None, pad=3).lstrip("\n")
-            if delayed_mon_del_reqs:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
+            if delayed_mon_del_info:  # using delayed_mon_reqs can be inaccurate re count when stacks are involved, as they could provide 4 switches, but if it's a stack that's 1 delete call.  hence the list comp below.
                 render.econsole.print(
                     f"[cyan]{len([c for c in cache_mon_devs if c.status.lower() == 'up'])}[/] of the [cyan]{len(cache_mon_devs)}[/] found devices are currently [bright_green]online[/]. [dim italic]They will be skipped.[/]\n"
                     "Devices can only be removed from UI if they are [red]offline[/]."
                 )
-                delayed_mon_del_reqs = []
-            if not mon_del_reqs:
+                delayed_mon_del_info = BuiltRequests()
+
+            if not mon_del_info:
                 self.exit("No devices found to remove from UI. [red]Exiting[/]...")
             else:
-                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len(cache_down_devs)}[/cyan] devices will be removed from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
+                confirm_msg += [confirmation_devs, f"\n[cyan][italic]{len(cache_down_devs)}[/cyan] devices will be [red]removed[/] from UI [bold]only[/].  They Will appear again once they connect to Central[/italic]."]
         else:
             confirmation_list = valid_serials if force or cop_inv_only else cache_found_devs
             confirm_msg += [utils.summarize_list(confirmation_list, max=40, color=None if not force else 'cyan').lstrip("\n")]
@@ -2144,40 +2359,61 @@ class CLICommon:
         # Perfrom initial delete actions (Any devs in inventory and any down devs in monitoring)
         render.console.print("\n".join(confirm_msg), emoji=False)
         batch_resp = []
-        mon_doc_ids = []
-        inv_doc_ids = []
+        inv_cache_del_serials = []
         render.confirm(yes)  # We abort if they don't confirm.
 
         # archive / unarchive (removes all subscriptions disassociates with Central in GLCP)
         # Also monitoring UI delete for any devices currently offline.
-        batch_resp = api.session.batch_request([*arch_reqs, *mon_del_reqs])  # mon_del_reqs will be empty list if cop_inv_only
+        batch_resp = api.session.batch_request([*arch_reqs, *mon_del_info.requests])  # mon_del_reqs will be empty list if cop_inv_only
         if arch_reqs and len(batch_resp) >= 2:
-            inv_doc_ids = self._get_inv_doc_ids(batch_resp)
+            inv_cache_del_serials = self._get_inv_del_serials(batch_resp)
             self.show_archive_results(batch_resp[:2])
             batch_resp = batch_resp[2:]
 
-        if batch_resp:  # Now represents responses associated with mon_del_reqs, will be empty if cop_inv_only
-            mon_doc_ids += self._get_mon_doc_ids(batch_resp)
-            # Any that failed with device currently online error, append to back of delayed_mon_reqs (possible if dev status in cache was stale)
-            delayed_mon_del_reqs += [req for req, resp in zip(mon_del_reqs, batch_resp) if not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007"]
+        # Gather serials associated with successful monitoring delete calls, and build retry for devices that failed due to being Up.
+        def _build_retry_reqs(batch_resp: List[Response], _mon_cache_del_serials: list = None):
+            retry_reqs, retry_items = [], []
+            _mon_cache_del_serials = _mon_cache_del_serials or []
+            if batch_resp:  # Now represents responses associated with mon_del_reqs, will be empty if cop_inv_only
+                for req, item, resp in zip(mon_del_info.requests, mon_del_info.items, batch_resp):
+                    if resp.ok or resp.status == 404:  # 404 indicates the dev was not found
+                        _mon_cache_del_serials.append({"serial": item}) if isinstance(item, str) else _mon_cache_del_serials.extend([{"serial": s} for s in item])
+                    elif not resp.ok and isinstance(resp.output, dict) and resp.output.get("error_code", "") == "0007":
+                        retry_reqs += [req]
+                        retry_items += [item]
+            return retry_reqs, retry_items, _mon_cache_del_serials
 
-        if delayed_mon_del_reqs:
-            delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_reqs)
+        retry_reqs, retry_items, mon_cache_del_serials = _build_retry_reqs(batch_resp)
+        if delayed_mon_del_info:
+            delayed_mon_resp = self._process_delayed_mon_deletes(delayed_mon_del_info.requests)
             batch_resp += delayed_mon_resp
-            mon_doc_ids += self._get_mon_doc_ids(delayed_mon_resp)
+            mon_cache_del_serials += self._extract_serials_from_built_requests_items(delayed_mon_del_info.items, delayed_mon_resp)
+        if retry_reqs:
+            retry_mon_resp = self._process_delayed_mon_deletes(retry_reqs)
+            batch_resp += retry_mon_resp
+            mon_cache_del_serials += self._extract_serials_from_built_requests_items(retry_items, retry_mon_resp)
+            _, retry_items, _ = _build_retry_reqs(retry_mon_resp)
 
         if cop_del_reqs:  # pragma: no cover  Currently do not test CoP
             batch_resp += api.session.batch_request(cop_del_reqs)
 
         # Cache Updates
-        if mon_doc_ids:
-            api.session.request(self.cache.update_dev_db, mon_doc_ids, remove=True)
-        if inv_doc_ids:
-            api.session.request(self.cache.update_inv_db, inv_doc_ids, remove=True)
+        if mon_cache_del_serials:
+            api.session.request(self.cache.update_dev_db, mon_cache_del_serials, action=DBAction.DELETE)  # mon_cache_del_serials is already [{"serial" serial}]
+        if inv_cache_del_serials:
+            api.session.request(self.cache.update_inv_db, [{"serial": s} for s in inv_cache_del_serials], action=DBAction.DELETE)
+
+        if retry_items:
+            log.warning(f"{len(retry_items)} remain in monitoring UI.  Either due to device status being [green]Up[/] or the [italic]Monitoring[/] [red]delete[/] call failed.  Rerun the command with [cyan]--ui-only[/] to remove them once they have gone offline.", caption=True)
+            if do_retry:
+                retry_file = config.outdir / "batch-mon-delete-retry.csv"
+                csv_data = [dict(cache_devs_by_serial[s]) for s in mon_del_info.items if cache_devs_by_serial[s].is_dev]
+                csv_str = render.get_csv_string(csv_data)
+                render.write_file(retry_file, csv_str)
 
         return batch_resp
 
-    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str]) -> BuiltRequests:
+    def _build_tag_reqs(self, devices: ImportDevices, tags: dict[str, str], api_clients: APIClients = _api_clients) -> BuiltRequests:
         api = api_clients.glp
         tags = tags or {}
         ret_dict = {}
@@ -2206,7 +2442,7 @@ class CLICommon:
 
         return BuiltRequests(batch_reqs, confirm_msgs=confirm_msg)
 
-    def _build_glp_sub_reqs(self, import_devs: ImportDevices, *, assigned: bool = None) -> BuiltRequests:
+    def _build_glp_sub_reqs(self, import_devs: ImportDevices, *, assigned: bool = None, api_clients: APIClients = _api_clients) -> BuiltRequests:
         glp_api = api_clients.glp
         devs_by_sub_id = import_devs.serials_by_subscription_id(assigned=assigned)
         confirm_msg = [""]
@@ -2243,9 +2479,9 @@ class CLICommon:
 
         return _data
 
-    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False, migrate: bool = False) -> list[Response]:
+    def batch_update_glp_devices(self, data: list[dict[str, Any]], *, tags: dict[str, str] = None, subscription: str = None, sub_required: bool = False, yes: bool = False, migrate: bool = False, api_clients: APIClients = _api_clients) -> list[Response]:
         _data = self._prep_glp_add_update_data(data, subscription=subscription, sub_required=sub_required)
-        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=not migrate)
+        sub_req_obj = self._build_glp_sub_reqs(_data, assigned=not migrate, api_clients=api_clients)
         confirm_msg = sub_req_obj.confirm_msgs
         sub_reqs = sub_req_obj.requests
 
@@ -2254,7 +2490,7 @@ class CLICommon:
 
         tag_reqs = []
         if tags or _data.has_tags:
-            tag_req_info = self._build_tag_reqs(_data, tags=tags)
+            tag_req_info = self._build_tag_reqs(_data, tags=tags, api_clients=api_clients)
             confirm_msg += tag_req_info.confirm_msgs
             tag_reqs = tag_req_info.requests
 
@@ -2267,8 +2503,11 @@ class CLICommon:
 
         batch_reqs = [*sub_reqs, *tag_reqs]
         if not batch_reqs:
-            render.econsole.print("The following devices were skipped as they do not appear to be assigned to Aruba Central", _data.warning_skip_not_assigned, emoji=False, sep="\n")
-            self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
+            if migrate:
+                render.econsole.print(f"{emoji.info} No Subscription or tag requests to process")
+            else:
+                render.econsole.print("The following devices were skipped as they do not appear to be assigned to Aruba Central", _data.warning_skip_not_assigned, emoji=False, sep="\n")
+                self.exit("All Devices were skipped.  Nothing to do.  Aborting...")
 
         if not migrate:
             confirm_msg += [f"\n[italic dark_olive_green2]Will result in a [italic]minimum[/] of {len(batch_reqs)} additional API Calls."]
@@ -2466,22 +2705,30 @@ class CLICommon:
         resp = api.session.request(api.configuration.update_ap_banner, *args, **kwargs)
         render.display_results(resp, tablefmt="action")
 
-    def batch_add_update_replace_variables(self, import_file: Path, action: APIAction, yes: bool = False):
+    def batch_add_update_replace_variables(self, import_file: Path, action: APIAction, yes: bool = False, bulk: bool = True):
         data = utils.listify(self._get_import_file(import_file, "variables", required_fields=["_sys_serial", "_sys_lan_mac"]))
         replace = action == APIAction.REPLACE
-        action_word = "Add" if action == APIAction.ADD else "Update"  # TODO we could potentially cache all devices that have variables defined, then determine if it should be an update/replace vs add
+        action_word = "Add" if action == APIAction.ADD else "Update"
 
         render.econsole.print(f"[bright_green]{action_word}{'ing' if yes else ''}[/] variables for {len(data)} devices found in [cyan]{import_file.name}[/]", emoji=False)
         if replace:
             render.econsole.print(f"\n[dark_orange3]:warning:[/]  [cyan]-R[/]|[cyan]--replace[/] :triangular_flag: used. [bright_red]All existing variables will be flushed[/] for the {len(data)} devices found in [cyan]{import_file.name}[/]")
         render.confirm(yes)
-        if action == APIAction.ADD:
-            batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev) for dev in data]
-        else:
-            batch_reqs = [BatchRequest(api.configuration.update_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev, replace=replace) for dev in data]
 
-        batch_resp = api.session.batch_request(batch_reqs)
-        render.display_results(batch_resp, tablefmt="action")
+        if action == APIAction.ADD:
+            if bulk:
+                batch_reqs = [BatchRequest(api.configuration.create_all_devices_template_variables, variable_file=import_file)]
+            else:
+                batch_reqs = [BatchRequest(api.configuration.create_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev) for dev in data]
+        else:
+            if bulk:
+                batch_reqs = [BatchRequest(api.configuration.update_all_devices_template_variables, variable_file=import_file, replace=replace)]
+            else:
+                batch_reqs = [BatchRequest(api.configuration.update_device_template_variables, dev["_sys_serial"], utils.Mac(dev["_sys_lan_mac"]).cols, var_dict=dev, replace=replace) for dev in data]
+
+        batch_resp = BatchResponse(api.session.batch_request(batch_reqs))
+        caption = batch_resp.caption if not bulk else None
+        render.display_results(batch_resp.responses, tablefmt="action", caption=caption)
 
     def help_block(self, default_txt: str, help_type: Literal["default", "requires"] = "default") -> str:
         """Helper function that returns properly escaped default text, including rich color markup, for use in CLI help.
