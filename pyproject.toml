@@ -1,6 +1,6 @@
 [project]
 name = "centralcli"
-version = "10.0.0"
+version = "10.0.1"
 description = "A CLI for interacting with Aruba Central (Cloud Management Platform).  Facilitates bulk imports, exports, reporting.  A handy tool if you have devices managed by Aruba Central."
 license = "MIT"
 authors = [{"name" = "Wade Wells (Pack3tL0ss)","email" = "cencli@consolepi.com"}]
@@ -35,6 +35,7 @@ dependencies = [
     "oauthlib>=3.2.2",
     "requests_oauthlib>=2.0.0",
     "stringenum;python_version<'3.11'",
+    "sqlalchemy>=2.0.0",
 ]
 
 keywords = [

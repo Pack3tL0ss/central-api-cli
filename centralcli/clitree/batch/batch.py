@@ -764,7 +764,7 @@ def unsubscribe(
         if not resp:
             render.display_results(resp, exit_on_fail=True)
 
-        devices = [d for d in resp.output if d.get("status") is None and d["services"]]
+        devices = [d for d in resp.output if d.get("status") is None and d["subscription"]]
         if dis_cen:
             resp = common.batch_delete_devices(devices, yes=yes)
         else:
@@ -794,7 +794,7 @@ def unsubscribe(
 
     render.display_results(resp, tablefmt="action")
     if not dis_cen:
-        inv_devs = [{"serial": serial, "services": None, "subscription_key": None, "subscription_expires": None} for req, resp in zip(unsub_reqs, resp) if resp.ok for serial in req.kwargs["serials"]]
+        inv_devs = [{"serial": serial, "subscription": None, "subscription_key": None, "subscription_expires": None} for req, resp in zip(unsub_reqs, resp) if resp.ok for serial in req.kwargs["serials"]]
         api.session.request(common.cache.update_inv_db, inv_devs)
 
 
