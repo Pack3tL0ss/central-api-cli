@@ -28,3 +28,4 @@ oauthlib
 requests_oauthlib
 stringenum; python_version < '3.11'
 watchdog
+sqlalchemy
