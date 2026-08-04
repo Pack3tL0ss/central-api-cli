@@ -823,7 +823,7 @@ def inventory(
         verbose -= 1
 
         show_devices(
-            dev_type=dev_type, assigned=assigned, archived=archived, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
+            dev_type=dev_type, assigned=assigned, archived=None, outfile=outfile, include_inventory=True, verbosity=verbose, do_clients=True, sort_by=sort_by, reverse=reverse,
             pager=pager, do_json=do_json, do_csv=do_csv, do_yaml=do_yaml, do_table=do_table
         )  # will display results and exit here
 
