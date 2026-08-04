@@ -2594,6 +2594,9 @@ class Cache:
         if not sub_resp.ok:
             log.error(f"Call to fetch subscription details failed.  {sub_resp.error}.  Subscription details provided from previously cached values.", caption=True)
             combined = {serial: {**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()}
+        elif sub_resp.get("detail", "") == "RBAC Access Forbidden":
+            log.error("Call to fetch subscription details failed.  RBAC Access Forbidden.  Subscription details provided from previously cached values.", caption=True)
+            combined = {serial: {**_inv_by_ser[serial], **self.inventory_by_serial.get(serial, {})} for serial in _inv_by_ser.keys()}
         else:
             raw_devs_by_serial = {serial: dev_data["subscription_key"] for serial, dev_data in _inv_by_ser.items()}
             dev_subs = list(set(raw_devs_by_serial.values()))
