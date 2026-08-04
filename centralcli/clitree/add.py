@@ -240,8 +240,7 @@ def group(
     if mon_only_cx:
         _msg = f"{_msg}\n    [cyan]Monitor Only ArubaOS-CX[/cyan]: [bright_green]:white_check_mark:[/bright_green]"
     if cnx:
-        _msg = f"{_msg}\n\n    [yellow]:information:[/]  [italic]Group will be configured as [bright_green]CNX[/] enabled.  All configuration must be done in CNX ([bright_green]C[/]entral [bright_green]N[/]ext Generation E[bright_green]x[/]perience)"
-        _msg = f"{_msg}\n    [dark_orange3]:warning:[/]  [italic]CNX configuration is currently Select Availability, contant your HPE Aruba Networking Account Team for details.[/italic]"
+        _msg = f"{_msg}\n\n    [yellow]:information:[/]  [italic]Group will be configured as [bright_green]New Central[/] enabled.  All configuration must be done in New Central ([bright_green]C[/]entral [bright_green]N[/]ext Generation E[bright_green]x[/]perience)"
 
     econsole.print(f"{_msg}")
 
