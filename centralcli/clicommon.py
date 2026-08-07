@@ -464,6 +464,7 @@ class CLICommon:
         # -- // sticky last account messaging account is loaded in config.py \\ --
         elif _workspace == config.default_workspace:  # They didn't specify anything via cmd flags.  Honor last_account if set and not expired.
             if config.last_workspace:
+                this_cmd_ts = round(pendulum.now().timestamp(), 2)
                 # last account messaging.
                 if config.forget is not None:
                     if config.last_workspace_expired:
@@ -477,16 +478,16 @@ class CLICommon:
                         msg = self.WorkSpaceMsg(_workspace)
                         if not config.last_workspace_msg_shown:
                             render.econsole.print(msg.previous_will_forget)
-                            config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
                         else:
                             render.econsole.print(msg.previous_short)
+                        config.update_last_workspace_file(_workspace, this_cmd_ts, True)
 
                 else:
                     _workspace = config.last_workspace
                     msg = self.WorkSpaceMsg(_workspace)
                     if not config.last_workspace_msg_shown:
                         render.econsole.print(msg.previous)
-                        config.update_last_workspace_file(_workspace, config.last_cmd_ts, True)
+                        config.update_last_workspace_file(_workspace, this_cmd_ts, True)
                     else:
                         render.econsole.print(msg.previous_short)
 
