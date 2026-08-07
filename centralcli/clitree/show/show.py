@@ -3430,11 +3430,11 @@ def radios(
 
         combined = [ap for r in passed for ap in r.output]
         resp = sorted(passed, key=lambda ap: ap.rl)[0]
-        resp.output = [{"name": ap["name"], **rdict} for ap in combined for rdict in ap["radios"]]
+        resp.output = [{"name":  f'{ap["name"]} ({ap["serial"]})', **rdict} for ap in combined for rdict in ap["radios"]]
     else:
         resp = api.session.request(common.cache.refresh_dev_db, dev_type="ap", **{**params, **default_params})
         if resp.ok:
-            resp.output = [{"name": ap["name"], **rdict} for ap in resp.output for rdict in ap["radios"]]
+            resp.output = [{"name": f'{ap["name"]} ({ap["serial"]})', **rdict} for ap in resp.output for rdict in ap["radios"]]
 
     if resp.ok:
         # We sort before sending data to renderer to keep groupings by AP name
