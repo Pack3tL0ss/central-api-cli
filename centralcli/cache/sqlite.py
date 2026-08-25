@@ -77,10 +77,9 @@ from centralcli.objects.cache import (
 from centralcli.response import BatchResponse, CombinedResponse, Response
 from centralcli.strings import emoji
 from centralcli.typedefs import typed_lru_cache
+from centralcli.config import Config
 
 if TYPE_CHECKING:
-
-    from centralcli.config import Config
     from centralcli.typedefs import MPSKStatus, SiteData
 
 
