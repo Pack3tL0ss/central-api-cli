@@ -7,6 +7,7 @@ from ... import config as cfg
 from ...client import Session
 from ...config import Config
 from .central.monitoring import MonitoringAPI
+from .central.config import ConfigAPI
 from .glp.devices import GreenLakeDevicesAPI
 from .glp.service_managers import GreenLakeServiceManagerAPI
 from .glp.subscriptions import GreenLakeSubscriptionsAPI
@@ -75,6 +76,10 @@ class CentralAPI:
     @cached_property
     def monitoring(self) -> MonitoringAPI:
         return MonitoringAPI(self.session)
+
+    @cached_property
+    def config_elements(self) -> ConfigAPI:
+        return ConfigAPI(self.session)
 
 
 

@@ -212,7 +212,8 @@ def command(
     from ..cnx.api import CentralAPI
     api = CentralAPI(config)
     tablefmt = common.get_format(do_json=do_json, do_yaml=do_yaml, do_csv=do_csv, do_table=do_table)
-    resp = api.session.request(api.monitoring.get_aps)  # deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
+    # resp = api.session.request(api.monitoring.get_aps)  # deployment=APDeployment.STANDALONE, status=DeviceStatusFilter.ONLINE, limit=3)
+    resp = api.session.request(api.config_elements.get_system_info)
     render.display_results(resp, tablefmt=tablefmt, outfile=outfile, pager=pager, sort_by=sort_by, reverse=reverse, output_by_key="deviceName")
     ...
 
