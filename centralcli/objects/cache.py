@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import KeysView, MutableMapping
 from enum import Enum
 from functools import cached_property
@@ -18,8 +20,8 @@ from centralcli.typedefs import CacheSiteDict
 from . import DateTime
 
 if TYPE_CHECKING:
-    from ..cache import Cache
     from ..typedefs import CacheSiteDict, CertType, ClientType, PortalAuthTypes
+    from ..cache import Cache
 
 
 api = api_clients.classic
@@ -211,7 +213,7 @@ class CacheInvDevice(CentralObject):
 
 
 class CacheDevice(CentralObject):
-    cache: Cache = None
+    cache = None
 
     def __init__(self, data: dict[str, Any]) -> None:
         super().__init__(data, is_dev=True)
