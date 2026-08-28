@@ -17,7 +17,7 @@ from importlib.metadata import PackageNotFoundError, version
 from importlib.util import find_spec
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional, Tuple, Union
 
 import pendulum
 import typer
@@ -1563,7 +1563,7 @@ class CLICommon:
 
             return out
 
-    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]], cx_retain_config: bool = False, cx_retain_force: bool = None, no_pre_prov: bool = False, no_refresh: bool = False) -> GroupMoves:
+    def _check_group(self, cache_devs: List[CacheDevice | CacheInvDevice], import_data: list[dict[str, Any]], cx_retain_config: bool = False, cx_retain_force: bool = None, no_pre_prov: bool = False, no_refresh: bool = False, spinner: Optional[render.Spinner] = None) -> GroupMoves:
         pregroup_mv_reqs, pregroup_mv_msgs = {}, {}
         group_mv_reqs, group_mv_msgs = {}, {}
         req_dict, msg_dict = {}, {}
@@ -1589,7 +1589,7 @@ class CLICommon:
                 continue
 
             if to_group not in cache_group_names:
-                to_group = self.cache.get_group_identifier(to_group, exit_on_fail=False, retry=not no_refresh)  # will force cache update, and exit if not found in cache
+                to_group = self.cache.get_group_identifier(to_group, exit_on_fail=False, retry=not no_refresh, spinner=spinner)  # will force cache update, and exit if not found in cache
                 if not to_group:
                     ignoring_group_not_exists += 1
                     continue
@@ -1876,15 +1876,15 @@ class CLICommon:
 
         site_rm_reqs, batch_reqs, confirm_msgs = [], [], []
         if do_site:  # TODO switch stack with multiple switches confirmation will show "1 device will be moved...", no doubt the same for swarms.  Better if confirm msg indicated the actual # of devices impacted by the move in these cases
-            with render.Spinner(f"Fetching site info from cache for {len(query_res.found_devs)} devices in [cyan]{config.workspace}[/] workspace"):
+            with render.Spinner(f"Fetching site info from cache for {len(query_res.found_devs)} device{utils.singular_plural_sfx(query_res.found_devs, plural='s')} in [cyan]{config.workspace}[/] workspace"):
                 site_ops = self._check_site(cache_devs=query_res.found_devs, import_data=devices, no_refresh=not refresh_on_fail)
                 batch_reqs += site_ops.move.reqs
                 site_rm_reqs += site_ops.remove.reqs
                 confirm_msgs += [str(site_ops)]
         serials_by_site = None if not do_site else site_ops.serials_by_site_id
         if do_group:
-            with render.Spinner(f"Fetching group info from cache for {len(query_res.found_devs)} devices in [cyan]{config.workspace}[/] workspace", spinner="dots2"):
-                group_ops = self._check_group(cache_devs=query_res.found_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force, no_pre_prov=no_pre_prov, no_refresh=not refresh_on_fail)
+            with render.Spinner(f"Fetching group info from cache for {len(query_res.found_devs)} device{utils.singular_plural_sfx(query_res.found_devs, plural='s')} in [cyan]{config.workspace}[/] workspace", spinner="dots2") as spinner:
+                group_ops = self._check_group(cache_devs=query_res.found_devs, import_data=devices, cx_retain_config=cx_retain_config, cx_retain_force=cx_retain_force, no_pre_prov=no_pre_prov, no_refresh=not refresh_on_fail, spinner=spinner)
                 batch_reqs += group_ops.reqs
                 confirm_msgs += [str(group_ops)]
         serials_by_group = None if not do_group else group_ops.serials_by_group
