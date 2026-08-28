@@ -567,7 +567,7 @@ class Cache:
 
         return [m.to_dict() for m in matches]
 
-    def fuzz_lookup(self, query_str: str, table: CacheTable, cache_object: CacheObject, field: str = "name", group: str = None, portal_id: str = None, dev_type: list[constants.LibAllDevTypes] = None) -> list[CacheTable]:  # pragma: no cover  Requires tty
+    def fuzz_lookup(self, query_str: str, table: CacheTable, cache_object: CacheObject, field: str = "name", group: str = None, portal_id: str = None, dev_type: list[constants.LibAllDevTypes] = None, spinner: Optional[render.Spinner] = None) -> list[CacheTable]:  # pragma: no cover  Requires tty
         cache_items = self._get_all(table, cache_object)
         if not render.console.is_terminal or not cache_items:
             return []
@@ -588,12 +588,15 @@ class Cache:
         matches = []
         if fuzz_resp:
             fuzz_match, fuzz_confidence = fuzz_resp[0]
-            if fuzz_confidence >= 70 and render.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
-                with Session(self.engine) as session:
-                    start = time.perf_counter()
-                    stmt = select(table).where(getattr(table, field) == fuzz_match)
-                    matches: list[CacheTable] = session.scalars(stmt).all()
-                    log.debug(f"{len(matches)} {table.__name__} fetched via fuzz lookup in {round(time.perf_counter() - start, 3)}")
+            if fuzz_confidence >= 70:
+                if spinner is not None:  # batch move devices has a spinner that will otherwise overwrite the prompt below
+                    spinner.stop()
+                if render.confirm(prompt=f"Did you mean [green3]{fuzz_match}[/]?", abort=False):
+                    with Session(self.engine) as session:
+                        start = time.perf_counter()
+                        stmt = select(table).where(getattr(table, field) == fuzz_match)
+                        matches: list[CacheTable] = session.scalars(stmt).all()
+                        log.debug(f"{len(matches)} {table.__name__} fetched via fuzz lookup in {round(time.perf_counter() - start, 3)}")
 
         return matches
 
@@ -3807,6 +3810,7 @@ class Cache:
         completion: Optional[bool] = False,
         silent: Optional[bool] = False,
         exit_on_fail: Optional[bool] = True,
+        spinner: Optional[render.Spinner] = None,
     ) -> CacheSite | list[CacheSite] | None:
         retry = False if completion else retry
         if isinstance(query_str, (list, tuple)):
@@ -3838,7 +3842,7 @@ class Cache:
                 if retry and not matches and not self.responses.site:
                     econsole.print(f"{emoji.warn} [bright_red]No Match found[/] for [cyan]{query_str}[/].")
                     if FUZZ and self.sites and not silent:  # pragma: no cover requires tty
-                        matches = self.fuzz_lookup(query_str, table=Site, cache_object=CacheSite)
+                        matches = self.fuzz_lookup(query_str, table=Site, cache_object=CacheSite, spinner=spinner)
                     if not matches:
                         econsole.print(":arrows_clockwise: Updating [cyan]site[/] Cache")
                         self.check_fresh(refresh=True, site_db=True)
@@ -3903,6 +3907,7 @@ class Cache:
         completion: Optional[bool] = False,
         silent: Optional[bool] = False,
         exit_on_fail: Optional[bool] = True,
+        spinner: Optional[render.Spinner] = None,
     ) -> CacheGroup | list[CacheGroup] | None:
         """Allows Case insensitive group match"""
         retry = False if completion else retry
@@ -3945,8 +3950,13 @@ class Cache:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups if "name" in g and bool([t for t in g["allowed_types"] if t in dev_type])], limit=1)[0]
                         else:
                             fuzz_match, fuzz_confidence = process.extract(query_str, [g["name"] for g in self.groups], limit=1)[0]
-                        confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
-                        if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        # batch move ... starts spinners, we need to stop them for the prompt to actually be visible
+                        if spinner is not None:
+                            spinner.stop()
+                        # confirm_str = render.rich_capture(f"Did you mean [green3]{fuzz_match}[/]?")
+                        # if fuzz_confidence >= 70 and typer.confirm(confirm_str):
+                        confirm_str = f"Did you mean [green3]{fuzz_match}[/]?"
+                        if fuzz_confidence >= 70 and render.confirm(prompt=confirm_str, abort=False):
                             matches = session.scalars(select(Group).where(Group.name == fuzz_match)).all()
                     if not matches:
                         econsole.print(":arrows_clockwise: Updating [cyan]group[/] Cache")

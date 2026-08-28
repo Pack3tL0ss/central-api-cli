@@ -138,10 +138,14 @@ log = MyLogger(log_file, debug=config.debug, show=config.debug, verbose=config.d
 
 log.debug(f"{__name__} __init__ calling script: {_calling_script}, base_dir: {config.base_dir}")
 
-# HACK Windows completion fix for upstream issue.
-# completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
-# This hack manually adds the _expand_args functionality to click.utils which is pinned to 7.1.2  Otherwise an exception is thrown on Windows.
 if os.name == "nt":  # pragma: no cover
+    #  Windows Only: Inject Windows trust store into ssl standard library context
+    import truststore
+    truststore.inject_into_ssl()
+
+    # HACK Windows completion fix for upstream issue.
+    # completion has gotten jacked up.  typer calls click.utils._expand_args in Windows which was added in click 8, but completion is broken in click 8 so cencli is pinned to 7.1.2 until I can investigate further
+    # This hack manually adds the _expand_args functionality to click.utils which is pinned to 7.1.2  Otherwise an exception is thrown on Windows.
     def _expand_args(
         args: Iterable[str],
         *,
