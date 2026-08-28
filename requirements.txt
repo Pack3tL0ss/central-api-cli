@@ -1,4 +1,4 @@
-colorama
+colorama; platform_system == 'Windows'
 click<=7.1.2
 pygments
 tabulate
@@ -29,3 +29,4 @@ requests_oauthlib
 stringenum; python_version < '3.11'
 watchdog
 sqlalchemy
+truststore; platform_system == 'Windows'
